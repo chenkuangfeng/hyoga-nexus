@@ -2,6 +2,8 @@
 
 状态截至 2026-10-25。已完成项以代码和本地测试为准；依赖真实 PostgreSQL 的并发、故障恢复验收仍保持未完成。P1 变更不归档，直到所有验收项完成。
 
+本轮验收安排（用户于 2026-10-25 确认）：先使用 SQLite 隔离测试，PostgreSQL 专项留到后续新环境执行。已运行 `uv sync --locked --extra dev` 和 `env -u NEXUS_TEST_POSTGRES_URL uv run --locked pytest -q -rs`，结果为 10 passed、1 skipped；跳过项为 PostgreSQL 专项。存在一条 FastAPI/Starlette TestClient 的 httpx 弃用警告，不影响本次测试结果。不将本次结果计入 PostgreSQL 验收，相关待办保持未勾选。
+
 - [x] 1. 定稿领域契约
   - [x] 1.1 定义 Workspace/Membership/AgentVersion/Binding/Session/Run/Event/Invocation 逻辑模型及数据库空间一致性约束
   - [x] 1.2 定义角色矩阵、共享资源授权和工具执行时撤权复核语义

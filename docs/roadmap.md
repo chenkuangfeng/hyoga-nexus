@@ -21,7 +21,7 @@ P2 是自研智能体可用版；P3/P4 是有知识和技能的通用智能体�
 
 ## 下一轮建议范围
 
-P1 的首批 API、迁移、配置与 Run/Outbox 已实现；目标 PostgreSQL 的迁移、并发 worker、崩溃恢复及部署验收，以及 Repository/Unit of Work 边界仍待收敛。P2 OpenSpec 草案可先行审阅，P2 编码须在用户确认变更且 P1 运行基础验收条件具备后开始。
+P1 的首批 API、迁移、配置与 Run/Outbox 已实现；目标 PostgreSQL 的迁移、并发 worker、崩溃恢复及部署验收，以及 Repository/Unit of Work 边界仍待收敛。按用户 2026-10-25 确认，本轮先使用 SQLite 隔离测试，PostgreSQL 专项留到后续新环境执行，不作为本轮本地测试的前置条件。SQLite 测试不代表 PostgreSQL 并发或部署验收通过，也不新增 SQLite 应用后端模式。P2 OpenSpec 草案可先行审阅，P2 编码仍须用户明确确认变更。
 
 ## 测试与评估
 
