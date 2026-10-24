@@ -13,5 +13,5 @@
 - Keep skills content in top-level skills/, implementation in packages/skills; software tests in tests/, quality cases in evals/, financial backtests in guanlan/backtesting.
 - Never commit credentials, data dumps or third-party source repositories. Record pinned versions and attribution if code is reused later.
 - Distinguish planned scaffolding from implemented functionality. Add package dependencies only when code actually uses them.
-- At the end of each day's completed work, review the working tree, commit the changes produced by that work, and push the current branch. Do not include unrelated pre-existing user changes or secrets; if commit or push cannot complete, report the exact blocker and leave the changes intact.
+- At the end of every completed task, review the entire working tree, commit all pending non-sensitive changes, and push the current branch to GitHub. Do not omit unrelated pending changes; never commit credentials, data dumps, or third-party source repositories. If commit or push cannot complete, report the exact blocker and leave the changes intact.
 - Use uv sync --locked --extra dev and relevant pytest checks; run npm ci / npm run build for frontend changes. Documentation-only edits need link and diff checks, not full runtime testing.
