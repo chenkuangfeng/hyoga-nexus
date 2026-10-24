@@ -109,9 +109,11 @@ Event schema 需向后兼容，新增事件包括 `turn.started/turn.completed`�
 
 测试需使用 FakeChatModel 确定地输出文本、多工具/分片调用、坏 JSON、超时、中断和限额；FakeTool 注入授权撤销、异常、耗时、副作用结果未知；API/SSE 验证事件续读、重复事件去重、Session 隔离和 waiting_input。危险执行只在真实隔离 sandbox 验收后才测试启用，不能用 mock 结果冒充隔离验收。
 
-## 10. 待确认技术点
+## 10. 实施决策与部署待验收项
 
-- 首个 OpenAI-compatible async SDK 和版本；是否在 P2 接入单一供应商真实凭据的在线验收。
-- SandboxPort 首个生产可验证后端。无后端时，P2 以注册式 Python 工具闭环验收，代码执行保持 unsupported；若验收目标要求任意 Python 代码执行，应另提供隔离运行环境后再纳入。
-- `waiting_input` 采用同一 Run resume 或关联 continuation Run 的状态/消息方案；必须保持 `RunStatus` 可追踪且不会将长等待挂在 worker 上。
-- Assistant message/event 的存储容量、流式事件 retention 与摘要策略；历史消息原件与面向模型的压缩摘要分开存储。
+- 已采用 `openai==2.29.0`，通过模拟 HTTP 流验证 SDK 适配；未使用真实模型账号在线验收。
+- 未提供隔离 Sandbox backend；以注册式 Python 工具闭环验收，代码、shell、宿主文件/任意网络与文件产物保持 unavailable。
+- waiting_input 继续同一 Run，通过输入请求和 execute Outbox 幂等恢复，预算累计；不保留阻塞 worker。
+- 流事件与消息分别保留，不自动清理原件；模型上下文使用有界历史摘录并记录 compaction 事件，超限显式失败。retention/归档策略仍由 P1/P9 治理待办追踪。
+- 工具原始结果不自动落盘，只有显式公开投影（最多 4000 字符）进入事件、模型和历史；详细 Artifact 存储尚未接入。
+- 具体决策见 [ADR-0003](../../../docs/adr/0003-native-model-and-execution.md)，行为证据见 [验收记录](verification.md)。

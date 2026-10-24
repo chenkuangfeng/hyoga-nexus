@@ -42,7 +42,7 @@ class AuthorizedToolGateway:
         output = []
         for name, version in self.bindings.items():
             tool = self.registry.get(name, version)
-            if tool:
+            if tool and tool.definition.capability == 'python_function':
                 try:
                     await self.access.authorize(name, version)
                 except RuntimeFault:
@@ -58,6 +58,8 @@ class AuthorizedToolGateway:
         error = None
         if tool is None:
             error = 'tool_not_registered'
+        elif tool.definition.capability != 'python_function':
+            error = 'sandbox_unavailable'
         else:
             try:
                 binding_id = await self.access.authorize(call.name, version)

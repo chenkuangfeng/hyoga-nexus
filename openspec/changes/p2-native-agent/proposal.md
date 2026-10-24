@@ -33,4 +33,4 @@ P1 已提供 Workspace 授权、不可变 AgentVersion、Session、Run/Event 和
 
 ## 审核边界
 
-本提案、delta specs、技术设计和任务清单供审阅。用户明确确认 P2 变更后才开始功能编码。
+用户已于 2026-10-25 明确要求继续 P2 代码实现。本轮完成 Native 闭环与 SQLite/模拟模型/浏览器夹具验证；真实供应商、PostgreSQL 和隔离后端验收边界见 [验收记录](verification.md)。

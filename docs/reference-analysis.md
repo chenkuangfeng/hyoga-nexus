@@ -47,3 +47,9 @@
 - https://github.com/lsdefine/GenericAgent/blob/a9a36b4/ga.py
 - https://github.com/Tencent/WeKnora/tree/e1f9a6166/internal/agent
 - https://github.com/Tencent/WeKnora/tree/e1f9a6166/internal/im
+
+## P2 行为保持
+
+已按相同固定版本核对 GenericAgent loop/StepOutcome/dispatch、hooks、abort、history、checkpoint、memory/SOP，以及 WeKnora 事件、会话 busy gate/测试、AgentGrant 测试和流式聊天组件。Native 的行为映射与本地测试证据见 [P2 验收矩阵](../openspec/changes/p2-native-agent/verification.md)。没有复制两个项目的源码。
+
+多用户服务采用持久 Run/Input/Outbox 代替进程内回调和共享历史；Typed hooks 代替 locals()；Memory/SOP 写入只产生可归属的草稿；任意宿主执行在缺少隔离后端时明确 unavailable。这些是隔离、审计和权限方面的增强，不把高风险动作审批或 AgentGrant 语义混同为 Workspace 共享授权。高风险工具审批/自动化尚未开放。

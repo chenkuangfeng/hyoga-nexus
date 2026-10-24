@@ -12,7 +12,7 @@ from nexus_core.runtime import (
     RuntimeStorePort, ToolDisposition, ToolGatewayPort,
 )
 
-from nexus_runtimes.native.context import compact_history
+from nexus_runtimes.native.context import compact_history, resolve_incomplete_exchanges
 
 T = TypeVar('T')
 
@@ -66,7 +66,7 @@ class NativeEngine:
         progress = progress or RuntimeProgress()
         started = time.monotonic()
         previous_seconds = progress.active_seconds
-        history = list(messages)
+        history = list(resolve_incomplete_exchanges(messages))
         outcome = RuntimeOutcome('failed', 'runtime_error')
         active_turn = 0
         try:
@@ -88,14 +88,18 @@ class NativeEngine:
                     await self._hook(run_id, 'turn.before', turn)
                     await self.store.emit('turn.started', {'turn': turn})
                     definitions = await self.tools.definitions()
-                    await self._hook(run_id, 'model.before', turn)
-                    await self.store.emit('model.started', {'turn': turn})
                     text, calls, finished, usage = '', [], False, 0
+                    finish_reason = ''
                     output_chars = 0
                     # Conservative fallback budget for providers without usage reporting.
-                    input_estimate = len(str(history)) + len(str(definitions))
+                    input_estimate = len(str(history).encode('utf-8')) + len(str(definitions).encode('utf-8'))
+                    remaining = budget.max_tokens - progress.tokens - input_estimate
+                    if remaining <= 0:
+                        raise RuntimeFault('budget_exhausted')
                     request = ModelRequest(tuple(history), definitions,
-                                           min(budget.max_output_tokens, budget.max_tokens - progress.tokens))
+                                           min(budget.max_output_tokens, remaining))
+                    await self._hook(run_id, 'model.before', turn)
+                    await self.store.emit('model.started', {'turn': turn})
                     try:
                         async with asyncio.timeout(budget.model_timeout_seconds):
                             async with aclosing(self.model.stream(request)) as stream:
@@ -124,15 +128,16 @@ class NativeEngine:
                                         if chunk.finish_reason not in ('stop', 'tool_calls'):
                                             raise RuntimeFault('model_stream_invalid')
                                         finished = True
+                                        finish_reason = chunk.finish_reason
                                     if output_chars > budget.max_output_tokens * 8 or len(calls) > 32:
                                         raise RuntimeFault('budget_exhausted')
                     except TimeoutError:
                         raise RuntimeFault('model_timeout') from None
                     finally:
                         await self._hook(run_id, 'model.after', turn)
-                    if not finished or len({c.id for c in calls}) != len(calls):
+                    if not finished or len({c.id for c in calls}) != len(calls) or bool(calls) != (finish_reason == 'tool_calls'):
                         raise RuntimeFault('model_stream_invalid')
-                    progress.tokens += max(usage, input_estimate + output_chars)
+                    progress.tokens += usage if usage else input_estimate + len(text.encode('utf-8')) + sum(len(call.arguments.encode('utf-8')) for call in calls)
                     await self.store.save_progress(progress)
                     await self.store.emit('model.completed', {'turn': turn, 'tokens': progress.tokens})
                     if progress.tokens > budget.max_tokens:
@@ -144,6 +149,7 @@ class NativeEngine:
                         outcome = RuntimeOutcome('completed')
                         end_turn = True
                     else:
+                        continuations = []
                         for index, call in enumerate(calls):
                             token.check()
                             await self._hook(run_id, 'tool.before', turn, call.name)
@@ -164,18 +170,20 @@ class NativeEngine:
                                 if result.disposition == ToolDisposition.WAIT_INPUT:
                                     outcome = RuntimeOutcome('waiting_input', question=result.data)
                                 elif result.disposition == ToolDisposition.COMPLETE:
-                                    outcome = RuntimeOutcome('completed')
+                                    outcome = RuntimeOutcome('failed' if result.error_code else 'completed', result.error_code)
                                 elif result.exit_status in ('completed', 'failed'):
                                     outcome = RuntimeOutcome(result.exit_status, result.error_code)
                                 else:
                                     raise RuntimeFault('tool_exit_invalid')
                                 break
                             if result.continuation:
-                                instruction = ModelMessage('user', result.continuation)
-                                history.append(instruction)
-                                await self.store.message(instruction)
+                                continuations.append(result.continuation)
                             if progress.errors >= budget.max_errors:
                                 raise RuntimeFault('budget_exhausted')
+                        if continuations and not end_turn:
+                            instruction = ModelMessage('user', '\n'.join(continuations))
+                            history.append(instruction)
+                            await self.store.message(instruction)
                     await self.store.emit('turn.completed', {'turn': turn})
                     await self._hook(run_id, 'turn.after', turn)
                     active_turn = 0

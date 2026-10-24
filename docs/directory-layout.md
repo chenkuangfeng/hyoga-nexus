@@ -1,6 +1,6 @@
 # 目录设计与依赖边界
 
-本文件对应实际骨架。P1 已落地的 Workspace/Agent/Run 持久化实现位于 platform 包；其他空包与目录仍只是占位，功能状态见总体架构。
+本文件对应实际骨架。P1 已落地的 Workspace/Agent/Run 持久化实现位于 platform 包；P2 的 Native、工具与对话模块已落地；其他空包与目录仍只是占位，功能状态见总体架构。
 
 ```text
 hyoga-nexus/
@@ -11,7 +11,7 @@ hyoga-nexus/
 │       ├── api/ components/ composables/ layouts/
 │       ├── router/ stores/ types/ # 只预留目录，尚未接入路由/状态库
 │       └── views/
-│           ├── OverviewView.vue   # 当前可运行的能力目录页
+│           ├── OverviewView.vue   # 平台能力状态页
 │           ├── agents/ chat/ resources/ knowledge/
 │           └── channels/ settings/ guanlan/
 ├── packages/
@@ -20,7 +20,7 @@ hyoga-nexus/
 │   │   ├── identity/ workspaces/ agents/ sessions/ runs/
 │   │   └── resources/ models/ memory/ jobs/ persistence/ observability/
 │   ├── runtimes/src/nexus_runtimes/
-│   │   ├── native/                # engine、context、prompts
+│   │   ├── native/                # engine、context、models（OpenAI-compatible）
 │   │   ├── adapters/              # codex、claude_code、deepseek
 │   │   └── capabilities/
 │   ├── skills/src/nexus_skills/   # registry、loader、bindings、versions
@@ -66,3 +66,13 @@ hyoga-nexus/
 保留原有包名与导入；Codex/Claude Code/DeepSeek 占位目录移至 runtimes/adapters，新增 native。core/memory 空占位移至 platform/memory。现有前端能力页移至 views/OverviewView.vue，App.vue 保留应用入口。新增包纳入 workspace、锁文件与安装脚本，CI 使用锁文件安装。
 
 没有复制 GenericAgent/WeKnora 源码，没有实现计划中的业务接口，也没有一次性安装尚未使用的数据库、模型或解析 SDK。
+
+## P2 实际模块
+
+- `core/runtime.py`：厂商无关模型、工具、生命周期、取消、MemoryDraft 与 Sandbox 契约。
+- `platform/runs/execution.py`：执行准备、租约校验、持久消息/事件、工具审计、检查点与输入继续。
+- `runtimes/native/engine`、`context`、`models`：模型/工具循环、有界摘录、SDK 适配；`tools/registry`、`gateway`、`builtins`：工具注册、授权执行和安全内置工具。
+- `apps/worker/native.py`：模型凭据、工具与持久化的组合入口；`apps/web/src/api/chat.ts`、`types/chat.ts`、`composables/useConversation.ts`：类型化通信与对话状态。
+- `migrations/platform/versions/b5a16ed22801_native_runtime.py`：P2 增量迁移；`tests/test_native_*.py`、`tests/web/conversation.mjs`：隔离验证。
+
+使用方式见 [worker](../apps/worker/README.md) 和 [Web](../apps/web/README.md) 说明。没有新增 SQLite 应用后端产品模式，也未实现隔离 Sandbox 或文件产物。

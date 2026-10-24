@@ -37,6 +37,7 @@ class ToolDefinition:
     version: str = 'v1'
     side_effects: bool = False
     timeout_seconds: float = 15
+    capability: Literal["python_function", "sandbox_code"] = "python_function"
 
 
 @dataclass(frozen=True)
@@ -109,7 +110,7 @@ class ExecutionBudget:
     max_errors: int = 4
     max_context_chars: int = 100000
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if any(not math.isfinite(value) or value <= 0 for value in vars(self).values()):
             raise ValueError('Execution budgets must be positive')
 

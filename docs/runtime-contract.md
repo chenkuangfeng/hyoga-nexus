@@ -1,6 +1,6 @@
 # Runtime 适配契约
 
-状态：P1 已实现平台 Runtime 资源授权端口、Run/Event 持久化和外部 Session 映射表；Runtime 执行契约仍是目标设计，尚无模型循环或 SDK 适配器。
+状态：P2 已实现 Native 执行循环、厂商无关契约、OpenAI-compatible 适配器、授权工具、取消、持久输入等待与 SSE。外部 Runtime 的 start/resume/approval 等统一操作仍为目标设计，尚未接入真实外部 SDK。
 
 ## 职责
 
@@ -39,3 +39,15 @@ Runtime 执行智能体任务；平台负责资源授权、身份、记录、调
 来源：[Codex SDK](https://learn.chatgpt.com/docs/codex-sdk)、[App Server](https://learn.chatgpt.com/docs/app-server)。正式接入时锁定版本并重新核对，账号和模型权限单独验证。
 
 Claude Code、DeepSeek Harness 在各自阶段核对官方文档和真实项目；本阶段只保留边界，不宣称与 Codex 功能对等。
+
+## P2 实际接口
+
+`nexus_core.runtime` 定义 `ChatModelPort`、`ModelMessage/Request/Chunk`、`ToolDefinition/Call/Result/Disposition`、预算、取消、持久化、生命周期、MemoryDraft 和 Sandbox 端口。`ToolDisposition` 显式区分 continue、complete、wait_input、exit；exit 必须提供完成/失败状态。原 `contracts.AgentRuntime` 保留兼容。
+
+`NativeEngine.run` 执行单 Run，所有模型/工具阶段经持久化 adapter 写事件；hooks 只接收稳定元数据，异常隔离且结束时注销。每个工具先做当前授权/参数校验，记录独立 invocation；结果公开投影和历史持久化与 SDK 私有类型分离。
+
+`GET /api/v1/workspaces/{workspace_id}/runs/{run_id}/events` 默认分页 JSON，`Accept: text/event-stream` 使用 sequence 游标（`Last-Event-ID` 或 `after_sequence`）。SSE 名称 `run.event`，data 保留 event_id/run_id/sequence/schema_version；`stream.closed` 要求客户端检查权限或连接。等待或终态结束当前连接，浏览器重连不创建 Run。
+
+`POST .../runs/{run_id}/input` 提交 input_request_id、response 和 `Idempotency-Key`；`GET .../input` 查询未消费请求。回答继续同一 Run，累计预算，未知副作用不重放。`GET .../runs/{run_id}/memory-drafts` 仅返回有权 Run 的待审核草稿。`GET /api/v1/runtime-capabilities` 明确已实现 Native 与不可用 Sandbox。
+
+工作检查点与消息按 Session 隔离。先复核历史来源资源授权，再做有界摘录；源消息不删。中断造成的缺失工具结果只补上下文中的未知结果标记，不执行工具。

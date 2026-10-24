@@ -32,6 +32,7 @@ from nexus_platform.workspaces import service as workspaces
 from nexus_platform.workspaces.service import ADMIN_ROLES
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.schemas.platform import (
+    InputResponse,
     AgentDraftInput,
     AgentView,
     AgentVersionView,
@@ -405,8 +406,8 @@ def list_run_events(
             nonlocal cursor
             while True:
                 try:
-                    rows = runs.list_events(db, principal, workspace_id, run_id, cursor, limit)
                     run = runs.get_run(db, principal, workspace_id, run_id)
+                    rows = runs.list_events(db, principal, workspace_id, run_id, cursor, limit)
                 except Exception:
                     yield 'event: stream.closed\ndata: {}\n\n'
                     return
@@ -520,7 +521,8 @@ def conversation_history(workspace_id: UUID, session_id: UUID,
     messages, latest = sessions.conversation(db, principal, workspace_id, session_id,
                                             after_sequence=after_sequence, limit=limit)
     return {'messages': [{'id': row.id, 'run_id': row.run_id, 'sequence': row.sequence,
-                          'role': row.role, 'content': row.content, 'created_at': row.created_at} for row in messages],
+                          'role': 'system' if row.role == 'user' and row.runtime_metadata.get('origin') == 'runtime' else row.role,
+                          'content': row.content, 'created_at': row.created_at} for row in messages],
             'latest_run': RunView.model_validate(latest, from_attributes=True) if latest else None}
 
 
@@ -533,9 +535,6 @@ def pending_input(workspace_id: UUID, run_id: UUID, principal: Principal = Depen
         pending = db.scalar(select(InputRequestRecord).where(InputRequestRecord.run_id == run_id,
                             InputRequestRecord.responded_at.is_(None)).order_by(InputRequestRecord.created_at.desc()))
         return {'input_request_id': pending.id, 'question': pending.question} if pending else None
-
-
-from nexus_api.schemas.platform import InputResponse
 
 
 @router.post('/workspaces/{workspace_id}/runs/{run_id}/input', response_model=RunView, status_code=202)

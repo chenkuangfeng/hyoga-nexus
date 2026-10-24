@@ -1,0 +1,28 @@
+"""P2 migrations preserve P1 records and can be applied repeatedly."""
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, text
+
+
+def test_native_migration_preserves_existing_p1_data(tmp_path, monkeypatch):
+    url = 'sqlite:///' + str(tmp_path / 'native-migration.db')
+    monkeypatch.setenv('NEXUS_DATABASE_URL', url)
+    config = Config('alembic.ini')
+    command.upgrade(config, '9608e45573e5')
+    engine = create_engine(url)
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO users (id,issuer,subject,status,created_at) VALUES (:id,'test','existing','active',CURRENT_TIMESTAMP)"),
+                   {'id': '00000000000000000000000000000001'})
+    command.upgrade(config, 'head')
+    command.upgrade(config, 'head')
+    with engine.connect() as db:
+        assert db.execute(text('SELECT subject FROM users')).scalar_one() == 'existing'
+        tables = {row[0] for row in db.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        assert {'native_run_states', 'run_input_requests', 'session_checkpoints', 'memory_drafts'} <= tables
+        columns = {row[1] for row in db.execute(text('PRAGMA table_info(messages)'))}
+        assert 'runtime_metadata' in columns
+    command.downgrade(config, '9608e45573e5')
+    with engine.connect() as db:
+        assert db.execute(text('SELECT subject FROM users')).scalar_one() == 'existing'
+    command.upgrade(config, 'head')
+    engine.dispose()

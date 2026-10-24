@@ -1,12 +1,12 @@
 # Hyoga Nexus · 织枢
 
-Python 多类型智能体平台，支持规划中的自研 Native、Codex、Claude Code 和未来运行时。每个智能体可绑定多个技能、工具、MCP 工具及知识库；新建会话时选择已配置的智能体。**观澜 Guanlan** 是首个股票研究应用。
+Python 多类型智能体平台，已实现自研 Native，规划接入 Codex、Claude Code 和更多运行时。每个智能体可绑定多个技能、工具、MCP 工具及知识库；新建会话时选择已配置的智能体。**观澜 Guanlan** 是首个股票研究应用。
 
 ## 技术与状态
 
 Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / Vite，Node.js 22.12+。模块化单体部署，API 与后台 worker 分开启动。
 
-当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Workspace 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。尚未接入真实身份提供方、凭据保险库、Native/外部 Runtime 执行、知识库、技能/MCP、数据采集或股票分析。
+当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Workspace 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。P2 已实现 Native 多轮流式执行、授权 Python 工具、取消/等待输入、SSE 续读与对话工作台，并完成 SQLite/模拟模型验证。尚未接入真实身份提供方、凭据保险库、外部 Runtime、知识库、技能/MCP、隔离沙箱、文件产物或股票分析。
 
 ## 目录入口
 
@@ -73,4 +73,4 @@ npm run build
 uv run python -m nexus_worker
 ```
 
-P1 暂无 Runtime 执行器。Worker 消费新 Run 后会把它明确标为 `failed`，错误码为 `runtime_not_configured`；它不会声称已调用模型。平台 API 文档位于 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。
+P2 worker 按已发布 Native Agent 配置执行。需显式配置模型协议、凭据引用和允许解析的环境变量；未配置时仍明确失败，不声称已调用模型。配置步骤见 [worker 使用说明](apps/worker/README.md)，对话与浏览器验证见 [Web 使用说明](apps/web/README.md)。平台 API 文档位于 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。

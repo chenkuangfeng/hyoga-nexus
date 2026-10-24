@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useConversation } from '../../composables/useConversation'
-import { statusLabels } from '../../types/chat'
+import { errorLabels, statusLabels } from '../../types/chat'
 const chat = useConversation()
-const { workspaces, agents, sessions, workspace, sessionId, versionId, messages, run, pendingInput,
-  error, loading, submitting, connection, cancelling, active, streamed, tools } = chat
+const { workspaces, agents, sessions, workspace, sessionId, versionId, timeline, run, pendingInput,
+  error, loading, submitting, connection, cancelling, active } = chat
 const prompt = ref(''), answer = ref('')
 onMounted(chat.initialize)
 async function send() { if (await chat.send(prompt.value)) prompt.value = '' }
@@ -44,26 +44,22 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
         <div class="run-status" role="status" aria-live="polite">
           <span>{{ cancelling ? '正在停止，请等待执行结果确认' : run ? statusLabels[run.status] : '准备开始对话' }}</span>
           <span v-if="connection === 'reconnecting'">连接中断，正在自动重连</span>
-          <span v-if="run?.error_code" class="muted">原因：{{ run.error_code }}</span>
+          <span v-if="run?.error_code" class="muted">{{ errorLabels[run.error_code] || '运行未完成，请检查配置后重试' }}</span>
         </div>
         <el-button v-if="connection === 'reconnecting' || connection === 'closed'" @click="chat.reconnect">重新连接</el-button>
         <el-skeleton v-if="loading" :rows="5" animated />
         <div v-else class="message-list">
           <el-empty v-if="!sessionId" description="选择或新建一个会话" />
-          <p v-else-if="!messages.length && !streamed.length" class="muted">写下你的第一个问题。</p>
-          <article v-for="message in messages" :key="message.id" class="chat-message" :class="message.role">
-            <h2>{{ message.role === 'user' ? '你' : '智能体' }}</h2>
-            <div class="message-text">{{ message.content }}</div>
-          </article>
-          <article v-for="part in streamed" :key="part.turn" class="chat-message assistant">
-            <h2>智能体 · 第 {{ part.turn }} 轮</h2><div class="message-text">{{ part.text }}</div>
-          </article>
-          <section v-if="tools.length" class="tool-list" aria-label="工具执行记录">
-            <h2>工具执行</h2>
-            <details v-for="tool in tools" :key="tool.id" class="tool-card">
-              <summary>{{ tool.name }} · {{ tool.status }}</summary><pre v-if="tool.summary">{{ tool.summary }}</pre>
+          <p v-else-if="!timeline.length" class="muted">写下你的第一个问题。</p>
+          <template v-for="item in timeline" :key="item.id">
+            <article v-if="item.kind === 'message'" class="chat-message" :class="item.role">
+              <h2>{{ item.role === 'user' ? '你' : '智能体' }}</h2>
+              <div class="message-text">{{ item.content }}</div>
+            </article>
+            <details v-else class="tool-card">
+              <summary>{{ item.name }} · {{ item.status }}</summary><pre v-if="item.summary">{{ item.summary }}</pre>
             </details>
-          </section>
+          </template>
         </div>
         <form v-if="pendingInput" class="composer input-request" @submit.prevent="respond">
           <label for="answer">智能体需要你的回答</label><p class="message-text">{{ pendingInput.question }}</p>

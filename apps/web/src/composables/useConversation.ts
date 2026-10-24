@@ -14,26 +14,35 @@ export function useConversation() {
   let responseAttempt: { text: string; key: string; request: string } | undefined
   const active = computed(() => !!run.value && !terminal(run.value.status))
   const availableAgents = computed(() => agents.value.filter(agent => agent.runtime_type === 'native' && agent.published_version_id))
-  const visibleMessages = computed(() => messages.value.filter(message => message.role === 'user' || (message.role === 'assistant' && message.run_id !== run.value?.id)))
-  const streamed = computed(() => {
-    const byTurn = new Map<number, string>()
-    for (const event of events.value) if (event.event_type === 'message.delta' && typeof event.payload.text === 'string' && typeof event.payload.turn === 'number') {
-      byTurn.set(event.payload.turn, (byTurn.get(event.payload.turn) || '') + event.payload.text)
-    }
-    return Array.from(byTurn, ([turn, text]) => ({ turn, text }))
-  })
-  const tools = computed(() => {
-    const byId = new Map<string, { id: string; name: string; status: string; summary: string }>()
+  type TimelineItem = { kind: 'message'; id: string; role: string; content: string } |
+    { kind: 'tool'; id: string; name: string; status: string; summary: string }
+  const timeline = computed(() => {
+    const result: TimelineItem[] = messages.value.filter(message => message.run_id !== run.value?.id && ['user', 'assistant'].includes(message.role))
+      .map(message => ({ kind: 'message', id: message.id, role: message.role, content: message.content }))
+    const users = messages.value.filter(message => message.run_id === run.value?.id && message.role === 'user')
+    let userIndex = 0
+    const appendUser = () => { const user = users[userIndex++]; if (user) result.push({ kind: 'message', id: user.id, role: user.role, content: user.content }) }
+    appendUser()
+    const turns = new Map<number, Extract<TimelineItem, { kind: 'message' }>>()
+    const toolItems = new Map<string, Extract<TimelineItem, { kind: 'tool' }>>()
     for (const event of events.value) {
+      if (event.event_type === 'message.delta' && typeof event.payload.text === 'string' && typeof event.payload.turn === 'number') {
+        let item = turns.get(event.payload.turn)
+        if (!item) { item = { kind: 'message', id: `turn-${event.payload.turn}`, role: 'assistant', content: '' }; turns.set(event.payload.turn, item); result.push(item) }
+        item.content += event.payload.text
+      }
+      if (event.event_type === 'input.received') appendUser()
       const id = event.payload.invocation_id
       if (typeof id !== 'string') continue
-      if (event.event_type === 'tool.started') byId.set(id, { id, name: String(event.payload.name || '工具'), status: '运行中', summary: '' })
-      else if (['tool.completed', 'tool.failed'].includes(event.event_type)) {
-        const item = byId.get(id)
-        if (item) { item.status = event.event_type === 'tool.completed' ? '已完成' : String(event.payload.status || '失败'); item.summary = String(event.payload.summary || '') }
+      if (event.event_type === 'tool.started') {
+        const item = { kind: 'tool' as const, id, name: String(event.payload.name || '工具'), status: '运行中', summary: '' }
+        toolItems.set(id, item); result.push(item)
+      } else if (['tool.completed', 'tool.failed'].includes(event.event_type)) {
+        const item = toolItems.get(id)
+        if (item) { item.status = event.event_type === 'tool.completed' ? '已完成' : event.payload.status === 'interrupted' ? '结果未知' : event.payload.status === 'cancelled' ? '已取消' : '执行失败'; item.summary = String(event.payload.summary || '') }
       }
     }
-    return [...byId.values()]
+    return result
   })
   function resetConnection() { source?.close(); source = undefined; connection.value = 'idle' }
   function attach(cursor = 0) {
@@ -44,10 +53,10 @@ export function useConversation() {
     const stream = new EventSource(`/api/v1${runPath(workspace.value, id)}/events?after_sequence=${cursor}`)
     source = stream
     let last = cursor
-    stream.onopen = () => { if (epoch === generation) connection.value = 'connected' }
-    stream.addEventListener('stream.closed', () => { stream.close(); connection.value = 'closed'; error.value = '事件连接已关闭，请刷新检查访问权限。' })
+    stream.onopen = () => { if (source === stream && epoch === generation) connection.value = 'connected' }
+    stream.addEventListener('stream.closed', () => { if (source !== stream) return; stream.close(); connection.value = 'closed'; error.value = '事件连接已关闭，请刷新检查访问权限。' })
     stream.addEventListener('run.event', event => {
-      if (epoch !== generation || run.value?.id !== id) return
+      if (source !== stream || epoch !== generation || run.value?.id !== id) return
       try {
         const item = parseEvent(JSON.parse((event as MessageEvent<string>).data))
         if (item.run_id !== id || item.sequence <= last) return
@@ -66,19 +75,28 @@ export function useConversation() {
           run.value.error_code = typeof item.payload.error_code === 'string' ? item.payload.error_code : null
           cancelling.value = false
           // Replaying a historical wait must not close a stream whose Run has already resumed.
-          if (terminal(status)) { stream.close(); connection.value = 'idle' }
+          if (terminal(status)) { pendingInput.value = null; stream.close(); connection.value = 'idle' }
         }
       } catch { stream.close(); connection.value = 'closed'; error.value = '无法读取运行事件，请重连。' }
     })
     stream.onerror = () => {
-      if (epoch !== generation) return
+      if (source !== stream || epoch !== generation) return
       if (run.value?.status === 'waiting_input' && pendingInput.value) { stream.close(); connection.value = 'idle' }
       else connection.value = 'reconnecting'
     }
   }
   async function initialize() {
+    const epoch = ++generation
+    controller?.abort(); controller = new AbortController(); resetConnection()
+    workspace.value = ''; sessionId.value = ''; run.value = null; messages.value = []; events.value = []
+    workspaces.value = []; agents.value = []; sessions.value = []; pendingInput.value = null; cancelling.value = false
     loading.value = true; error.value = ''
-    try { workspaces.value = await api.workspaces(); if (workspaces.value[0]) await selectWorkspace(workspaces.value[0].id) }
+    try {
+      const rows = await api.workspaces(controller.signal)
+      if (epoch !== generation) return
+      workspaces.value = rows
+      if (rows[0]) await selectWorkspace(rows[0].id)
+    }
     catch (cause) { error.value = String(cause instanceof Error ? cause.message : cause) }
     finally { loading.value = false }
   }
@@ -141,7 +159,7 @@ export function useConversation() {
     if (!run.value || cancelling.value) return
     const epoch = generation
     cancelling.value = true; error.value = ''
-    try { const result = await api.cancel(workspace.value, run.value.id); if (epoch === generation) { run.value = result; if (terminal(result.status)) cancelling.value = false } }
+    try { const result = await api.cancel(workspace.value, run.value.id); if (epoch === generation) { run.value = result; if (terminal(result.status)) { pendingInput.value = null; cancelling.value = false; resetConnection() } } }
     catch (cause) { if (epoch === generation) { cancelling.value = false; error.value = cause instanceof Error ? cause.message : '停止失败' } }
   }
   async function respond(text: string): Promise<boolean> {
@@ -158,7 +176,7 @@ export function useConversation() {
     finally { submitting.value = false }
   }
   onBeforeUnmount(() => { generation++; controller?.abort(); resetConnection() })
-  return { workspaces, agents: availableAgents, sessions, workspace, sessionId, versionId, messages: visibleMessages,
-    run, pendingInput, error, loading, submitting, connection, cancelling, active, streamed, tools,
+  return { workspaces, agents: availableAgents, sessions, workspace, sessionId, versionId, timeline,
+    run, pendingInput, error, loading, submitting, connection, cancelling, active,
     initialize, selectWorkspace, openSession, createSession, send, cancel, respond, reconnect: () => attach(events.value.at(-1)?.sequence || 0) }
 }

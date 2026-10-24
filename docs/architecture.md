@@ -1,6 +1,6 @@
 # Hyoga Nexus 总体架构
 
-状态：P0 已完成；P1 平台 API、PostgreSQL schema/迁移、Outbox worker 和单元/API 测试已实现。2026-10-25。PostgreSQL 专用并发/故障集成测试尚未在本环境运行；Runtime、知识库和领域业务仍未实现。
+状态：P0 已完成；P1 平台底座已实现；P2 Native 执行、工具网关、SSE 和对话工作台已实现并通过本地 SQLite/模拟模型验证。2026-10-25。PostgreSQL 专项与真实供应商部署验收待后续环境执行。
 
 ## 产品目标与边界
 
@@ -53,7 +53,7 @@ apps 是组合入口：API 负责装配 HTTP，worker 装配任务和调度，we
 
 ## 自研引擎
 
-Native 使用模型 API，执行“上下文准备 → 模型响应 → 工具请求 → 授权与执行 → 结果反馈”循环。最小版支持流式文本、工具执行、停止、轮次/耗时预算与持久化；后续加入上下文压缩、检查点、暂停恢复和长期记忆。
+Native 使用模型 API，执行“上下文准备 → 模型响应 → 工具请求 → 授权与执行 → 结果反馈”循环。当前支持流式文本、顺序工具执行、停止、轮次/token/活跃耗时预算、持久事件、有界历史摘录、Session 检查点和等待输入后的持久继续。长期记忆/SOP 目前只提供待审核草稿与扩展端口，不自动发布或注入。
 
 GenericAgent 的生成器与 StepOutcome 可借鉴；对外必须转成结构化事件。不能靠解析前端 Markdown 推断工具状态，也不能把共享文件记忆、宿主机子进程和全局 cwd 直接作为服务端执行方案。
 
@@ -93,4 +93,6 @@ GenericAgent 的生成器与 StepOutcome 可借鉴；对外必须转成结构化
 
 已实现 `/api/v1/health`、PostgreSQL 连通 `/api/v1/ready`、规划能力目录，以及 P1 Workspace/Membership、模型配置版本、Agent 草稿与发布、固定版本 Session、幂等 Run、持久事件/游标、审计和 PostgreSQL Outbox worker。运行 API 需要配置 PostgreSQL 并执行 Alembic 迁移；平台 API 默认没有生产身份提供方，需明确启用本机开发身份或注入外部认证适配器。
 
-worker 会消费 Run 并标记 `runtime_not_configured`，不会调用模型。未实现真实 Runtime、凭据解析器、技能/MCP 执行、知识库、工具执行、文档处理、股票数据和分析。
+worker 装配 Native Engine 和 OpenAI-compatible 流式模型适配器，按运行解析允许的环境凭据引用。支持授权 Python 工具、当前权限复核、生命周期 hooks、运行级取消、等待输入、检查点与 Memory/SOP 草稿。缺少协议/Runtime 时仍明确 `runtime_not_configured`，缺少凭据时为 `model_credential_unavailable`。Web 提供空间、已发布 Native Agent 和 Session 选择、对话、工具状态、停止与游标重连。
+
+尚未接入真实身份/凭据保险库、外部 Runtime、技能/MCP/知识库执行、隔离 Sandbox、文件产物、股票数据与分析。SQLite 仅用于本轮隔离验收，不能代替 PostgreSQL 并发/部署测试。配置方式见 [worker 使用说明](../apps/worker/README.md)，实现边界见 [ADR-0003](adr/0003-native-model-and-execution.md)。

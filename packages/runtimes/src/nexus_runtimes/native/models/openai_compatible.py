@@ -73,7 +73,7 @@ class OpenAICompatibleModel:
                     raise RuntimeFault('budget_exhausted')
                 if choice.finish_reason:
                     reason = choice.finish_reason
-            if reason is None or (calls and reason != 'tool_calls'):
+            if reason is None or (calls and reason != 'tool_calls') or (reason == 'tool_calls' and not calls):
                 raise RuntimeFault('model_stream_invalid')
             for _, call in sorted(calls.items()):
                 if not call['id'] or not call['name']:

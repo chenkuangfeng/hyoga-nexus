@@ -1,6 +1,6 @@
 # 智能体与资源配置模型
 
-状态：P1 平台核心模型已实现 PostgreSQL 迁移与 API。技能、工具、MCP、知识库等业务资源由未来资源包登记到平台资源目录；当前没有实现这些资源自身的 CRUD 或内容存储。
+状态：P1 平台核心模型已实现迁移与 API；P2 增加版本化 Python 工具、Native 消息/输入请求、检查点和 Memory/SOP 草稿。SQLite 已做本地验收，PostgreSQL 专项待后续环境执行。技能、MCP、知识库资源内容仍待各自阶段实现。
 
 ## 核心对象
 
@@ -66,4 +66,12 @@ budgets:
 
 ## API 资源草案
 
-`/api/v1/agents`、`/sessions`、`/runs`、`/skills`、`/tools`、`/mcp-connections`、`/knowledge-bases`、`/channels`、`/model-profiles`、`/artifacts` 为后续资源入口。Run 提供事件流、取消与审批操作。观澜 API 使用 `/api/v1/guanlan/...`。路由在实现时定稿，当前只存在 health 和 capabilities。
+`/api/v1/agents`、`/sessions`、`/runs`、`/skills`、`/tools`、`/mcp-connections`、`/knowledge-bases`、`/channels`、`/model-profiles`、`/artifacts` 为后续资源入口。Run 提供事件流、取消与审批操作。观澜 API 使用 `/api/v1/guanlan/...`。这些规划路径不能当作已实现接口；当前平台接口按 `/api/v1/workspaces/{workspace_id}/...` 组织，详见 `/docs`。P2 的事件 JSON/SSE、取消与输入回复已实现，审批和文件产物尚未接入。
+
+## P2 持久状态与授权
+
+Message 新增内部 Runtime 元数据，关联 assistant tool calls 和 tool_call_id，不将 SDK 对象作为消息存储。NativeRunState 保存累计预算；InputRequest 记录问题、回答和幂等键；WorkingCheckpoint 按 Workspace/Session 保存来源 Run；MemoryDraft 保存 kind、Session scope、diff 和 pending_review 状态。草稿不自动成为正式记忆。
+
+同 Session 的 queued/running/waiting_input/waiting_approval Run 互斥，重复幂等请求仍返回原 Run。工具 registry 定义名称、版本、schema、timeout、副作用与 capability；Agent 绑定不授予权限，实际调用复核当前身份、Workspace、Run、binding、资源状态与 grant，并记录 invocation 和访问审计。未登记、禁用、坏参数、撤权与超时分别可诊断。
+
+危险代码 capability 在没有隔离后端时拒绝执行，不能通过注册普通 Python 函数获得沙箱权限。Native 当前不能执行技能/MCP/知识库绑定，遇到这些尚未接入的资源能力明确失败，不静默宣称已使用资源。

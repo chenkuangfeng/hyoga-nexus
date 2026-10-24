@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import timedelta
+from datetime import timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from nexus_core.platform import CredentialRef, Principal, RunStatus, new_id, utc_now
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
@@ -40,19 +41,20 @@ class ExecutionContext:
     history_run_ids: tuple[UUID, ...]
 
 
-def add_message(db, run, message):
-    db.scalar(select(SessionRecord).where(SessionRecord.id == run.session_id).with_for_update())
+def add_message(db: Session, run: RunRecord, message: ModelMessage, *, origin: str = "runtime") -> MessageRecord:
+    session_row = db.scalar(select(SessionRecord).where(SessionRecord.id == run.session_id).with_for_update())
+    session_row.updated_at = utc_now()
     sequence = db.scalar(select(func.coalesce(func.max(MessageRecord.sequence), 0)).where(
         MessageRecord.session_id == run.session_id)) + 1
     row = MessageRecord(id=new_id(), session_id=run.session_id, run_id=run.id, sequence=sequence,
         role=message.role, content=message.content, created_at=utc_now(),
-        runtime_metadata={'tool_calls': [asdict(call) for call in message.tool_calls],
+        runtime_metadata={'origin': origin, 'tool_calls': [asdict(call) for call in message.tool_calls],
                           'tool_call_id': message.tool_call_id})
     db.add(row)
     return row
 
 
-def _history_allowed(db, run):
+def _history_allowed(db: Session, run: RunRecord) -> bool:
     try:
         for resource in run.config_snapshot.get('resources', []):
             authorize_resource(db, run.workspace_id, resource['kind'], resource['resource_id'],
@@ -63,7 +65,7 @@ def _history_allowed(db, run):
         return False
 
 
-def _finish(db, run, outcome):
+def _finish(db: Session, run: RunRecord, outcome: RuntimeOutcome) -> None:
     transition_run(run, RunStatus(outcome.status))
     run.error_code = outcome.error_code
     run.error_message = outcome.error_code  # Stable codes only, never exception/provider text.
@@ -80,7 +82,7 @@ def _finish(db, run, outcome):
           {'error_code': outcome.error_code})
 
 
-def prepare_execution(factory, task_id: UUID, worker_id: str) -> ExecutionContext | None:
+def prepare_execution(factory: sessionmaker[Session], task_id: UUID, worker_id: str) -> ExecutionContext | None:
     with factory() as db, db.begin():
         task = db.scalar(select(OutboxRecord).where(OutboxRecord.id == task_id).with_for_update())
         if not task or task.completed_at or task.lease_owner != worker_id:
@@ -148,6 +150,9 @@ def prepare_execution(factory, task_id: UUID, worker_id: str) -> ExecutionContex
             if not state:
                 state = NativeRunStateRecord(run_id=run.id, progress={})
                 db.add(state)
+            if version.runtime_type == 'native' and db.scalar(select(ResourceBindingRecord.id).where(
+                    ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind != 'tool').limit(1)):
+                raise RuntimeFault('runtime_capability_unavailable')
             bindings = tuple((binding.resource_id, binding.resource_version_id or 'v1', str(binding.id))
                 for binding in db.scalars(select(ResourceBindingRecord).where(
                     ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'tool')))
@@ -164,23 +169,28 @@ def prepare_execution(factory, task_id: UUID, worker_id: str) -> ExecutionContex
                 Principal(user.subject, user.issuer), version.runtime_type, profile.provider, model.model_name,
                 model.options, credential, (ModelMessage('system', system), *history), bindings,
                 version.budgets, RuntimeProgress(**state.progress), tuple(allowed_runs))
-        except (PlatformError, RuntimeFault):
-            _finish(db, run, RuntimeOutcome('failed', 'run_authorization_denied'))
+        except (PlatformError, RuntimeFault) as exc:
+            code = exc.code if isinstance(exc, RuntimeFault) else 'run_authorization_denied'
+            _finish(db, run, RuntimeOutcome('failed', code))
             task.completed_at = utc_now()
             return None
 
 
 class DurableRuntimeStore:
-    def __init__(self, factory, context: ExecutionContext, worker_id: str, task_id: UUID):
+    def __init__(self, factory: sessionmaker[Session], context: ExecutionContext, worker_id: str, task_id: UUID):
         self.factory, self.context, self.worker_id, self.task_id = factory, context, worker_id, task_id
 
-    def _run(self, db):
+    def _run(self, db: Session) -> RunRecord:
+        task = db.get(OutboxRecord, self.task_id)
+        if (not task or task.completed_at or task.lease_owner != self.worker_id or
+                not task.lease_until or task.lease_until.replace(tzinfo=timezone.utc) <= utc_now()):
+            raise RuntimeFault('interrupted')
         run = db.scalar(select(RunRecord).where(RunRecord.id == self.context.run_id).with_for_update())
         if not run or run.status != 'running' or run.lease_owner != self.worker_id:
             raise RuntimeFault('interrupted')
         return run
 
-    async def emit(self, kind, payload):
+    async def emit(self, kind: str, payload: dict[str, object]) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
             if kind == 'model.started':
@@ -195,11 +205,11 @@ class DurableRuntimeStore:
                     raise RuntimeFault('run_authorization_denied') from None
             append_event(db, run.id, kind, payload)
 
-    async def message(self, message):
+    async def message(self, message: ModelMessage) -> None:
         with self.factory() as db, db.begin():
             add_message(db, self._run(db), message)
 
-    async def save_progress(self, progress):
+    async def save_progress(self, progress: RuntimeProgress) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
             db.get(NativeRunStateRecord, run.id).progress = asdict(progress)
@@ -218,7 +228,7 @@ class DurableRuntimeStore:
                 return True
             return run.cancel_requested_at is not None
 
-    def finish(self, outcome):
+    def finish(self, outcome: RuntimeOutcome) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
             _finish(db, run, outcome)
@@ -237,13 +247,13 @@ class DurableRuntimeStore:
             raise RuntimeFault('tool_authorization_denied') from None
         return binding_id
 
-    async def denied(self, name):
+    async def denied(self, name: str) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
             audit(db, run.workspace_id, run.principal_id, 'tool.denied', 'run', str(run.id),
                   {'tool_name': name[:64]}, result='denied')
 
-    async def start(self, call, binding_id):
+    async def start(self, call: ToolCall, binding_id: str | None) -> str:
         with self.factory() as db, db.begin():
             run = self._run(db)
             previous = db.scalar(select(ToolInvocationRecord).where(
@@ -258,7 +268,7 @@ class DurableRuntimeStore:
             append_event(db, run.id, 'tool.started', {'invocation_id': str(invocation_id), 'name': call.name})
             return str(invocation_id)
 
-    async def finish_tool(self, invocation_id, status, summary, error_code):
+    async def finish_tool(self, invocation_id: str, status: str, summary: str, error_code: str | None) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
             row = db.get(ToolInvocationRecord, UUID(invocation_id))
@@ -271,7 +281,7 @@ class DurableRuntimeStore:
             audit(db, run.workspace_id, run.principal_id, 'tool.' + status, 'tool_invocation', invocation_id,
                   {'run_id': str(run.id), 'error_code': error_code})
 
-    async def checkpoint(self, content):
+    async def checkpoint(self, content: str) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
             row = db.get(WorkingCheckpointRecord, run.session_id)
@@ -282,7 +292,7 @@ class DurableRuntimeStore:
             audit(db, run.workspace_id, run.principal_id, 'checkpoint.updated', 'session', str(run.session_id),
                   {'run_id': str(run.id)})
 
-    async def propose(self, kind, scope, diff):
+    async def propose(self, kind: str, scope: str, diff: str) -> str:
         if kind not in ('memory', 'sop') or scope != 'session':
             raise RuntimeFault('memory_scope_invalid')
         with self.factory() as db, db.begin():
@@ -295,7 +305,8 @@ class DurableRuntimeStore:
             return str(row.id)
 
 
-def respond_input(db, principal, workspace_id, run_id, input_request_id, response, key):
+def respond_input(db: Session, principal: Principal, workspace_id: UUID, run_id: UUID,
+                  input_request_id: UUID, response: str, key: str) -> RunRecord:
     if not key.strip() or len(key) > 255:
         raise ValueError('Idempotency-Key must contain 1 to 255 characters')
     with db.begin():
@@ -316,7 +327,7 @@ def respond_input(db, principal, workspace_id, run_id, input_request_id, respons
         if run.status != 'waiting_input' or run.cancel_requested_at:
             raise Conflict('Run is not waiting for input')
         request.response, request.response_key, request.responded_at = response, key, utc_now()
-        add_message(db, run, ModelMessage('user', response))
+        add_message(db, run, ModelMessage('user', response), origin='user_input')
         append_event(db, run.id, 'input.received', {'input_request_id': str(request.id)})
         task = db.scalar(select(OutboxRecord).where(OutboxRecord.run_id == run.id,
             OutboxRecord.message_type == 'run.execute').with_for_update())

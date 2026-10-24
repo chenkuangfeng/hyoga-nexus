@@ -91,8 +91,12 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         if any(not isinstance(options.get(key, 1), int) for key in
                ('max_rounds', 'max_tokens', 'max_output_tokens', 'max_errors', 'max_context_chars')):
             raise RuntimeFault('runtime_budget_invalid')
+        try:
+            budget = ExecutionBudget(**options)
+        except ValueError:
+            raise RuntimeFault('runtime_budget_invalid') from None
         outcome = await NativeEngine(model, gateway, store, hooks=hooks).run(
-            str(context.run_id), context.messages, token, ExecutionBudget(**options), context.progress)
+            str(context.run_id), context.messages, token, budget, context.progress)
     except RuntimeFault as exc:
         outcome = RuntimeOutcome('interrupted' if exc.code == 'interrupted' else 'failed', exc.code)
     except Exception:

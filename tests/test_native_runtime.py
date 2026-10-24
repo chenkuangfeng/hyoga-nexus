@@ -333,3 +333,134 @@ def test_environment_credentials_are_allowlisted_and_not_repr(monkeypatch):
     lease = resolver.resolve(reference, principal_id=new_id(), run_id=new_id())
     assert 'private-value' not in repr(lease)
     assert lease.reveal_for_call() == 'private-value'
+
+
+def test_context_compaction_preserves_tool_exchanges_and_original_messages(database):
+    from nexus_runtimes.native.context import compact_history, resolve_incomplete_exchanges
+    original = (ModelMessage('system', 'Rules'), ModelMessage('user', 'a' * 2000),
+        ModelMessage('assistant', 'b' * 2000), ModelMessage('user', 'Current question'),
+        ModelMessage('assistant', '', (ToolCall('one', 'echo', '{}'),)),
+        ModelMessage('tool', 'result', tool_call_id='one'))
+    compacted, removed = compact_history(original, 1000)
+    assert removed == 2
+    assert compacted[-3:] == original[-3:]
+    assert 'partial' in compacted[1].content
+    assert len(original[1].content) == 2000
+    incomplete = resolve_incomplete_exchanges((original[-2], ModelMessage('user', 'Continue after crash')))
+    assert incomplete[1].role == 'tool'
+    assert incomplete[1].tool_call_id == 'one'
+    assert 'unknown' in incomplete[1].content
+    principal, workspace, session, run, _ = stack(database)
+    other_session = None
+    with database() as db:
+        other_session = create_session(db, principal, workspace.id, agent_version_id=session.agent_version_id)
+        from nexus_platform.runs.execution import add_message
+        with db.begin():
+            db.add(MessageRecord(id=new_id(), session_id=other_session.id, sequence=1, role='user',
+                                 content='foreign session private text', runtime_metadata={}, created_at=utc_now()))
+    model = FakeModel([[ModelChunk('text', text='Safe')]])
+    run_once(database, 'worker', model_factory=lambda _: model)
+    assert 'foreign session private text' not in str(model.requests)
+
+
+def test_tool_timeout_exit_and_continuation_protocol(database):
+    principal, workspace, session, run, _ = stack(database, ['echo'])
+    async def slow(args, context):
+        await asyncio.sleep(20)
+        return ToolResult('late')
+    model = FakeModel([[call('echo', '{"text":"go"}')], [ModelChunk('text', text='timeout handled')]])
+    run_once(database, 'worker', model_factory=lambda _: model,
+             registry_factory=lambda _: registry(slow, timeout=0.02))
+    assert run_row(database, run.id).status == 'completed'
+    with database() as db:
+        assert db.scalar(select(ToolInvocationRecord).where(ToolInvocationRecord.run_id == run.id)).error_code == 'tool_timeout'
+    with database() as db:
+        second, _ = create_run(db, principal, workspace.id, session.id, message='Next', idempotency_key='next')
+    async def continuing(args, context):
+        return ToolResult('ok', continuation='Continue with evidence')
+    model = FakeModel([[call('echo', '{"text":"a"}'), call('echo', '{"text":"b"}')], [ModelChunk('text', text='complete')]])
+    run_once(database, 'worker', model_factory=lambda _: model, registry_factory=lambda _: registry(continuing))
+    roles = [message.role for message in model.requests[1].messages]
+    assert roles[-4:] == ['assistant', 'tool', 'tool', 'user']
+    with database() as db:
+        third, _ = create_run(db, principal, workspace.id, session.id, message='Exit', idempotency_key='exit')
+    async def exit_tool(args, context):
+        return ToolResult('explicit failure', disposition=ToolDisposition.EXIT, exit_status='failed', error_code='explicit_exit')
+    model = FakeModel([[call('echo', '{"text":"go"}')]])
+    run_once(database, 'worker', model_factory=lambda _: model, registry_factory=lambda _: registry(exit_tool))
+    assert run_row(database, third.id).status == 'failed'
+    assert run_row(database, third.id).error_code == 'explicit_exit'
+
+
+def test_waiting_cancel_and_unbound_tools_cannot_execute(database):
+    principal, workspace, _, run, _ = stack(database, ['ask_user'])
+    run_once(database, 'worker', model_factory=lambda _: FakeModel([[call('ask_user', '{"question":"Proceed?"}')]]))
+    with database() as db:
+        pending = db.scalar(select(InputRequestRecord).where(InputRequestRecord.run_id == run.id))
+    with database() as db:
+        request_cancel(db, principal, workspace.id, run.id)
+        with pytest.raises(Conflict):
+            respond_input(db, principal, workspace.id, run.id, pending.id, 'yes', 'answer')
+    assert run_row(database, run.id).status == 'cancelled'
+    assert not run_once(database, 'worker')
+    _, _, _, second, _ = stack(database, [])
+    seen = []
+    async def forbidden(args, context):
+        seen.append(True)
+        return ToolResult('forbidden')
+    model = FakeModel([[call('echo', '{"text":"go"}')], [ModelChunk('text', text='No access')]])
+    run_once(database, 'worker', model_factory=lambda _: model, registry_factory=lambda _: registry(forbidden))
+    assert not seen
+    with database() as db:
+        assert db.scalar(select(ToolInvocationRecord).where(ToolInvocationRecord.run_id == second.id)).error_code == 'tool_not_registered'
+
+
+def test_duration_budget_and_incomplete_provider_stream(database):
+    _, _, _, run, _ = stack(database, ['echo'], budgets={'max_seconds': 0.03})
+    async def slow(args, context):
+        await asyncio.sleep(20)
+        return ToolResult('late')
+    run_once(database, 'worker', model_factory=lambda _: FakeModel([[call('echo', '{"text":"go"}')]]),
+             registry_factory=lambda _: registry(slow))
+    assert run_row(database, run.id).error_code == 'budget_exhausted'
+    _, _, _, second, _ = stack(database)
+    async def broken_stream():
+        yield ModelChunk('text', text='incomplete')
+    model = FakeModel([broken_stream])
+    run_once(database, 'worker', model_factory=lambda _: model)
+    assert run_row(database, second.id).error_code == 'model_stream_invalid'
+    assert model.closed
+
+
+@pytest.mark.parametrize('failure,expected', [('timeout', 'model_timeout'), ('invalid', 'model_stream_invalid'), ('context', 'model_context_exceeded')])
+def test_provider_deadline_invalid_stream_and_context_errors(failure, expected):
+    async def verify():
+        def transport(request):
+            if failure == 'timeout':
+                raise httpx.ReadTimeout('private-value', request=request)
+            if failure == 'context':
+                return httpx.Response(400, json={'error': {'message': 'private-value', 'type': 'invalid_request_error', 'code': 'context_length_exceeded'}})
+            return httpx.Response(200, headers={'content-type': 'text/event-stream'}, content='data: [DONE]\n\n')
+        model = OpenAICompatibleModel(model='fake', api_key='private-value', http_client=httpx.AsyncClient(transport=httpx.MockTransport(transport)))
+        with pytest.raises(RuntimeFault) as error:
+            _ = [chunk async for chunk in model.stream(ModelRequest((ModelMessage('user', 'hello'),), (), 100))]
+        assert error.value.code == expected
+        assert 'private-value' not in str(error.value)
+        await model.close()
+    asyncio.run(verify())
+
+
+def test_unverified_sandbox_capability_is_not_executable(database):
+    _, _, _, run, _ = stack(database, ['code_run'])
+    seen = []
+    async def forbidden(args, context):
+        seen.append(True)
+        return ToolResult('must not execute')
+    tools = ToolRegistry()
+    tools.register(RegisteredTool(ToolDefinition('code_run', 'Code', {'type': 'object'}, capability='sandbox_code'), forbidden))
+    model = FakeModel([[call('code_run')], [ModelChunk('text', text='Sandbox unavailable')]])
+    run_once(database, 'worker', model_factory=lambda _: model, registry_factory=lambda _: tools)
+    assert model.requests[0].tools == ()
+    assert not seen
+    with database() as db:
+        assert db.scalar(select(ToolInvocationRecord).where(ToolInvocationRecord.run_id == run.id)).error_code == 'sandbox_unavailable'

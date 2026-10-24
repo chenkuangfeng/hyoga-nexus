@@ -409,8 +409,8 @@ def authorize_run_resource(
                 ResourceBindingRecord.agent_version_id == UUID(run.config_snapshot["agent_version_id"]),
             )
         )
-        if binding is None:
-            raise Forbidden("Resource is not bound to this Run")
+        if binding is None or binding.binding_config.get("enabled") is False:
+            raise Forbidden("Resource is not bound or enabled for this Run")
         resource = authorize_resource(
             session, workspace_id, binding.kind, binding.resource_id,
             source_workspace_id=binding.source_workspace_id,

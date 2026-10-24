@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import OverviewView from './views/OverviewView.vue'
 import ConversationView from './views/chat/ConversationView.vue'
 const page = ref(location.hash === '#overview' ? 'overview' : 'chat')
 function select(value: string) { page.value = value; location.hash = value }
-window.addEventListener('hashchange', () => { page.value = location.hash === '#overview' ? 'overview' : 'chat' })
+const hashChanged = () => { page.value = location.hash === '#overview' ? 'overview' : 'chat' }
+window.addEventListener('hashchange', hashChanged)
+onBeforeUnmount(() => window.removeEventListener('hashchange', hashChanged))
 </script>
 <template>
   <nav class="app-navigation" aria-label="主导航">
