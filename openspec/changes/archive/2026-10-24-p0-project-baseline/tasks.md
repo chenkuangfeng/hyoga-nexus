@@ -1,6 +1,6 @@
 # Tasks: P0 架构与项目结构基线收尾
 
-静态核对完成。没有发现需要增加或修改功能代码的差异；安装和运行时验收未执行。
+基线核对和基础运行验收完成。没有发现需要增加或修改功能代码的差异。
 
 - [x] 1. 基线核对
   - [x] 1.1 对照 REQ-01 至 REQ-07 核对根工作区、API、Web 和 worker 入口
@@ -13,3 +13,7 @@
 - [x] 3. 文档状态收尾
   - [x] 3.1 同步 architecture、roadmap 和 OpenSpec 的 P0 状态
   - [x] 3.2 保持 P1 及后续阶段为计划状态，不将脚手架描述成业务能力
+- [x] 4. 基础运行验收
+  - [x] 4.1 `uv sync --locked --extra dev` 与 `uv run --locked pytest`（2 项通过）
+  - [x] 4.2 API 健康/能力端点 smoke check 与 worker 占位启动
+  - [x] 4.3 Node 22.23.4 下 `npm ci` 与 `npm run build`（成功；有 bundle 体积提示）

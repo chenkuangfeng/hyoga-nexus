@@ -2,7 +2,7 @@
 
 ## Status
 - **Change ID**: `p0-project-baseline`
-- **Status**: Completed — 静态核对通过；本次未运行安装、服务或前端验证
+- **Status**: Completed — 锁定安装、pytest、API/worker smoke check 和 Node 22 前端构建通过
 
 ## Requirements
 
