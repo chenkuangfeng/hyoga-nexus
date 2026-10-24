@@ -1,6 +1,6 @@
 # Runtime 适配契约
 
-状态：目标契约草案。当前 contracts.py 仅有最小 stream 协议，本文件不表示接口已实现。
+状态：P1 已实现平台 Runtime 资源授权端口、Run/Event 持久化和外部 Session 映射表；Runtime 执行契约仍是目标设计，尚无模型循环或 SDK 适配器。
 
 ## 职责
 

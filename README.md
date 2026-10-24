@@ -6,7 +6,7 @@ Python 多类型智能体平台，支持规划中的自研 Native、Codex、Clau
 
 Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / Vite，Node.js 22.12+。模块化单体部署，API 与后台 worker 分开启动。
 
-当前已实现健康检查、规划能力目录、读取目录的前端和基础协议。本轮已调整目录与开发计划；新增包仅是骨架，尚无真实 Agent 执行、知识库、权限管理、SDK、数据采集或股票分析。
+当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Workspace 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。尚未接入真实身份提供方、凭据保险库、Native/外部 Runtime 执行、知识库、技能/MCP、数据采集或股票分析。
 
 ## 目录入口
 
@@ -30,8 +30,14 @@ Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / 
 
 ```bash
 uv sync --locked --extra dev
+test -n "$NEXUS_DATABASE_URL" || exit 1
+export NEXUS_AUTH_MODE=development
+export NEXUS_DEV_USER_ID=local-developer
+uv run alembic -c alembic.ini upgrade head
 uv run uvicorn nexus_api.main:app --reload
 ```
+
+`NEXUS_DATABASE_URL` 必须由本地环境预先设置为 PostgreSQL 连接串。开发认证使用固定的单一主体，不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `NEXUS_AUTH_MODE=external` 并在 API 组合入口注册 provider。
 
 或者使用 Python 3.11+ 环境：
 
@@ -59,4 +65,12 @@ cd apps/web
 npm run build
 ```
 
-`uv run python -m nexus_worker` 仅打印 worker 骨架说明，尚无调度或消费逻辑。参考项目独立保留在 `/project`，不嵌入本仓库。
+参考项目独立保留在 `/project`，不嵌入本仓库。
+
+在另一个终端中，使用相同的 PostgreSQL 环境变量运行 P1 worker：
+
+```bash
+uv run python -m nexus_worker
+```
+
+P1 暂无 Runtime 执行器。Worker 消费新 Run 后会把它明确标为 `failed`，错误码为 `runtime_not_configured`；它不会声称已调用模型。平台 API 文档位于 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。

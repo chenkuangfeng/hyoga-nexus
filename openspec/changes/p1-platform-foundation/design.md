@@ -10,8 +10,7 @@ flowchart LR
   API --> Platform[Platform services]
   Platform --> DB[(PostgreSQL)]
   Platform --> Outbox[(Outbox / run queue records)]
-  Outbox --> Broker[Queue candidate TBD]
-  Broker --> Worker
+  Outbox --> Worker[PostgreSQL lease polling]
   Worker --> Platform
   Worker --> Runtime[Runtime contract]
   Worker --> DB
@@ -19,7 +18,7 @@ flowchart LR
   Events --> DB
 ```
 
-用户身份来源（本地账号还是外部身份提供者）仍是待定部署决策；领域接口以稳定 `user_id` 为主体，不依赖某个身份 SDK。平台包不依赖 `guanlan`、Runtime SDK 或队列厂商 SDK；厂商消息和队列消息由应用入口/适配器转换为 core 契约。
+生产身份提供方和凭据秘密后端仍是待定部署决策；当前仅有显式启用的本地开发主体与可注入外部身份 provider。平台包不依赖 `guanlan`、Runtime SDK 或队列厂商 SDK。P1 选择 PostgreSQL Outbox/lease polling，不另设 broker；该选择及其复评条件见 ADR-0002。真实 PostgreSQL 集成验收尚未完成。
 
 ## 2. 逻辑数据模型
 
@@ -69,7 +68,7 @@ P1 角色动作矩阵：
 2. 发布生成不可变 AgentVersion 和内容哈希，并将 Agent 的发布指针原子更新。并发发布使用版本号/乐观锁；冲突返回可重试的版本冲突。
 3. 用户在 Workspace 内选择已发布版本创建 Session；Session 固定该版本与 RuntimeType。
 4. 提交 Run 时验证当前权限，按 `(workspace_id, principal_id, idempotency_key)` 去重；在单个数据库事务中写 Run、初始状态/事件及 OutboxRecord。相同键和相同请求返回原 Run；相同键但请求摘要不同返回冲突。
-5. Outbox relay 向选定队列投递 Run ID。投递可能至少一次，worker 通过原子领取/租约将 Run 从 `queued` 改为 `running`，写事件，再开始 Runtime。不得依赖 broker 的恰好一次语义。
+5. Worker 直接从 PostgreSQL Outbox 领取 Run。领取采用 `FOR UPDATE SKIP LOCKED` 和有时限 lease，Run 状态及唯一约束防止并发执行；不得假定恰好一次语义。当前 P1 不接入 Runtime，领取后明确以 `runtime_not_configured` 失败结束。
 6. Runtime 输出转成版本化 core 事件；事件分配 sequence 并持久化后才发布。完成、失败、取消及中断更新 Run 状态与终态事件需事务一致。
 7. SSE/API 按权限查询持久化事件，从 `after_sequence` 游标开始推送；断线后客户端续读，事件重放不会重新调用 Runtime。
 
@@ -81,7 +80,7 @@ P1 角色动作矩阵：
 
 RunEvent 的 sequence 在数据库事务或专用 Run 计数器下分配，确保并发写不会重复/乱序。事件存储保留期/归档策略为部署决策，但 P1 至少承诺在产品保留期内可按游标重放。读 SSE 不获得队列消费权。
 
-Outbox 可避免“Run 已提交但消息未发”窗口；relay 可重复投递。候选队列需要比较：Redis Streams、PostgreSQL 持久任务表/队列库、独立 broker（如 RabbitMQ）。验证指标包括恢复语义、可见延迟、取消控制、部署维护成本、监控、水平 worker、测试替身和本地开发。此处不作最终选择。
+Outbox 与 Run 在同一 PostgreSQL 事务提交，worker 轮询并租赁到期记录。ADR-0002 选择该方式作为 P1 初始队列，并比较 Redis Streams、RabbitMQ 的运维与解耦成本。多 worker 并发领取及 PostgreSQL 崩溃恢复尚待目标数据库验收；出现 ADR 所列的积压、资源竞争或路由需求时再做实测和新 ADR。
 
 ## 6. API 契约草案
 
@@ -99,7 +98,7 @@ API 路径仅作为契约设计，不代表当前存在路由：
 
 ## 7. 迁移与包边界
 
-拟由 `platform/persistence` 提供 Repository/Unit of Work 端口与事务边界，平台服务不依赖 ORM 具体模型。数据库实现和迁移版本由平台持久化适配器管理；应用入口注入数据库会话和队列适配器。`core` 只定义与厂商无关的 ID、枚举、DTO、事件和 Runtime/存储端口，不导入 SQLAlchemy、Redis、SDK。
+当前数据库模型、事务和迁移由 `platform/persistence` 管理，`core` 未导入 SQLAlchemy、Redis 或 SDK。P1 实现中的部分应用服务直接使用 SQLAlchemy ORM，API 也存在读取 ORM 模型的路由；完整 Repository/Unit of Work 抽象尚未落地，应在后续平台变更中逐步收敛，不应把当前边界描述成已完成。
 
 迁移需支持空库初始化、连续升级、备份恢复演练和失败后的可诊断状态。破坏性字段调整采用扩展/迁移/收缩步骤；迁移运行由明确的发布命令执行，不由每个 API/worker 实例并发自动执行。
 
@@ -120,7 +119,7 @@ API 路径仅作为契约设计，不代表当前存在路由：
 ## 9. 决策与待验证项
 
 - PostgreSQL 作为平台主关系库：已由用户确认；是否与观澜关系数据共用集群不属于本变更定论。迁移工具仍需验证并记录 ADR。
-- 队列与 Outbox relay：通过 `tasks.md` 的 P1 技术验证比较后决定。
+- 队列选择：P1 使用 PostgreSQL Outbox/lease polling，见 ADR-0002；目标 PostgreSQL 并发与故障验收仍未完成。
 - 身份认证提供方、凭据存储后端、事件保留时长、附件对象存储、加密密钥管理：先定义适配边界，产品/部署条件明确后在 ADR 决定。
 - UUIDv7 为 ID 候选，需核对 Python 版本/库策略后定案。
 - P1 首个可验收闭环限定 Native 配置类型、Agent/Session/Run 持久化及事件重放；不表示 Native 执行循环已纳入 P1。

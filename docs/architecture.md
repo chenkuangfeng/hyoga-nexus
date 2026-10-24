@@ -1,6 +1,6 @@
 # Hyoga Nexus 总体架构
 
-状态：P0 项目基线与目录骨架已落地并通过基础运行验收；正文中的业务能力尚未实现。2026-10-24。已验证锁定安装、pytest、API 健康/能力端点、worker 占位入口及 Node 22 前端构建。当前前端构建有 bundle 体积提示。
+状态：P0 已完成；P1 平台 API、PostgreSQL schema/迁移、Outbox worker 和单元/API 测试已实现。2026-10-25。PostgreSQL 专用并发/故障集成测试尚未在本环境运行；Runtime、知识库和领域业务仍未实现。
 
 ## 产品目标与边界
 
@@ -81,7 +81,7 @@ GenericAgent 的生成器与 StepOutcome 可借鉴；对外必须转成结构化
 
 ## 数据与部署基线
 
-建议首期采用 PostgreSQL 管理平台与股票关系数据，pgvector 提供初期向量索引，文件走可替换对象存储接口；开发可用本地文件，生产再配置兼容 S3 的存储。任务采用一个 Python worker 技术栈，Redis/队列实现通过阶段 P1 技术验证选定，不在本轮增加未使用依赖。
+平台主关系库确定为 PostgreSQL；知识检索的 pgvector 与对象存储按 P3 设计落地。P1 使用 PostgreSQL Outbox 表和 lease polling 作为持久任务队列，决策见 [ADR-0002](adr/0002-p1-run-queue.md)；PostgreSQL 并发/故障恢复验收尚待目标环境执行。未来只有在积压、数据库竞争或路由需求达到复评条件时才引入独立队列。
 
 知识库文档与股票数值数据各自建模。价格、复权、交易日历、财务与龙虎榜通过结构化服务查询；公告与研究文本可以进入知识库。采集任务由 worker 调度，不依赖 Agent 每天“记得执行”。
 
@@ -91,4 +91,6 @@ GenericAgent 的生成器与 StepOutcome 可借鉴；对外必须转成结构化
 
 ## 当前实际能力
 
-仅健康检查、规划能力目录、读取目录的前端与基础协议可运行。新包和目录只是模块边界，不表示已实现检索、SDK、任务调度、隔离或股票分析。
+已实现 `/api/v1/health`、PostgreSQL 连通 `/api/v1/ready`、规划能力目录，以及 P1 Workspace/Membership、模型配置版本、Agent 草稿与发布、固定版本 Session、幂等 Run、持久事件/游标、审计和 PostgreSQL Outbox worker。运行 API 需要配置 PostgreSQL 并执行 Alembic 迁移；平台 API 默认没有生产身份提供方，需明确启用本机开发身份或注入外部认证适配器。
+
+worker 会消费 Run 并标记 `runtime_not_configured`，不会调用模型。未实现真实 Runtime、凭据解析器、技能/MCP 执行、知识库、工具执行、文档处理、股票数据和分析。

@@ -10,9 +10,9 @@ P1 需要为智能体平台建立可追溯、可授权的最小持久化底座�
 - 定义最小角色授权、空间边界、资源授权校验点、凭据引用边界和撤权生效时机。
 - 定义 Agent 草稿/发布版本、会话固定版本、运行配置快照和资源版本引用语义。
 - 定义 Run 状态迁移、事件顺序/游标、持久化后投递、幂等请求和 worker 崩溃恢复策略。
-- 评估 PostgreSQL 迁移基线及候选任务队列，形成可验收的技术验证与 ADR 任务；选择在验证后确定。
+- 按已记录 ADR 采用 PostgreSQL、SQLAlchemy 2/psycopg 3/Alembic，并以 PostgreSQL Outbox 作为 P1 持久队列；目标 PostgreSQL 环境下的并发和故障恢复验收仍待完成。
 - 按可独立验收的批次实施 P1：技术决策与迁移基线、Core/持久化契约、Workspace 与授权、Agent 配置版本、Session/Run/Event 与 worker、API 验收。
-- 用户确认本提案后再开始编码；队列实现、迁移工具等未定决策必须先通过验证并记录 ADR，不在实现中隐式选型。
+- 用户已确认本提案并授权开始编码；所有实现依据此变更记录。技术选型通过 ADR 显式记录，尚未接入的生产适配器不视为已实现。
 
 ## 3. 影响与范围
 
@@ -22,7 +22,7 @@ P1 需要为智能体平台建立可追溯、可授权的最小持久化底座�
 
 ## 4. 实施批次
 
-1. **决策与存储基线**：记录 PostgreSQL 迁移工具 ADR；验证队列候选的投递、重复投递、worker 崩溃恢复、取消和优雅关闭；确定迁移和任务投递实现。
+1. **决策与存储基线**：已记录 PostgreSQL 迁移工具与 Outbox 队列 ADR；SQLite 迁移往返已验证，PostgreSQL 队列并发、崩溃恢复、取消和优雅关闭待目标环境验收。
 2. **公共契约与持久化**：在 `core` 定义稳定平台 DTO/状态/事件契约；在 `platform` 建立仓储与事务端口；创建 PostgreSQL 初始迁移、审计、幂等、Outbox 和 worker lease 结构。
 3. **身份、空间与 Agent 配置**：落地主体注入边界、Workspace/Membership 策略、Agent 草稿和不可变发布版本、模型配置及 CredentialRef、多资源绑定校验。
 4. **Session、Run 与 worker**：落地 Session、幂等 Run、运行快照、授权复核、状态迁移、持久化事件、worker 领取/恢复、事件查询与 SSE 游标。

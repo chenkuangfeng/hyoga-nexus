@@ -1,6 +1,6 @@
 # 目录设计与依赖边界
 
-本文件对应实际骨架。各目录中的 __init__.py 或 README 只是占位，功能状态见总体架构。
+本文件对应实际骨架。P1 已落地的 Workspace/Agent/Run 持久化实现位于 platform 包；其他空包与目录仍只是占位，功能状态见总体架构。
 
 ```text
 hyoga-nexus/
@@ -40,7 +40,8 @@ hyoga-nexus/
 │   ├── general/                  # 通用技能内容预留
 │   └── guanlan/                  # 股票分析、公告、热点、龙虎榜、回测技能草稿
 ├── configs/                      # agents、models、channels 的非敏感示例
-├── migrations/                   # platform、knowledge、guanlan
+├── migrations/                   # platform Alembic、knowledge、guanlan
+├── docs/adr/                     # 技术决策记录
 ├── tests/                        # 软件测试，后续按模块增设目录
 ├── evals/                        # agent、knowledge、skills、guanlan 基准样例
 ├── scripts/                      # 开发辅助入口

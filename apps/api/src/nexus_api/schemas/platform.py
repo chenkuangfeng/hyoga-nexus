@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class WorkspaceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+
+
+class WorkspaceView(BaseModel):
+    id: UUID
+    name: str
+    role: str
+    status: str
+    created_at: datetime
+
+
+class MemberCreate(BaseModel):
+    issuer: str = Field(min_length=1, max_length=128)
+    subject: str = Field(min_length=1, max_length=255)
+    role: Literal["admin", "member"] = "member"
+
+
+class MemberRoleUpdate(BaseModel):
+    role: Literal["owner", "admin", "member"]
+
+
+class MemberView(BaseModel):
+    workspace_id: UUID
+    user_id: UUID
+    role: str
+    status: str
+    joined_at: datetime
+
+
+class CredentialReferenceInput(BaseModel):
+    backend: str = Field(min_length=1, max_length=80)
+    handle: str = Field(min_length=1, max_length=512)
+
+
+class CredentialReferenceView(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    backend: str
+    status: str
+    created_at: datetime
+
+
+class ModelProfileCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    provider: str = Field(min_length=1, max_length=100)
+    model_name: str = Field(min_length=1, max_length=160)
+    options: dict[str, Any] = Field(default_factory=dict)
+    credential_reference_id: UUID | None = None
+
+
+class ModelProfileUpdate(BaseModel):
+    model_name: str = Field(min_length=1, max_length=160)
+    options: dict[str, Any] = Field(default_factory=dict)
+    credential_reference_id: UUID | None = None
+
+
+class ModelProfileVersionView(BaseModel):
+    id: UUID
+    profile_id: UUID
+    version: int
+    model_name: str
+    options: dict[str, Any]
+    credential_reference_id: UUID | None
+    content_hash: str
+    created_at: datetime
+
+
+class ModelProfileView(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    provider: str
+    current_version: ModelProfileVersionView | None
+    created_at: datetime
+
+
+class ResourceBindingInput(BaseModel):
+    kind: str = Field(min_length=1, max_length=64)
+    resource_id: str = Field(min_length=1, max_length=255)
+    resource_version_id: str | None = Field(default=None, max_length=255)
+    source_workspace_id: UUID | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentDraftInput(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=2000)
+    runtime_type: Literal["native", "codex", "claude_code", "deepseek_harness"] = "native"
+    instructions: str = Field(default="", max_length=100000)
+    model_profile_version_id: UUID
+    budgets: dict[str, Any] = Field(default_factory=dict)
+    resource_bindings: list[ResourceBindingInput] = Field(default_factory=list)
+
+
+class AgentVersionView(BaseModel):
+    id: UUID
+    agent_id: UUID
+    version: int
+    name: str
+    description: str
+    runtime_type: str
+    model_profile_version_id: UUID
+    budgets: dict[str, Any]
+    content_hash: str
+    published_at: datetime
+
+
+class AgentView(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    description: str
+    status: str
+    published_version_id: UUID | None
+    version_counter: int
+    current_version: AgentVersionView | None = None
+    runtime_type: str
+    instructions: str
+    model_profile_version_id: UUID | None
+    budgets: dict[str, Any]
+    resource_bindings: list[dict[str, Any]]
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionCreate(BaseModel):
+    agent_version_id: UUID
+    title: str = Field(default="", max_length=255)
+
+
+class SessionView(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    owner_user_id: UUID
+    agent_version_id: UUID
+    runtime_type: str
+    title: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RunCreate(BaseModel):
+    message: str = Field(min_length=1, max_length=100000)
+
+
+class RunView(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    session_id: UUID
+    principal_id: UUID
+    status: str
+    attempt: int
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    ended_at: datetime | None
+
+
+class RunEventView(BaseModel):
+    event_id: UUID
+    run_id: UUID
+    sequence: int
+    event_type: str
+    schema_version: int
+    payload: dict[str, Any]
+    occurred_at: datetime
+
+
+class ResourceGrantCreate(BaseModel):
+    source_workspace_id: UUID
+    kind: str = Field(min_length=1, max_length=64)
+    resource_id: str = Field(min_length=1, max_length=255)
+    permissions: list[Literal["read", "use"]] = Field(min_length=1)
+
+
+class ResourceGrantView(BaseModel):
+    id: UUID
+    source_workspace_id: UUID
+    target_workspace_id: UUID
+    kind: str
+    resource_id: str
+    permissions: list[str]
+    created_at: datetime

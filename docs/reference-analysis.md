@@ -34,6 +34,13 @@
 
 平台组织参考 WeKnora，Native 内核参考 GenericAgent，自有 Python 知识库形成公共资源；Codex/Claude Code/其他运行时并列接入同一资源体系。研究和复用机制优先，尚未引入参考项目源码或依赖；如后续复用实际代码，再按该文件和第三方组件的许可保留归属信息。
 
+## P1 实现映射
+
+- WeKnora 以 Tenant ID 作为资源数据范围，并由请求上下文携带 tenant/user 身份；Nexus 将该边界表达为 Workspace，并在服务层将 Principal 映射为 User，再验证 Membership。关键 AgentVersion、Session、Run 和模型配置关系增加 Workspace 复合外键，读取和写入都按 Workspace 过滤。
+- WeKnora 对共享 Agent/知识库分别检查来源租户和共享范围；Nexus 的 ResourceGrant 只表示 Workspace 间显式共享，ResourceBinding 只记录 Agent 版本想使用的资源。发布、Run 创建和真实资源访问分别复核资源登记、版本与当前 Grant，Agent 配置不会自行授予权限。
+- WeKnora 的 AgentGrant 是另一类授权：按 session/automation scope 绑定用户、grant key、配置 hash、风险级别、撤销/过期时间和 automation 空闲期。它不能与 ResourceGrant 混为一谈。P1 尚无 Runtime 工具调用和审批执行；在实现工具审批/记忆授权前，后续 OpenSpec 必须逐字段保留并扩展这些可观察语义，不得用 Workspace 角色或资源共享替代。
+- GenericAgent 的任务 Queue、输出 Queue、Abort 与 StepOutcome 属于执行生命周期。P1 只实现持久化 Run/事件和数据库 worker 投递；P2 Native Runtime 必须在统一事件契约下保留流式输出、工具结果、停止控制、生命周期钩子及运行级隔离。
+
 ## 核查入口
 
 - https://github.com/lsdefine/GenericAgent/blob/a9a36b4/agent_loop.py
