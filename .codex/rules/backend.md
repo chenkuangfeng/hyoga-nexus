@@ -1,10 +1,10 @@
 # 后端开发规范
 
-本文适用于 Python 服务端、平台底座、Runtime、工具/MCP/知识库适配器、worker、持久化与 API。项目总约束见根目录 [AGENTS.md](../AGENTS.md)。
+本文适用于 Python 服务端、平台底座、Runtime、工具/MCP/知识库适配器、worker、持久化与 API。项目总约束见根目录 [AGENTS.md](../../AGENTS.md)。
 
 ## 参考实现与能力保持
 
-- 开始核心框架工作前，阅读 [参考项目与取舍](../docs/reference-analysis.md)，并对照其中固定版本的 WeKnora、GenericAgent 源码和测试。README 或二手总结不能代替实现核对。
+- 开始核心框架工作前，阅读 [参考项目与取舍](../../docs/reference-analysis.md)，并对照其中固定版本的 WeKnora、GenericAgent 源码和测试。README 或二手总结不能代替实现核对。
 - 平台编排、资源组织、生命周期、权限/策略、会话事件等对照 WeKnora 的实际实现；Native 执行、模型响应循环、工具分发、StepOutcome、生命周期钩子、任务队列与记忆/SOP 对照 GenericAgent 的实际实现。
 - 先列出参考实现的行为、状态转换、错误处理和扩展点，再设计本项目接口。不得为了缩短代码、减少对象或方便当前验收而删除或合并已有能力语义。
 - 改动只能增加能力或增加适配层，保持既有行为和接口兼容。若 Python 栈、多租户隔离或安全要求需要改变实现形态，必须记录映射关系、兼容边界及验证方式；安全加固可以收紧未授权行为，但不能静默移除合法能力。
