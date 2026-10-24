@@ -22,6 +22,19 @@ TradingAgents 展示了一种可参考的流程：先由不同分析员生成共
 
 若后续采用该模式，专家规则用于约束证据口径、检查项和论证要求；研报知识库提供可追溯材料；XGBoost 工具提供量化结果。多空双方都应能看到相关证据，并说明接受、质疑或无法判断的理由。研究经理负责综合，不应只按发言先后、票数或模型分数裁决。
 
+### `daily_stock_analysis` 可借鉴点
+
+本地参考仓库：[`ZhuLinsen/daily_stock_analysis`](https://github.com/ZhuLinsen/daily_stock_analysis)。它更偏向专业分工、阶段编排和结构化综合，并非 TradingAgents 式多头/空头轮流辩论。以下只记录对 P7 股票领域流程有启发的模式，不表示直接复用其代码或改变 Hyoga Nexus 平台底座的参考边界。
+
+- **专业分工与统一综合**：技术、情报、风险和专项策略分析各自产出结构化观点，最后由决策 Agent 综合。观澜可据此明确每一步的职责、输入、输出和失败/缺失状态。
+- **按成本选择分析深度**：通过 quick、standard、full、specialist 等路径选择分析阶段。观澜可在 P7 设计时评估是否提供不同分析深度，而不是默认每次运行全部阶段。
+- **结构化中间观点**：将方向、置信度、依据、关键价位、风险标记等作为中间结果，使下游综合和报告能够检查输入。XGBoost 也可作为一种结构化量化观点来源，携带预测目标、周期、模型版本、验证摘要和限制。
+- **Skill 与工具分工**：Skill 指导采用何种分析策略及调用顺序；工具负责取数和可复现计算。Skill 只提供指引，不自行扩大工具权限。
+- **风险清单与程序护栏**：把需要检查的风险项、严重程度和降级要求写清楚；对于可确定判断的硬约束，使用程序校验，避免只靠模型自由发挥。
+- **输入质量可见**：用统一分析上下文记录行情、日线、技术、新闻等数据块的来源、时点、缺失和降级情况，让报告解释证据限制。
+
+这些模式可纳入候选股票分析步骤：专项分析输出并行或按序完成后，进入综合结论与风险复核。是否并行、阶段配置、结构化观点 Schema 和质量护栏细则均留待 P7 OpenSpec 阶段确认。此处不把 `daily_stock_analysis` 的 Agent 编排器当作 Hyoga Nexus Runtime 或平台架构的替代品。
+
 ## 对应股票分析步骤模块
 
 以下是讨论归纳出的候选步骤，用于对齐 P7「股票研究技能」范围；不是已定稿的产品流程：
@@ -52,4 +65,5 @@ TradingAgents 展示了一种可参考的流程：先由不同分析员生成共
 - [TradingAgents 多头研究员](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/researchers/bull_researcher.py)
 - [TradingAgents 空头研究员](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/researchers/bear_researcher.py)
 - [TradingAgents 研究经理](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/managers/research_manager.py)
+- [`daily_stock_analysis` 项目](https://github.com/ZhuLinsen/daily_stock_analysis)、[Agent 编排器](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/orchestrator.py)、[技术分析 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/technical_agent.py)、[风险 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/risk_agent.py)、[决策 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/decision_agent.py)、[分析上下文包](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/analysis-context-pack.md)
 - 本项目 [总体架构](architecture.md)、[实施计划](roadmap.md) 与 [资源模型](resource-model.md)。
