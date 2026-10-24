@@ -35,6 +35,17 @@ TradingAgents 展示了一种可参考的流程：先由不同分析员生成共
 
 这些模式可纳入候选股票分析步骤：专项分析输出并行或按序完成后，进入综合结论与风险复核。是否并行、阶段配置、结构化观点 Schema 和质量护栏细则均留待 P7 OpenSpec 阶段确认。此处不把 `daily_stock_analysis` 的 Agent 编排器当作 Hyoga Nexus Runtime 或平台架构的替代品。
 
+### Qlib 可借鉴点
+
+本地参考仓库：[`microsoft/qlib`](https://github.com/microsoft/qlib)。Qlib 是量化研究框架，适合参考建模、信号评估和投资策略回测闭环；它本身不是 Agent 编排框架。仓库中的 XGBoost Alpha158 示例将数据集、模型、时间切分、预测信号分析、组合策略与回测配置组合成可复现工作流。
+
+- **训练与在线分析分开**：模型训练、验证和发布属于离线量化研究/模型管理流程；智能体分析时调用已选定版本的模型推理工具，不应在每轮对话中临时训练模型。
+- **定义模型信号契约**：工具结果应说明标的或股票池、预测目标与周期、数据时点、特征/模型版本、分数或排序含义及适用限制。模型输出是量化证据，不天然等价于买入/卖出建议。
+- **验证信号与策略表现**：除预测误差外，还需评估信号质量和采用策略后的组合表现；回测明确基准、持仓策略、交易成本和测试时间段，并避免未来信息泄漏。历史回测结果与智能体对当前行情的解释分开呈现。
+- **保留可复现配置**：将数据集/特征定义、训练验证区间、模型参数、预测产物和回测配置关联版本，便于解释某条量化结论的来源并重跑评估。
+
+对应到候选股票分析步骤，可在在线流程的“量化建模（可选）”之前增加独立的离线模型生命周期：数据与特征准备 → 时间切分训练/验证 → 信号评估 → 策略回测 → 模型版本发布。在线流程只加载已发布模型生成预测结果，再由 Skill 指引调用时机，由分析员和研究经理结合基本面、技术面、新闻、风险及数据质量进行解释。模型训练服务、模型产物存储、推理工具、权限及验收方式均待 P7 OpenSpec 阶段设计确认。
+
 ## 对应股票分析步骤模块
 
 以下是讨论归纳出的候选步骤，用于对齐 P7「股票研究技能」范围；不是已定稿的产品流程：
@@ -66,4 +77,5 @@ TradingAgents 展示了一种可参考的流程：先由不同分析员生成共
 - [TradingAgents 空头研究员](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/researchers/bear_researcher.py)
 - [TradingAgents 研究经理](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/managers/research_manager.py)
 - [`daily_stock_analysis` 项目](https://github.com/ZhuLinsen/daily_stock_analysis)、[Agent 编排器](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/orchestrator.py)、[技术分析 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/technical_agent.py)、[风险 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/risk_agent.py)、[决策 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/decision_agent.py)、[分析上下文包](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/analysis-context-pack.md)
+- [Microsoft Qlib](https://github.com/microsoft/qlib)、[XGBoost Alpha158 工作流](https://github.com/microsoft/qlib/blob/main/examples/benchmarks/XGBoost/workflow_config_xgboost_Alpha158.yaml)、[代码组装工作流示例](https://github.com/microsoft/qlib/blob/main/examples/workflow_by_code.py)
 - 本项目 [总体架构](architecture.md)、[实施计划](roadmap.md) 与 [资源模型](resource-model.md)。
