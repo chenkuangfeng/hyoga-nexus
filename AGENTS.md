@@ -18,6 +18,33 @@
 
 开始功能开发前，阅读 [架构](docs/architecture.md)、[目录设计](docs/directory-layout.md) 和 [路线图](docs/roadmap.md) 的相关阶段。目录占位与计划不代表功能已实现。
 
+## 构建命令
+
+### 后端（Python / uv）
+
+以下命令在仓库根目录执行：
+
+- **安装开发依赖**：`uv sync --locked --extra dev`
+- **构建根应用包**：`uv build`
+- **构建指定包**：`uv build --package hyoga-nexus-core`（按需替换包名）
+- **升级平台数据库**：`uv run alembic -c alembic.ini upgrade head`
+- **启动 API**：`uv run uvicorn nexus_api.main:app --reload`
+- **启动 worker**：`uv run python -m nexus_worker`
+- **运行全部测试**：`uv run --locked pytest`
+- **运行指定测试**：`uv run --locked pytest tests/test_api.py`（按需替换测试路径）
+
+启动前按 [项目 README](README.md) 配置 PostgreSQL 连接和认证环境；Native 模型配置见 [worker 使用说明](apps/worker/README.md)。
+
+### 前端（Vue 3 / TypeScript / npm）
+
+使用 Node.js 22.12+，以下命令在 `apps/web/` 目录执行：
+
+- **安装依赖**：`npm ci`
+- **启动开发服务**：`npm run dev`
+- **类型检查与生产构建**：`npm run build`
+- **预览生产构建**：`npm run preview`
+- **浏览器测试**：`npm run test:browser`（需先安装 Playwright Chromium 并启动 Vite，详见 [Web 使用说明](apps/web/README.md)）
+
 ## 规则入口
 
 按任务范围主动阅读以下规则；不能假设工具会自动加载 `.codex/rules/`。
@@ -46,9 +73,24 @@
 
 ## 文档管理
 
+每个模块的文档存放在模块目录下的 `docs/` 中，按实际复杂度建立，不批量创建空文档：
+
+```text
+xxx-xxx/                     ← 每个包或者应用（或前端 app/package）
+├── docs/
+│   ├── requirements.md       ← 该模块做什么（功能需求）
+│   └── design.md             ← 该模块怎么做（包结构、设计决策）
+└── README.md                 ← 快速入门（父模块专属）
+```
+
+**父模块定义**：有多个子模块或者应用的模块。父模块需同时维护：
+
+- `README.md` — **模块自身说明**（功能特性、模块结构、使用方式），底部附子模块文档链接
+- `docs/requirements.md` — 汇总子模块需求
+- `docs/design.md` — 汇总子模块设计
+
 - 根 `docs/` 维护全局架构、目录、契约、路线图、参考分析和 `docs/adr/` 中的架构决策；[项目 README](README.md) 作为入口。
-- 包或应用需要独立说明时，在其 `docs/` 维护需求与设计，README 提供用途、使用方式和文档链接；按实际复杂度建立，不批量创建空文档。
-- 功能或接口变化同步更新相关说明和 OpenSpec 规格。文档简洁记录当前结果、约束及明确标注的计划；过程记录保留在变更提案和 Git 历史中。
+- 功能或接口变化同步更新相关 doc 文档和 OpenSpec 规格。文档记录当前结果、约束及明确标注的计划，不记录中间变更的说明；过程记录保留在变更提案和 Git 历史中。
 
 ## 验证与交付
 
