@@ -8,7 +8,7 @@ P1 继续采用模块化单体：API 负责认证、参数校验与平台应用�
 flowchart LR
   Client --> API
   API --> Platform[Platform services]
-  Platform --> DB[(PostgreSQL candidate)]
+  Platform --> DB[(PostgreSQL)]
   Platform --> Outbox[(Outbox / run queue records)]
   Outbox --> Broker[Queue candidate TBD]
   Broker --> Worker
@@ -119,7 +119,7 @@ API 路径仅作为契约设计，不代表当前存在路由：
 
 ## 9. 决策与待验证项
 
-- PostgreSQL 作为平台主关系库：基于架构文档候选，实施前验证并记录 ADR；是否与观澜关系数据共用集群不属于本变更定论。
+- PostgreSQL 作为平台主关系库：已由用户确认；是否与观澜关系数据共用集群不属于本变更定论。迁移工具仍需验证并记录 ADR。
 - 队列与 Outbox relay：通过 `tasks.md` 的 P1 技术验证比较后决定。
 - 身份认证提供方、凭据存储后端、事件保留时长、附件对象存储、加密密钥管理：先定义适配边界，产品/部署条件明确后在 ADR 决定。
 - UUIDv7 为 ID 候选，需核对 Python 版本/库策略后定案。
