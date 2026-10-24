@@ -4,6 +4,17 @@
 
 ## 讨论结论
 
+### AkShare 可借鉴点
+
+本地量化栈可把 [AkShare](https://github.com/akfamily/akshare) 作为 Python 金融数据接口生态的参考。它面向多类金融数据并提供 Python 接口；在观澜中，这类库应处于数据源适配位置，为领域数据服务提供候选数据源，而不是直接作为 Agent、Skill 或知识库使用。
+
+- **通过领域适配器接入**：由 `guanlan/data` 的 provider/adapter 封装外部数据接口，将外部字段映射为项目自己的行情、财务、交易日历等领域契约。Agent 和 Skill 调用项目工具，不直接依赖 AkShare 的函数或返回类型。
+- **统一来源和时点语义**：规范化数值、单位、市场/证券标识和日期，保留 provider、获取时间、数据对应时间、复权/口径等必要元数据；无法确认的字段或时点应明确标记，不要推断补齐。
+- **为源变化准备降级**：外部公开页面或接口可能变化，采集应有超时、错误分类、缓存新鲜度和经过验证的备用源策略。备用源结果标注实际来源及降级状态，不能静默混成同一数据质量。
+- **先核实适用边界**：按具体接口检查数据可用市场、历史范围、更新频率、稳定性、使用条款及商业使用限制；不同接口逐项验证，不把“库中存在接口”视为 SLA 或授权保证。
+
+因此，AkShare 的借鉴重点是多源数据接入和适配思路。是否选用它作为某个市场或数据类型的实际 provider，需要在 P6 数据平台/P7 研究技能设计和数据源验证中决定；不应让分析 Skill 绑定某个具体供应商。
+
 ### XGBoost 与智能体的关系
 
 XGBoost 更适合封装为股票领域工具，由股票分析 Skill 描述何时、为何以及如何调用；Skill 本身是工作流程指引，不负责运行模型，也不授予工具权限。工具根据明确的数据时点和预测任务执行模型，返回结构化结果，例如预测目标、预测周期、分数或概率、模型/数据版本、验证指标和适用限制。智能体把结果作为量化证据，结合其他材料分析，不将单一模型分数直接等同于买卖结论。
@@ -78,4 +89,5 @@ TradingAgents 展示了一种可参考的流程：先由不同分析员生成共
 - [TradingAgents 研究经理](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/managers/research_manager.py)
 - [`daily_stock_analysis` 项目](https://github.com/ZhuLinsen/daily_stock_analysis)、[Agent 编排器](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/orchestrator.py)、[技术分析 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/technical_agent.py)、[风险 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/risk_agent.py)、[决策 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/decision_agent.py)、[分析上下文包](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/analysis-context-pack.md)
 - [Microsoft Qlib](https://github.com/microsoft/qlib)、[XGBoost Alpha158 工作流](https://github.com/microsoft/qlib/blob/main/examples/benchmarks/XGBoost/workflow_config_xgboost_Alpha158.yaml)、[代码组装工作流示例](https://github.com/microsoft/qlib/blob/main/examples/workflow_by_code.py)
+- [AkShare 项目](https://github.com/akfamily/akshare)
 - 本项目 [总体架构](architecture.md)、[实施计划](roadmap.md) 与 [资源模型](resource-model.md)。
