@@ -8,8 +8,13 @@ members = [
     "hyoga-nexus-connectors",
     "hyoga-nexus-core",
     "hyoga-nexus-guanlan",
+    "hyoga-nexus-knowledge",
+    "hyoga-nexus-mcp",
+    "hyoga-nexus-platform",
     "hyoga-nexus-runtimes",
+    "hyoga-nexus-sandbox",
     "hyoga-nexus-skills",
+    "hyoga-nexus-tools",
 ]
 
 [[package]]
@@ -232,8 +237,13 @@ dependencies = [
     { name = "hyoga-nexus-connectors" },
     { name = "hyoga-nexus-core" },
     { name = "hyoga-nexus-guanlan" },
+    { name = "hyoga-nexus-knowledge" },
+    { name = "hyoga-nexus-mcp" },
+    { name = "hyoga-nexus-platform" },
     { name = "hyoga-nexus-runtimes" },
+    { name = "hyoga-nexus-sandbox" },
     { name = "hyoga-nexus-skills" },
+    { name = "hyoga-nexus-tools" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -250,8 +260,13 @@ requires-dist = [
     { name = "hyoga-nexus-connectors", editable = "packages/connectors" },
     { name = "hyoga-nexus-core", editable = "packages/core" },
     { name = "hyoga-nexus-guanlan", editable = "packages/guanlan" },
+    { name = "hyoga-nexus-knowledge", editable = "packages/knowledge" },
+    { name = "hyoga-nexus-mcp", editable = "packages/mcp" },
+    { name = "hyoga-nexus-platform", editable = "packages/platform" },
     { name = "hyoga-nexus-runtimes", editable = "packages/runtimes" },
+    { name = "hyoga-nexus-sandbox", editable = "packages/sandbox" },
     { name = "hyoga-nexus-skills", editable = "packages/skills" },
+    { name = "hyoga-nexus-tools", editable = "packages/tools" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1" },
 ]
@@ -261,6 +276,12 @@ provides-extras = ["dev"]
 name = "hyoga-nexus-connectors"
 version = "0.1.0"
 source = { editable = "packages/connectors" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
 
 [[package]]
 name = "hyoga-nexus-core"
@@ -271,16 +292,89 @@ source = { editable = "packages/core" }
 name = "hyoga-nexus-guanlan"
 version = "0.1.0"
 source = { editable = "packages/guanlan" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+
+[[package]]
+name = "hyoga-nexus-knowledge"
+version = "0.1.0"
+source = { editable = "packages/knowledge" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+
+[[package]]
+name = "hyoga-nexus-mcp"
+version = "0.1.0"
+source = { editable = "packages/mcp" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+
+[[package]]
+name = "hyoga-nexus-platform"
+version = "0.1.0"
+source = { editable = "packages/platform" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
 
 [[package]]
 name = "hyoga-nexus-runtimes"
 version = "0.1.0"
 source = { editable = "packages/runtimes" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+
+[[package]]
+name = "hyoga-nexus-sandbox"
+version = "0.1.0"
+source = { editable = "packages/sandbox" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
 
 [[package]]
 name = "hyoga-nexus-skills"
 version = "0.1.0"
 source = { editable = "packages/skills" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+
+[[package]]
+name = "hyoga-nexus-tools"
+version = "0.1.0"
+source = { editable = "packages/tools" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
 
 [[package]]
 name = "idna"

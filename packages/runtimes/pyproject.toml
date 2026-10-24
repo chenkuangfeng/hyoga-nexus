@@ -5,5 +5,6 @@ build-backend = "hatchling.build"
 name = "hyoga-nexus-runtimes"
 version = "0.1.0"
 requires-python = ">=3.11"
+dependencies = ["hyoga-nexus-core"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/nexus_runtimes"]
