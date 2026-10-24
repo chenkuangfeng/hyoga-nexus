@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import time
+
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -383,15 +387,47 @@ def get_run(
 def list_run_events(
     workspace_id: UUID,
     run_id: UUID,
+    request: Request,
     after_sequence: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     principal: Principal = Depends(get_principal),
     db: Session = Depends(get_database_session),
 ):
-    rows = runs.list_events(db, principal, workspace_id, run_id, after_sequence)
-    return [RunEventView(
-        event_id=row.id, run_id=row.run_id, sequence=row.sequence, event_type=row.event_type,
-        schema_version=row.schema_version, payload=row.payload, occurred_at=row.occurred_at,
-    ) for row in rows]
+    cursor = after_sequence
+    if last_event_id is not None:
+        if not last_event_id.isdecimal() or len(last_event_id) > 18:
+            raise ValueError("Last-Event-ID must be a nonnegative sequence")
+        cursor = max(cursor, int(last_event_id))
+    runs.get_run(db, principal, workspace_id, run_id)
+    if 'text/event-stream' in request.headers.get('accept', ''):
+        def stream():
+            nonlocal cursor
+            while True:
+                try:
+                    rows = runs.list_events(db, principal, workspace_id, run_id, cursor, limit)
+                    run = runs.get_run(db, principal, workspace_id, run_id)
+                except Exception:
+                    yield 'event: stream.closed\ndata: {}\n\n'
+                    return
+                for row in rows:
+                    data = event_view(row).model_dump_json()
+                    yield f'id: {row.sequence}\nevent: run.event\ndata: {data}\n\n'
+                    cursor = row.sequence
+                if len(rows) == limit:
+                    continue
+                if run.status in ('completed', 'failed', 'cancelled', 'interrupted', 'waiting_input', 'waiting_approval'):
+                    return
+                yield ': heartbeat\n\n'
+                time.sleep(0.25)
+        return StreamingResponse(stream(), media_type='text/event-stream',
+            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+    return [event_view(row) for row in runs.list_events(db, principal, workspace_id, run_id, cursor, limit)]
+
+
+def event_view(row):
+    return RunEventView(event_id=row.id, run_id=row.run_id, sequence=row.sequence, event_type=row.event_type,
+        schema_version=row.schema_version, payload=row.payload, occurred_at=row.occurred_at)
 
 
 @router.post("/workspaces/{workspace_id}/runs/{run_id}/cancel", response_model=RunView, status_code=202)
@@ -475,3 +511,66 @@ def bindings_data(bindings, default_workspace_id: UUID) -> list[dict[str, Any]]:
         }
         for binding in bindings
     ]
+
+
+@router.get('/workspaces/{workspace_id}/sessions/{session_id}/messages')
+def conversation_history(workspace_id: UUID, session_id: UUID,
+    after_sequence: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500),
+    principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    messages, latest = sessions.conversation(db, principal, workspace_id, session_id,
+                                            after_sequence=after_sequence, limit=limit)
+    return {'messages': [{'id': row.id, 'run_id': row.run_id, 'sequence': row.sequence,
+                          'role': row.role, 'content': row.content, 'created_at': row.created_at} for row in messages],
+            'latest_run': RunView.model_validate(latest, from_attributes=True) if latest else None}
+
+
+@router.get('/workspaces/{workspace_id}/runs/{run_id}/input')
+def pending_input(workspace_id: UUID, run_id: UUID, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)):
+    from nexus_platform.persistence.models import InputRequestRecord
+    runs.get_run(db, principal, workspace_id, run_id)
+    with db.begin():
+        pending = db.scalar(select(InputRequestRecord).where(InputRequestRecord.run_id == run_id,
+                            InputRequestRecord.responded_at.is_(None)).order_by(InputRequestRecord.created_at.desc()))
+        return {'input_request_id': pending.id, 'question': pending.question} if pending else None
+
+
+from nexus_api.schemas.platform import InputResponse
+
+
+@router.post('/workspaces/{workspace_id}/runs/{run_id}/input', response_model=RunView, status_code=202)
+def submit_input(workspace_id: UUID, run_id: UUID, body: InputResponse,
+    idempotency_key: str = Header(alias='Idempotency-Key'),
+    principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    from nexus_platform.runs.execution import respond_input
+    row = respond_input(db, principal, workspace_id, run_id, body.input_request_id, body.response, idempotency_key)
+    return RunView.model_validate(row, from_attributes=True)
+
+
+@router.get('/workspaces/{workspace_id}/runs/{run_id}/memory-drafts')
+def memory_drafts(workspace_id: UUID, run_id: UUID, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)):
+    from nexus_platform.persistence.models import MemoryDraftRecord
+    runs.get_run(db, principal, workspace_id, run_id)
+    with db.begin():
+        rows = db.scalars(select(MemoryDraftRecord).where(MemoryDraftRecord.source_run_id == run_id,
+                                                         MemoryDraftRecord.workspace_id == workspace_id))
+        return [{'id': row.id, 'kind': row.kind, 'scope': row.scope, 'diff': row.diff,
+                 'status': row.status, 'source_run_id': row.source_run_id} for row in rows]
+
+
+@router.post('/workspaces/{workspace_id}/tools/{name}/enable', status_code=201)
+def enable_builtin(workspace_id: UUID, name: str, principal: Principal = Depends(get_principal),
+                   db: Session = Depends(get_database_session)):
+    from nexus_tools.builtins import builtins
+    from nexus_platform.errors import NotFound
+    tool = builtins(None).get(name, 'v1')
+    if not tool:
+        raise NotFound('Tool not found')
+    with db.begin():
+        user = resolve_user(db, principal)
+        require_workspace(db, workspace_id)
+        require_membership(db, workspace_id, user.id, roles=ADMIN_ROLES)
+        workspaces.register_resource(db, workspace_id=workspace_id, kind='tool', resource_id=name, version_id='v1')
+        workspaces.audit(db, workspace_id, user.id, 'tool.enabled', 'tool', name)
+    return {'kind': 'tool', 'resource_id': name, 'resource_version_id': 'v1', 'source_workspace_id': workspace_id}

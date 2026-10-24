@@ -69,3 +69,15 @@ def get_session_for_user(session: Session, principal: Principal, workspace_id: U
         if row is None:
             raise NotFound("Session not found")
         return row
+
+
+def conversation(session, principal, workspace_id, session_id, *, after_sequence=0, limit=200):
+    from nexus_platform.persistence.models import MessageRecord, RunRecord
+    owner = get_session_for_user(session, principal, workspace_id, session_id)
+    with session.begin():
+        messages = list(session.scalars(select(MessageRecord).where(
+            MessageRecord.session_id == owner.id, MessageRecord.sequence > after_sequence)
+            .order_by(MessageRecord.sequence).limit(limit)))
+        latest = session.scalar(select(RunRecord).where(RunRecord.session_id == owner.id)
+                                .order_by(RunRecord.created_at.desc()).limit(1))
+        return messages, latest

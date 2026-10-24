@@ -107,7 +107,21 @@ def ready():
 @app.get("/api/v1/capabilities")
 def capabilities():
     return {
-        "runtimes": [{"name": name, "status": "planned"} for name in ["自研 Native", "Codex", "Claude Code", "DeepSeek Harness"]],
-        "channels": [{"name": name, "status": "planned"} for name in ["Web", "企业微信", "微信", "QQ"]],
+        "runtimes": [{"name": "自研 Native", "status": "requires_configuration"},
+                     *[{"name": name, "status": "planned"} for name in ["Codex", "Claude Code", "DeepSeek Harness"]]],
+        "channels": [{"name": "Web", "status": "available"},
+                     *[{"name": name, "status": "planned"} for name in ["企业微信", "微信", "QQ"]]],
         "applications": [{"name": "观澜 Guanlan", "status": "planned"}],
     }
+
+
+@app.get("/api/v1/runtime-capabilities")
+def runtime_capabilities():
+    return {"native": {"status": "implemented", "configuration_required": True,
+            "model_protocols": ["openai_chat_completions"], "streaming": True,
+            "sequential_tools": True, "waiting_input": True, "cancellation": True,
+            "working_checkpoint": True, "memory_drafts": True,
+            "tools": ["ask_user", "update_working_checkpoint", "propose_memory_draft"]},
+            "sandbox": {"status": "unavailable", "reason": "isolated_backend_not_configured",
+                        "code_execution": False, "shell": False, "host_files": False,
+                        "arbitrary_network": False, "file_artifacts": False}}

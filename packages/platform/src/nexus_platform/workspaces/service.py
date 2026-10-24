@@ -336,6 +336,7 @@ def audit(
     target_type: str,
     target_id: str,
     metadata: dict[str, object] | None = None,
+    *, result: str = "success",
 ) -> None:
     session.add(
         AuditRecord(
@@ -345,7 +346,7 @@ def audit(
             action=action,
             target_type=target_type,
             target_id=target_id,
-            result="success",
+            result=result,
             metadata_json=metadata or {},
             created_at=utc_now(),
         )

@@ -32,7 +32,7 @@ def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
     schema = "nexus_test_" + uuid4().hex[:12]
     admin_engine = create_engine(database_url)
     admin_url = parsed.set(query={**parsed.query, "options": f"-csearch_path={schema}"})
-    scoped_url = str(admin_url)
+    scoped_url = admin_url.render_as_string(hide_password=False)
     scoped_engine = create_engine(scoped_url, pool_size=5, max_overflow=5)
     try:
         with admin_engine.begin() as connection:
@@ -77,8 +77,9 @@ def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
         assert reclaimed_id == claimed_id
 
         with factory() as session:
+            second_session = create_session(session, principal, workspace.id, agent_version_id=version.id)
             second_run, _ = create_run(
-                session, principal, workspace.id, platform_session.id, message="second",
+                session, principal, workspace.id, second_session.id, message="second",
                 idempotency_key="lease-recovery",
             )
         with factory() as session:

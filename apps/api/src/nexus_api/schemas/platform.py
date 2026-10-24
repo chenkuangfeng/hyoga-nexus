@@ -193,3 +193,8 @@ class ResourceGrantView(BaseModel):
     resource_id: str
     permissions: list[str]
     created_at: datetime
+
+
+class InputResponse(BaseModel):
+    input_request_id: UUID
+    response: str = Field(min_length=1, max_length=100000)

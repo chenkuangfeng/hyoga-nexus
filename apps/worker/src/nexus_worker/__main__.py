@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import argparse
 import logging
 import os
@@ -14,13 +15,13 @@ logging.basicConfig(level=os.getenv("NEXUS_LOG_LEVEL", "INFO"))
 logger = logging.getLogger("nexus_worker")
 
 
-def run_once(factory, worker_id: str) -> bool:
+def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> bool:
     with factory() as session:
         task_id = claim_next(session, worker_id)
     if task_id is None:
         return False
-    with factory() as session:
-        process_claimed(session, task_id, worker_id)
+    from nexus_worker.native import execute_native
+    asyncio.run(execute_native(factory, task_id, worker_id, stopped=stopped, **execution_options))
     return True
 
 
@@ -40,9 +41,9 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     try:
         while not stopped.is_set():
             try:
-                processed = run_once(factory, worker_id)
+                processed = run_once(factory, worker_id, stopped=stopped)
             except Exception:
-                logger.exception("Worker task failed", extra={"worker_id": worker_id})
+                logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id})
                 processed = False
             if once:
                 return

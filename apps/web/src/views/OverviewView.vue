@@ -22,13 +22,13 @@ onMounted(load)
   <main>
     <header><div><p class="eyebrow">HYOGA NEXUS / 织枢</p><h1>智能体工作台</h1></div><el-button :loading="loading" @click="load">刷新状态</el-button></header>
     <p class="intro">连接模型、技能与业务。观澜是平台的首个股票研究应用。</p>
-    <el-alert title="项目初始化阶段：以下能力均待接入。" type="info" :closable="false" show-icon />
+    <el-alert title="Native 对话已实现，需配置模型与凭据；其他规划能力以状态为准。" type="info" :closable="false" show-icon />
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="error" />
     <el-skeleton v-if="loading" :rows="6" animated />
     <section v-else class="grid" aria-label="平台能力">
       <el-card v-for="(items, key) in groups" :key="key" shadow="never">
         <template #header><h2>{{ titles[key] || key }}</h2></template>
-        <div v-for="item in items" :key="item.name" class="capability"><span>{{ item.name }}</span><el-tag type="info">待接入</el-tag></div>
+        <div v-for="item in items" :key="item.name" class="capability"><span>{{ item.name }}</span><el-tag :type="item.status === 'available' ? 'success' : 'info'">{{ item.status === 'available' ? '已接入' : item.status === 'requires_configuration' ? '待配置' : '待接入' }}</el-tag></div>
       </el-card>
     </section>
   </main>

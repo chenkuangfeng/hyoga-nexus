@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -309,6 +310,7 @@ class MessageRecord(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     role: Mapped[str] = mapped_column(String(24), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    runtime_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -324,6 +326,9 @@ class RunRecord(Base):
             "status IN ('queued','running','waiting_input','waiting_approval','completed','failed','cancelled','interrupted')",
             name="ck_runs_status",
         ),
+        Index("uq_runs_active_session", "session_id", unique=True,
+              sqlite_where=text("status IN ('queued','running','waiting_input','waiting_approval')"),
+              postgresql_where=text("status IN ('queued','running','waiting_input','waiting_approval')")),
         Index("ix_runs_session_created", "session_id", "created_at"),
         Index("ix_runs_lease", "status", "lease_until"),
     )
@@ -362,6 +367,7 @@ class RunEventRecord(Base):
 
 class ToolInvocationRecord(Base):
     __tablename__ = "tool_invocations"
+    __table_args__ = (Index("uq_tool_invocations_operation", "run_id", "operation_id", unique=True),)
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     run_id: Mapped[UUID] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
@@ -423,4 +429,43 @@ class OutboxRecord(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NativeRunStateRecord(Base):
+    __tablename__ = 'native_run_states'
+    run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), primary_key=True)
+    progress: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class InputRequestRecord(Base):
+    __tablename__ = 'run_input_requests'
+    __table_args__ = (UniqueConstraint('run_id', 'response_key', name='uq_input_response_key'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    response: Mapped[str | None] = mapped_column(Text)
+    response_key: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WorkingCheckpointRecord(Base):
+    __tablename__ = 'session_checkpoints'
+    session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id', ondelete='CASCADE'), primary_key=True)
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryDraftRecord(Base):
+    __tablename__ = 'memory_drafts'
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope: Mapped[str] = mapped_column(String(255), nullable=False)
+    diff: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default='pending_review')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

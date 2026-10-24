@@ -9,4 +9,11 @@ def test_health():
 def test_unimplemented_capabilities_are_not_advertised_as_ready():
     response = client.get("/api/v1/capabilities")
     assert response.status_code == 200
-    assert all(item["status"] == "planned" for group in response.json().values() for item in group)
+    data = response.json()
+    assert data["runtimes"][0]["status"] == "requires_configuration"
+    assert all(item["status"] == "planned" for item in data["runtimes"][1:])
+    assert all(item["status"] == "planned" for item in data["channels"][1:])
+    capabilities = client.get('/api/v1/runtime-capabilities').json()
+    assert capabilities['sandbox']['code_execution'] is False
+    assert capabilities['sandbox']['shell'] is False
+    assert capabilities['native']['streaming'] is True

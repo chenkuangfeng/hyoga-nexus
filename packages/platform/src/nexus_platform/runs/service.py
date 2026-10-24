@@ -115,6 +115,12 @@ def create_run(
                 raise Conflict("Idempotency key was already used for a different request")
             return existing, True
 
+        if session.scalar(select(RunRecord.id).where(
+            RunRecord.session_id == session_id,
+            RunRecord.status.in_(['queued', 'running', 'waiting_input', 'waiting_approval']),
+        ).limit(1)) is not None:
+            raise Conflict("Session already has an active Run")
+
         authorized_resources: list[dict[str, Any]] = []
         for binding in bindings:
             authorized_resources.append({
@@ -208,7 +214,7 @@ def get_run(session: Session, principal: Principal, workspace_id: UUID, run_id: 
         return run
 
 
-def list_events(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID, after_sequence: int):
+def list_events(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID, after_sequence: int, limit: int = 200):
     with session.begin():
         user = resolve_user(session, principal)
         require_workspace(session, workspace_id)
@@ -228,7 +234,7 @@ def list_events(session: Session, principal: Principal, workspace_id: UUID, run_
             session.scalars(
                 select(RunEventRecord)
                 .where(RunEventRecord.run_id == run.id, RunEventRecord.sequence > after_sequence)
-                .order_by(RunEventRecord.sequence)
+                .order_by(RunEventRecord.sequence).limit(limit)
             )
         )
 
@@ -250,7 +256,7 @@ def request_cancel(session: Session, principal: Principal, workspace_id: UUID, r
             raise NotFound("Run not found")
         if RunStatus(run.status).terminal:
             return run
-        if run.status == RunStatus.QUEUED.value:
+        if run.status in (RunStatus.QUEUED.value, RunStatus.WAITING_INPUT.value, RunStatus.WAITING_APPROVAL.value):
             transition_run(run, RunStatus.CANCELLED)
             run.cancel_requested_at = now
             run.ended_at = now
@@ -275,6 +281,7 @@ def request_cancel(session: Session, principal: Principal, workspace_id: UUID, r
                         available_at=now, attempts=0, created_at=now,
                     )
                 )
+        append_event(session, run.id, "run.cancel_requested", {"status": run.status}, now)
         audit(session, workspace_id, user.id, "run.cancel_requested", "run", str(run.id))
     return run
 
