@@ -30,4 +30,5 @@ def configured_routing(context, factory, resolver):
                 routed = replace(context, options=version.options, model_name=version.model_name, provider=profile.provider, credential=credential)
             return configured_model(routed, resolver)
         factories.append(fallback)
-    return RetryModel(RoutedModel(factories, spring_back_seconds=policy.routing_spring_seconds), policy)
+    return RetryModel(RoutedModel(factories, spring_back_seconds=policy.routing_spring_seconds,
+                                         max_retry_delay_seconds=policy.max_retry_delay_seconds), policy)

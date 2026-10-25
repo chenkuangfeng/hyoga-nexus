@@ -29,3 +29,7 @@ Python 全量回归、Web 类型/生产构建及浏览器夹具仅证明本地�
 - `npm run build`：类型与生产构建通过，存在 chunk 体积提示。
 - `npm run test:browser`：聊天和模型设置夹具通过，包含候选项点击与追加指令幂等提交。
 - 修改文档的本地链接及 `git diff --check`：通过。
+
+## 模型错误与终态局部验收
+
+已按用户确认完成三协议错误/终态、工具完整性、缓存用量与有界重试修复；详见 [独立批次验收](../../../openspec/changes/model-terminal-consistency/verification.md)。该批次不消除本提案的完整迁移与环境验收待办。

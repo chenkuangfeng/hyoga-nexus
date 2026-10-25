@@ -4,6 +4,10 @@
 
 全文阅读并核对哈希：api/endpoint.go、endpoint_test.go、sse.go、sse_test.go、usage.go、stream_assembler.go、stream_assembler_test.go，三协议 client.go，openaicompletions/stream_tool_index_test.go。对三协议 request.go、Responses/Anthropic 综合测试与 Completions golden_test.go 做请求生成和终态相关分支核对；这些文件仍只记定点阅读，不宣称全部测试映射完成。路径均相对 internal/models/。
 
+## 当前批次实现
+
+上文审查对应的三个复现缺口已在用户确认后的局部修复中覆盖，证据见 [验收记录](../../openspec/changes/model-terminal-consistency/verification.md)。本文复现段保留为原审查证据，不等同当前实现状态；完整模型迁移仍未完成。
+
 ## 请求与生命周期
 
 Endpoint 负责 JSON 编码、认证、自定义 header、URL SSRF 校验、Session ID 与固定 User-Agent；静态模型 header 不能覆盖本次会话身份。Do 将发送失败包装为 TransportError，非 2xx 保留 HTTPError/status/header 和最多 1 MiB 正文，并关闭 body。PostJSON 将超大响应、解码失败和读取中断区分，只有读取中断包装为 TransportError。Retry-After 支持数字秒和 HTTP 日期。

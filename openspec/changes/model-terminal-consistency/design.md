@@ -49,7 +49,7 @@ Retry-After 支持非负数字秒和 HTTP 日期，受已有 max_retry_delay_sec
 
 ## 用量
 
-按协议解释已有 usage 字段，不改变用户设置。Responses/Chat total 缺失时为 input+output，cache_read 是 input 子集；Anthropic 普通 input 与 cache_read/cache_creation 相加后再加 output。累计 usage 更新采用最新快照/对应字段合并，不累加每个 SSE 快照。total 有效时尊重供应商总值；负数、非数值、溢出/不合理字段显式验证，不能静默增加预算或抛出原始解析异常。实现前固定可接受数值范围和测试。
+按协议解释已有 usage 字段，不改变用户设置。Responses/Chat total 缺失时为 input+output，cache_read 是 input 子集；Anthropic 普通 input 与 cache_read/cache_creation 相加后再加 output。累计 usage 更新采用最新快照/对应字段合并，不累加每个 SSE 快照。total 有效时尊重供应商总值；负数、非数值、溢出/不合理字段显式验证，不能静默增加预算或抛出原始解析异常。已固定为 0..2**53-1 的 JSON 整数（不接受布尔/字符串/分数），相关无效值回归覆盖。
 
 ## 验收矩阵
 

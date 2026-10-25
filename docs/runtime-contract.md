@@ -57,3 +57,9 @@ Claude Code、DeepSeek Harness 在各自阶段核对官方文档和真实项目�
 模型供应商设置通过不可变 ModelProfileVersion 进入 Native 配置。显式模型选择优先于个人默认和空间默认；默认仅用于新智能体选择，不改已发布版本或已有会话。个人模型在发布、会话/运行创建及实际执行时校验归属，不能通过共享 Agent 扩大使用权限。
 
 worker 支持 environment 与 encrypted 凭据解析；密文凭据受 Run/主体/空间/模型约束，配置错误不向事件暴露秘密。实际网络客户端和测试连接共用目的地址策略，默认公网 HTTPS、DNS/IP 固定、不跟随重定向。详见 [ADR-0004](adr/0004-model-provider-settings.md)。
+
+## Native 模型结果约束
+
+模型适配器只在已验证终态后交付可执行工具；失败、过滤、截断或未闭合工具不得变成工具执行。部分流失败保留已发文本，Run 明确失败，本次请求不自动重发；仅预输出的暂时故障可以在现有预算内重试/切换。Retry-After 受已有最大延迟与取消/截止时间约束，不缩短后提前重试。
+
+错误继续以稳定字符串传递，新增 `model_authentication_failed`、`model_request_rejected`、`model_quota_exhausted`、`model_response_failed` 区分永久失败，既有 timeout/rate_limited/provider_unavailable/context/stream 错误保留。供应商正文与认证信息不进入错误文本。usage 保留 input/output/cache_read/cache_creation 字段，total 按协议归一；缺失或零用量的预算仍使用既有估算。实现与来源边界见 [Runtime 设计](../packages/runtimes/docs/design.md)。

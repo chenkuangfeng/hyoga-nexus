@@ -6,6 +6,8 @@ Native calls take precedence so identical embedded text cannot execute a second 
 import json
 import re
 from dataclasses import replace
+from contextlib import aclosing
+from .errors import mark_output
 from nexus_core.runtime import ModelChunk, ModelMessage, RuntimeFault, ToolCall
 
 
@@ -56,26 +58,44 @@ class TextToolModel:
             'After tool results, continue until the user task is complete. Mounted tools: ' + schema)
         actual = replace(request, messages=(guidance, *request.messages), tools=())
         text, native, usage, reason = '', [], [], ''
-        async for chunk in self.model.stream(actual):
-            if chunk.kind == 'text':
-                text += chunk.text
-            elif chunk.kind == 'tool_call':
-                native.append(chunk)
-            elif chunk.kind == 'usage':
-                usage.append(chunk)
-            elif chunk.kind == 'done':
-                reason = chunk.finish_reason
+        started = False
+        try:
+            async with aclosing(self.model.stream(actual)) as stream:
+                async for chunk in stream:
+                    if reason and chunk.kind != 'usage':
+                        raise RuntimeFault('model_stream_invalid')
+                    started |= chunk.kind in ('text', 'tool_call', 'done')
+                    if chunk.kind == 'text':
+                        text += chunk.text
+                    elif chunk.kind == 'tool_call':
+                        native.append(chunk)
+                    elif chunk.kind == 'usage':
+                        usage[:] = [chunk]
+                    elif chunk.kind == 'done':
+                        if reason:
+                            raise RuntimeFault('model_stream_invalid')
+                        reason = chunk.finish_reason
+                    if len(text) > request.max_output_tokens * 8 or len(native) > 32:
+                        raise RuntimeFault('budget_exhausted')
+            if reason not in ('stop', 'tool_calls', 'length', 'max_tokens', 'content_filter'):
+                raise RuntimeFault('model_stream_invalid')
+        except RuntimeFault as exc:
+            # The supplier may have streamed data even though this parser buffers it.
+            # Preserve public non-tool text on failure, but never expose partial calls.
+            if text and '<tool_' not in text:
+                yield ModelChunk('text', text=text)
+            raise mark_output(exc, started) from None
         self._sequence += 1
-        calls, visible = ([], text) if native else parse_text_calls(text)
+        calls, visible = ([], text) if native or reason in ('length', 'max_tokens', 'content_filter') else parse_text_calls(text)
         if visible:
             yield ModelChunk('text', text=visible)
-        for chunk in native:
+        for chunk in native if reason not in ('content_filter', 'length', 'max_tokens') else ():
             yield chunk
         for call in calls:
             yield ModelChunk('tool_call', tool_call=replace(call, id=f'text-{self._sequence}-{call.id}'))
         for chunk in usage:
             yield chunk
-        yield ModelChunk('done', finish_reason='tool_calls' if native or calls else reason)
+        yield ModelChunk('done', finish_reason=reason if reason in ('length', 'max_tokens', 'content_filter') else 'tool_calls' if native or calls else reason)
 
     async def close(self):
         await self.model.close()

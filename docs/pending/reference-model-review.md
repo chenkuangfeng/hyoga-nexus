@@ -4,6 +4,10 @@
 
 定点阅读 GA 桌面模型切换测试，以及 Nexus models 的 factory、routing、retry、tool_protocol、protocols/structured、openai_compatible 和对应回归测试。WK 其余模型协议、HTTP Endpoint 和 stream assembler 尚未在本批完整审查，不将本批结论推广为整个模型模块完成。
 
+## 当前实现说明
+
+本文缺口表为修复前审查基线。用户已确认并完成“模型错误与终态一致性”局部实现；当前修复及验证以 [批次记录](../../openspec/changes/model-terminal-consistency/verification.md)为准，不将下列全部差异当作仍未修复或完整迁移已完成。
+
 ## 配置、连接与会话基础
 
 - GA MyKeys 优先查找并执行 mykey Python 源码，否则读取 mykey.json；JSON 可含 remote_url 并发出远程配置请求。加载前后比对本地 mtime_ns，reload 普通异常保留旧快照，成功更新单调版本；Python 加载中的 BaseException 清理 sys.modules 后继续抛出，不全部被 reload 吞掉。

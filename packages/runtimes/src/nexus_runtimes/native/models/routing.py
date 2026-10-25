@@ -1,7 +1,9 @@
 """GA MixinSession sticky fallback/spring-back translated to request-local async models."""
 import time
 from nexus_core.runtime import RuntimeFault
-from .retry import RETRYABLE
+from contextlib import aclosing
+from .errors import RETRYABLE, mark_output
+from .retry import wait_for_retry
 
 
 class RoutedModel:
@@ -11,10 +13,11 @@ class RoutedModel:
     Failed partial streams only choose another node for the *next* request. Successfully
     completed tools are outside this module and cannot be replayed by route selection.
     """
-    def __init__(self, factories, *, spring_back_seconds=300, clock=time.monotonic):
+    def __init__(self, factories, *, spring_back_seconds=300, max_retry_delay_seconds=60, clock=time.monotonic):
         if not factories:
             raise ValueError('At least one model is required')
         self.factories, self.spring, self.clock = tuple(factories), spring_back_seconds, clock
+        self.max_retry_delay = max_retry_delay_seconds
         self.current, self.switched_at = 0, 0
         self._clients = []
 
@@ -28,20 +31,24 @@ class RoutedModel:
             self._clients.append(model)
             emitted = False
             try:
-                async for chunk in model.stream(request):
-                    emitted |= chunk.kind in ('text', 'tool_call', 'done')
-                    yield chunk
+                async with aclosing(model.stream(request)) as stream:
+                    async for chunk in stream:
+                        emitted |= chunk.kind in ('text', 'tool_call', 'done')
+                        yield chunk
                 self.current = index
                 if index != base:
                     self.switched_at = self.clock()
                 return
-            except RuntimeFault as exc:
-                if emitted:
+            except RuntimeFault as original:
+                exc = mark_output(original, emitted)
+                if exc.output_started:
                     self.current = (index + 1) % len(self.factories)
                     self.switched_at = self.clock()
-                    raise
-                if exc.code not in RETRYABLE or offset == len(self.factories) - 1:
-                    raise
+                    raise exc from None
+                if exc.recovery_blocked or exc.code not in RETRYABLE or offset == len(self.factories) - 1:
+                    raise exc from None
+                if exc.retry_after is not None:
+                    await wait_for_retry(exc, 0, self.max_retry_delay)
             finally:
                 await model.close()
                 self._clients.remove(model)

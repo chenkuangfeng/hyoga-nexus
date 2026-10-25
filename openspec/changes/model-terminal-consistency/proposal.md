@@ -39,4 +39,4 @@
 
 ## Status
 
-待用户确认，尚未编码。实施与验收清单见 [tasks.md](tasks.md)，具体映射见 [design.md](design.md)。
+用户已明确确认，局部实现与本地验收已完成；环境边界见 [verification.md](verification.md)。实施与验收清单见 [tasks.md](tasks.md)，具体映射见 [design.md](design.md)。

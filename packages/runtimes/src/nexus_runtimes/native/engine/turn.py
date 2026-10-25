@@ -60,4 +60,6 @@ async def collect_response(model, request: ModelRequest, token, store, turn: int
         raise RuntimeFault('model_stream_invalid')
     if response.finish_reason in ('stop', 'tool_calls') and bool(response.calls) != (response.finish_reason == 'tool_calls'):
         raise RuntimeFault('model_stream_invalid')
+    if response.finish_reason == 'content_filter':
+        raise RuntimeFault('model_content_filtered')
     return response
