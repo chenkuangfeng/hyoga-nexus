@@ -15,3 +15,5 @@
 | [stock-analysis-discussion.md](stock-analysis-discussion.md) | P7 | 股票分析流程、多空辩论（`TradingAgents`）、分工编排与量化回测（`Qlib`）探讨记录 |
 
 增补源码证据：[GenericAgent 外围入口与协作审查](reference-peripheral-review.md)，包含 UltraPlan、Agent BBS、HTTP App、Python 执行头、中英文记忆模板与配置向导的分支、适配边界与待验证项。
+
+审查排期与逐项职责：[范围盘点](reference-review-plan.md)、[工作清单](reference-review-worklist.tsv)；完整模块证据：[hooks 与插件](reference-hooks-review.md)。
