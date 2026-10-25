@@ -104,11 +104,11 @@ flowchart TB
 ### 4.1 Milestone 1.1：当前工作区 `native-reference-parity` 改动审计、收口与基线闭环
 
 - **现状与目标**：
-  - 当前本地工作区已有 `docs/pending/native-reference-parity` 的实施代码（含 `runtimes/native/engine/{runner,turn,completion,recovery,tools,cancellation}.py`、`context/{assembly,compaction,history,working}.py`、`models/{factory,routing,retry,tool_protocol,protocols}`、`platform/{memory,runs,sessions/fork}` 及前端 `NativeSettingsView.vue`、`RuntimeControls.vue`、`ModelBranchControls.vue`）。
+  - 仓库已有 Native 迁移批次的实施代码（含 `runtimes/native/engine/{runner,turn,completion,recovery,tools,cancellation}.py`、`context/{assembly,compaction,history,working}.py`、`models/{factory,routing,retry,tool_protocol,protocols}`、`platform/{memory,runs,sessions/fork}` 及前端 `NativeSettingsView.vue`、`RuntimeControls.vue`、`ModelBranchControls.vue`）。
   - 第一步不是再叠新代码，而是**先对工作区现有改动做完整质量审计、清理临时目录（如 `third_party/`）、跑通全量测试与前端构建并提交入库**，确立干净的 Stage 1 基线。
 - **具体实施任务**：
   1. 清理工作区未跟踪的第三方参考源码副本（`third_party/`），确保符合 `AGENTS.md`“不提交第三方源码仓库”的红线。
-  2. 对照 [native-reference-parity/tasks.md](native-reference-parity/tasks.md) 核查当前已实现的模块边界、版权归属头与类型注解。
+  2. 核查当前已实现的模块边界、版权归属头与类型注解。
   3. 运行 `uv run --locked pytest`（含 `tests/test_native_parity.py`）与 `apps/web` 的 `npm run build`，修复任何潜在边界缺陷后完成分批提交。
 - **验收门禁**：
   - 全量 `pytest` 100% 通过，`apps/web` 生产构建零错误，`git status` 工作区干净。

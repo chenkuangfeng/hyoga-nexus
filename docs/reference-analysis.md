@@ -56,8 +56,8 @@
 
 ## 源码差距审计与后续迁移
 
-[Native 双项目审计](pending/native-reference-audit.md)列明已核实缺口、上游来源、模块结构和逻辑冲突。WeKnora 的 `internal/agent` 包含实际执行循环、完成判断、压缩、steer、审批与恢复，应一并迁移，而不只参考资源组织。
+WeKnora 的 `internal/agent` 包含实际执行循环、完成判断、压缩、steer、审批与恢复，应一并迁移，而不只参考资源组织。
 
 当前 P2 本地验证不等于 GenericAgent 完整功能兼容。no_tool 判断、done hooks、回合收尾、完整工作记忆/长期 SOP、上下文变换 hooks、多模型协议/故障转移等尚未完整实现；六项代码/文件/浏览器工具按用户此前确认继续暂缓。未审查、未实现、暂缓和部署未验收分别登记，不再以“接口预留”或“已参考”代替功能迁移完成。
 
-后续范围见 [源码迁移提案](pending/native-reference-parity/proposal.md)，尚待确认。
+后续设计讨论见 [综合架构分析](pending/open-source-agents-analysis-and-solution.md)与[分阶段实施方案](pending/omni-agent-phased-implementation-plan.md)。

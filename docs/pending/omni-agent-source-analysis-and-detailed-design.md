@@ -2,7 +2,7 @@
 
 > 状态：独立设计建议，供评审；不表示现有功能已经实现，也不自动批准后续编码。
 > 分析日期：2026-10-25。对象为 `/project` 下的八个本地 Git 快照；`weknora`、`tradingagents`、`fastgpt` 分别按实际目录 `WeKnora`、`TradingAgents`、`FastGPT` 分析，`deepseek-harne ss` 按 `deepseek-harness` 分析。
-> 本文不以 hyoga-nexus 当前包结构、数据库或路线图为设计起点。保留 Python 服务端、Vue/TypeScript 用户界面作为组织实施约束，而非从现有代码倒推架构。目录名按本次要求使用 `docs/pedding/`。
+> 本文不以 hyoga-nexus 当前包结构、数据库或路线图为设计起点。保留 Python 服务端、Vue/TypeScript 用户界面作为组织实施约束，而非从现有代码倒推架构。文档位于 `docs/pending/`。
 
 ## 目录
 

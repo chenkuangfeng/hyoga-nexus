@@ -6,4 +6,4 @@
 
 - [功能需求](docs/requirements.md)
 - [模块设计](docs/design.md)
-- [双项目源码差距审计](../../docs/pending/native-reference-audit.md)
+- [综合架构分析](../../docs/pending/open-source-agents-analysis-and-solution.md)

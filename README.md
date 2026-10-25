@@ -20,7 +20,7 @@ Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / 
 
 ## 开发计划
 
-[总体架构](docs/architecture.md) · [资源模型](docs/resource-model.md) · [Runtime 契约](docs/runtime-contract.md) · [实施计划](docs/roadmap.md) · [参考项目分析](docs/reference-analysis.md) · [待确认分析与方案](docs/pending/README.md)
+[总体架构](docs/architecture.md) · [资源模型](docs/resource-model.md) · [Runtime 契约](docs/runtime-contract.md) · [实施计划](docs/roadmap.md) · [参考项目分析](docs/reference-analysis.md) · [待确认分析与方案](docs/pending/)
 
 顺序：平台底座 → 自研智能体 → Python 知识库与技能/MCP → Codex/Claude Code → 股票数据与研究技能 → 多渠道；企业微信可以在基础执行稳定后提前。
 

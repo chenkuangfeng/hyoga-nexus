@@ -29,7 +29,7 @@ P1 的首批 API、迁移、配置与 Run/Outbox 已实现；目标 PostgreSQL �
 
 ## 待定事项
 
-- Native 迁移方向已明确：按 GenericAgent / WeKnora 锁定源码复制或等价翻译迁移，保留全部适用行为与模块边界；日常配置前端优先。完整差距和待确认范围见 [双项目审计](pending/native-reference-audit.md)及[提案](pending/native-reference-parity/proposal.md)。
+- Native 迁移方向已明确：按 GenericAgent / WeKnora 锁定源码复制或等价翻译迁移，保留全部适用行为与模块边界；日常配置前端优先。后续设计讨论见 [综合架构分析](pending/open-source-agents-analysis-and-solution.md)及[分阶段实施方案](pending/omni-agent-phased-implementation-plan.md)。
 - 首批模型、账号与部署资源；外部 Runtime 支持版本和认证方式。
 - 队列/调度实现、解析/OCR 与重排后端，经过验证后记录 ADR。
 - 微信/QQ/企业微信各自接入模式与账号条件。

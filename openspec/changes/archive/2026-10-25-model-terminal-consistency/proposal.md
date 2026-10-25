@@ -4,7 +4,7 @@
 
 当前 Nexus 三协议适配器的错误、终态和用量语义不一致。已本地复现 Responses 非流式 failed 被归为 done/stop、Anthropic 未闭合工具仍被返回、Responses cached 输入被重复计入总量。普通正常路径回归通过不能排除这些缺陷；将永久拒绝归为 provider_unavailable 还可能引发重试。
 
-来源与分支证据见 [GA 模型审查](../../../../docs/pending/reference-model-review.md)和 [WK 协议审查](../../../../docs/pending/reference-weknora-protocol-review.md)。本提案是完整迁移的一个独立验收批次，不表示完整对齐。
+来源与分支映射见 [模型来源映射](../../../../third_party/model-terminal-mapping.md)。本提案是完整迁移的一个独立验收批次，不表示完整对齐。
 
 ## What Changes
 

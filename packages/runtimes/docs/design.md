@@ -6,7 +6,7 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 通过 httpx transport 注入假 HTTP 的既有 Provider 单元测试仍可执行；用户配置的真实请求由 API/worker 装配安全 transport。
 
-完整参考实现迁移尚未完成，实际缺口和拟采用的模块划分见 [双项目审计](../../../docs/pending/native-reference-audit.md)。`reference-source-inventory.tsv` 的未审查项仍是待办；不得把当前单类循环视作两个项目的完整等价实现。
+完整参考实现迁移尚未完成，后续设计讨论见 [综合架构分析](../../../docs/pending/open-source-agents-analysis-and-solution.md)。当前实现不代表两个项目的完整等价迁移。
 
 ## Native 迁移批次
 
@@ -14,7 +14,7 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 `context/working.py` 管理工作锚点和周期提醒，`compaction.py` 在配置启用时生成摘要并保留源记录；失败降级为有界历史片段。`hooks/` 提供可信注册与追加上下文/完成提示，不能扩大资源授权。模型模块按协议、文本工具解析、重试和路由分离，支持 Chat Completions、Responses、Anthropic Messages；流已输出后不重新拼接重试结果。协议测试目前使用 HTTP 夹具，尚未证明真实供应商兼容性。
 
-配置由不可变 AgentVersion 快照注入。来源、许可证、验证和未完成范围见 [本批记录](../../../docs/pending/native-reference-parity/verification.md)。
+配置由不可变 AgentVersion 快照注入。模型局部修复的来源与许可证见 [来源映射](../../../third_party/model-terminal-mapping.md)，验证和未验收范围见 [批次记录](../../../openspec/changes/archive/2026-10-25-model-terminal-consistency/verification.md)。
 
 ## 模型失败、终态和用量
 
