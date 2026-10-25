@@ -95,4 +95,4 @@ GenericAgent 的生成器与 StepOutcome 可借鉴；对外必须转成结构化
 
 worker 装配 Native Engine 和 OpenAI-compatible 流式模型适配器，按运行解析允许的环境凭据引用。支持授权 Python 工具、当前权限复核、生命周期 hooks、运行级取消、等待输入、检查点与 Memory/SOP 草稿。缺少协议/Runtime 时仍明确 `runtime_not_configured`，缺少凭据时为 `model_credential_unavailable`。Web 提供空间、已发布 Native Agent 和 Session 选择、对话、工具状态、停止与游标重连。
 
-尚未接入真实身份/凭据保险库、外部 Runtime、技能/MCP/知识库执行、隔离 Sandbox、文件产物、股票数据与分析。SQLite 仅用于本轮隔离验收，不能代替 PostgreSQL 并发/部署测试。配置方式见 [worker 使用说明](../apps/worker/README.md)，实现边界见 [ADR-0003](adr/0003-native-model-and-execution.md)。
+已接入用户模型供应商设置、个人/共享范围、加密 Key 与默认模型，详见 [ADR-0004](adr/0004-model-provider-settings.md)。尚未接入真实身份/外部凭据保险库、外部 Runtime、技能/MCP/知识库执行、隔离 Sandbox、文件产物、股票数据与分析。SQLite 仅用于本轮隔离验收，不能代替 PostgreSQL 并发/部署测试。配置方式见 [worker 使用说明](../apps/worker/README.md)，实现边界见 [ADR-0003](adr/0003-native-model-and-execution.md)。

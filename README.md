@@ -6,7 +6,7 @@ Python 多类型智能体平台，已实现自研 Native，规划接入 Codex、
 
 Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / Vite，Node.js 22.12+。模块化单体部署，API 与后台 worker 分开启动。
 
-当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Workspace 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。P2 已实现 Native 多轮流式执行、授权 Python 工具、取消/等待输入、SSE 续读与对话工作台，并完成 SQLite/模拟模型验证。尚未接入真实身份提供方、凭据保险库、外部 Runtime、知识库、技能/MCP、隔离沙箱、文件产物或股票分析。
+当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Workspace 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。P2 已实现 Native 多轮流式执行、授权 Python 工具、取消/等待输入、SSE 续读与对话工作台，并完成 SQLite/模拟模型验证。用户设置已支持多个模型供应商、多个模型、加密 Key、个人/空间默认模型和连接测试。尚未接入真实身份提供方、凭据保险库、外部 Runtime、知识库、技能/MCP、隔离沙箱、文件产物或股票分析。
 
 ## 目录入口
 
@@ -73,4 +73,4 @@ npm run build
 uv run python -m nexus_worker
 ```
 
-P2 worker 按已发布 Native Agent 配置执行。需显式配置模型协议、凭据引用和允许解析的环境变量；未配置时仍明确失败，不声称已调用模型。配置步骤见 [worker 使用说明](apps/worker/README.md)，对话与浏览器验证见 [Web 使用说明](apps/web/README.md)。平台 API 文档位于 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。
+P2 worker 按已发布 Native Agent 配置执行。可通过用户设置配置供应商/模型与 Key（API/worker 需同一部署加密主密钥），也可继续使用凭据引用与允许解析的环境变量；未配置时仍明确失败，不声称已调用模型。配置步骤见 [worker 使用说明](apps/worker/README.md)，对话与浏览器验证见 [Web 使用说明](apps/web/README.md)。平台 API 文档位于 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。

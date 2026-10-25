@@ -469,3 +469,37 @@ class MemoryDraftRecord(Base):
     diff: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default='pending_review')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ModelProviderRecord(Base):
+    __tablename__ = 'model_providers'
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), nullable=False)
+    owner_user_id: Mapped[UUID | None] = mapped_column(ForeignKey('users.id'))
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    credential_id: Mapped[UUID] = mapped_column(ForeignKey('credential_references.id'), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProviderModelRecord(Base):
+    __tablename__ = 'provider_models'
+    profile_id: Mapped[UUID] = mapped_column(ForeignKey('model_profiles.id'), primary_key=True)
+    provider_id: Mapped[UUID] = mapped_column(ForeignKey('model_providers.id'), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class ModelDefaultRecord(Base):
+    __tablename__ = 'model_defaults'
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version_id: Mapped[UUID] = mapped_column(ForeignKey('model_profile_versions.id'), nullable=False)
+
+
+class ProviderCredentialRecord(Base):
+    __tablename__ = 'provider_credentials'
+    credential_id: Mapped[UUID] = mapped_column(ForeignKey('credential_references.id'), primary_key=True)
+    provider_id: Mapped[UUID] = mapped_column(ForeignKey('model_providers.id'), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)

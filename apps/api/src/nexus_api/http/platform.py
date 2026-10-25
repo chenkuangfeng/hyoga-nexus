@@ -209,6 +209,13 @@ def list_model_profiles(
         items = []
         for profile in profiles:
             version = db.get(ModelProfileVersionRecord, profile.current_version_id) if profile.current_version_id else None
+            from nexus_platform.models.provider_settings import authorize_model
+            from nexus_platform.errors import NotFound
+            try:
+                if version:
+                    authorize_model(db, workspace_id, user.id, version.id)
+            except NotFound:
+                continue
             items.append(model_profile_view(profile, version))
     return items
 
@@ -262,6 +269,15 @@ def list_agents(
         rows = agents.list_agents(db, workspace_id)
         output = []
         for row in rows:
+            from nexus_platform.models.provider_settings import authorize_model
+            from nexus_platform.errors import NotFound
+            version = db.get(AgentVersionRecord, row.published_version_id) if row.published_version_id else None
+            model_id = row.draft_model_profile_version_id if membership.role in ADMIN_ROLES else (version.model_profile_version_id if version else None)
+            if model_id:
+                try:
+                    authorize_model(db, workspace_id, user.id, model_id)
+                except NotFound:
+                    continue
             if membership.role in ADMIN_ROLES:
                 bindings = list(db.scalars(
                     select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == row.id)
@@ -290,11 +306,15 @@ def get_agent(
         membership = require_membership(db, workspace_id, user.id)
         row, bindings = agents.get_agent(db, workspace_id, agent_id)
         public_version = None
+        from nexus_platform.models.provider_settings import authorize_model
+        if membership.role in ADMIN_ROLES and row.draft_model_profile_version_id:
+            authorize_model(db, workspace_id, user.id, row.draft_model_profile_version_id)
         if membership.role not in ADMIN_ROLES:
             public_version = db.get(AgentVersionRecord, row.published_version_id) if row.published_version_id else None
             if public_version is None:
                 from nexus_platform.errors import NotFound
                 raise NotFound("Agent not found")
+            authorize_model(db, workspace_id, user.id, public_version.model_profile_version_id)
             bindings = list(db.scalars(
                 select(ResourceBindingRecord).where(ResourceBindingRecord.agent_version_id == public_version.id)
             ))

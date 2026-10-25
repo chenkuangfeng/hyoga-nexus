@@ -51,3 +51,9 @@ Claude Code、DeepSeek Harness 在各自阶段核对官方文档和真实项目�
 `POST .../runs/{run_id}/input` 提交 input_request_id、response 和 `Idempotency-Key`；`GET .../input` 查询未消费请求。回答继续同一 Run，累计预算，未知副作用不重放。`GET .../runs/{run_id}/memory-drafts` 仅返回有权 Run 的待审核草稿。`GET /api/v1/runtime-capabilities` 明确已实现 Native 与不可用 Sandbox。
 
 工作检查点与消息按 Session 隔离。先复核历史来源资源授权，再做有界摘录；源消息不删。中断造成的缺失工具结果只补上下文中的未知结果标记，不执行工具。
+
+## 用户模型配置与凭据
+
+模型供应商设置通过不可变 ModelProfileVersion 进入 Native 配置。显式模型选择优先于个人默认和空间默认；默认仅用于新智能体选择，不改已发布版本或已有会话。个人模型在发布、会话/运行创建及实际执行时校验归属，不能通过共享 Agent 扩大使用权限。
+
+worker 支持 environment 与 encrypted 凭据解析；密文凭据受 Run/主体/空间/模型约束，配置错误不向事件暴露秘密。实际网络客户端和测试连接共用目的地址策略，默认公网 HTTPS、DNS/IP 固定、不跟随重定向。详见 [ADR-0004](adr/0004-model-provider-settings.md)。

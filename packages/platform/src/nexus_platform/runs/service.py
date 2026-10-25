@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, RunStatus, new_id, utc_now
 from nexus_platform.errors import Conflict, Forbidden, NotFound
+from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
 from nexus_platform.persistence.models import (
     AgentRecord,
@@ -95,6 +96,7 @@ def create_run(
                 source_workspace_id=binding.source_workspace_id,
                 resource_version_id=binding.resource_version_id, permission="use"
             )
+        authorize_model(session, workspace_id, user.id, agent_version.model_profile_version_id)
         profile_version = session.get(ModelProfileVersionRecord, agent_version.model_profile_version_id)
         if profile_version is None:
             raise Conflict("Agent model profile version is unavailable")

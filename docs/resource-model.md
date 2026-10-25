@@ -75,3 +75,7 @@ Message 新增内部 Runtime 元数据，关联 assistant tool calls 和 tool_ca
 同 Session 的 queued/running/waiting_input/waiting_approval Run 互斥，重复幂等请求仍返回原 Run。工具 registry 定义名称、版本、schema、timeout、副作用与 capability；Agent 绑定不授予权限，实际调用复核当前身份、Workspace、Run、binding、资源状态与 grant，并记录 invocation 和访问审计。未登记、禁用、坏参数、撤权与超时分别可诊断。
 
 危险代码 capability 在没有隔离后端时拒绝执行，不能通过注册普通 Python 函数获得沙箱权限。Native 当前不能执行技能/MCP/知识库绑定，遇到这些尚未接入的资源能力明确失败，不静默宣称已使用资源。
+
+## 用户模型供应商设置
+
+供应商记录归属 Workspace；owner_user_id 非空时仅该用户可管理和调用，空值表示空间共享并由管理员维护。每个供应商关联多个 ModelProfile，模型修改生成不可变版本。加密凭据独立保存并绑定引用 ID，模型 options 仅保存公开地址/协议。个人与空间默认分开保存，空间默认不得指向个人模型。停用保留历史元数据并清除相关默认；已有运行/会话的固定版本不自动替换。配置与授权细节见 [平台设计](../packages/platform/docs/design.md)。

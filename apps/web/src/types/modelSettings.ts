@@ -1,0 +1,5 @@
+export type SettingsScope = 'personal' | 'workspace'
+export interface ConfiguredModel { id: string; name: string; version_id: string; version: number }
+export interface ModelProvider { id: string; name: string; base_url: string; scope: SettingsScope; key_configured: boolean; models: ConfiguredModel[] }
+export interface ModelSettings { providers: ModelProvider[]; defaults: Partial<Record<SettingsScope, string>>; can_manage_workspace: boolean }
+export interface ProviderInput { name: string; base_url: string; scope: SettingsScope; api_key?: string }

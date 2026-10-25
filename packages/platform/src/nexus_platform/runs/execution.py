@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import CredentialRef, Principal, RunStatus, new_id, utc_now
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
 from nexus_platform.errors import PlatformError, Conflict, NotFound
+from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
 from nexus_platform.persistence.models import (
     AgentVersionRecord, CredentialReferenceRecord, InputRequestRecord, MessageRecord,
@@ -118,6 +119,7 @@ def prepare_execution(factory: sessionmaker[Session], task_id: UUID, worker_id: 
             if not user or user.status != 'active':
                 raise RuntimeFault('run_authorization_denied')
             version = db.get(AgentVersionRecord, UUID(run.config_snapshot['agent_version_id']))
+            authorize_model(db, run.workspace_id, run.principal_id, version.model_profile_version_id)
             model = db.get(ModelProfileVersionRecord, version.model_profile_version_id)
             profile = db.get(ModelProfileRecord, model.profile_id)
             credential = None
@@ -195,6 +197,8 @@ class DurableRuntimeStore:
             run = self._run(db)
             if kind == 'model.started':
                 try:
+                    authorize_model(db, run.workspace_id, run.principal_id,
+                                    UUID(run.config_snapshot['model_profile_version_id']))
                     require_workspace(db, run.workspace_id)
                     require_membership(db, run.workspace_id, run.principal_id)
                     for source_id in self.context.history_run_ids:

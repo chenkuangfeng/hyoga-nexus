@@ -10,7 +10,7 @@
 - 首个模型适配使用 `openai==2.29.0`（Apache-2.0）的异步 Chat Completions 流。模型配置必须显式设置 `options.protocol=openai_chat_completions`；`provider` 名称不用于猜测协议。SDK 类型与异常只在模型适配器中出现。禁用 SDK 自动重试，工具执行后不重放整个回合。
 - 工具参数使用 `jsonschema==4.26.0`（MIT）校验，定义按名称和版本注册；处理器必须为可协作取消的异步函数。阻塞或资源密集执行需独立 executor/隔离后端，不能当作普通快速函数注册。
 - 工具由显式绑定和当前资源授权共同控制；模型不能通过参数选择主体/空间/Run。工具作者提供公开结果投影；投影后的最多 4000 字符用于模型、消息和事件，原始输出不自动落盘。详细输出/文件产物留待隔离 Artifact backend，不把截断伪装成完整结果。
-- 凭据仅在 worker 边界解析。首个 resolver 读取 `env://` 引用，并额外要求 `NEXUS_MODEL_CREDENTIAL_ALLOWLIST`；默认拒绝所有环境变量名。其他凭据后端保留注入端口。
+- 凭据仅在受控服务端调用边界解析，用户设置测试连接与加密凭据扩展见 [ADR-0004](0004-model-provider-settings.md)。首个 resolver 读取 `env://` 引用，并额外要求 `NEXUS_MODEL_CREDENTIAL_ALLOWLIST`；默认拒绝所有环境变量名。其他凭据后端保留注入端口。
 - 同一 Session 仅允许一个活跃 Run（含等待状态），由服务检查和数据库部分唯一索引兜底。重复幂等请求仍返回同一 Run。
 - 等待输入继续同一 Run：持久问题与回答，重置该 Run 的 execute Outbox 后释放请求。回答幂等，轮次/token/活跃耗时预算累计，用户等待时间不消耗执行时长。
 - 不恢复进程内模型流。失去 execute 租约后 Run/未决工具标记 interrupted；旧 worker 的持久化写入检查租约，不盲目重放副作用。

@@ -16,6 +16,7 @@ from nexus_platform.persistence.models import (
     CredentialReferenceRecord,
     ModelProfileRecord,
     ModelProfileVersionRecord,
+    ModelProviderRecord, ProviderModelRecord, ProviderCredentialRecord,
 )
 from nexus_platform.workspaces.service import ADMIN_ROLES, audit
 
@@ -41,6 +42,8 @@ def create_model_profile(
         require_workspace(session, workspace_id)
         require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
         if credential_reference_id is not None:
+            if session.scalar(select(ProviderCredentialRecord.credential_id).where(ProviderCredentialRecord.credential_id == credential_reference_id)):
+                raise ValueError('Manage stored credentials through model settings')
             reference = session.get(CredentialReferenceRecord, credential_reference_id)
             if reference is None or reference.workspace_id != workspace_id or reference.status != "active":
                 raise NotFound("Credential reference not found")
@@ -100,9 +103,13 @@ def update_model_profile(
                 ModelProfileRecord.id == profile_id, ModelProfileRecord.workspace_id == workspace_id
             ).with_for_update()
         )
+        if session.get(ProviderModelRecord, profile_id):
+            raise ValueError('Manage this model through model settings')
         if profile is None:
             raise NotFound("Model profile not found")
         if credential_reference_id is not None:
+            if session.scalar(select(ProviderCredentialRecord.credential_id).where(ProviderCredentialRecord.credential_id == credential_reference_id)):
+                raise ValueError('Manage stored credentials through model settings')
             reference = session.get(CredentialReferenceRecord, credential_reference_id)
             if reference is None or reference.workspace_id != workspace_id or reference.status != "active":
                 raise NotFound("Credential reference not found")

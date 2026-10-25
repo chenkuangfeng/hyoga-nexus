@@ -76,3 +76,7 @@ hyoga-nexus/
 - `migrations/platform/versions/b5a16ed22801_native_runtime.py`：P2 增量迁移；`tests/test_native_*.py`、`tests/web/conversation.mjs`：隔离验证。
 
 使用方式见 [worker](../apps/worker/README.md) 和 [Web](../apps/web/README.md) 说明。没有新增 SQLite 应用后端产品模式，也未实现隔离 Sandbox 或文件产物。
+
+## 用户模型设置
+
+`platform/models/provider_settings.py` 管理供应商、密文和默认偏好；API `http/model_settings.py` 提供设置与有界连接测试；Web `views/settings/ModelSettingsView.vue`、`composables/useModelSettings.ts` 和 `api/modelSettings.ts` 提供用户设置。Runtime `native/models/network.py` 实现目的地址检查和 DNS/IP 固定，worker 显式装配。迁移为 `c8d240ab1701`，模型继续使用不可变版本。

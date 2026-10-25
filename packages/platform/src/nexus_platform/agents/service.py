@@ -10,6 +10,7 @@ from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.errors import Conflict, InvalidConfiguration, NotFound
 from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
 from nexus_platform.models.service import clean_public_options, content_hash
+from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.persistence.models import (
     AgentDraftBindingRecord,
     AgentRecord,
@@ -45,8 +46,9 @@ def create_agent(
     with session.begin():
         user = resolve_user(session, principal)
         require_workspace(session, workspace_id)
-        require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
+        require_membership(session, workspace_id, user.id)
         verify_model_version(session, workspace_id, model_profile_version_id)
+        authorize_model(session, workspace_id, user.id, model_profile_version_id)
         agent = AgentRecord(
             id=new_id(), workspace_id=workspace_id, name=name.strip(), description=description.strip(),
             status="draft", draft_runtime_type=runtime_type, draft_instructions=instructions,
@@ -84,15 +86,18 @@ def update_agent_draft(
     with session.begin():
         user = resolve_user(session, principal)
         require_workspace(session, workspace_id)
-        require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
+        require_membership(session, workspace_id, user.id)
         agent = session.scalar(
             select(AgentRecord).where(
                 AgentRecord.id == agent_id, AgentRecord.workspace_id == workspace_id
             ).with_for_update()
         )
+        if agent is not None and agent.created_by != user.id:
+            require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
         if agent is None:
             raise NotFound("Agent not found")
         verify_model_version(session, workspace_id, model_profile_version_id)
+        authorize_model(session, workspace_id, user.id, model_profile_version_id)
         agent.name = name.strip()
         agent.description = description.strip()
         agent.draft_runtime_type = runtime_type
@@ -111,12 +116,14 @@ def publish_agent(session: Session, principal: Principal, workspace_id: UUID, ag
     with session.begin():
         user = resolve_user(session, principal)
         require_workspace(session, workspace_id)
-        require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
+        require_membership(session, workspace_id, user.id)
         agent = session.scalar(
             select(AgentRecord).where(
                 AgentRecord.id == agent_id, AgentRecord.workspace_id == workspace_id
             ).with_for_update()
         )
+        if agent is not None and agent.created_by != user.id:
+            require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
         if agent is None:
             raise NotFound("Agent not found")
         if agent.draft_runtime_type != "native":
@@ -126,6 +133,7 @@ def publish_agent(session: Session, principal: Principal, workspace_id: UUID, ag
         model_profile, model_version = verify_model_version(
             session, workspace_id, agent.draft_model_profile_version_id
         )
+        authorize_model(session, workspace_id, user.id, model_version.id)
         if model_version.credential_reference_id:
             credential = session.get(CredentialReferenceRecord, model_version.credential_reference_id)
             if credential is None or credential.workspace_id != workspace_id or credential.status != "active":

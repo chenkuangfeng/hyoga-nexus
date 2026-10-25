@@ -11,6 +11,9 @@ from dataclasses import fields
 from nexus_core.platform import utc_now
 from nexus_core.runtime import ExecutionBudget, RuntimeFault, RuntimeOutcome, ToolDefinition, ToolDisposition, ToolResult
 from nexus_platform.models.ports import CredentialLease
+from nexus_platform.models.provider_settings import StoredCredentialResolver
+from nexus_platform.errors import PlatformError
+from nexus_runtimes.native.models.network import provider_client
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_runtimes.native.engine import CancellationToken, NativeEngine
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
@@ -36,11 +39,15 @@ def configured_model(context, resolver):
         raise RuntimeFault('runtime_not_configured')
     if not context.credential:
         raise RuntimeFault('model_credential_unavailable')
-    lease = resolver.resolve(context.credential, principal_id=context.principal_id, run_id=context.run_id)
+    try:
+        lease = resolver.resolve(context.credential, principal_id=context.principal_id, run_id=context.run_id)
+    except PlatformError:
+        raise RuntimeFault('model_credential_unavailable') from None
     if lease.expires_at <= utc_now():
         raise RuntimeFault('model_credential_unavailable')
     return OpenAICompatibleModel(model=context.model_name, api_key=lease.reveal_for_call(),
-        base_url=context.options.get('base_url', 'https://api.openai.com/v1'))
+        base_url=context.options.get('base_url', 'https://api.openai.com/v1'),
+        http_client=provider_client(context.options.get('base_url', 'https://api.openai.com/v1')))
 
 
 
@@ -77,7 +84,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         if model_factory:
             model = model_factory(context)
         else:
-            model = configured_model(context, resolver or EnvironmentCredentialResolver())
+            model = configured_model(context, resolver or StoredCredentialResolver(factory, EnvironmentCredentialResolver()))
         if context.runtime_type != 'native':
             raise RuntimeFault('runtime_not_configured')
         registry = (registry_factory or builtins)(store)

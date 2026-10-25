@@ -7,6 +7,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13,<2",
+    "cryptography>=46,<48",
     "hyoga-nexus-core",
     "psycopg[binary]>=3.2,<4",
     "sqlalchemy>=2.0,<3",
