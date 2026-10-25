@@ -15,6 +15,8 @@
 
 范围统计与职责工作清单见 [审查计划](../reference-review-plan.md)；本批完成 plugins 四文件全文阅读及哈希核对，证据与未覆盖测试见 [hooks 审查](../reference-hooks-review.md)。全量审查任务继续未完成。
 
+模型模块增补：[模型协议与故障转移审查](../reference-model-review.md)完成 GA llmcore 与 WK JSON retry/原测试全文阅读和哈希核对；确认 Responses failed 归一成功缺口。WK 其余协议与完整差分验证仍未完成。
+
 ## 源码审查和确认
 - [ ] 用户确认本提案的范围、模块结构和冲突解决方案。
 - [ ] 对剩余索引逐职责分类与深读，包括全部执行分支、测试、配置、提示词和外围能力；每项保留来源/目标/适配/证据，不漏项。

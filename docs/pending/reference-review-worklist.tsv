@@ -3926,8 +3926,8 @@ weknora	internal/models/api/rerank.go	WK 模型与上下文配置	inventoried_no
 weknora	internal/models/api/rerank_settings.go	WK 模型与上下文配置	inventoried_not_reviewed	file
 weknora	internal/models/api/response_limit.go	WK 模型与上下文配置	inventoried_not_reviewed	file
 weknora	internal/models/api/response_limit_test.go	WK 模型与上下文配置	inventoried_not_reviewed	file
-weknora	internal/models/api/retry.go	WK 模型与上下文配置	inventoried_not_reviewed	file
-weknora	internal/models/api/retry_test.go	WK 模型与上下文配置	inventoried_not_reviewed	file
+weknora	internal/models/api/retry.go	WK 模型与上下文配置	read_or_targeted_review	file
+weknora	internal/models/api/retry_test.go	WK 模型与上下文配置	read_or_targeted_review	file
 weknora	internal/models/api/runtime_notice_test.go	WK 模型与上下文配置	inventoried_not_reviewed	file
 weknora	internal/models/api/sandbox_file_progress.go	WK 模型与上下文配置	inventoried_not_reviewed	file
 weknora	internal/models/api/sandbox_file_progress_test.go	WK 模型与上下文配置	inventoried_not_reviewed	file

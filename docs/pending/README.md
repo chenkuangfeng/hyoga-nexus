@@ -17,3 +17,5 @@
 增补源码证据：[GenericAgent 外围入口与协作审查](reference-peripheral-review.md)，包含 UltraPlan、Agent BBS、HTTP App、Python 执行头、中英文记忆模板与配置向导的分支、适配边界与待验证项。
 
 审查排期与逐项职责：[范围盘点](reference-review-plan.md)、[工作清单](reference-review-worklist.tsv)；完整模块证据：[hooks 与插件](reference-hooks-review.md)。
+
+Native 核心模型证据：[模型协议、历史与故障转移审查](reference-model-review.md)，含非流式错误终态复现和待修复批次。
