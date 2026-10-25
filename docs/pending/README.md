@@ -13,3 +13,5 @@
 | [knowledge-base-implementation.md](knowledge-base-implementation.md) | P3 | Python 知识库、混合检索与可选图谱增强（GraphRAG）分步实施计划 |
 | [guanlan-data-platform-discussion.md](guanlan-data-platform-discussion.md) | P6 | 观澜股票数据平台与外部数据源（如 AkShare）适配讨论记录 |
 | [stock-analysis-discussion.md](stock-analysis-discussion.md) | P7 | 股票分析流程、多空辩论（`TradingAgents`）、分工编排与量化回测（`Qlib`）探讨记录 |
+
+增补源码证据：[GenericAgent 外围入口与协作审查](reference-peripheral-review.md)，包含 UltraPlan、Agent BBS 和 HTTP App 的分支、适配边界与待验证项。
