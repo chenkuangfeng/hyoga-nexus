@@ -5,6 +5,11 @@ import { modelSettingsApi as settingsApi } from '../api/modelSettings'
 import type { Workspace } from '../types/chat'
 import type { ModelProvider, ModelSettings, SettingsScope } from '../types/modelSettings'
 
+/** Own settings state, dialogs and mutually exclusive writes for one mounted page.
+ * Workspace queries are aborted on replacement/unmount; late results cannot replace current data.
+ * Mutations surface sanitized API errors. Key inputs clear on submit completion or unmount and
+ * are never persisted to browser storage. Scope checks remain authoritative on the server.
+ */
 export function useModelSettings() {
   const workspaces = ref<Workspace[]>([]), workspace = ref(''), loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
   const data = ref<ModelSettings>({ providers: [], defaults: {}, can_manage_workspace: false })

@@ -18,6 +18,10 @@ function provider(value: unknown): ModelProvider {
 const path = (workspace: string) => `${workspacePath(workspace)}/model-settings`
 const json = (method: string, value?: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) })
 const saved = (value: unknown) => { string(record(value).status) }
+/** Settings requests validate public response DTOs at runtime.
+ * Keys appear only in the one-time write body; callers must clear their input after submission.
+ * Failures use the shared request error mapping. IDs are always escaped as path segments.
+ */
 export const modelSettingsApi = {
   list: (workspace: string, signal?: AbortSignal) => request<ModelSettings>(path(workspace), value => {
     const row = record(value), defaults = record(row.defaults)

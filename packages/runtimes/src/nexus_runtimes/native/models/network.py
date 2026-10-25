@@ -12,6 +12,11 @@ from nexus_core.runtime import RuntimeFault
 
 
 def validate_url(value: str) -> str:
+    """Normalize a provider base URL or raise the stable destination-denied RuntimeFault.
+
+    Saving a valid URL does not establish DNS safety: the transport checks and pins addresses
+    for every request. Private HTTP destinations require deployment-level hostname allowlisting.
+    """
     try:
         parsed = urlsplit(value)
         allowed = {host.strip().lower() for host in os.getenv('NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST', '').split(',') if host.strip()}
@@ -34,6 +39,12 @@ def validate_url(value: str) -> str:
 
 
 class PinnedTransport(httpx.AsyncBaseTransport):
+    """HTTPX transport restricted to one provider origin and validated numeric addresses.
+
+    DNS resolution is bounded to five seconds. Host and TLS SNI retain the original hostname,
+    while the connection uses a literal approved IP. No ambient proxy or redirect can redirect
+    credential transmission. The owner must close this transport with its HTTP client.
+    """
     def __init__(self, base_url: str):
         self.url = httpx.URL(validate_url(base_url))
         self.inner = httpx.AsyncHTTPTransport(trust_env=False, retries=0)
@@ -64,5 +75,6 @@ class PinnedTransport(httpx.AsyncBaseTransport):
 
 
 def provider_client(base_url: str, *, timeout: float = 60) -> httpx.AsyncClient:
+    """Build the controlled async client for both connection tests and actual Native calls."""
     return httpx.AsyncClient(transport=PinnedTransport(base_url), follow_redirects=False,
                              trust_env=False, timeout=timeout)

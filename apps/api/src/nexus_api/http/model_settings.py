@@ -24,6 +24,8 @@ router = APIRouter(prefix='/api/v1/workspaces/{workspace_id}/model-settings', ta
 
 
 class ProviderInput(BaseModel):
+    """Public supplier configuration with a write-only, optional replacement secret."""
+
     name: str = Field(min_length=1, max_length=160)
     base_url: str = Field(min_length=1, max_length=512)
     scope: Literal['personal', 'workspace'] = 'personal'
@@ -31,21 +33,28 @@ class ProviderInput(BaseModel):
 
 
 class ModelInput(BaseModel):
+    """Supplier model identifier; edits append versions rather than rewriting history."""
+
     name: str = Field(min_length=1, max_length=160)
 
 
 class DefaultInput(BaseModel):
+    """Scoped default preference; a null version clears the explicit preference."""
+
     scope: Literal['personal', 'workspace'] = 'personal'
     version_id: UUID | None = None
 
 
 class AgentInput(BaseModel):
+    """Minimal Native Agent configuration; omitted model selects authorized defaults."""
+
     name: str = Field(min_length=1, max_length=160)
     instructions: str = Field(default='You are a helpful assistant.', max_length=20000)
     model_profile_version_id: UUID | None = None
 
 
 def provider_values(body: ProviderInput) -> dict[str, object]:
+    """Validate public configuration and one-time Key without reflecting secret input in errors."""
     if not body.name.strip():
         raise ValueError('Provider name is required')
     key = body.api_key.get_secret_value() if body.api_key else None
@@ -60,31 +69,37 @@ def provider_values(body: ProviderInput) -> dict[str, object]:
 
 @router.get('')
 def list_settings(workspace_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Return the authenticated caller’s visible models and defaults in the requested Workspace."""
     return settings.list_settings(db, principal, workspace_id)
 
 
 @router.post('/providers', status_code=201)
 def create_provider(workspace_id: UUID, body: ProviderInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Accept a write-only Key and return a masked, scoped provider after encrypted persistence."""
     return settings.save_provider(db, principal, workspace_id, **provider_values(body))
 
 
 @router.put('/providers/{provider_id}')
 def update_provider(workspace_id: UUID, provider_id: UUID, body: ProviderInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Update metadata or rotate the Key after owner/administrator authorization."""
     return settings.save_provider(db, principal, workspace_id, provider_id=provider_id, **provider_values(body))
 
 
 @router.delete('/providers/{provider_id}')
 def delete_provider(workspace_id: UUID, provider_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Disable the provider and invalidate its defaults; historical configuration is retained."""
     settings.disable(db, principal, workspace_id, provider_id)
     return {'status': 'disabled'}
 
 
 @router.post('/providers/{provider_id}/models', status_code=201)
 def add_model(workspace_id: UUID, provider_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Create an immutable configured model under a manageable provider."""
     return settings.save_model(db, principal, workspace_id, provider_id, model_name(body.name))
 
 
 def model_name(value: str) -> str:
+    """Normalize the supplier model identifier; reject empty values without invoking the supplier."""
     if not value.strip():
         raise ValueError('Model name is required')
     return value.strip()
@@ -92,23 +107,29 @@ def model_name(value: str) -> str:
 
 @router.put('/providers/{provider_id}/models/{profile_id}')
 def edit_model(workspace_id: UUID, provider_id: UUID, profile_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Append a model version; preserve already published AgentVersion references."""
     return settings.save_model(db, principal, workspace_id, provider_id, model_name(body.name), profile_id)
 
 
 @router.delete('/providers/{provider_id}/models/{profile_id}')
 def delete_model(workspace_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Disable this model and clear its defaults without deleting historical runs."""
     settings.disable(db, principal, workspace_id, provider_id, profile_id)
     return {'status': 'disabled'}
 
 
 @router.put('/default')
 def set_default(workspace_id: UUID, body: DefaultInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Set or clear an authorized personal/space preference for future Agent creation."""
     settings.set_default(db, principal, workspace_id, body.scope, body.version_id)
     return {'status': 'saved'}
 
 
 @router.post('/agents', status_code=201)
 def create_native_agent(workspace_id: UUID, body: AgentInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Create and publish a Native Agent using explicit, personal or space-default selection.
+
+    Selection never mutates existing Agents or sessions. No tools are implicitly granted."""
     from nexus_platform.agents.service import create_agent, publish_agent
     with db.begin():
         user, _ = settings.context(db, principal, workspace_id)
@@ -134,6 +155,11 @@ def create_native_agent(workspace_id: UUID, body: AgentInput, principal: Princip
 
 @router.post('/providers/{provider_id}/models/{profile_id}/test')
 async def test_connection(workspace_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Test an authorized saved model with a bounded minimal streaming request.
+
+    The supplier may charge for the request. Per-provider tests are limited to one start
+    every ten seconds and a fifteen-second total deadline. Responses omit generated content
+    and raw supplier errors; the client is closed even on timeout or request cancellation."""
     with db.begin():
         user, _ = settings.context(db, principal, workspace_id)
         provider = settings.provider_access(db, workspace_id, user.id, provider_id, manage=True)

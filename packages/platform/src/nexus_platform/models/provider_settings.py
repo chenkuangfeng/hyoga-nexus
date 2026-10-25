@@ -25,6 +25,9 @@ from nexus_platform.workspaces.service import ADMIN_ROLES, audit
 
 
 def cipher() -> Fernet:
+    """Load the deployment Fernet key; raise ServiceUnavailable rather than generate a fallback.
+
+    API and worker must share this key. Its value never leaves the credential adapter."""
     try:
         return Fernet(os.environ['NEXUS_CREDENTIAL_ENCRYPTION_KEY'].encode('ascii'))
     except (KeyError, ValueError, UnicodeError):
@@ -32,11 +35,18 @@ def cipher() -> Fernet:
 
 
 def encrypt(value: str, credential_id: UUID) -> str:
+    """Encrypt a secret bound to its credential ID; return an opaque database-safe token.
+
+    Authentication covers both the reference and secret, so swapping encrypted rows fails closed."""
     # Bind authenticated plaintext to its opaque reference to prevent ciphertext swapping.
     return cipher().encrypt((str(credential_id) + '\n' + value).encode()).decode()
 
 
 def decrypt(provider: StoredKey) -> str:
+    """Resolve one authenticated stored secret in memory.
+
+    The caller must first authorize the provider and reference. Invalid tokens or a different
+    deployment key raise ServiceUnavailable without including ciphertext or secret values."""
     try:
         text = cipher().decrypt(provider.encrypted_key.encode()).decode()
         identity, secret = text.split('\n', 1)
@@ -48,6 +58,7 @@ def decrypt(provider: StoredKey) -> str:
 
 
 def context(db: Session, principal: Principal, workspace_id: UUID) -> tuple[UserRecord, MembershipRecord]:
+    """Resolve the authenticated user and active Workspace membership in the caller transaction."""
     user = resolve_user(db, principal)
     require_workspace(db, workspace_id)
     membership = require_membership(db, workspace_id, user.id)
@@ -55,6 +66,10 @@ def context(db: Session, principal: Principal, workspace_id: UUID) -> tuple[User
 
 
 def provider_access(db: Session, workspace_id: UUID, user_id: UUID, provider_id: UUID, *, manage: bool = False) -> Provider:
+    """Require an active provider in this Workspace and the caller’s personal scope.
+
+    Reads hide private/disabled resources as NotFound. Management of shared providers
+    additionally requires an administrator and locks the row for consistent updates."""
     row = db.scalar(select(Provider).where(Provider.id == provider_id).with_for_update()) if manage else db.get(Provider, provider_id)
     if not row or row.workspace_id != workspace_id or not row.active:
         raise NotFound('Provider unavailable')
@@ -66,6 +81,10 @@ def provider_access(db: Session, workspace_id: UUID, user_id: UUID, provider_id:
 
 
 def authorize_model(db: Session, workspace_id: UUID, user_id: UUID, version_id: UUID) -> Version:
+    """Check version, current credential, provider ownership and model availability.
+
+    Historical versions remain valid until explicitly disabled. This check is shared by
+    publication, Session/Run creation and execution so an Agent cannot grant personal Key access."""
     version = db.get(Version, version_id)
     if not version or version.workspace_id != workspace_id:
         raise NotFound('Model unavailable')
@@ -85,6 +104,7 @@ def authorize_model(db: Session, workspace_id: UUID, user_id: UUID, version_id: 
 
 
 def view(db: Session, row: Provider) -> dict[str, object]:
+    """Project public provider metadata and active current model versions; never expose a Key."""
     models = []
     for link in db.scalars(select(Link).where(Link.provider_id == row.id, Link.active.is_(True))):
         profile = db.get(Profile, link.profile_id)
@@ -97,6 +117,9 @@ def view(db: Session, row: Provider) -> dict[str, object]:
 
 
 def list_settings(db: Session, principal: Principal, workspace_id: UUID) -> dict[str, object]:
+    """Return only visible providers, authorized defaults and the caller’s management capability.
+
+    Unavailable defaults are omitted; no private configuration is returned to space administrators."""
     with db.begin():
         user, membership = context(db, principal, workspace_id)
         rows = db.scalars(select(Provider).where(Provider.workspace_id == workspace_id, Provider.active.is_(True)))
@@ -114,6 +137,11 @@ def list_settings(db: Session, principal: Principal, workspace_id: UUID) -> dict
 
 
 def save_provider(db: Session, principal: Principal, workspace_id: UUID, *, name: str, base_url: str, scope: str, api_key: str | None, provider_id: UUID | None = None) -> dict[str, object]:
+    """Create or update an authorized provider in one transaction and return public metadata.
+
+    Address changes require a replacement Key and new references, preserving historical
+    destinations. Same-address replacement rotates credentials for subsequent resolutions.
+    Missing encryption configuration fails without persisting plaintext."""
     with db.begin():
         user, _ = context(db, principal, workspace_id)
         if provider_id:
@@ -167,6 +195,9 @@ def save_provider(db: Session, principal: Principal, workspace_id: UUID, *, name
 
 
 def new_version(db: Session, provider: Provider, profile: Profile, model_name: str) -> Version:
+    """Append a model version and advance related defaults without changing published Agents.
+
+    Called inside the locked provider transaction; existing Session/Run references stay fixed."""
     old = db.get(Version, profile.current_version_id) if profile.current_version_id else None
     options = {'protocol': 'openai_chat_completions', 'base_url': provider.base_url}
     version = Version(id=new_id(), workspace_id=provider.workspace_id, profile_id=profile.id,
@@ -183,6 +214,9 @@ def new_version(db: Session, provider: Provider, profile: Profile, model_name: s
 
 
 def save_model(db: Session, principal: Principal, workspace_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None) -> dict[str, str]:
+    """Create a provider-bound profile or append its next version after management authorization.
+
+    Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten."""
     with db.begin():
         user, _ = context(db, principal, workspace_id)
         provider = provider_access(db, workspace_id, user.id, provider_id, manage=True)
@@ -203,6 +237,10 @@ def save_model(db: Session, principal: Principal, workspace_id: UUID, provider_i
 
 
 def disable(db: Session, principal: Principal, workspace_id: UUID, provider_id: UUID, profile_id: UUID | None = None) -> None:
+    """Soft-disable a provider or model and clear every affected default atomically.
+
+    Historical versions remain traceable. Provider disablement revokes all its credential
+    references; it cannot recall requests already received by the remote supplier."""
     with db.begin():
         user, _ = context(db, principal, workspace_id)
         provider = provider_access(db, workspace_id, user.id, provider_id, manage=True)
@@ -224,6 +262,10 @@ def disable(db: Session, principal: Principal, workspace_id: UUID, provider_id: 
 
 
 def set_default(db: Session, principal: Principal, workspace_id: UUID, scope: str, version_id: UUID | None) -> None:
+    """Set or clear the personal/space default to an authorized current model version.
+
+    Space defaults require an administrator and cannot use a personal provider. No existing
+    AgentVersion, Session or Run is modified; invalid versions raise NotFound or Conflict."""
     with db.begin():
         user, _ = context(db, principal, workspace_id)
         if scope == 'workspace':
@@ -247,10 +289,17 @@ def set_default(db: Session, principal: Principal, workspace_id: UUID, scope: st
 
 
 class StoredCredentialResolver:
+    """Resolve only credentials attached to an authorized, currently running task.
+
+    Encrypted references use the supplied database factory; other backends delegate to the
+    injected resolver. Returned CredentialLease contains a five-minute in-memory secret,
+    intentionally excluded from repr. Revoked access raises a sanitized platform error.
+    """
     def __init__(self, factory: sessionmaker[Session], fallback: CredentialResolver | None):
         self.factory, self.fallback = factory, fallback
 
     def resolve(self, reference: CredentialRef, *, principal_id: UUID, run_id: UUID) -> CredentialLease:
+        """Authorize Run, membership and exact model reference before decrypting or delegating."""
         if reference.backend != 'encrypted':
             if self.fallback is None:
                 raise ServiceUnavailable('Credential backend is unavailable')

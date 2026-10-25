@@ -472,6 +472,8 @@ class MemoryDraftRecord(Base):
 
 
 class ModelProviderRecord(Base):
+    """Workspace-scoped provider; a non-null owner restricts all use to that user."""
+
     __tablename__ = 'model_providers'
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), nullable=False)
@@ -484,6 +486,8 @@ class ModelProviderRecord(Base):
 
 
 class ProviderModelRecord(Base):
+    """Active association between a provider and an immutable-version model profile."""
+
     __tablename__ = 'provider_models'
     profile_id: Mapped[UUID] = mapped_column(ForeignKey('model_profiles.id'), primary_key=True)
     provider_id: Mapped[UUID] = mapped_column(ForeignKey('model_providers.id'), nullable=False)
@@ -491,6 +495,8 @@ class ProviderModelRecord(Base):
 
 
 class ModelDefaultRecord(Base):
+    """Per-Workspace personal UUID or workspace preference; never an execution override."""
+
     __tablename__ = 'model_defaults'
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), primary_key=True)
     scope_key: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -498,6 +504,8 @@ class ModelDefaultRecord(Base):
 
 
 class ProviderCredentialRecord(Base):
+    """Authenticated encrypted secret bound to one provider, reference and historical destination."""
+
     __tablename__ = 'provider_credentials'
     credential_id: Mapped[UUID] = mapped_column(ForeignKey('credential_references.id'), primary_key=True)
     provider_id: Mapped[UUID] = mapped_column(ForeignKey('model_providers.id'), nullable=False)

@@ -35,6 +35,11 @@ class EnvironmentCredentialResolver:
 
 
 def configured_model(context, resolver):
+    """Resolve this Run's short-lived credential and construct its controlled model client.
+
+    Only explicit Chat Completions configuration is supported. Missing/expired credentials
+    produce a stable RuntimeFault; platform/storage errors never expose secret diagnostics.
+    """
     if context.runtime_type != 'native' or context.options.get('protocol') != 'openai_chat_completions':
         raise RuntimeFault('runtime_not_configured')
     if not context.credential:
