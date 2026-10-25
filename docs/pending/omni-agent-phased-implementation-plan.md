@@ -105,9 +105,9 @@ flowchart TB
 
 - **现状与目标**：
   - 仓库已有 Native 迁移批次的实施代码（含 `runtimes/native/engine/{runner,turn,completion,recovery,tools,cancellation}.py`、`context/{assembly,compaction,history,working}.py`、`models/{factory,routing,retry,tool_protocol,protocols}`、`platform/{memory,runs,sessions/fork}` 及前端 `NativeSettingsView.vue`、`RuntimeControls.vue`、`ModelBranchControls.vue`）。
-  - 第一步不是再叠新代码，而是**先对工作区现有改动做完整质量审计、清理临时目录（如 `third_party/`）、跑通全量测试与前端构建并提交入库**，确立干净的 Stage 1 基线。
+  - 第一步不是再叠新代码，而是**先对工作区现有改动做完整质量审计、清理临时参考源码目录、跑通全量测试与前端构建并提交入库**，确立干净的 Stage 1 基线。
 - **具体实施任务**：
-  1. 清理工作区未跟踪的第三方参考源码副本（`third_party/`），确保符合 `AGENTS.md`“不提交第三方源码仓库”的红线。
+  1. 清理工作区未跟踪的第三方参考源码副本，确保符合 `AGENTS.md`“不提交第三方源码仓库”的红线。
   2. 核查当前已实现的模块边界、版权归属头与类型注解。
   3. 运行 `uv run --locked pytest`（含 `tests/test_native_parity.py`）与 `apps/web` 的 `npm run build`，修复任何潜在边界缺陷后完成分批提交。
 - **验收门禁**：
@@ -295,7 +295,7 @@ flowchart TB
 在正式按上述阶段启动 OpenSpec 提案与编码前，请确认以下 4 个关键推进决策：
 
 1. **当前工作区 `native-reference-parity` 的处理方式（Milestone 1.1）**：
-   - 是否同意先清理工作区未跟踪的 `third_party/` 临时参考副本，对工作区已编写的 `native-reference-parity` 模块跑通完整测试与前端构建后先行提交，作为第一阶段的干净基线？
+   - 是否同意先清理工作区未跟踪的第三方临时参考副本，对工作区已编写的 `native-reference-parity` 模块跑通完整测试与前端构建后先行提交，作为第一阶段的干净基线？
 2. **第一阶段升级范围（Milestone 1.2 & 1.3）**：
    - 在完成 Milestone 1.1 基线收口后，是否立即创建/更新 OpenSpec 提案，优先落地 **Prefix-Cache 字节级冻结 + 动态尾部借道注入 + 事件溯源 `message/attempt` 分离 + `AuxiliaryModelRouter` 旁路轻量路由**？
 3. **第二阶段（P3 知识编译 vs. P4 技能馆长 & 单调守卫工具管线）的先后顺序**：

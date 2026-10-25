@@ -14,7 +14,7 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 `context/working.py` 管理工作锚点和周期提醒，`compaction.py` 在配置启用时生成摘要并保留源记录；失败降级为有界历史片段。`hooks/` 提供可信注册与追加上下文/完成提示，不能扩大资源授权。模型模块按协议、文本工具解析、重试和路由分离，支持 Chat Completions、Responses、Anthropic Messages；流已输出后不重新拼接重试结果。协议测试目前使用 HTTP 夹具，尚未证明真实供应商兼容性。
 
-配置由不可变 AgentVersion 快照注入。模型局部修复的来源与许可证见 [来源映射](../../../third_party/model-terminal-mapping.md)，验证和未验收范围见 [批次记录](../../../openspec/changes/archive/2026-10-25-model-terminal-consistency/verification.md)。
+配置由不可变 AgentVersion 快照注入。模型局部修复的验证和未验收范围见 [批次记录](../../../openspec/changes/archive/2026-10-25-model-terminal-consistency/verification.md)。
 
 ## 模型失败、终态和用量
 
@@ -28,4 +28,4 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 `usage.py` 接受缺失/null 为未知零值，计数必须是 0..2**53-1 的 JSON 整数，拒绝布尔、字符串、负数、分数和越界。Responses/Chat 缺 total 时用 input+output，Anthropic 用 input+cache_read+cache_creation+output；有效显式 total 包括零值予以保留。累计输出快照覆盖而非累加，Anthropic 输入/缓存计数不会被输出尾块清零。零/缺用量时 Native 仍按既有方式估算预算；不能由计数零推断真实免费调用，也不宣称已观测失败尝试的真实供应商消耗。
 
-已确认的上游差异和逐文件归属见 [来源映射](../../../third_party/model-terminal-mapping.md)。完整模型签名/历史、供应商兼容参数、多模态和 cache 状态治理不在此局部修复的完成声明内。
+已确认的上游行为差异见[批次设计](../../../openspec/changes/archive/2026-10-25-model-terminal-consistency/design.md)。完整模型签名/历史、供应商兼容参数、多模态和 cache 状态治理不在此局部修复的完成声明内。

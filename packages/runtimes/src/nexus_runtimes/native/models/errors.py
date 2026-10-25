@@ -1,7 +1,7 @@
 """Bounded model failures; no vendor bodies or SDK types cross the adapter boundary.
 
 Behavior mapping: GenericAgent llmcore.py and WeKnora models/api/endpoint.go
-at the locked revisions in third_party/notices. Retry policy differences are documented.
+at revisions a9a36b4 (GenericAgent) and e1f9a6166 (WeKnora). Retry differences are documented.
 """
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime

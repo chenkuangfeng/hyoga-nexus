@@ -1,7 +1,7 @@
 """GA no_tool and WeKnora completion guards, translated without executing model text.
 
 Derived from GenericAgent ga.py do_no_tool/_retry_or_exit (a9a36b4, MIT) and
-WeKnora observe.go/length_truncation tests (e1f9a6166, MIT). See third_party/notices.
+WeKnora observe.go/length_truncation tests (e1f9a6166, MIT).
 """
 from dataclasses import dataclass
 import re
