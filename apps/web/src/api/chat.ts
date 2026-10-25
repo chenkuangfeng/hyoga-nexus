@@ -66,7 +66,7 @@ export const api = {
   cancel: (workspace: string, run: string) => request(`${runPath(workspace, run)}/cancel`, parseRun, post({})),
   input: (workspace: string, run: string) => request<InputRequest | null>(`${runPath(workspace, run)}/input`, value => {
     if (value === null) return null
-    const row = record(value); return { input_request_id: string(row.input_request_id), question: string(row.question) }
+    const row = record(value); return { input_request_id: string(row.input_request_id), question: string(row.question), candidates: row.candidates === undefined ? [] : array(row.candidates, string) }
   }),
   respond: (workspace: string, run: string, input: string, response: string, key: string) => request(`${runPath(workspace, run)}/input`, parseRun, post({ input_request_id: input, response }, key)),
 }

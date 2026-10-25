@@ -36,6 +36,7 @@ class ModelInput(BaseModel):
     """Supplier model identifier; edits append versions rather than rewriting history."""
 
     name: str = Field(min_length=1, max_length=160)
+    options: dict[str, object] = Field(default_factory=dict)
 
 
 class DefaultInput(BaseModel):
@@ -95,7 +96,7 @@ def delete_provider(workspace_id: UUID, provider_id: UUID, principal: Principal 
 @router.post('/providers/{provider_id}/models', status_code=201)
 def add_model(workspace_id: UUID, provider_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Create an immutable configured model under a manageable provider."""
-    return settings.save_model(db, principal, workspace_id, provider_id, model_name(body.name))
+    return settings.save_model(db, principal, workspace_id, provider_id, model_name(body.name), model_options=body.options)
 
 
 def model_name(value: str) -> str:
@@ -108,7 +109,7 @@ def model_name(value: str) -> str:
 @router.put('/providers/{provider_id}/models/{profile_id}')
 def edit_model(workspace_id: UUID, provider_id: UUID, profile_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Append a model version; preserve already published AgentVersion references."""
-    return settings.save_model(db, principal, workspace_id, provider_id, model_name(body.name), profile_id)
+    return settings.save_model(db, principal, workspace_id, provider_id, model_name(body.name), profile_id, model_options=body.options)
 
 
 @router.delete('/providers/{provider_id}/models/{profile_id}')
@@ -147,8 +148,13 @@ def create_native_agent(workspace_id: UUID, body: AgentInput, principal: Princip
         if selected is None:
             raise ValueError('Select a model or configure a default first')
         settings.authorize_model(db, workspace_id, user.id, selected)
+        from nexus_platform.runs.settings import view as native_preferences
+        preferences = native_preferences(db, user.id, workspace_id)['settings']
+        budgets = preferences['budgets'] | {'behavior': preferences['behavior']}
+        bindings = [{'kind': 'tool', 'resource_id': name, 'resource_version_id': 'v1',
+            'source_workspace_id': workspace_id, 'config': {}} for name in preferences['behavior']['enabled_tools']]
     agent = create_agent(db, principal, workspace_id, name=body.name, description='', runtime_type='native',
-        instructions=body.instructions, model_profile_version_id=selected, budgets={}, bindings=[])
+        instructions=body.instructions, model_profile_version_id=selected, budgets=budgets, bindings=bindings)
     version = publish_agent(db, principal, workspace_id, agent.id)
     return {'id': str(agent.id), 'published_version_id': str(version.id), 'name': agent.name}
 
@@ -175,8 +181,12 @@ async def test_connection(workspace_id: UUID, provider_id: UUID, profile_id: UUI
         audit(db, workspace_id, user.id, 'provider.connection_test', 'model_provider', str(provider.id))
     model = None
     try:
-        model = OpenAICompatibleModel(model=name, api_key=key, base_url=base_url,
-                                     timeout=12, http_client=provider_client(base_url, timeout=12))
+        if version.options.get('protocol', 'openai_chat_completions') == 'openai_chat_completions':
+            model = OpenAICompatibleModel(model=name, api_key=key, base_url=base_url,
+                                         timeout=12, http_client=provider_client(base_url, timeout=12), options=version.options)
+        else:
+            from nexus_runtimes.native.models.factory import create_model
+            model = create_model(model=name, api_key=key, options=version.options, timeout=12)
         async with asyncio.timeout(15):
             async for _ in model.stream(ModelRequest((ModelMessage('user', 'Reply OK.'),), (), 32)):
                 pass

@@ -7,3 +7,5 @@ Vue 3、TypeScript、Element Plus；主导航通过现有 hash 机制切换 `#ch
 采用现有绿色主色、语义 token、系统字体与表单风格。设计技能查询的营销布局不适用本设置页，沿用现有产品布局；表单交互使用 Element Plus，未新增另一套表单依赖。按钮/标签提供可读名称，状态区播报结果，窄屏卡片与操作换行。
 
 浏览器用例位于 `tests/web/model-settings.mjs`，运行在 API 夹具上；不能代替真实部署端到端验收。
+
+Native 接口统一封装在 `api/native.ts`，设置页位于 `views/settings/NativeSettingsView.vue`，运行控制和模型分支分别由 `RuntimeControls.vue`、`ModelBranchControls.vue` 负责。异步加载清理、错误反馈和禁用状态由组件管理；服务端仍是授权与运行状态的事实来源。候选项仅填写回答框，由用户显式提交；追加指令携带幂等键，不新建 Run。

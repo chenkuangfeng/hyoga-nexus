@@ -444,6 +444,7 @@ class InputRequestRecord(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    candidates: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     response: Mapped[str | None] = mapped_column(Text)
     response_key: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -511,3 +512,78 @@ class ProviderCredentialRecord(Base):
     provider_id: Mapped[UUID] = mapped_column(ForeignKey('model_providers.id'), nullable=False)
     base_url: Mapped[str] = mapped_column(String(512), nullable=False)
     encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class NativePreferenceRecord(Base):
+    """Versioned personal Native defaults; published AgentVersions keep their snapshots."""
+    __tablename__ = 'native_preferences'
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class RunDirectiveRecord(Base):
+    """Ordered, idempotent user corrections persisted before model context consumption."""
+    __tablename__ = 'run_directives'
+    __table_args__ = (UniqueConstraint('run_id', 'idempotency_key', name='uq_run_directive_key'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id'), nullable=False)
+    principal_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MemoryEntryRecord(Base):
+    """Private published memory/SOP identity, separate from knowledge documents and drafts."""
+    __tablename__ = 'memory_entries'
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), nullable=False)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    project: Mapped[str] = mapped_column(String(160), nullable=False, default='')
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryVersionRecord(Base):
+    """Immutable reviewed content and original Run provenance; rollback creates another version."""
+    __tablename__ = 'memory_versions'
+    entry_id: Mapped[UUID] = mapped_column(ForeignKey('memory_entries.id'), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id'), nullable=False)
+    source_draft_id: Mapped[UUID] = mapped_column(ForeignKey('memory_drafts.id'), nullable=False)
+    reviewed_by: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ContextSummaryRecord(Base):
+    """Cross-Run summary cutpoint tied to original stored messages and source authorization."""
+    __tablename__ = 'context_summaries'
+    session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id'), primary_key=True)
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), nullable=False)
+    source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id'), nullable=False)
+    through_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class ActionApprovalRecord(Base):
+    """One action decision, consumed only once under the original Run/binding hash."""
+    __tablename__ = 'action_approvals'
+    __table_args__ = (UniqueConstraint('run_id', 'tool_call_id', name='uq_action_approval_call'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id'), nullable=False)
+    tool_call_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments: Mapped[str] = mapped_column(Text, nullable=False)
+    modified_arguments: Mapped[str | None] = mapped_column(Text)
+    binding_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

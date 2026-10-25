@@ -8,7 +8,7 @@ const baseURL = process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173'
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const consoleErrors = []
 page.on('pageerror', error => consoleErrors.push(error.message))
-let sessions = [], messages = [], run = null, events = [], sends = 0, responses = 0, reconnects = 0
+let sessions = [], messages = [], run = null, events = [], sends = 0, responses = 0, reconnects = 0, corrections = 0
 const makeEvent = (sequence, event_type, payload = {}) => ({ event_id: `event-${run.id}-${sequence}`, run_id: run.id, sequence, event_type, payload })
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 await page.route('**/api/v1/**', async route => {
@@ -31,7 +31,7 @@ await page.route('**/api/v1/**', async route => {
       makeEvent(3, 'message.delta', { turn: 1, text: '<img src=x onerror="window.injected=true"> 安全内容' })]
     if (sends === 1) events.push(makeEvent(4, 'tool.started', { invocation_id: 'tool-1', name: 'ask_user' }),
       makeEvent(5, 'tool.completed', { invocation_id: 'tool-1', status: 'completed', summary: '选择市场' }),
-      makeEvent(6, 'input.requested', { input_request_id: 'input-1', question: '请选择研究市场' }),
+      makeEvent(6, 'input.requested', { input_request_id: 'input-1', question: '请选择研究市场', candidates: ['A股', '港股'] }),
       makeEvent(7, 'run.waiting_input', { status: 'waiting_input' }))
     return route.fulfill(json(run))
   }
@@ -43,6 +43,11 @@ await page.route('**/api/v1/**', async route => {
     messages.push({ id: 'assistant-before-input', run_id: run.id, sequence: messages.length + 1, role: 'assistant', content: '请选择研究市场' },
       { id: 'assistant-after-input', run_id: run.id, sequence: messages.length + 2, role: 'assistant', content: '收到回答，已完成。' })
     run.status = 'completed'; return route.fulfill(json(run))
+  }
+  if (path.endsWith('/steer') && method === 'POST') {
+    corrections++; assert.ok(request.headers()['idempotency-key'])
+    assert.equal(request.postDataJSON().content, '仅使用已验证信息')
+    return route.fulfill(json({ id: 'correction', status: 'queued' }))
   }
   if (path.endsWith('/cancel')) {
     run.status = 'cancelled'; events.push(makeEvent(4, 'run.cancelled', { status: 'cancelled' }))
@@ -68,7 +73,8 @@ try {
   assert.equal(await page.locator('.message-text img').count(), 0)
   assert.equal(await page.evaluate(() => window.injected), undefined)
   assert.match(await page.locator('summary').innerText(), /ask_user.*已完成/)
-  await page.getByLabel('智能体需要你的回答', { exact: true }).fill('A股')
+  await page.getByRole('button', { name: 'A股', exact: true }).click()
+  assert.equal(await page.getByLabel('智能体需要你的回答', { exact: true }).inputValue(), 'A股')
   await page.getByRole('button', { name: '提交回答', exact: true }).click()
   await page.getByText('收到回答，已完成。', { exact: true }).waitFor()
   assert.equal(responses, 1)
@@ -78,6 +84,10 @@ try {
   await page.getByLabel('你的消息', { exact: true }).fill('第二次请求')
   await page.getByRole('button', { name: '发送消息', exact: true }).click()
   await page.getByText('连接中断，正在自动重连', { exact: true }).waitFor()
+  await page.getByLabel('追加执行指令', { exact: true }).fill('仅使用已验证信息')
+  await page.getByRole('button', { name: '追加指令', exact: true }).click()
+  await page.getByText('指令已排队，将在下一回合生效', { exact: true }).waitFor()
+  assert.equal(corrections, 1)
   await page.getByRole('button', { name: '重新连接', exact: true }).click()
   await page.waitForTimeout(300)
   await page.getByRole('button', { name: '停止运行', exact: true }).click()

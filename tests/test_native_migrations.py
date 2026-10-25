@@ -18,9 +18,12 @@ def test_native_migration_preserves_existing_p1_data(tmp_path, monkeypatch):
     with engine.connect() as db:
         assert db.execute(text('SELECT subject FROM users')).scalar_one() == 'existing'
         tables = {row[0] for row in db.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
-        assert {'native_run_states', 'run_input_requests', 'session_checkpoints', 'memory_drafts', 'model_providers', 'provider_models', 'provider_credentials', 'model_defaults'} <= tables
+        assert {'native_run_states', 'run_input_requests', 'session_checkpoints', 'memory_drafts', 'model_providers', 'provider_models', 'provider_credentials', 'model_defaults',
+                'action_approvals', 'context_summaries', 'native_preferences', 'run_directives', 'memory_entries', 'memory_versions'} <= tables
         columns = {row[1] for row in db.execute(text('PRAGMA table_info(messages)'))}
         assert 'runtime_metadata' in columns
+        input_columns = {row[1] for row in db.execute(text('PRAGMA table_info(run_input_requests)'))}
+        assert 'candidates' in input_columns
     command.downgrade(config, '9608e45573e5')
     with engine.connect() as db:
         assert db.execute(text('SELECT subject FROM users')).scalar_one() == 'existing'

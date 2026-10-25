@@ -17,7 +17,7 @@ from nexus_platform.persistence.models import (
     AgentVersionRecord, CredentialReferenceRecord, InputRequestRecord, MessageRecord,
     ModelProfileRecord, ModelProfileVersionRecord, NativeRunStateRecord, OutboxRecord,
     ResourceBindingRecord, RunRecord, SessionRecord, ToolInvocationRecord, UserRecord,
-    WorkingCheckpointRecord, MemoryDraftRecord,
+    WorkingCheckpointRecord, MemoryDraftRecord, ContextSummaryRecord,
 )
 from nexus_platform.runs.service import append_event, transition_run, authorize_run_resource
 from nexus_platform.workspaces.service import audit, authorize_resource
@@ -73,10 +73,10 @@ def _finish(db: Session, run: RunRecord, outcome: RuntimeOutcome) -> None:
     run.lease_owner = None
     run.lease_until = None
     if outcome.status == 'waiting_input':
-        request = InputRequestRecord(id=new_id(), run_id=run.id, question=(outcome.question or '')[:4000], created_at=utc_now())
+        request = InputRequestRecord(id=new_id(), run_id=run.id, question=(outcome.question or '')[:4000], candidates=list(outcome.candidates), created_at=utc_now())
         db.add(request)
-        append_event(db, run.id, 'input.requested', {'input_request_id': str(request.id), 'question': request.question})
-    else:
+        append_event(db, run.id, 'input.requested', {'input_request_id': str(request.id), 'question': request.question, 'candidates': request.candidates})
+    elif outcome.status != 'waiting_approval':
         run.ended_at = utc_now()
     append_event(db, run.id, 'run.' + outcome.status, {'status': run.status, 'error_code': outcome.error_code})
     audit(db, run.workspace_id, run.principal_id, 'run.' + outcome.status, 'run', str(run.id),
@@ -140,10 +140,25 @@ def prepare_execution(factory: sessionmaker[Session], task_id: UUID, worker_id: 
                 if message.run_id is not None and message.run_id not in allowed_runs:
                     continue
                 metadata = message.runtime_metadata or {}
+                if metadata.get('source_run_id'):
+                    source_run = db.get(RunRecord, UUID(metadata['source_run_id']))
+                    if not source_run or source_run.principal_id != run.principal_id or not _history_allowed(db, source_run):
+                        continue
                 history.append(ModelMessage(message.role, message.content,
-                    tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id')))
+                    tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), str(message.id)))
+            summary = db.get(ContextSummaryRecord, run.session_id)
+            if summary and summary.workspace_id == run.workspace_id and summary.source_run_id in allowed_runs:
+                covered = list(db.scalars(select(MessageRecord).where(MessageRecord.session_id == run.session_id, MessageRecord.sequence <= summary.through_sequence)))
+                if all(message.run_id is None or message.run_id in allowed_runs for message in covered):
+                    covered_ids = {str(message.id) for message in covered}
+                    history = [ModelMessage('user', summary.content), *[m for m in history if m.source_id not in covered_ids]]
             checkpoint = db.get(WorkingCheckpointRecord, run.session_id)
             system = version.instructions
+            from nexus_platform.memory.service import index as memory_index
+            published_index = memory_index(db, run.workspace_id, run.principal_id,
+                version.budgets.get('behavior', {}).get('project_name', ''))
+            if published_index:
+                system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
             if checkpoint and checkpoint.workspace_id == run.workspace_id and checkpoint.source_run_id in allowed_runs:
                 system += '\nSession working checkpoint:\n' + checkpoint.content
                 audit(db, run.workspace_id, run.principal_id, 'checkpoint.read', 'session', str(run.session_id),
@@ -211,7 +226,8 @@ class DurableRuntimeStore:
 
     async def message(self, message: ModelMessage) -> None:
         with self.factory() as db, db.begin():
-            add_message(db, self._run(db), message)
+            row = add_message(db, self._run(db), message)
+            return str(row.id)
 
     async def save_progress(self, progress: RuntimeProgress) -> None:
         with self.factory() as db, db.begin():
@@ -272,6 +288,16 @@ class DurableRuntimeStore:
             append_event(db, run.id, 'tool.started', {'invocation_id': str(invocation_id), 'name': call.name})
             return str(invocation_id)
 
+    async def approval(self, call: ToolCall):
+        """Persist/consume a per-call action decision after current resource authorization."""
+        from .approvals import request
+        with self.factory() as db, db.begin():
+            return request(db, self._run(db), call)
+
+    async def tool_progress(self, invocation_id: str, text: str) -> None:
+        """Persist only the registered tool's public projection of intermediate output."""
+        await self.emit('tool.progress', {'invocation_id': invocation_id, 'text': text[:4000]})
+
     async def finish_tool(self, invocation_id: str, status: str, summary: str, error_code: str | None) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
@@ -285,6 +311,53 @@ class DurableRuntimeStore:
             audit(db, run.workspace_id, run.principal_id, 'tool.' + status, 'tool_invocation', invocation_id,
                   {'run_id': str(run.id), 'error_code': error_code})
 
+    async def save_summary(self, summary: str, source_id: str) -> None:
+        """Persist only a cutpoint belonging to this Session; later reads recheck source grants."""
+        with self.factory() as db, db.begin():
+            run = self._run(db)
+            source = db.get(MessageRecord, UUID(source_id))
+            if not source or source.session_id != run.session_id:
+                raise RuntimeFault('context_source_invalid')
+            record = db.get(ContextSummaryRecord, run.session_id)
+            if not record:
+                record = ContextSummaryRecord(session_id=run.session_id, workspace_id=run.workspace_id,
+                    source_run_id=run.id, through_sequence=source.sequence, content=summary[:8000])
+                db.add(record)
+            elif source.sequence >= record.through_sequence:
+                record.source_run_id, record.through_sequence, record.content = run.id, source.sequence, summary[:8000]
+            audit(db, run.workspace_id, run.principal_id, 'context.summary_saved', 'session', str(run.session_id))
+
+    async def drain_steer(self) -> list[ModelMessage]:
+        """Consume corrections under the same lease/Run lock as message persistence."""
+        from .directives import consume
+        with self.factory() as db, db.begin():
+            run = self._run(db)
+            require_workspace(db, run.workspace_id)
+            require_membership(db, run.workspace_id, run.principal_id)
+            return consume(db, run, add_message)
+
+    async def memory_index(self) -> str:
+        """Read the published pointer index for this principal without exposing drafts."""
+        from nexus_platform.memory.service import index
+        with self.factory() as db, db.begin():
+            run = self._run(db)
+            require_membership(db, run.workspace_id, run.principal_id)
+            result = index(db, run.workspace_id, run.principal_id)
+            audit(db, run.workspace_id, run.principal_id, 'memory.index_read', 'run', str(run.id))
+            return result
+
+    async def read_memory(self, entry_id: str) -> str:
+        """Authorize each model memory read at execution time, independently of old indexes."""
+        from nexus_platform.memory.repository import authorized_entry, content
+        with self.factory() as db, db.begin():
+            run = self._run(db)
+            require_membership(db, run.workspace_id, run.principal_id)
+            entry = authorized_entry(db, run.workspace_id, run.principal_id, UUID(entry_id))
+            version = content(db, entry)
+            audit(db, run.workspace_id, run.principal_id, 'memory.read', 'memory', entry_id,
+                  {'run_id': str(run.id), 'version': version.version})
+            return version.content
+
     async def checkpoint(self, content: str) -> None:
         with self.factory() as db, db.begin():
             run = self._run(db)
@@ -297,6 +370,8 @@ class DurableRuntimeStore:
                   {'run_id': str(run.id)})
 
     async def propose(self, kind: str, scope: str, diff: str) -> str:
+        from nexus_platform.models.service import clean_public_options
+        clean_public_options(diff, 'memory')
         if kind not in ('memory', 'sop') or scope != 'session':
             raise RuntimeFault('memory_scope_invalid')
         with self.factory() as db, db.begin():

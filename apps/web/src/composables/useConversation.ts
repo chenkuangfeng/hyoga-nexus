@@ -64,7 +64,7 @@ export function useConversation() {
         last = item.sequence
         events.value.push(item)
         if (item.event_type === 'input.requested' && typeof item.payload.input_request_id === 'string' && typeof item.payload.question === 'string') {
-          pendingInput.value = { input_request_id: item.payload.input_request_id, question: item.payload.question }
+          pendingInput.value = { input_request_id: item.payload.input_request_id, question: item.payload.question, candidates: Array.isArray(item.payload.candidates) ? item.payload.candidates.filter((value): value is string => typeof value === 'string') : [] }
         }
         if (item.event_type === 'input.received') pendingInput.value = null
         if (item.event_type === 'run.started') run.value.status = 'running'

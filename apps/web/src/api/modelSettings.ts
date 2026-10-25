@@ -12,7 +12,7 @@ function provider(value: unknown): ModelProvider {
   return { id: string(row.id), name: string(row.name), base_url: string(row.base_url), scope: row.scope as SettingsScope,
     key_configured: boolean(row.key_configured), models: row.models.map(value => { const model = record(value)
       if (typeof model.version !== 'number' || !Number.isSafeInteger(model.version)) throw new Error('模型版本无效')
-      return { id: string(model.id), name: string(model.name), version_id: string(model.version_id), version: model.version }
+      return { id: string(model.id), name: string(model.name), version_id: string(model.version_id), version: model.version, options: model.options === undefined ? {} : record(model.options) }
     }) }
 }
 const path = (workspace: string) => `${workspacePath(workspace)}/model-settings`
@@ -33,7 +33,7 @@ export const modelSettingsApi = {
   }, { signal }),
   saveProvider: (workspace: string, value: ProviderInput, id?: string) => request(`${path(workspace)}/providers${id ? '/' + encodeURIComponent(id) : ''}`, provider, json(id ? 'PUT' : 'POST', value)),
   removeProvider: (workspace: string, id: string) => request(`${path(workspace)}/providers/${encodeURIComponent(id)}`, saved, json('DELETE')),
-  saveModel: (workspace: string, provider: string, name: string, id?: string) => request(`${path(workspace)}/providers/${encodeURIComponent(provider)}/models${id ? '/' + encodeURIComponent(id) : ''}`, value => string(record(value).version_id), json(id ? 'PUT' : 'POST', { name })),
+  saveModel: (workspace: string, provider: string, name: string, id?: string, options?: Record<string, unknown>) => request(`${path(workspace)}/providers/${encodeURIComponent(provider)}/models${id ? '/' + encodeURIComponent(id) : ''}`, value => string(record(value).version_id), json(id ? 'PUT' : 'POST', { name, ...(options ? { options } : {}) })),
   removeModel: (workspace: string, provider: string, id: string) => request(`${path(workspace)}/providers/${encodeURIComponent(provider)}/models/${encodeURIComponent(id)}`, saved, json('DELETE')),
   setDefault: (workspace: string, scope: SettingsScope, version_id: string | null) => request(`${path(workspace)}/default`, saved, json('PUT', { scope, version_id })),
   test: (workspace: string, provider: string, model: string) => request(`${path(workspace)}/providers/${encodeURIComponent(provider)}/models/${encodeURIComponent(model)}/test`, value => { const row = record(value); return { ok: boolean(row.ok), message: string(row.message) } }, json('POST')),

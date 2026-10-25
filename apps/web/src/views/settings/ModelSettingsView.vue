@@ -2,7 +2,7 @@
 import { useModelSettings } from '../../composables/useModelSettings'
 const settings = useModelSettings()
 const { workspaces, workspace, loading, busy, error, feedback, data, models, providerDialog, modelDialog, form,
-  editingProvider, modelName, agentName, instructions, agentModel } = settings
+  editingProvider, modelName, modelProtocol, modelStream, modelTextTools, reasoningEffort, temperature, agentName, instructions, agentModel } = settings
 </script>
 <template>
   <main class="model-settings" v-loading="loading" :aria-busy="loading || busy">
@@ -81,6 +81,11 @@ const { workspaces, workspace, loading, busy, error, feedback, data, models, pro
     <el-dialog v-model="modelDialog" title="配置模型" width="min(480px, 94vw)" :close-on-click-modal="!busy" :show-close="!busy" :close-on-press-escape="!busy">
       <el-form label-position="top" @submit.prevent="settings.saveModel">
         <el-form-item label="模型名称" label-for="provider-model-name"><el-input id="provider-model-name" v-model="modelName" maxlength="160" :disabled="busy" placeholder="填写供应商实际支持的模型名" /></el-form-item>
+        <el-form-item label="模型协议"><el-select v-model="modelProtocol" :disabled="busy"><el-option label="OpenAI Chat Completions" value="openai_chat_completions" /><el-option label="OpenAI Responses" value="openai_responses" /><el-option label="Anthropic Messages" value="anthropic_messages" /></el-select></el-form-item>
+        <el-form-item label="流式响应"><el-switch v-model="modelStream" :disabled="busy" /></el-form-item>
+        <el-form-item label="文本工具协议（仅用于没有原生工具调用的模型）"><el-switch v-model="modelTextTools" :disabled="busy" /></el-form-item>
+        <el-form-item label="温度（可选）"><el-input-number v-model="temperature" :min="0" :max="2" :step="0.1" :disabled="busy" /></el-form-item>
+        <el-form-item label="推理强度（可选）"><el-select v-model="reasoningEffort" clearable :disabled="busy"><el-option v-for="value in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']" :key="value" :label="value" :value="value" /></el-select></el-form-item>
         <el-button native-type="submit" type="primary" :loading="busy" :disabled="!modelName.trim()">保存模型</el-button>
       </el-form><p v-if="error" role="alert">{{ error }}</p>
     </el-dialog>

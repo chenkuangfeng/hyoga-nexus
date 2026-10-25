@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import ModelBranchControls from '../../components/ModelBranchControls.vue'
+import RuntimeControls from '../../components/RuntimeControls.vue'
 import { useConversation } from '../../composables/useConversation'
 import { errorLabels, statusLabels } from '../../types/chat'
 const chat = useConversation()
@@ -7,6 +9,7 @@ const { workspaces, agents, sessions, workspace, sessionId, versionId, timeline,
   error, loading, submitting, connection, cancelling, active } = chat
 const prompt = ref(''), answer = ref('')
 onMounted(chat.initialize)
+async function openBranch(id: string) { await chat.selectWorkspace(workspace.value); await chat.openSession(id) }
 async function send() { if (await chat.send(prompt.value)) prompt.value = '' }
 async function respond() { if (await chat.respond(answer.value)) answer.value = '' }
 </script>
@@ -31,6 +34,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
         </el-select>
         <el-button type="primary" :disabled="!versionId || loading" :loading="submitting" @click="chat.createSession">新建会话</el-button>
         <p v-if="workspace && !agents.length && !loading" class="muted">暂无已发布的 Native 智能体，请先完成智能体配置和发布。</p>
+        <ModelBranchControls :workspace="workspace" :session="sessionId" :disabled="active || loading || submitting" @created="openBranch" />
         <h2>会话记录</h2>
         <nav class="session-list" aria-label="选择会话">
           <button v-for="item in sessions" :key="item.id" type="button" :aria-current="item.id === sessionId ? 'page' : undefined"
@@ -62,6 +66,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
           </template>
         </div>
         <form v-if="pendingInput" class="composer input-request" @submit.prevent="respond">
+          <div class="candidate-options"><el-button v-for="candidate in pendingInput.candidates || []" :key="candidate" :disabled="submitting" @click="answer = candidate">{{ candidate }}</el-button></div>
           <label for="answer">智能体需要你的回答</label><p class="message-text">{{ pendingInput.question }}</p>
           <el-input id="answer" v-model="answer" type="textarea" :rows="3" :maxlength="100000" :disabled="submitting || cancelling" />
           <div class="composer-actions"><el-button type="primary" native-type="submit" :loading="submitting" :disabled="!answer.trim() || cancelling">提交回答</el-button></div>
@@ -71,6 +76,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
           <el-input id="prompt" v-model="prompt" type="textarea" :rows="4" :maxlength="100000" :disabled="!sessionId || submitting || active || loading" placeholder="输入问题，点击发送" />
           <div class="composer-actions"><el-button type="primary" native-type="submit" :loading="submitting" :disabled="!sessionId || !prompt.trim() || active || loading">发送消息</el-button></div>
         </form>
+        <RuntimeControls v-if="workspace && run" :workspace="workspace" :run="run" @resume="chat.openSession(sessionId)" />
         <el-button v-if="active" class="stop-button" :loading="cancelling" :disabled="cancelling" @click="chat.cancel">停止运行</el-button>
       </section>
     </div>

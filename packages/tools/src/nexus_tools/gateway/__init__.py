@@ -9,6 +9,7 @@ from typing import Protocol
 from jsonschema import Draft202012Validator, ValidationError
 from nexus_core.runtime import CancellationTokenPort, RuntimeFault, ToolCall, ToolResult
 from nexus_tools.registry import ToolContext, ToolRegistry
+from nexus_tools.registry.invocation import invoke
 
 
 class ToolAccessPort(Protocol):
@@ -67,6 +68,13 @@ class AuthorizedToolGateway:
                 error = 'tool_authorization_denied'
         if error:
             await self.access.denied(call.name)
+        if not error and tool.definition.requires_approval:
+            if not hasattr(self.access, 'approval'):
+                return ToolResult('Action approval is unavailable', error_code='tool_approval_unavailable')
+            decision = await self.access.approval(call)
+            if isinstance(decision, ToolResult):
+                return decision
+            call = replace(call, arguments=decision)
         invocation_id = await self.access.start(call, binding_id)
         invoked = False
         try:
@@ -84,7 +92,10 @@ class AuthorizedToolGateway:
                     context = ToolContext(invocation_id, self.run_id, self.session_id, self.workspace_id, cancellation)
                     invoked = True
                     async with asyncio.timeout(tool.definition.timeout_seconds):
-                        result = await _controlled(tool.handler(arguments, context), cancellation)
+                        async def progress(text):
+                            if hasattr(self.access, 'progress'):
+                                await self.access.progress(invocation_id, text)
+                        result = await _controlled(invoke(tool, arguments, context, progress), cancellation)
                     if not isinstance(result, ToolResult):
                         raise RuntimeFault('tool_result_invalid')
             # The public projection is the only output allowed in events, model context or history.

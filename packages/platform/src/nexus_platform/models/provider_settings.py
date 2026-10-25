@@ -110,7 +110,7 @@ def view(db: Session, row: Provider) -> dict[str, object]:
         profile = db.get(Profile, link.profile_id)
         version = db.get(Version, profile.current_version_id)
         models.append({'id': str(profile.id), 'name': version.model_name,
-                       'version_id': str(version.id), 'version': version.version})
+                       'version_id': str(version.id), 'version': version.version, 'options': version.options})
     return {'id': str(row.id), 'name': row.name, 'base_url': row.base_url,
             'scope': 'personal' if row.owner_user_id else 'workspace',
             'key_configured': True, 'key_mask': '••••••••', 'models': models}
@@ -194,12 +194,14 @@ def save_provider(db: Session, principal: Principal, workspace_id: UUID, *, name
         return view(db, row)
 
 
-def new_version(db: Session, provider: Provider, profile: Profile, model_name: str) -> Version:
+def new_version(db: Session, provider: Provider, profile: Profile, model_name: str, model_options: dict | None = None) -> Version:
     """Append a model version and advance related defaults without changing published Agents.
 
     Called inside the locked provider transaction; existing Session/Run references stay fixed."""
     old = db.get(Version, profile.current_version_id) if profile.current_version_id else None
-    options = {'protocol': 'openai_chat_completions', 'base_url': provider.base_url}
+    options = dict(old.options) if old else {'protocol': 'openai_chat_completions'}
+    options.update(model_options or {})
+    options['base_url'] = provider.base_url
     version = Version(id=new_id(), workspace_id=provider.workspace_id, profile_id=profile.id,
         version=old.version + 1 if old else 1, model_name=model_name, options=options,
         credential_reference_id=provider.credential_id,
@@ -213,10 +215,11 @@ def new_version(db: Session, provider: Provider, profile: Profile, model_name: s
     return version
 
 
-def save_model(db: Session, principal: Principal, workspace_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None) -> dict[str, str]:
+def save_model(db: Session, principal: Principal, workspace_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None) -> dict[str, str]:
     """Create a provider-bound profile or append its next version after management authorization.
 
     Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten."""
+    model_options = validate_model_options(model_options or {})
     with db.begin():
         user, _ = context(db, principal, workspace_id)
         provider = provider_access(db, workspace_id, user.id, provider_id, manage=True)
@@ -231,7 +234,7 @@ def save_model(db: Session, principal: Principal, workspace_id: UUID, provider_i
             db.add(profile)
             db.flush()
             db.add(Link(profile_id=profile.id, provider_id=provider.id, active=True))
-        version = new_version(db, provider, profile, model_name)
+        version = new_version(db, provider, profile, model_name, model_options)
         audit(db, workspace_id, user.id, 'provider.model_saved', 'model_profile', str(profile.id))
         return {'id': str(profile.id), 'version_id': str(version.id)}
 
@@ -315,9 +318,30 @@ class StoredCredentialResolver:
             if not provider:
                 raise NotFound('Credential unavailable')
             provider_access(db, run.workspace_id, principal_id, provider.id)
-            version = authorize_model(db, run.workspace_id, principal_id,
-                                      UUID(run.config_snapshot['model_profile_version_id']))
-            if version.credential_reference_id != reference.id:
+            allowed_versions = [run.config_snapshot['model_profile_version_id'],
+                *run.config_snapshot.get('budgets', {}).get('behavior', {}).get('fallback_models', [])]
+            versions = [authorize_model(db, run.workspace_id, principal_id, UUID(identifier)) for identifier in allowed_versions]
+            if not any(version.credential_reference_id == reference.id for version in versions):
                 raise Forbidden('Credential unavailable')
             audit(db, run.workspace_id, principal_id, 'credential.resolved', 'credential_reference', str(reference.id))
             return CredentialLease(decrypt(secret), utc_now() + timedelta(minutes=5))
+
+
+def validate_model_options(options: dict) -> dict:
+    """Whitelist user-visible protocol settings; addresses and secrets stay provider-owned."""
+    allowed = {'protocol', 'stream', 'temperature', 'reasoning_effort', 'text_tools'}
+    if set(options) - allowed:
+        raise ValueError('Unsupported model option')
+    if options.get('protocol', 'openai_chat_completions') not in ('openai_chat_completions', 'openai_responses', 'anthropic_messages'):
+        raise ValueError('Unsupported model protocol')
+    for name in ('stream', 'text_tools'):
+        if name in options and type(options[name]) is not bool:
+            raise ValueError('Model switches must be boolean')
+    if 'temperature' in options:
+        import math
+        value = options['temperature']
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 2:
+            raise ValueError('Temperature must be between 0 and 2')
+    if options.get('reasoning_effort', '') not in ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'):
+        raise ValueError('Unsupported reasoning effort')
+    return options

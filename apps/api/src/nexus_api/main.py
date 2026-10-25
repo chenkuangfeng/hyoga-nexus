@@ -13,6 +13,8 @@ app = FastAPI(title="Hyoga Nexus", version="0.1.0")
 app.include_router(platform_router)
 from nexus_api.http.model_settings import router as model_settings_router
 app.include_router(model_settings_router)
+from nexus_api.http.native import router as native_router
+app.include_router(native_router)
 
 
 @app.middleware("http")

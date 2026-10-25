@@ -554,7 +554,7 @@ def pending_input(workspace_id: UUID, run_id: UUID, principal: Principal = Depen
     with db.begin():
         pending = db.scalar(select(InputRequestRecord).where(InputRequestRecord.run_id == run_id,
                             InputRequestRecord.responded_at.is_(None)).order_by(InputRequestRecord.created_at.desc()))
-        return {'input_request_id': pending.id, 'question': pending.question} if pending else None
+        return {'input_request_id': pending.id, 'question': pending.question, 'candidates': pending.candidates} if pending else None
 
 
 @router.post('/workspaces/{workspace_id}/runs/{run_id}/input', response_model=RunView, status_code=202)

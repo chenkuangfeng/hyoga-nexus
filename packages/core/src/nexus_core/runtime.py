@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import AsyncIterator, Literal, Protocol
 
@@ -27,6 +27,7 @@ class ModelMessage:
     content: str
     tool_calls: tuple[ToolCall, ...] = ()
     tool_call_id: str | None = None
+    source_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,9 @@ class ToolDefinition:
     side_effects: bool = False
     timeout_seconds: float = 15
     capability: Literal["python_function", "sandbox_code"] = "python_function"
+    read_only: bool = False
+    idempotent: bool = False
+    requires_approval: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,7 @@ class ModelChunk:
     tool_call: ToolCall | None = None
     total_tokens: int = 0
     finish_reason: str = ''
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 class ChatModelPort(Protocol):
@@ -65,6 +70,7 @@ class ToolDisposition(StrEnum):
     CONTINUE = 'continue'
     COMPLETE = 'complete'
     WAIT_INPUT = 'wait_input'
+    WAIT_APPROVAL = 'wait_approval'
     EXIT = 'exit'
 
 
@@ -75,6 +81,7 @@ class ToolResult:
     disposition: ToolDisposition = ToolDisposition.CONTINUE
     error_code: str | None = None
     exit_status: Literal['completed', 'failed'] | None = None
+    candidates: tuple[str, ...] = ()
 
 
 class CancellationTokenPort(Protocol):
@@ -121,6 +128,7 @@ class RuntimeProgress:
     tokens: int = 0
     errors: int = 0
     active_seconds: float = 0
+    state: dict[str, object] = field(default_factory=dict)
 
 
 class RuntimeStorePort(Protocol):
@@ -156,6 +164,7 @@ class SandboxPort(Protocol):
 
 @dataclass(frozen=True)
 class RuntimeOutcome:
-    status: Literal['completed', 'failed', 'cancelled', 'interrupted', 'waiting_input']
+    status: Literal['completed', 'failed', 'cancelled', 'interrupted', 'waiting_input', 'waiting_approval']
     error_code: str | None = None
     question: str | None = None
+    candidates: tuple[str, ...] = ()
