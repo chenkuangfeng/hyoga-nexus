@@ -19,3 +19,5 @@
 审查排期与逐项职责：[范围盘点](reference-review-plan.md)、[工作清单](reference-review-worklist.tsv)；完整模块证据：[hooks 与插件](reference-hooks-review.md)。
 
 Native 核心模型证据：[模型协议、历史与故障转移审查](reference-model-review.md)，含非流式错误终态复现和待修复批次。
+
+WeKnora 模型链路：[请求与终态审查](reference-weknora-protocol-review.md)；待确认批次：[模型错误与终态一致性](../../openspec/changes/model-terminal-consistency/proposal.md)。

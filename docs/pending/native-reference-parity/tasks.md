@@ -17,6 +17,8 @@
 
 模型模块增补：[模型协议与故障转移审查](../reference-model-review.md)完成 GA llmcore 与 WK JSON retry/原测试全文阅读和哈希核对；确认 Responses failed 归一成功缺口。WK 其余协议与完整差分验证仍未完成。
 
+WeKnora 协议增补：[请求与终态审查](../reference-weknora-protocol-review.md)记录已阅读/定点核对的 17 文件、原测试与两个新复现；局部实施按 [模型终态提案](../../../openspec/changes/model-terminal-consistency/proposal.md)确认，不提前勾选完整迁移。
+
 ## 源码审查和确认
 - [ ] 用户确认本提案的范围、模块结构和冲突解决方案。
 - [ ] 对剩余索引逐职责分类与深读，包括全部执行分支、测试、配置、提示词和外围能力；每项保留来源/目标/适配/证据，不漏项。
