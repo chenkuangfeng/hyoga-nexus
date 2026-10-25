@@ -30,20 +30,24 @@ Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / 
 
 ```bash
 uv sync --locked --extra dev
-test -n "$NEXUS_DATABASE_URL" || exit 1
-export NEXUS_AUTH_MODE=development
-export NEXUS_DEV_USER_ID=local-developer
-uv run alembic -c alembic.ini upgrade head
-uv run uvicorn nexus_api.main:app --reload
+# 首次配置时复制模板；已有 .env 时保留原文件。
+[ -f .env ] || cp .env.example .env
+# 编辑 .env，填写实际的 NEXUS_DATABASE_URL 后执行：
+uv run --env-file .env alembic -c alembic.ini upgrade head
+uv run --env-file .env uvicorn nexus_api.main:app --reload --host 127.0.0.1
 ```
 
-`NEXUS_DATABASE_URL` 必须由本地环境预先设置为 PostgreSQL 连接串。开发认证使用固定的单一主体，不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `NEXUS_AUTH_MODE=external` 并在 API 组合入口注册 provider。
+数据库连接与开发认证配置放在仓库根目录 `.env`，模板见 [.env.example](.env.example)。将 `NEXUS_DATABASE_URL` 填写为实际的 PostgreSQL 连接串；用户名或密码中的特殊字符需进行 URL 编码。`.env` 已被 Git 忽略，不提交真实凭据。上述命令由 uv 显式加载配置，已设置的同名环境变量优先于文件；程序本身不会自动读取 `.env`。开发认证使用固定的单一主体，不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `NEXUS_AUTH_MODE=external` 并在 API 组合入口注册 provider。
 
 或者使用 Python 3.11+ 环境：
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
+# .env 需使用兼容 shell 的赋值语法，并对含特殊字符的值加引号。
+set -a
+source .env
+set +a
 python -m pip install --upgrade pip
 python scripts/install_dev.py
 uvicorn nexus_api.main:app --reload
@@ -67,10 +71,10 @@ npm run build
 
 参考项目独立保留在 `/project`，不嵌入本仓库。
 
-在另一个终端中，使用相同的 PostgreSQL 环境变量运行 P1 worker：
+在另一个终端中，加载同一个 `.env` 配置文件运行 worker：
 
 ```bash
-uv run python -m nexus_worker
+uv run --env-file .env python -m nexus_worker
 ```
 
 P2 worker 按已发布 Native Agent 配置执行。可通过用户设置配置供应商/模型与 Key（API/worker 需同一部署加密主密钥），也可继续使用凭据引用与允许解析的环境变量；未配置时仍明确失败，不声称已调用模型。配置步骤见 [worker 使用说明](apps/worker/README.md)，对话与浏览器验证见 [Web 使用说明](apps/web/README.md)。平台 API 文档位于 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。

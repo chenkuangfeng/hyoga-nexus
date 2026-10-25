@@ -3,10 +3,10 @@
 worker 领取平台 Outbox，装配 Native Engine，并通过短事务保存消息、工具状态与事件。运行：
 
 ```bash
-uv run python -m nexus_worker
+uv run --env-file .env python -m nexus_worker
 ```
 
-API 与 worker 使用同一 `NEXUS_DATABASE_URL`，启动前运行 `uv run alembic upgrade head`。SQLite 用于本轮隔离测试；PostgreSQL 部署验收仍待目标环境执行。
+在仓库根目录运行上述命令，配置步骤见[项目入口](../../README.md#本地开发)。API 与 worker 从同一个 `.env` 加载 `NEXUS_DATABASE_URL`，启动前运行 `uv run --env-file .env alembic -c alembic.ini upgrade head`。SQLite 用于本轮隔离测试；PostgreSQL 部署验收仍待目标环境执行。
 
 推荐通过前端「用户设置 → 模型供应商」创建供应商、填写 API 地址与 Key，添加账号可用模型，并设置个人/空间默认模型。管理员先在 API 与 worker 环境中配置相同的 `NEXUS_CREDENTIAL_ENCRYPTION_KEY`（Fernet 格式），随后重启服务；主密钥不进入仓库。可以在本地安全终端生成后保存到部署秘密管理中：
 
@@ -14,7 +14,7 @@ API 与 worker 使用同一 `NEXUS_DATABASE_URL`，启动前运行 `uv run alemb
 uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 ```
 
-完成 `uv run alembic -c alembic.ini upgrade head` 后可保存设置。不要反复生成并覆盖已有主密钥，否则现有密文无法解析。设置页提供测试连接和创建/发布 Native 智能体；测试可能产生少量费用。更换模型地址需要新 Key，旧版本保留旧地址和凭据；同地址替换 Key 会应用于已有引用的后续调用。
+完成 `uv run --env-file .env alembic -c alembic.ini upgrade head` 后可保存设置。不要反复生成并覆盖已有主密钥，否则现有密文无法解析。设置页提供测试连接和创建/发布 Native 智能体；测试可能产生少量费用。更换模型地址需要新 Key，旧版本保留旧地址和凭据；同地址替换 Key 会应用于已有引用的后续调用。
 
 既有环境凭据方式仍可通过平台 `/docs` 创建：
 
