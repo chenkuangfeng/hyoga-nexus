@@ -6,7 +6,7 @@
 
 ## 当前批次实现
 
-上文审查对应的三个复现缺口已在用户确认后的局部修复中覆盖，证据见 [验收记录](../../openspec/changes/model-terminal-consistency/verification.md)。本文复现段保留为原审查证据，不等同当前实现状态；完整模型迁移仍未完成。
+上文审查对应的三个复现缺口已在用户确认后的局部修复中覆盖，证据见 [验收记录](../../openspec/changes/archive/2026-10-25-model-terminal-consistency/verification.md)。本文复现段保留为原审查证据，不等同当前实现状态；完整模型迁移仍未完成。
 
 ## 请求与生命周期
 
@@ -52,4 +52,4 @@ Responses input 已含 cached，total 缺失时 input+output，cached 只作分�
 
 ## 局部修复与剩余范围
 
-[模型错误与终态一致性提案](../../openspec/changes/model-terminal-consistency/proposal.md)定义修复范围、冲突决策与验收矩阵。完整模型历史/签名、供应商配置、缓存治理、多模态降级、早期进度与上游其余文件仍保留在审查/迁移清单，不因本批提案而消失。
+[模型错误与终态一致性提案](../../openspec/changes/archive/2026-10-25-model-terminal-consistency/proposal.md)定义修复范围、冲突决策与验收矩阵。完整模型历史/签名、供应商配置、缓存治理、多模态降级、早期进度与上游其余文件仍保留在审查/迁移清单，不因本批提案而消失。

@@ -41,4 +41,4 @@ Native 核心与全量外围分开跟踪，但不缩减用户要求。下一次�
 
 本清单按已有索引逐项归组，未重新证明上游整个 Git 树已被索引覆盖，也未逐项重新验证全部来源哈希。目录/符号链接/缺失项应先确认其实际类型与 Git 对象，再决定阅读方式；不能因本地无法按普通文件读取而标记完成。
 
-后续模型协议分支与原测试证据见 [WeKnora 协议审查](reference-weknora-protocol-review.md)；首个修复批次见 [模型终态提案](../../openspec/changes/model-terminal-consistency/proposal.md)，待确认后实施。
+后续模型协议分支与原测试证据见 [WeKnora 协议审查](reference-weknora-protocol-review.md)；首个修复批次见 [模型终态提案](../../openspec/changes/archive/2026-10-25-model-terminal-consistency/proposal.md)，本局部修复已确认、实施并归档；后续全量审查继续。

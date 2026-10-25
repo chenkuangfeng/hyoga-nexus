@@ -6,7 +6,7 @@
 
 ## 当前实现说明
 
-本文缺口表为修复前审查基线。用户已确认并完成“模型错误与终态一致性”局部实现；当前修复及验证以 [批次记录](../../openspec/changes/model-terminal-consistency/verification.md)为准，不将下列全部差异当作仍未修复或完整迁移已完成。
+本文缺口表为修复前审查基线。用户已确认并完成“模型错误与终态一致性”局部实现；当前修复及验证以 [批次记录](../../openspec/changes/archive/2026-10-25-model-terminal-consistency/verification.md)为准，不将下列全部差异当作仍未修复或完整迁移已完成。
 
 ## 配置、连接与会话基础
 

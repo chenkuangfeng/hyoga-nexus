@@ -32,4 +32,4 @@ Python 全量回归、Web 类型/生产构建及浏览器夹具仅证明本地�
 
 ## 模型错误与终态局部验收
 
-已按用户确认完成三协议错误/终态、工具完整性、缓存用量与有界重试修复；详见 [独立批次验收](../../../openspec/changes/model-terminal-consistency/verification.md)。该批次不消除本提案的完整迁移与环境验收待办。
+已按用户确认完成三协议错误/终态、工具完整性、缓存用量与有界重试修复；详见 [独立批次验收](../../../openspec/changes/archive/2026-10-25-model-terminal-consistency/verification.md)。该批次不消除本提案的完整迁移与环境验收待办。

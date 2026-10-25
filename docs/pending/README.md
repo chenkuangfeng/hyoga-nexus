@@ -20,4 +20,4 @@
 
 Native 核心模型证据：[模型协议、历史与故障转移审查](reference-model-review.md)，含非流式错误终态复现和待修复批次。
 
-WeKnora 模型链路：[请求与终态审查](reference-weknora-protocol-review.md)；待确认批次：[模型错误与终态一致性](../../openspec/changes/model-terminal-consistency/proposal.md)。
+WeKnora 模型链路：[请求与终态审查](reference-weknora-protocol-review.md)；已完成局部批次：[模型错误与终态一致性](../../openspec/changes/archive/2026-10-25-model-terminal-consistency/proposal.md)。
