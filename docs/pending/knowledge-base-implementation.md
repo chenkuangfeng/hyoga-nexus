@@ -66,4 +66,4 @@ P3 为平台提供 Python 知识库能力：文档生命周期、异步解析与
 
 - WeKnora `e1f9a6166`：`internal/types/graph.go`、`internal/application/service/graph.go`、`internal/application/repository/retriever/neo4j/`、`internal/agent/tools/query_knowledge_graph.go`、`internal/application/service/agent_tool_surface_test.go`。
 - RAGFlow `e5a5060c4`（`dev-20261024`）：`docs/guides/knowledge_compilation/overview.md`、`docs/guides/knowledge_compilation/built_in_templates_and_dedicated_configuration.md`、`docs/guides/dataset/notes_and_faqs.md`。
-- 本项目 [总体架构](architecture.md)、[资源模型](resource-model.md)、[运行时契约](runtime-contract.md) 与 [P3 路线图](roadmap.md)。
+- 本项目 [总体架构](../architecture.md)、[资源模型](../resource-model.md)、[运行时契约](../runtime-contract.md) 与 [P3 路线图](../roadmap.md)。

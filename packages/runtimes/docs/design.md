@@ -6,4 +6,4 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 通过 httpx transport 注入假 HTTP 的既有 Provider 单元测试仍可执行；用户配置的真实请求由 API/worker 装配安全 transport。
 
-完整参考实现迁移尚未完成，实际缺口和拟采用的模块划分见 [双项目审计](native-reference-audit.md)。`reference-source-inventory.tsv` 的未审查项仍是待办；不得把当前单类循环视作两个项目的完整等价实现。
+完整参考实现迁移尚未完成，实际缺口和拟采用的模块划分见 [双项目审计](../../../docs/pending/native-reference-audit.md)。`reference-source-inventory.tsv` 的未审查项仍是待办；不得把当前单类循环视作两个项目的完整等价实现。

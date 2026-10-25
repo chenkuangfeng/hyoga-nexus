@@ -24,4 +24,4 @@ P7 的股票研究技能消费 P6 提供的结构化数据和工具，不绑定�
 ## 参考
 
 - [AkShare 项目](https://github.com/akfamily/akshare)
-- 本项目 [总体架构](architecture.md)、[实施计划](roadmap.md)、[资源模型](resource-model.md) 与 [P7 股票分析流程探讨记录](stock-analysis-discussion.md)。
+- 本项目 [总体架构](../architecture.md)、[实施计划](../roadmap.md)、[资源模型](../resource-model.md) 与 [P7 股票分析流程探讨记录](stock-analysis-discussion.md)。

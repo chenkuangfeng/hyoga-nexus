@@ -122,4 +122,4 @@ WeKnora 不只是资源平台。`internal/agent/engine.go` 本身就是带状态
 - 源码/许可证核对、索引和文档检查不代替真实供应商、WeKnora Go 部署、PostgreSQL 或隔离环境验收。
 - 本轮未迁移任何上游源码、未新增执行权限、未安装上游整套依赖。
 
-迁移实施范围、结构和验收任务见 [提案](../../../openspec/changes/native-reference-parity/proposal.md)。源码未读完、功能未迁完、部署未验收三者分别跟踪，不合并成“已完成”。
+迁移实施范围、结构和验收任务见 [提案](native-reference-parity/proposal.md)。源码未读完、功能未迁完、部署未验收三者分别跟踪，不合并成“已完成”。

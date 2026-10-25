@@ -79,4 +79,4 @@ TradingAgents 展示了一种可参考的流程：先由不同分析员生成共
 - [`daily_stock_analysis` 项目](https://github.com/ZhuLinsen/daily_stock_analysis)、[Agent 编排器](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/orchestrator.py)、[技术分析 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/technical_agent.py)、[风险 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/risk_agent.py)、[决策 Agent](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/src/agent/agents/decision_agent.py)、[分析上下文包](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/analysis-context-pack.md)
 - [Microsoft Qlib](https://github.com/microsoft/qlib)、[XGBoost Alpha158 工作流](https://github.com/microsoft/qlib/blob/main/examples/benchmarks/XGBoost/workflow_config_xgboost_Alpha158.yaml)、[代码组装工作流示例](https://github.com/microsoft/qlib/blob/main/examples/workflow_by_code.py)
 - P6 的数据源与 AkShare 讨论见 [观澜数据平台探讨记录](guanlan-data-platform-discussion.md)。
-- 本项目 [总体架构](architecture.md)、[实施计划](roadmap.md) 与 [资源模型](resource-model.md)。
+- 本项目 [总体架构](../architecture.md)、[实施计划](../roadmap.md) 与 [资源模型](../resource-model.md)。

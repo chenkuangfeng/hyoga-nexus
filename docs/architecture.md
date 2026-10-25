@@ -8,7 +8,7 @@
 
 智能体有 Native、Codex、Claude Code 及后续类型。创建智能体时选择类型，并绑定多个技能、工具、MCP 工具及知识库；新建会话选择这个已配置的智能体。模型提供商和智能体类型是不同概念：Native 可以使用不同模型 API，Codex/Claude Code 按各自运行时能力配置模型。
 
-WeKnora 提供平台、知识库、权限，以及智能体完成判断、上下文压缩、审批与恢复的实现来源；GenericAgent 提供 Python 执行循环、工具、工作记忆和 SOP 的迁移主干。完整迁移尚未完成，差距见 [双项目审计](../packages/runtimes/docs/native-reference-audit.md)。知识库由本项目用 Python 实现，不把 WeKnora Go 服务作为必需依赖。不会直接复制两个项目的整个运行环境。
+WeKnora 提供平台、知识库、权限，以及智能体完成判断、上下文压缩、审批与恢复的实现来源；GenericAgent 提供 Python 执行循环、工具、工作记忆和 SOP 的迁移主干。完整迁移尚未完成，差距见 [双项目审计](pending/native-reference-audit.md)。知识库由本项目用 Python 实现，不把 WeKnora Go 服务作为必需依赖。不会直接复制两个项目的整个运行环境。
 
 ## 分层与执行路径
 
