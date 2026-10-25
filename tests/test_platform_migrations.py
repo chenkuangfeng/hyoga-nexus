@@ -10,6 +10,7 @@ def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
     url = "sqlite:///" + str(tmp_path / "platform.db")
     monkeypatch.setenv("NEXUS_DATABASE_URL", url)
     config = Config("alembic.ini")
+    config.attributes["database_url"] = url
 
     command.upgrade(config, "head")
     engine = create_engine(url)

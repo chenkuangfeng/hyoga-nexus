@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from nexus_platform.configuration import resolve_database_url
+
 
 def create_database_engine(url: str | None = None, *, echo: bool = False) -> Engine:
-    database_url = url or os.environ.get("NEXUS_DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("NEXUS_DATABASE_URL must be configured for platform operations")
+    """Build an engine from an explicit URL or shared deployment configuration.
+
+    Configuration errors are safe to display; no connection is opened until use.
+    SQLite connection options remain available for isolated tests.
+    """
+    database_url = resolve_database_url(url)
     options: dict[str, object] = {"pool_pre_ping": True, "echo": echo}
     if database_url.startswith("sqlite"):
         options["connect_args"] = {"check_same_thread": False}

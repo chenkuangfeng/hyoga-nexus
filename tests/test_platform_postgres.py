@@ -39,6 +39,7 @@ def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
         monkeypatch.setenv("NEXUS_DATABASE_URL", scoped_url)
         config = Config("alembic.ini")
+        config.attributes["database_url"] = scoped_url
         command.upgrade(config, "head")
         with scoped_engine.connect() as connection:
             current = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()

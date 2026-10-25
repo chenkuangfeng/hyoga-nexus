@@ -45,3 +45,7 @@ SqlAlchemyUnitOfWork 接受 API 借用会话或 worker 的 sessionmaker；前者
 
 
 RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease owner、锁 Run；已开始或曾尝试的执行标记 interrupted，取消优先于重试，首次执行在无 Runtime 时记录 started/failed。只有常规处理完成才清理租约字段；已终态的早退路径保留既有租约值并完成投递。该入口保留历史兼容，Native worker 仍由 ExecutionPreparer 和 DurableRuntimeStore 驱动。Delivery 是独立数据对象，后台按投递锁读取 Run 的内部端口不能用作用户可见性回退。
+
+## 部署数据库配置
+
+`configuration.py` 使用标准库 tomllib 集中解析 `configs/nexus.toml`，`resolve_database_url()` 按显式 URL、文件、环境变量顺序选取并验证连接串。`DatabaseConfigurationError` 继承 RuntimeError，错误不携带秘密。数据库工厂与 API/worker/Alembic 共用；读取规则和使用方式见 [configs](../../../configs/README.md)。不加载 dotenv，不在模块导入时读取配置。

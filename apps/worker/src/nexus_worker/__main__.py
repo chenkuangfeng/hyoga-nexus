@@ -8,6 +8,7 @@ import signal
 import socket
 import threading
 
+from nexus_platform.configuration import DatabaseConfigurationError, resolve_database_url
 from nexus_platform.persistence.database import create_database_engine, session_factory
 from nexus_platform.runs.service import claim_next, process_claimed
 
@@ -59,9 +60,10 @@ def main() -> None:
     parser.add_argument("--once", action="store_true", help="process at most one queued task")
     parser.add_argument("--poll-interval", type=float, default=1.0)
     args = parser.parse_args()
-    database_url = os.getenv("NEXUS_DATABASE_URL")
-    if not database_url:
-        parser.error("NEXUS_DATABASE_URL must be configured")
+    try:
+        database_url = resolve_database_url()
+    except DatabaseConfigurationError as exc:
+        parser.error(str(exc))
     run_worker(database_url=database_url, poll_interval=max(0.1, args.poll_interval), once=args.once)
 
 

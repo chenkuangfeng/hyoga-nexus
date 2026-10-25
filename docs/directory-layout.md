@@ -80,3 +80,7 @@ hyoga-nexus/
 ## 用户模型设置
 
 `platform/models/provider_settings.py` 管理供应商、密文和默认偏好；API `http/model_settings.py` 提供设置与有界连接测试；Web `views/settings/ModelSettingsView.vue`、`composables/useModelSettings.ts` 和 `api/modelSettings.ts` 提供用户设置。Runtime `native/models/network.py` 实现目的地址检查和 DNS/IP 固定，worker 显式装配。迁移为 `c8d240ab1701`，模型继续使用不可变版本。
+
+## 部署配置文件
+
+`configs/nexus.example.toml` 是数据库连接示例；工作目录下的 `configs/nexus.toml` 为被忽略的实际配置，由 platform 配置模块统一读取，API、worker 和 Alembic 共用。规则见 [configs](../configs/README.md)。

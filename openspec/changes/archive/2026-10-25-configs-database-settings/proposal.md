@@ -14,4 +14,4 @@
 
 ## 状态
 
-待用户确认；仅创建提案，尚未实施。
+用户已确认；实施与验证结果见 [verification.md](verification.md)。

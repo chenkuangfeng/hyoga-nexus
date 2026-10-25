@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 
 from nexus_api.http.platform import router as platform_router
 from nexus_platform.errors import PlatformError
+from nexus_platform.configuration import DatabaseConfigurationError
 from nexus_platform.persistence.database import create_database_engine, session_factory
 
 app = FastAPI(title="Hyoga Nexus", version="0.1.0")
@@ -90,15 +91,14 @@ def health():
 
 @app.get("/api/v1/ready")
 def ready():
-    import os
     from sqlalchemy import text
 
     engine = getattr(app.state, "database_engine", None)
     if engine is None:
-        database_url = os.getenv("NEXUS_DATABASE_URL")
-        if not database_url:
+        try:
+            engine = create_database_engine()
+        except DatabaseConfigurationError:
             return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "database_not_configured"})
-        engine = create_database_engine(database_url)
         app.state.database_engine = engine
         app.state.session_factory = session_factory(engine)
     try:
