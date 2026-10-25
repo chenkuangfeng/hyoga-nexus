@@ -1,0 +1,48 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-github-gitee-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "::error::请先配置 GITEE_TOKEN Secret"
+            exit 1
+          fi
+          git remote add gitee "https://hyoga2026:${GITEE_TOKEN}@gitee.com/hyoga2026/hyoga-nexus.git"
+          remote_head="$(git ls-remote --heads gitee main)"
+          if [ -n "$remote_head" ]; then
+            git fetch --no-tags gitee main
+            if git merge-base --is-ancestor HEAD FETCH_HEAD; then
+              echo "Gitee 已包含 GitHub 的提交，无需推送。"
+            elif git merge-base --is-ancestor FETCH_HEAD HEAD; then
+              git push gitee HEAD:refs/heads/main
+            else
+              echo "::error::两端 main 已分叉，请先合并两端提交后再同步。"
+              exit 1
+            fi
+          else
+            git push gitee HEAD:refs/heads/main
+          fi
