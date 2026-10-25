@@ -1,6 +1,6 @@
 # 分阶段实施计划
 
-状态：P0 已完成；P1 平台实现与 SQLite 单元/API/迁移验收已完成，PostgreSQL 专用并发、迁移与故障恢复验收待目标环境执行；P2 Native 闭环已实现并完成 SQLite/模拟模型与浏览器夹具验证；真实模型部署验收待执行，P3 及后续阶段尚未开始。
+状态：P0 已完成；P1 平台实现与 SQLite 单元/API/迁移验收已完成，PostgreSQL 专用并发、迁移与故障恢复验收待目标环境执行；P2 Native 基础闭环已实现并完成 SQLite/模拟模型与浏览器夹具验证，但 GenericAgent / WeKnora 智能体完整能力尚未迁移；真实模型部署验收待执行，P3 及后续阶段尚未开始。
 
 | 阶段 | 范围 | 可验收结果 | 依赖 |
 |---|---|---|---|
@@ -29,7 +29,7 @@ P1 的首批 API、迁移、配置与 Run/Outbox 已实现；目标 PostgreSQL �
 
 ## 待定事项
 
-- Native 是自主实现还是抽取 GenericAgent 部分机制：先做小型验证，不把未经隔离的原代码直接嵌入服务。
+- Native 迁移方向已明确：按 GenericAgent / WeKnora 锁定源码复制或等价翻译迁移，保留全部适用行为与模块边界；日常配置前端优先。完整差距和待确认范围见 [双项目审计](../packages/runtimes/docs/native-reference-audit.md)及[提案](../openspec/changes/native-reference-parity/proposal.md)。
 - 首批模型、账号与部署资源；外部 Runtime 支持版本和认证方式。
 - 队列/调度实现、解析/OCR 与重排后端，经过验证后记录 ADR。
 - 微信/QQ/企业微信各自接入模式与账号条件。

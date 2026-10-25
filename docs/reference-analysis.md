@@ -18,7 +18,7 @@
 - frontends/：包含 Streamlit、终端、FastAPI conductor、桌面桥，以及企业微信/微信/QQ 等入口。
 - frontends/genericagent_acp_bridge.py：ACP 初始化声明 HTTP/SSE MCP 能力为 false；不能因为有 ACP 桥就假设已有完整 MCP 或知识库资源体系。
 
-## 适合借鉴
+## 适合迁移的能力
 
 紧凑而可替换的执行循环、统一工具结果、运行生命周期钩子、短期工作检查点、摘要/索引/详细资料分层、完成后沉淀 SOP 草稿、多入口复用任务执行。
 
@@ -32,7 +32,7 @@
 
 ## 组合建议
 
-平台组织参考 WeKnora，Native 内核参考 GenericAgent，自有 Python 知识库形成公共资源；Codex/Claude Code/其他运行时并列接入同一资源体系。研究和复用机制优先，尚未引入参考项目源码或依赖；如后续复用实际代码，再按该文件和第三方组件的许可保留归属信息。
+平台组织与智能体可靠性逻辑对照 WeKnora，Native 执行/工作记忆/SOP 主干对照 GenericAgent。用户已明确要求按锁定源码复制或等价翻译迁移全部适用逻辑与细节，并参照模块结构；日常配置优先通过前端管理，允许保持兼容的易用性扩展。自有 Python 知识库形成公共资源；Codex/Claude Code/其他运行时并列接入同一资源体系。当前尚未迁移完整源码；后续逐文件核对许可证、保留来源与归属，不提交整个第三方源码仓库。
 
 ## P1 实现映射
 
@@ -53,3 +53,11 @@
 已按相同固定版本核对 GenericAgent loop/StepOutcome/dispatch、hooks、abort、history、checkpoint、memory/SOP，以及 WeKnora 事件、会话 busy gate/测试、AgentGrant 测试和流式聊天组件。Native 的行为映射与本地测试证据见 [P2 验收矩阵](../openspec/changes/p2-native-agent/verification.md)。没有复制两个项目的源码。
 
 多用户服务采用持久 Run/Input/Outbox 代替进程内回调和共享历史；Typed hooks 代替 locals()；Memory/SOP 写入只产生可归属的草稿；任意宿主执行在缺少隔离后端时明确 unavailable。这些是隔离、审计和权限方面的增强，不把高风险动作审批或 AgentGrant 语义混同为 Workspace 共享授权。高风险工具审批/自动化尚未开放。
+
+## 源码差距审计与后续迁移
+
+[Native 双项目审计](../packages/runtimes/docs/native-reference-audit.md)列明已核实缺口、上游来源、模块结构和逻辑冲突。WeKnora 的 `internal/agent` 包含实际执行循环、完成判断、压缩、steer、审批与恢复，应一并迁移，而不只参考资源组织。
+
+当前 P2 本地验证不等于 GenericAgent 完整功能兼容。no_tool 判断、done hooks、回合收尾、完整工作记忆/长期 SOP、上下文变换 hooks、多模型协议/故障转移等尚未完整实现；六项代码/文件/浏览器工具按用户此前确认继续暂缓。未审查、未实现、暂缓和部署未验收分别登记，不再以“接口预留”或“已参考”代替功能迁移完成。
+
+后续范围见 [源码迁移提案](../openspec/changes/native-reference-parity/proposal.md)，尚待确认。
