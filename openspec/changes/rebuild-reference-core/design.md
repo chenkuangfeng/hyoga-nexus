@@ -6,6 +6,10 @@
 
 保持一个模型/工具执行循环。不能启动完整 GenericAgent.run 后在外面再套 NativeEngine；两项目贡献的行为由同一 RunOrchestrator/TurnExecutor 组合。现有 SDK adapter 内部只管理传输，不再次编排任务。
 
+## 共享契约
+
+将 core/runtime.py 的模型消息/请求/块、工具、预算/进度、事件和故障按 models.py、tools.py、budgets.py、events.py、errors.py 分入 core/runtime/ package；__init__ 继续导出原名。core/native.py 的行为策略与 hook DTO 同样按职责组织，旧导入保留。只移动实际稳定跨包契约，不把 ORM、平台 Repository 或 SDK 类型放入 core。
+
 ## 平台类与文件分布（目标，尚未实现）
 
 | 路径 | 主类/职责 | 当前代码处理 |
