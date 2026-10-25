@@ -14,4 +14,4 @@
 | [guanlan-data-platform-discussion.md](guanlan-data-platform-discussion.md) | P6 | 观澜股票数据平台与外部数据源（如 AkShare）适配讨论记录 |
 | [stock-analysis-discussion.md](stock-analysis-discussion.md) | P7 | 股票分析流程、多空辩论（`TradingAgents`）、分工编排与量化回测（`Qlib`）探讨记录 |
 
-增补源码证据：[GenericAgent 外围入口与协作审查](reference-peripheral-review.md)，包含 UltraPlan、Agent BBS、HTTP App、Python 执行头与中英文记忆模板的分支、适配边界与待验证项。
+增补源码证据：[GenericAgent 外围入口与协作审查](reference-peripheral-review.md)，包含 UltraPlan、Agent BBS、HTTP App、Python 执行头、中英文记忆模板与配置向导的分支、适配边界与待验证项。
