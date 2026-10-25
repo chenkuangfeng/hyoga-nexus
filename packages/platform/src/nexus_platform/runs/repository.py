@@ -1,71 +1,98 @@
-"""SQLAlchemy adapters for scoped Run access, ordered events and queue claims.
+"""SQLAlchemy Run identity, owner locking, explicit writes and idempotency savepoints.
 
-Responsibility mapping follows WeKnora application/repository and interfaces/session
-(e1f9a6166); this adapter preserves Nexus Workspace/Principal keys and transaction locks.
-It does not copy GORM code or weaken scope through a tenant-only query.
+Nexus scope is always explicit. Separate adapters own event allocation and queue delivery;
+compatibility re-exports retain the earlier internal repository import paths.
 """
-from datetime import datetime
+from copy import deepcopy
+from dataclasses import fields
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from nexus_core.platform import new_id
-from nexus_platform.persistence.models import OutboxRecord, RunEventRecord, RunRecord, SessionRecord
+from nexus_platform.persistence.models import RunRecord, SessionRecord
+from .domain import Delivery, Run
+from .event_repository import SqlAlchemyRunEventRepository
+from .queue_repository import SqlAlchemyOutboxRepository
 
 
 class SqlAlchemyRunRepository:
-    """Workspace and principal-filtered Run queries in an existing transaction."""
+    """Keep mapped identity inside the adapter and return independent write-side Run values."""
     def __init__(self, session: Session):
         self.session = session
+        self._records: dict[UUID, RunRecord] = {}
 
     def visible(self, workspace_id: UUID, user_id: UUID, run_id: UUID) -> RunRecord | None:
-        """Return a Run only to its principal or its Session owner in the same workspace."""
-        return self.session.scalar(select(RunRecord).join(SessionRecord, SessionRecord.id == RunRecord.session_id).where(
+        """Legacy read projection for Run principal or Session owner, scoped to one workspace."""
+        return self.session.scalar(
+            select(RunRecord).join(SessionRecord, SessionRecord.id == RunRecord.session_id).where(
+                RunRecord.id == run_id, RunRecord.workspace_id == workspace_id,
+                (RunRecord.principal_id == user_id) | (SessionRecord.owner_user_id == user_id),
+            )
+        )
+
+    def _remember(self, row: RunRecord) -> Run:
+        self._records[row.id] = row
+        return Run(**{field.name: deepcopy(getattr(row, field.name)) for field in fields(Run)})
+
+    def owned_for_update(self, workspace_id: UUID, user_id: UUID, run_id: UUID) -> Run | None:
+        """Lock a Run strictly owned by this principal; never reuse broader read visibility."""
+        row = self.session.scalar(select(RunRecord).where(
             RunRecord.id == run_id, RunRecord.workspace_id == workspace_id,
-            (RunRecord.principal_id == user_id) | (SessionRecord.owner_user_id == user_id)))
+            RunRecord.principal_id == user_id,
+        ).with_for_update())
+        return self._remember(row) if row is not None else None
 
+    def for_delivery(self, delivery: Delivery) -> Run | None:
+        """Worker-only load after the service validates the locked delivery's lease owner.
 
-class SqlAlchemyRunEventRepository:
-    """Event allocation under the caller's parent-Run lock; replay never performs execution."""
-    def __init__(self, session: Session):
-        self.session = session
-
-    def after(self, run_id: UUID, sequence: int, limit: int) -> list[RunEventRecord]:
-        """Read events in sequence order, excluding the supplied cursor."""
-        return list(self.session.scalars(select(RunEventRecord).where(
-            RunEventRecord.run_id == run_id, RunEventRecord.sequence > sequence)
-            .order_by(RunEventRecord.sequence).limit(limit)))
-
-    def append(self, run_id: UUID, kind: str, payload: dict, at: datetime) -> RunEventRecord:
-        """Allocate the next sequence and flush; caller must hold the parent Run lock.
-
-        Flush preserves the existing uniqueness/foreign-key error behavior. This method
-        never commits so event, audit and related state updates stay atomic.
+        User-facing operations must use owned_for_update; this is not a visibility fallback.
         """
-        sequence = self.session.scalar(select(func.coalesce(func.max(RunEventRecord.sequence), 0)).where(
-            RunEventRecord.run_id == run_id)) + 1
-        row = RunEventRecord(id=new_id(), run_id=run_id, sequence=sequence, event_type=kind,
-                             schema_version=1, payload=payload, occurred_at=at)
-        self.session.add(row)
-        self.session.flush()
-        return row
+        row = self.session.scalar(select(RunRecord).where(
+            RunRecord.id == delivery.run_id,
+        ).with_for_update())
+        return self._remember(row) if row is not None else None
 
+    def by_key(self, workspace_id: UUID, user_id: UUID, key: str) -> Run | None:
+        """Look up the existing request only within its authenticated idempotency scope."""
+        row = self.session.scalar(select(RunRecord).where(
+            RunRecord.workspace_id == workspace_id, RunRecord.principal_id == user_id,
+            RunRecord.idempotency_key == key,
+        ))
+        return self._remember(row) if row is not None else None
 
-class SqlAlchemyOutboxRepository:
-    """Claim one available queue entry using the existing lease and ordering rules."""
-    def __init__(self, session: Session):
-        self.session = session
+    def has_active(self, session_id: UUID) -> bool:
+        """Check the submission Session already locked and authorized by the application."""
+        return self.session.scalar(select(RunRecord.id).where(
+            RunRecord.session_id == session_id,
+            RunRecord.status.in_(['queued', 'running', 'waiting_input', 'waiting_approval']),
+        ).limit(1)) is not None
 
-    def claim(self, worker_id: str, now: datetime, until: datetime) -> UUID | None:
-        """Lock the oldest available/expired entry, skip locked rows and update its lease."""
-        task = self.session.scalar(select(OutboxRecord).where(
-            OutboxRecord.completed_at.is_(None), OutboxRecord.available_at <= now,
-            (OutboxRecord.lease_until.is_(None)) | (OutboxRecord.lease_until <= now))
-            .order_by(OutboxRecord.available_at, OutboxRecord.created_at, OutboxRecord.id)
-            .limit(1).with_for_update(skip_locked=True))
-        if task is None:
-            return None
-        task.lease_owner, task.lease_until = worker_id, until
-        task.attempts += 1
-        return task.id
+    def insert_or_replay(self, run: Run) -> tuple[Run, bool]:
+        """Insert under a savepoint; resolve only a scoped key collision, not other DB failures."""
+        row = RunRecord(**{field.name: deepcopy(getattr(run, field.name)) for field in fields(Run)})
+        try:
+            with self.session.begin_nested():
+                self.session.add(row)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.by_key(run.workspace_id, run.principal_id, run.idempotency_key)
+            if existing is None:
+                raise
+            return existing, False
+        return self._remember(row), True
+
+    def save(self, run: Run) -> None:
+        """Apply explicit state to a previously inserted/locked Run; do not issue an unscoped read."""
+        row = self._records[run.id]
+        for field in fields(Run):
+            setattr(row, field.name, deepcopy(getattr(run, field.name)))
+
+    def legacy_record(self, run_id: UUID) -> RunRecord:
+        """Return the already tracked mapped identity after commit, with no new query/transaction.
+
+        This is for the compatibility facade only and is intentionally absent from the
+        application repository protocol. Unknown IDs fail rather than performing a lookup.
+        """
+        return self._records[run_id]

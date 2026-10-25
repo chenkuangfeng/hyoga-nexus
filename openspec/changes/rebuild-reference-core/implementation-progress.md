@@ -35,4 +35,17 @@ WeKnora 锁定版本 `e1f9a6166a593a4804a2f99f1d942919c9cc8ea7` 本批再次阅�
 
 ## 未完成
 
-B1 的提交、取消、执行准备和持久适配仍有直接 ORM 使用，需要继续提取领域对象/仓储。B0 的其余模块深读门禁仍保留；B2 模型私有历史/文本协议/上下文压缩、B3 循环/hooks/工具并发、B4 快照/ActionGrant/长期记忆整理未完成。真实供应商、上游 Go 测试和 PostgreSQL 实库尚未验收；不归档提案，不勾选这些任务。
+B1 的提交、取消和输入恢复已完成下述写入隔离；执行资源授权、执行准备和持久适配仍需继续分离 ORM。B0 的其余模块深读门禁仍保留；B2 模型私有历史/文本协议/上下文压缩、B3 循环/hooks/工具并发、B4 快照/ActionGrant/长期记忆整理未完成。真实供应商、上游 Go 测试和 PostgreSQL 实库尚未验收；不归档提案，不勾选这些任务。
+
+
+## B1 后续：写入应用边界
+
+- RunSubmissionService、RunCancellationService、RunInputService 只操作领域对象和 RunCommandUnitOfWork 端口；直接导入这些类不会加载 SQLAlchemy。领域 Run 与 JSON 是独立副本，显式 save 后才写入跟踪行。
+- 配置读取、当前权限、Run 幂等插入、消息、事件、队列、输入消费和审计分别绑定同一 Session。保留当前授权先于重放、Session 固定版本、原配置快照键、保存点回退、取消事件顺序、输入 key 原值和已消费回答优先重放等规则。
+- compatibility.py 维护旧函数签名及 RunRecord 返回身份；直接使用仓储已跟踪的行，不追加提交后的查询。先前职责模块中的旧函数导入也继续可用。
+- 新增 test_run_write_boundaries.py 14 项真实仓储/事务和架构边界用例；测试保存点碰撞与外层继续写入、无显式保存不落库、旧实体身份/事务状态、三种 idle 取消、active 取消去重、跨主体/空间写入拒绝、取消/输入后续失败回滚、回答 key 原值/终态重放、禁用主体不能用幂等绕过权限。没有删除旧用例，原事务故障探针改为在审计适配边界注入。
+- 对应编码前来源/分支/目标/断言映射见 [写入迁移关卡](persistence-boundary-analysis.md)。本批以第一方持久化隔离为主，没有复制上游片段，不宣称循环、协议或全部 Session 功能已迁移。
+
+- 同批完成旧 P1 RunLeaseService.process 的队列/Run/事件/审计端口隔离，保留 missing/completed/foreign owner 早退、取消优先、未知执行 interrupted、无 Runtime started/failed 和 terminal 早退租约字段语义。新增 test_run_lease_boundaries.py 的 8 项真实数据库用例；领域导入隔离测试一并覆盖租约服务。
+
+- 本批最终全量回归：`uv run --locked pytest -q -rs` 为 266 passed、1 skipped，仍只跳过缺少 `NEXUS_TEST_POSTGRES_URL` 的 PostgreSQL 专项，既有 Starlette/httpx 弃用警告保留。platform 的 sdist/wheel 构建通过；SQLite/PostgreSQL 34 张表与索引 DDL 再次逐项比较不变，SQLite 正式迁移/metadata 一致性随全量测试通过。未生成伪迁移，未修改前端。

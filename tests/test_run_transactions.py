@@ -24,7 +24,7 @@ def test_submission_failure_rolls_back_snapshot_message_event_audit_and_queue(da
         baseline = [db.scalar(select(func.count()).select_from(table)) for table in tables]
     # Fail after all Run-side writes, including the event flush, before transaction exit.
     with database() as db, patch(
-        "nexus_platform.runs.submission.audit", side_effect=RuntimeError("audit unavailable")
+        "nexus_platform.runs.audit_repository.audit", side_effect=RuntimeError("audit unavailable")
     ):
         with pytest.raises(RuntimeError, match="audit unavailable"):
             create_run(db, principal, workspace.id, session.id,

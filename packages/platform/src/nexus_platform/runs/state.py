@@ -2,7 +2,12 @@
 from __future__ import annotations
 from nexus_core.platform import RunStatus
 from nexus_platform.errors import Conflict
-from nexus_platform.persistence.models import RunRecord
+from typing import Protocol
+
+
+class RunState(Protocol):
+    """Mutable state shared by domain Runs and the legacy persistence adapter."""
+    status: str
 
 
 ALLOWED_TRANSITIONS = {
@@ -16,7 +21,8 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def transition_run(run: RunRecord, target: RunStatus) -> None:
+def transition_run(run: RunState, target: RunStatus) -> None:
+    """Apply a legal transition in place; identical status is a no-op, invalid edges conflict."""
     current = RunStatus(run.status)
     if target == current:
         return

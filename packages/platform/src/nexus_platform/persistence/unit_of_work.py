@@ -55,11 +55,19 @@ class SqlAlchemyUnitOfWork:
         from nexus_platform.runs.repository import (
             SqlAlchemyRunRepository, SqlAlchemyRunEventRepository, SqlAlchemyOutboxRepository,
         )
-        from nexus_platform.identity.repository import SqlAlchemyWorkspaceAccess
+        from nexus_platform.runs.submission_access import SqlAlchemySubmissionAccess
+        from nexus_platform.runs.configuration_repository import SqlAlchemySubmissionCatalog
+        from nexus_platform.runs.message_repository import SqlAlchemyRunMessageRepository
+        from nexus_platform.runs.input_repository import SqlAlchemyRunInputRepository
+        from nexus_platform.runs.audit_repository import SqlAlchemyRunAuditRepository
         self.runs = SqlAlchemyRunRepository(self.session)
         self.events = SqlAlchemyRunEventRepository(self.session)
         self.outbox = SqlAlchemyOutboxRepository(self.session)
-        self.access = SqlAlchemyWorkspaceAccess(self.session)
+        self.access = SqlAlchemySubmissionAccess(self.session)
+        self.catalog = SqlAlchemySubmissionCatalog(self.session)
+        self.messages = SqlAlchemyRunMessageRepository(self.session)
+        self.inputs = SqlAlchemyRunInputRepository(self.session)
+        self.audit = SqlAlchemyRunAuditRepository(self.session)
 
     def __exit__(self, exc_type, exc_value, traceback):
         try:

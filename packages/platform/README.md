@@ -6,3 +6,5 @@
 
 - [功能需求](docs/requirements.md)
 - [模块设计](docs/design.md)
+
+Run 写入规则位于 `runs/submission.py`、`cancellation.py`、`inputs.py`；领域值对象、事务端口和 SQLAlchemy 适配分别组织。原 `runs.service`、`runs.execution` 调用入口保持兼容，具体边界见 [平台设计](docs/design.md)。

@@ -9,9 +9,10 @@ from nexus_core.runtime import ModelMessage
 from nexus_platform.errors import PlatformError
 from nexus_platform.persistence.models import MessageRecord, RunRecord, SessionRecord
 from nexus_platform.workspaces.service import authorize_resource
+from .domain import Run
 
 
-def add_message(db: Session, run: RunRecord, message: ModelMessage, *, origin: str = "runtime") -> MessageRecord:
+def add_message(db: Session, run: RunRecord | Run, message: ModelMessage, *, origin: str = "runtime") -> MessageRecord:
     session_row = db.scalar(select(SessionRecord).where(SessionRecord.id == run.session_id).with_for_update())
     session_row.updated_at = utc_now()
     sequence = db.scalar(select(func.coalesce(func.max(MessageRecord.sequence), 0)).where(

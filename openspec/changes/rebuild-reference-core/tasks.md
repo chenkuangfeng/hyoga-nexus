@@ -1,6 +1,6 @@
 # 重实现任务与实际状态
 
-状态：用户已明确确认，正在实施。共享契约、平台实体与 Run 职责拆分已落地；仓储隔离只完成查询、事件和领取路径，不能据此宣称 P0–P2 源码迁移完成。实际证据与剩余项见 implementation-progress.md。
+状态：用户已明确确认，正在实施。共享契约、平台实体与 Run 职责拆分已落地；仓储隔离已完成查询、事件、领取/旧 P1 处理和提交/取消/输入写入应用路径，不能据此宣称 P0–P2 源码迁移完成。实际证据与剩余项见 implementation-progress.md。
 
 ## A. 已完成的准备
 
@@ -23,6 +23,8 @@
 
 - [x] 拆 core 的共享契约与平台 ORM 各领域类，保留旧导入、唯一 metadata、表名与全部约束。
 - [ ] 建立实际被使用的 Repository/UnitOfWork，分离平台领域服务与 SQLAlchemy；事务内授权和写入不分裂。
+- [x] 将提交、取消、输入恢复和旧 P1 process_claimed 应用规则迁移到独立领域对象与事务端口，保留映射返回、锁顺序、幂等保存点及失败回滚。
+- [ ] 继续分离执行资源授权、ExecutionPreparer 与 DurableRuntimeStore 的 ORM 访问。
 - [x] 拆 Run 提交/领取/取消/事件、ExecutionPreparer/DurableRuntimeStore/输入恢复，保留现有调用入口兼容。
 - [ ] 验证空库/已有库、metadata、外键与迁移往返；没有 schema 变化时不生成伪迁移。
 - [ ] 验证 P1 空间隔离、撤权、发布版本、Session 固定、幂等、Outbox/lease、事件顺序回归。
