@@ -1,27 +1,28 @@
-# 通用智能体 8 大核心模块与 Hyoga-Nexus 博采众长选型方案
+# 通用智能体 9 大核心模块与 Hyoga-Nexus 博采众长选型方案
 
 > 生成日期：2026-10-25
 > 对比范围：`/project/deer-flow`、`/project/WeKnora`、`/project/hermes-agent`、`/project/GenericAgent`、`/project/hyoga-nexus`
 
-本文档汇总了对四个外部参考项目（**Deer-Flow**、**WeKnora**、**Hermes-Agent**、**GenericAgent**）与 **Hyoga-Nexus** 的源码级横向对比，提炼出通用智能体（General Agent）的 **8 大核心模块标准架构**，并给出每个模块向 **Hyoga-Nexus** 移植时的具体借鉴选型、源码锚点、落地方案与避坑清单。
+本文档汇总了对四个外部参考项目（**Deer-Flow**、**WeKnora**、**Hermes-Agent**、**GenericAgent**）与 **Hyoga-Nexus** 的源码级横向对比，提炼出通用智能体（General Agent）的 **9 大核心模块标准架构**，深入剖析了 **知识库（Knowledge Base）与记忆（Memory）的边界、触发机制与协同闭环**，并给出每个模块向 **Hyoga-Nexus** 移植时的具体借鉴选型、源码锚点、落地方案与避坑清单。
 
 ---
 
 ## 一、 五大项目核心底座横向对比基线
 
-### 1.1 会话管理、事件机制、消息记录与 Skill 对比总表
+### 1.1 9 大核心维度横向对比总表
 
 | 维度 | **Deer-Flow** (全栈多智能体平台) | **WeKnora** (企业级 RAG 问答底座) | **Hermes-Agent** (极客全能个人助手) | **GenericAgent** (极简自进化种子) | **Hyoga-Nexus** (强治理垂直生产力平台) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **核心定位** | 基于 LangGraph 的异步工作流与沙箱多智能体编排 | 基于 Go 的无状态多租户知识库问答与 Agent 服务 | 多端 IM 网关接入的全天候本地/容器生产力 Agent | 300 行主循环 + SOP 自进化的极简宿主机 Agent | 显式受控状态机 + 强版本/权限/审计治理的垂直平台 |
-| **1. 会话与生命周期** | `RunManager` + `ThreadState` 双层解耦；支持 `reject`/`rollback`/`interrupt`/`enqueue` 四种并发策略 | **无状态 Session 容器**：Go 实例不驻留会话，状态存 Redis + PG；Redis Pub/Sub 跨实例 Cancel | SQLite (`state.db`) 持久化 + 多渠道网关动态会话路由；通过 `parent_session_id` 构建会话分叉链 | 进程内全局变量 + 磁盘文件，无多用户/多会话并发隔离；支持 ` fork ` 自重启 | PG 双平面分离：交互会话 (`chat_sessions`) 与后台分析执行 (`analysis_runs`) 解耦 |
+| **1. 会话与生命周期** | `RunManager` + `ThreadState` 双层解耦；支持 `reject`/`rollback`/`interrupt`/`enqueue` 四种并发策略 | **无状态 Session 容器**：Go 实例不驻留会话，状态存 Redis + PG；Redis Pub/Sub 跨实例 Cancel | SQLite (`state.db`) 持久化 + 多渠道网关动态会话路由；通过 `parent_session_id` 构建会话分叉链 | 进程内全局变量 + 磁盘文件，无多用户/多会话并发隔离；支持 `fork` 自重启 | PG 双平面分离：交互会话 (`chat_sessions`) 与后台分析执行 (`analysis_runs`) 解耦 |
 | **2. 认知与执行引擎** | LangGraph 状态图 + 14 层洋葱圈 Middleware + `SubagentExecutor` 并发子智能体池 | Go 同步 ReAct 循环 (`AgentEngine`) + Hook 拦截器 | 单文件巨型同步 Loop (`AIAgent.run_conversation`) + 进程池 Subagent (`delegate_tool`) | 300 行 `agent_runner_loop` + `BaseHandler.dispatch` 动态分发 `do_<tool>` | 显式有限状态机 `RunRunner`，拒绝黑盒多智能体自治 |
-| **3. 上下文与消息记录** | 链式 `RunJournal`（通过 `parent_id` 支持树状分支）+ `SummarizationMiddleware` + `DurableContextMiddleware` | 滑动窗口加载近期历史 + Redis 瞬态流与 PG 最终消息双写 | **双轨存储** + **严守 System Prompt 静态化保 KV Cache** + 两阶段 `ContextCompressor` | **三层递进工作记忆**：`raw_history` + `history_summary` + `working_checkpoint` (`key_info`) | 平台数据库强 Schema 组装 + 模板化 Prompt 注入 |
+| **3. 上下文与消息记录** | 链式 `RunJournal`（通过 `parent_id` 支持树状分支）+ `SummarizationMiddleware` + `DurableContextMiddleware` | 滑动窗口加载近期历史 + Redis 瞬态流与 PG 最终消息双写 | **双轨存储** + **严守 System Prompt 静态化保 KV Cache** + 两阶段 `ContextCompressor` | **三层递进工作记忆**：`raw_history` + `history_summary` + `working_checkpoint` (`key_info`) | 平台数据库强 Schema 组装 + 模板化 Prompt 注入 + `WorkingCheckpoint` |
 | **4. 原子工具与沙箱** | `SandboxProvider`（Local / Docker / K8s）+ `/mnt/user-data` 虚拟路径映射 + MCP | Go 内置 RAG 检索工具集 + 受控沙箱执行 + MCP | 6 大执行后端（Local / Docker / SSH / Modal / Daytona / Singularity）+ 超大输出自动转存文件 | 9 个宿主机原生工具（`code_run` / `file_patch` / `web_scan` 等），无沙箱隔离 | 强权限网关封装的确定性领域工具与受控命令执行 |
 | **5. 技能系统 (Skill)** | **L1 延迟发现 (`describe_skill`) + 沙箱只读签名投射 (`projection.py`) + 静态 AST 安全扫描** | **Claude 规范三级渐进披露 + 独创 Installer Agent 安装期预烘焙租户技能镜像** | **5 层目录扫描 + 平台/环境/App 准入过滤 + 防压缩保护 + `skill_manage` 自主热更新** | **SOP 即 Skill**：`global_mem_insight.txt` 指针表 + `memory/*_sop.md` + Python 脚本 | **版本化资源绑定 (`AgentVersion`) + 发布期依赖强校验 + “Skill 绝不授予额外权限”** |
 | **6. 记忆与自我演进** | 异步去抖队列 (`MemoryUpdater`) 后台提炼全局 User Profile 与 Fact | 无跨会话自演进机制，聚焦企业静态知识库检索 | SQLite FTS5 全文检索历史会话 + Agent 自主调用工具写回记忆与技能 | 读取 SOP 时触发 `log_memory_access` 统计与 `[SYSTEM TIPS]`；满 10 轮直接 `file_patch` 改写 SOP | 模型仅可调用 `propose` 提交 `memory_drafts` 草稿，必须经人工 `review` 审批后发布版本 |
 | **7. 事件总线与观测** | `StreamBridge`（内存 / Redis Streams）+ `Last-Event-ID` 游标断点重连 | Go 泛型内存 `EventBus` + `SessionEventRelay` 桥接 SSE | 回调函数驱动 CLI 渲染与 IM 网关消息定时编辑刷新 | 仅 `ui.py` 进程内 `Queue` 供终端/Streamlit 展示 | 异步队列流式推送 + 完整数据库审计表 (`run_events` / `tool_executions`) |
 | **8. 控制面与安全治理** | **3 门禁 `required-secrets` 带外注入与 stdout 自动脱敏** + Sidecar 凭证代理 + Clarify 挂起 | 多租户隔离 (`TenantID`) + RBAC + 租户级环境变量声明 + AgentGrant | 危险命令正则拦截审批 + 项目级 `.agents/skills` 检疫门禁 (Quarantine) | 零权限与多租户治理（完全信任本地单用户环境） | 完整控制面（Workspace / RBAC / ResourceGrant / AgentVersion 发布校验 / 记忆审核） |
+| **9. 知识库与证据溯源** | 轻量外部 `deerflow/rag/` 检索适配器接口（对接 RAGFlow 等外部服务） | **行业标杆**：文档解析分块、关键词+向量混合检索、Rerank、Neo4j 知识图谱、按图谱能力动态暴露工具 | 无独立文档级知识库与 Citation 体系（仅靠 SQLite FTS5 与本地文件搜索） | 无独立知识库模块（外部资料均混放于 `memory/` 目录） | **独立的 `packages/knowledge`**：不可变 `DocumentVersion`、Pre-Filter 混合 RAG + 选配图谱、强制 `Citation` 证据回溯 |
 
 ---
 
@@ -29,47 +30,48 @@
 
 1. **Deer-Flow**
    * **优势**：工程化最完备的 Python 异步智能体底座；`RunManager` + `StreamBridge` 解决了长任务断线重连；`skills/projection.py`（沙箱只读投射）与 `secret_context.py`（请求级密钥注入 + stdout 脱敏）是极佳的安全标杆；14 层 Middleware 切面清晰。
-   * **劣势**：重度耦合 LangChain / LangGraph 的消息与状态序列化体系，框架黑盒魔法较多，调试栈较深。
+   * **劣势**：重度耦合 LangChain / LangGraph 的消息与状态序列化体系，框架黑盒魔法较多；原生知识库仅有一层薄适配器。
 2. **WeKnora**
-   * **优势**：“无状态 Session 容器”天然适合云原生水平扩缩容；针对禁网沙箱首创 **Installer Agent 安装期依赖预装与租户技能镜像固化**；多租户资源授权（`ResourceGrant` / `AgentGrant`）模型严谨。
-   * **劣势**：Go 同步请求级 ReAct 循环对超长程（数十分钟）自主研究任务的上下文压缩、树状分支与动态子智能体支持较弱。
+   * **优势**：“无状态 Session 容器”天然适合云原生水平扩缩容；**企业级知识库（混合 RAG + 知识图谱 + 权限预过滤 + 图谱工具动态暴露）最为成熟**；针对禁网沙箱首创 **Installer Agent 安装期依赖预装与租户技能镜像固化**；多租户资源授权（`ResourceGrant` / `AgentGrant`）模型严谨。
+   * **劣势**：Go 同步请求级 ReAct 循环对超长程（数十分钟）自主研究任务的上下文压缩、树状分支与跨会话经验演进支持较弱。
 3. **Hermes-Agent**
    * **优势**：**上下文工程（Context Engineering）极致精细**——严格保护 System Prompt 静态前缀以命中 LLM KV Cache，配合两阶段压缩器与活跃 Skill 防裁剪保护；支持平台/环境/App 级别的 Skill 准入过滤与 FTS5 跨会话全文检索。
-   * **劣势**：核心循环 `run_agent.py` 超过万行，单文件巨石架构耦合重；基于单机 SQLite，不支持多租户高并发服务化。
+   * **劣势**：核心循环 `run_agent.py` 超过万行，单文件巨石架构耦合重；无独立文档知识库与 Citation 证据体系；基于单机 SQLite，不支持多租户高并发服务化。
 4. **GenericAgent**
    * **优势**：**极简主义与高信噪比的工作记忆设计**——300 行主循环清晰可控；`raw_history` + `history_summary` + `working_checkpoint` 三层递进记忆结构极大提升了长任务目标保持能力；读取 SOP 时自动记录访问频次并注入 `[SYSTEM TIPS]` 强制提取步骤到 Checkpoint 的机制以极小代价解决了“长任务遗忘 SOP”的痛点。
-   * **劣势**：零多用户隔离、零沙箱防护、允许模型直接覆写生产 SOP 与宿主机脚本，不能直接用于多租户服务端。
+   * **劣势**：零多用户隔离、零沙箱防护、把外部事实与内部经验混同于 `memory/` 目录且允许模型直接覆写生产 SOP，不能直接用于多租户严肃场景。
 
 ---
 
-## 二、 通用智能体的 8 大核心模块全景架构
+## 二、 通用智能体的 9 大核心模块全景架构
 
 ```mermaid
 flowchart TB
     subgraph Control["模块 8：控制面、安全治理与人机协同 (Control Plane, Security & HITL)"]
-        RBAC["多租户隔离 / RBAC / 预算配额"]
+        RBAC["多租户隔离 / RBAC / ResourceGrant / 预算配额"]
         HITL["高危工具拦截审批 (Interrupt) & 记忆发布审核 (Review)"]
         SecretGate["请求级密钥网关 (Request-Scoped Secrets)"]
     end
 
     subgraph Entry["模块 1：会话与执行生命周期管理 (Session & Run Lifecycle)"]
         Gateway["多渠道接入网关 (Web / CLI / IM) & 会话路由"]
-        RunMgr["后台化执行 (Background Run) / 并发锁 / 优雅取消 (Cancel)"]
+        RunMgr["后台化执行 (Background Run) / 并发门禁 / 分布式取消 (Cancel)"]
     end
 
     subgraph Core["核心认知与上下文层 (Brain & Working Memory)"]
-        Loop["模块 2：核心认知与执行引擎\n(Agent Loop / ReAct / 中间件管线 / 子智能体编排)"]
-        Context["模块 3：上下文工程与消息记录\n(Prompt KV Cache 保护 / 动态压缩 / 工作检查点)"]
+        Loop["模块 2：核心认知与执行引擎\n(Agent Loop / ReAct / 中间件切面 / 受控只读 Subagent)"]
+        Context["模块 3：上下文工程与消息记录\n(Prompt KV Cache 保护 / 两阶段压缩 / WorkingCheckpoint)"]
     end
 
-    subgraph Capability["能力、工作流与长效记忆层 (Hands, Playbooks & Long-Term Memory)"]
-        Tool["模块 4：原子工具与沙箱环境\n(Bash / 文件 / 浏览器 / MCP / 容器隔离)"]
-        Skill["模块 5：技能与领域工作流系统\n(SKILL.md 三级渐进披露 / 沙箱投射 / 依赖预装 / 安全扫描)"]
-        Memory["模块 6：长效记忆与自我演进系统\n(用户画像 / 混合检索 / SOP 经验提炼写回)"]
+    subgraph FourPillars["能力与知识四柱矩阵 (Hands, Playbooks, Experience & Ground Truth)"]
+        Tool["模块 4：原子工具与沙箱环境\n(领域工具 / Bash / MCP / 容器隔离)"]
+        Skill["模块 5：技能与领域工作流系统\n(SKILL.md 三级披露 / 沙箱只读投射 / 依赖预烘焙)"]
+        Memory["模块 6：长效记忆与自我演进系统\n(用户画像 / 记忆索引 / propose->review 经验沉淀)"]
+        KB["★ 模块 9：知识库与证据溯源系统\n(不可变文档版本 / 混合 RAG + 选配图谱 / Pre-Filter 权限 / Citation)"]
     end
 
     subgraph Infra["模块 7：事件总线与实时可观测性 (Event Bus & Observability)"]
-        EventBus["流式事件分发 (SSE / WebSocket) / 游标断点重连 / 全链路审计轨迹 (Traces)"]
+        EventBus["流式事件分发 (StreamBridge) / 游标断点重连 / 全链路审计轨迹 (run_events)"]
     end
 
     Entry --> Loop
@@ -77,30 +79,110 @@ flowchart TB
     Loop --> Tool
     Loop <--> Skill
     Loop <--> Memory
-    Skill -.->|"L1/L2 按需披露指令"| Context
-    Skill -.->|"L3 脚本投射 & 密钥绑定"| Tool
-    Memory -.->|"实战经验沉淀升级为 SOP"| Skill
+    Loop <--> KB
+    Skill -.->|"1. 编排检索与分析步骤"| KB
+    Memory -.->|"2. 提供术语口径与偏好指导检索"| KB
+    KB -.->|"3. 返回带 Citation 的原文证据块"| Context
+    Context -.->|"4. 提炼方法论提交 MemoryDraft"| Memory
     Control --> Entry
     Control --> Skill
     Control --> Tool
     Control --> Memory
+    Control --> KB
     Loop --> EventBus
 ```
 
-### 能力层“铁三角”职责边界（模块 4 vs. 模块 5 vs. 模块 6）
-* **模块 4（Tool + Sandbox）是“手和隔离车间”**：提供无状态的底层原子动作（读写文件、跑命令、查数据）与容器隔离环境。
-* **模块 5（Skill）是“岗位操作手册（SOP）+ 配套脚本夹具包”**：通过 `SKILL.md` 三级渐进披露，教模型如何把原子工具编排成复杂领域工作流（如股票深度分析、DCF 估值计算），但 **Skill 本身绝不授予额外权限**。
-* **模块 6（Memory）是“老员工的笔记本”**：记录跨会话的偏好、事实与踩坑教训；当某类经验经人工审核足够成熟时，可升级固化为新的 Skill。
+### 能力与知识层【四柱矩阵】职责边界（模块 4 vs. 模块 5 vs. 模块 6 vs. 模块 9）
+
+| 核心模块 | 形象比喻 | 核心回答的问题 | 事实属性与治理特征 | 在 Hyoga-Nexus 中的对应包 |
+| :--- | :--- | :--- | :--- | :--- |
+| **模块 4：原子工具与沙箱**<br>*(Tool & Sandbox)* | **“手与安全车间”** | 智能体能执行什么**原子动作**？（跑代码、调行情接口、抓网页） | 动作执行权 + 容器隔离 + 超大输出自动落盘截断 | `packages/tools` + 沙箱后端 |
+| **模块 5：技能与领域工作流**<br>*(Skill System)* | **“岗位操作手册 (SOP)”** | 面对复杂领域任务，应该**按什么标准步骤组合工具**？ | 程序性规范（`SKILL.md` 三级渐进披露），**绝不授予额外权限** | `packages/skills` |
+| **模块 6：长效记忆与自演进**<br>*(Memory System)* | **“个人工作笔记与经验本”** | 当前分析到了哪一步（`Checkpoint`）？用户有什么偏好？过往踩过什么坑？ | 内部交互衍生状态，**非权威事实**，走 `propose -> review` 审批演进 | `packages/platform/memory` |
+| **模块 9：知识库与证据溯源**<br>*(Knowledge Base & Citation)* | **“权威图书馆与证据链”** | 支撑研究结论的**外部客观原文证据**在哪里？出处是哪篇文档第几页？ | **权威事实源 (Ground Truth)**，版本不可变，强制 Pre-Filter 权限与 `Citation` | `packages/knowledge` |
+
+> **补充边界（结构化领域数据源 `DataSource`）**：如 [`docs/pending/knowledge-base-implementation.md`](file:///project/hyoga-nexus/docs/pending/knowledge-base-implementation.md#L14) 所确立的铁律——**“结构化股票行情、财务数据和平台记忆不进入文档知识库或其图谱”**。结构化行情与财务报表由确定性领域工具（模块 4）精确查询，非结构化文档（财报原文 PDF、公告、研报）归入知识库（模块 9），经验与偏好归入记忆（模块 6）。
 
 ---
 
-## 三、 Hyoga-Nexus 8 大模块“博采众长”移植与落地方案
+## 三、 专项深潜：知识库（Knowledge Base）与记忆（Memory）的边界、触发与协同
 
-Hyoga-Nexus（Python 3.12 + FastAPI + SQLAlchemy Monorepo）目前已具备扎实的控制面契约（`packages/platform`），但在执行运行时（`packages/runtime`）、上下文工程（`packages/prompts`）、技能投射（`packages/skills`）和沙箱工具（`packages/tools`）上仍有巨大演进空间。
+### 3.1 知识库 vs. 记忆：8 大工程维度对比
 
-以下是针对每个模块的 **首选借鉴对象、源码锚点、落地改造方案与避坑清单**：
+| 维度 | **知识库 (模块 9: Knowledge Base)** | **记忆 (模块 6: Memory)** |
+| :--- | :--- | :--- |
+| **1. 数据来源与产生方式** | **外部导入**：人工上传文档（PDF/MD/Docx）、外部公告/研报同步 | **内部衍生**：由会话历史、工具调用过程、模型反思（`propose`）或用户偏好沉淀生成 |
+| **2. 事实权威性 (Truthfulness)** | **高权威（证据源 / Ground Truth）**：原文不可篡改，必须附带 `Citation`（文档版本 + 页码/Chunk 定位） | **非权威（经验/启发式状态）**：可能包含过时偏好或模型归纳偏差，**不可作为研究报告的客观事实依据** |
+| **3. 颗粒度与存储形态** | **大颗粒度多模态文档**：原文件（对象存储） $\rightarrow$ 分块（Chunk） $\rightarrow$ 关键词/向量双索引 + 可选知识图谱（实体/关系） | **细颗粒度结构化/半结构化条目**：短期 `WorkingCheckpoint`（JSON）、长期偏好/经验条目、SOP 草稿（`MemoryDraft`） |
+| **4. 写入与变更管线** | **重资产异步编译管线**：上传 $\rightarrow$ 去重 $\rightarrow$ 不可变 `DocumentVersion` $\rightarrow$ 后台解析/分块/Embedding/构图 $\rightarrow$ 索引版本原子切换 | **轻量化状态流转**：短期检查点随 Step 实时更新；长期记忆走 `propose`（草稿） $\rightarrow$ 人工 `review`（审核）版本化生效 |
+| **5. 权限与隔离边界** | **资源级多对多授权**：属于 Workspace 资产，通过 `AgentResourceBinding` 与 `ResourceGrant` 控制，**必须在检索前（Pre-Filter）计算授权范围** | **分层作用域（Scope）**：分为 `Run/Session` 级（工作检查点）、`User` 级（个人偏好）、`Agent/Workspace` 级（公共经验与 SOP） |
+| **6. 淘汰与生命周期** | **按文档版本与业务有效性管理**：撤权、删除或上传新版本时，同步清理旧版本的向量与图谱索引 | **按时间衰减与热度淘汰**：短期记忆随会话归档；长期记忆按访问频次（`access_count`）与人工订正持续迭代或淘汰 |
+| **7. Prompt 注入协议标签** | `<knowledge_evidence citation_id="..." doc_version="...">`（明确告知模型此为外部客观证据） | `<agent_memory scope="...">` / `<working_checkpoint>`（明确告知模型此为内部状态与经验参考） |
+| **8. 观澜（投研）典型示例** | 《贵州茅台 2025 年年度报告.pdf》、证监会处罚公告库、卖方深度研报库 | “该分析师习惯用 DCF + PE 历史分位双视角”、“某接口查港股代码需补 0”、“当前 Run 已确认的 3 个财务疑点” |
 
-### 3.1 选型总览矩阵
+---
+
+### 3.2 运行时触发机制：Push（框架注入） + Pull（工具拉取） + Hook（生命周期钩子）
+
+知识库和记忆**并非全部通过工具触发**，而是根据层级与运行阶段采用混合触发策略：
+
+| 运行阶段 | **记忆 (Memory) 如何触发？** | **知识库 (Knowledge Base) 如何触发？** | **触发主体** |
+| :--- | :--- | :--- | :--- |
+| **1. 会话/Run 启动期**<br>*(拼装首轮上下文)* | **【框架自动 Push】**<br>直接往上下文注入：<br>① 当前会话 `WorkingCheckpoint`<br>② 用户核心偏好画像<br>③ **L1 记忆目录索引 (`memory_index`)** | **【框架自动 Push 仅目录元数据】**<br>只往上下文注入当前 `AgentVersion` 已授权绑定的**知识库名称与简介列表**（不塞具体文档内容）；若用户显式 `@某文档` 则预加载该文档摘要 | **Runtime 框架代码**<br>*(无需模型调工具)* |
+| **2. ReAct 推理循环中**<br>*(查细节 / 多跳找证据)* | **【模型调 Tool Pull】**<br>模型看 L1 索引发现某条历史经验有用，主动调用：<br>• `read_memory(id)` 读取 L2 全文<br>• `search_memory(query)` 搜历史记录 | **【模型调 Tool Pull（95% 主路径！）】**<br>模型根据问题自主拆解并改写查询词，多次调用：<br>• `search_knowledge(kb_ids, query)`<br>• `read_document(doc_id, chunk_range)`<br>• `query_knowledge_graph(entities)` *(仅当绑定图谱库时动态暴露)* | **LLM 自主决策**<br>*(通过 `tool_calls`)* |
+| **3. 步骤推进 / 窗口满时**<br>*(维护短期工作状态)* | **【Tool + 框架阈值 Hook 双触发】**<br>• 模型主动调 `update_working_checkpoint`<br>• 或当上下文超阈值时，压缩器 Hook 强制拦截要求模型先更新 Checkpoint | *（运行中不修改知识库，仅将检索命中的 `citation_id` 记入 `WorkingCheckpoint` 防止压缩丢失）* | **LLM 工具调用**<br>或 **Compactor 钩子** |
+| **4. 任务收尾 / 归档期**<br>*(经验沉淀与文档入库)* | **【Tool 提议 + 后台 Hook + 人工审批】**<br>• 模型调 `propose_memory` 提交草稿 $\rightarrow$ 人工调 `review` 审批生效<br>• `after_run` 异步钩子更新记忆访问热度统计 | **【用户/外部管线触发】**<br>用户在对话中上传高价值长篇 PDF 资料或管理员后台上传，触发异步文档解析/分块/向量化/构图管线 | **LLM / 异步 Worker / 人工审批** |
+
+---
+
+### 3.3 知识库与记忆在单次 `AnalysisRun` 中的协同触发时序图
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 用户
+    participant Runner as RunRunner (框架层)
+    participant LLM as 大模型 (Brain)
+    participant Mem as 模块 6: 记忆系统 (Memory)
+    participant KB as 模块 9: 知识库 (Knowledge Base)
+
+    User->>Runner: 发起分析请求 ("分析茅台2025年报渠道改革成效")
+
+    rect rgb(235, 245, 255)
+        Note over Runner,KB: 阶段 1：启动期框架自动 Push（不调工具）
+        Runner->>Mem: 获取 WorkingCheckpoint + 用户偏好 + L1 记忆索引(memory_index)
+        Runner->>KB: 获取已授权绑定的知识库目录元数据 (名称/ID/是否含已就绪图谱)
+        Runner->>LLM: 组装首轮上下文 (System静态前缀 + 记忆索引 + 知识库列表 + 动态挂载检索工具)
+    end
+
+    rect rgb(255, 248, 235)
+        Note over Runner,KB: 阶段 2：ReAct 循环中模型通过 Tool 按需 Pull（记忆指导检索）
+        LLM->>Runner: tool_call: read_memory(id="白酒行业分析口径")
+        Runner->>Mem: 读取 L2 记忆正文 (+1 访问计数 & 自动附带 [SYSTEM TIP])
+        Mem-->>LLM: 返回记忆正文 ("重点关注合同负债与i茅台直销占比...")
+
+        LLM->>Runner: tool_call: search_knowledge(kb="年报库", query="茅台 2025 直销 i茅台 合同负债")
+        Runner->>KB: Pre-Filter 权限过滤 + 关键词/向量/图谱混合检索 + Rerank
+        KB-->>LLM: 返回 Top-K 原文 Chunk + 精确 Citation 定位 (文档版本/页码/块ID)
+
+        LLM->>Runner: tool_call: update_working_checkpoint(已核实数据 & Citation列表)
+        Runner->>Mem: 更新当前会话 WorkingCheckpoint
+    end
+
+    rect rgb(235, 255, 240)
+        Note over Runner,KB: 阶段 3：收尾期输出带引用报告 & 经验沉淀触发
+        LLM->>Runner: (可选) tool_call: propose_memory(diff="新增i茅台数字渠道核查要点")
+        Runner->>Mem: 写入 memory_drafts 表 (status=pending_review)
+        LLM->>User: 输出带精确 Citation 引用的最终研究报告
+        Runner--)Mem: [异步 after_run Hook] 记录本次记忆与技能调用遥测统计
+    end
+```
+
+---
+
+## 四、 Hyoga-Nexus 9 大模块“博采众长”移植与落地方案
+
+### 4.1 9 大模块选型总览矩阵
 
 | 模块 | **首选抄作业对象** | **次选/补充对象** | **移植到 Hyoga-Nexus 的核心机制** | **坚决不抄（避坑）** |
 | :--- | :--- | :--- | :--- | :--- |
@@ -112,10 +194,11 @@ Hyoga-Nexus（Python 3.12 + FastAPI + SQLAlchemy Monorepo）目前已具备扎�
 | **模块 6：记忆与自我演进** | **GenericAgent** (读取钩子 + 热度统计) | **Deer-Flow** (异步去抖提取) | 在 Hyoga 现有 `propose -> review` 闭环上，增加**读取 SOP 时自动注入 Checkpoint 提示**与**记忆访问频次统计** | 不抄 GenericAgent/Hermes 的无审核直接覆写 SOP（破坏治理原则） |
 | **模块 7：事件总线与观测** | **Deer-Flow** (`StreamBridge`) | **WeKnora** (类型化 EventRelay) | **内存 / Redis Streams 双模 `StreamBridge`**（支持 `after_seq` 游标重连）+ 里程碑事件异步落盘 `run_events` | 不在主推理协程里对每个 `token_delta` 同步阻塞写 PostgreSQL |
 | **模块 8：控制面与安全治理** | **Deer-Flow** (`required-secrets` 网关) | **保留 Hyoga 现有设计** | 在 Hyoga 现有 RBAC + 版本发布校验基础上，补齐**请求级密钥带外注入与 stdout/日志自动脱敏** | — |
+| **模块 9：知识库与证据溯源** | **WeKnora** (混合 RAG + 图谱动态工具面) | **RAGFlow** (知识编译与分块模板) | **Pre-Filter 权限范围混合检索** + **按已就绪图谱能力动态暴露图工具** + **不可变文档版本与 Citation 契约** | 不把结构化行情/财务指标或未审核的平台记忆混入文档知识库与图谱 |
 
 ---
 
-### 3.2 逐模块落地设计细节
+### 4.2 逐模块落地设计细节
 
 #### 模块 1：会话与生命周期管理
 * **现状**：[`PlatformRunStore`](file:///project/hyoga-nexus/packages/platform/src/nexus_platform/runs/store.py) 已分离 `chat_sessions` 与 `analysis_runs`，但执行层仍在请求链路内直接驱动 [`RunRunner`](file:///project/hyoga-nexus/packages/runtime/src/nexus_runtime/runs/runner.py)。
@@ -148,7 +231,7 @@ Hyoga-Nexus（Python 3.12 + FastAPI + SQLAlchemy Monorepo）目前已具备扎�
   2. **两阶段上下文压缩 (`ContextCompactor`)**：
      * **Phase 1（工具输出脱水）**：距离当前轮次超过 N 步的超长工具返回（如几百行原始财报表格），自动替换为 `[已归档至 tool_execution:{id}，摘要：...]`，但豁免近期加载的 `SKILL.md` 正文（借鉴 Hermes `_collect_protected_skill_names`）。
      * **Phase 2（历史区间折叠）**：当总 Token 超过模型窗口阈值（如 75%）时，保留首尾消息，将中间轮次压缩为结构化 `<history_summary>`。
-  3. **结构化工作检查点 (`working_checkpoint`)**：借鉴 GenericAgent，在 Run 状态中维护显式的检查点槽位（包含 `objective`、`verified_facts`、`active_sop_steps`、`pending_questions`），确保即使经历多次上下文压缩，核心研究脉络也绝不丢失。
+  3. **结构化工作检查点 (`working_checkpoint`)**：借鉴 GenericAgent，在 Run 状态中维护显式的检查点槽位（包含 `objective`、`verified_facts`、`citations`、`active_sop_steps`、`pending_questions`），确保即使经历多次上下文压缩，核心研究脉络与证据引用也绝不丢失。
 
 #### 模块 4：原子工具与沙箱执行环境
 * **现状**：[`packages/tools`](file:///project/hyoga-nexus/packages/tools/) 需补齐安全隔离的代码/脚本执行后端与大输出保护。
@@ -202,16 +285,26 @@ Hyoga-Nexus（Python 3.12 + FastAPI + SQLAlchemy Monorepo）目前已具备扎�
      * 执行沙箱脚本时，必须同时满足三重门禁：**① Workspace 已配置该凭证 $\times$ ② 当前 `AgentVersion` 已授权绑定该 Skill/Tool $\times$ ③ 该 Skill 在当前 Run 中已激活**，平台才将凭证通过内存通道注入子进程环境变量。
   2. **输出与日志强制脱敏 (`Secret Scrubbing`)**：在沙箱 stdout/stderr 返回给模型或写入 `tool_executions` / `run_events` 表之前，自动将所有已注入密钥的明文替换为 `[REDACTED]`，确保**沙箱进程可用、大模型与日志不可见**。
 
+#### 模块 9：知识库与证据溯源系统 (Knowledge Base & Citation System)
+* **现状**：已在 [`docs/pending/knowledge-base-implementation.md`](file:///project/hyoga-nexus/docs/pending/knowledge-base-implementation.md) 完成 P3.1 ~ P3.5 详细设计。
+* **源码参考**：
+  * WeKnora：[`internal/application/service/graph.go`](file:///project/WeKnora/internal/application/service/graph.go)、[`internal/agent/tools/query_knowledge_graph.go`](file:///project/WeKnora/internal/agent/tools/query_knowledge_graph.go)、[`internal/application/service/agent_tool_surface_test.go`](file:///project/WeKnora/internal/application/service/agent_tool_surface_test.go)
+* **Hyoga-Nexus 改造方案**：
+  1. **检索前权限强过滤（Pre-Retrieval Scope Filtering）**：在调用向量服务或图谱服务前，先根据当前 Principal、Workspace、`AgentResourceBinding` 与 `ResourceGrant` 计算出可见的 `(kb_id, doc_version_id)` 范围，杜绝“先全局召回再过滤”。
+  2. **按绑定的知识库能力动态暴露工具表面（Dynamic Tool Surface）**：借鉴 WeKnora，仅当 `AgentVersion` 绑定了知识库时暴露 `search_knowledge` / `read_document` / `list_documents`；仅当授权范围内存在已启用且完成索引的图谱知识库时，才暴露 `query_knowledge_graph`。
+  3. **不可变版本与全链路 Citation 契约**：所有检索返回与图谱边/摘要均回链至具体的 `doc_version_id` 与 `chunk_id`；当图谱服务不可用或邻域截断时，显式返回降级/截断标记并回退至基础混合 RAG，防止模型把“截断未返回”误判为“事实不存在”。
+
 ---
 
-## 四、 推荐分阶段落地路线图（Roadmap）
+## 五、 推荐分阶段落地路线图（Roadmap）
 
 1. **Phase A（低成本高收益：上下文工程与 SOP 遵循率质变）**
    * 落地 **模块 3**：System Prompt 静态前缀隔离（保 KV Cache）+ 两阶段工具输出压缩 + `working_checkpoint`。
    * 落地 **模块 6**：读取 Memory / Skill 时自动注入 `[SYSTEM TIP]` 钩子与访问频次统计。
    * 落地 **模块 2**：`LoopDetectionMiddleware` 死循环检测切面。
-2. **Phase B（打通深度领域工作流：Skill 体系与沙箱投射）**
+2. **Phase B（打通深度领域工作流與权威证据链：Skill + 知识库 + 沙箱）**
    * 落地 **模块 5**：Skill 三级渐进披露、`RunState.active_skills` 防压缩保护、沙箱只读签名投射 (`SkillProjection`)。
+   * 落地 **模块 9**：`packages/knowledge` 文档生命周期、Pre-Filter 混合 RAG、动态图谱工具挂载与 `Citation` 证据回溯契约。
    * 落地 **模块 4**：统一 `SandboxProvider` 抽象、虚拟路径映射与超大工具输出自动落盘截断。
 3. **Phase C（生产级高可用与企业安全闭环）**
    * 落地 **模块 1 & 7**：`RunManager` 后台 Worker 化、同会话并发冲突策略、分布式 Cancel、`StreamBridge` 游标断点续传。
