@@ -44,6 +44,33 @@
 
 待验证：忙闲竞态、输出覆盖与重连、异常/取消的终态区分、模型分支历史完整性、提示修改的版本与权限边界。
 
+## 执行头与中英文记忆模板
+
+本批阅读全文并核对索引 SHA-256：`assets/code_run_header.py`、`assets/global_mem_insight_template.txt`、`assets/global_mem_insight_template_en.txt`。同时定点核对 `ga.py:code_run/get_global_memory` 与 `agentmain.py` 的初始化入口；未执行上游脚本。根许可证为 MIT，版权为 2025 lsdefine；本次只记录分析，没有复制实现。
+
+### 代码执行头
+
+- `ga.py:code_run` 仅在 Python/py 文件执行分支将执行头文本写入临时脚本；缺失时跳过。shell 分支不插入执行头。
+- 头部依据临时脚本的 `__file__` 计算 `../memory` 并加入 `sys.path`，不保证指向项目的真实 memory 目录；目标实现必须明确脚本位置与模块路径的关系。
+- 包装 `subprocess.run`：移除 text/universal_newlines/encoding/errors 参数，按 text 标志决定是否将字符串 input 编码为默认 UTF-8，捕获的 stdout/stderr 优先按默认 UTF-8 解码，失败后按 GBK replacement 解码。指定 encoding 只启用文本模式，并不使用指定编码；errors 参数被丢弃。未设置文本模式时保留字节输出。
+- 包装 `Popen.__init__`：Windows 将 CREATE_NO_WINDOW 位与已有 creationflags 合并；其他平台不加此标志。这是脚本进程中的模块级修改，会影响其后续子进程调用。
+- 替换 `sys.excepthook`，仅对 ImportError/AttributeError 在原 traceback 后附加探测/安装依赖提示；其他异常沿用原处理。提示本身不安装包，也不提供执行授权。
+
+目标归属：隔离执行适配器的脚本准备、编码与进程生命周期。六项执行工具继续暂缓，此头部未迁移。不能在平台/API/worker 进程直接加载以获得相同效果；编码参数行为与临时路径须列入后续提案的兼容决策。
+
+待验证：UTF-8/GBK/无效字节、空输出、文本与字节 input、显式 encoding/errors、check/timeout 异常携带输出、Windows flags 合并、缺失头文件和临时脚本目录变化。
+
+### 记忆模板初始化和注入
+
+- 两个模板包含 L0 元 SOP、空 L2、L3 技能/脚本索引、L4 原始会话位置及八条操作规则；其中涉及浏览器、桌面、手机、定时、自主运行等内容。模板中的索引不能证明这些能力已在 Nexus 实现或可调用。
+- `agentmain.py` 在 GA_LANG 未设置时按系统 locale 选择 zh/en；只有值严格等于 en 时使用英文后缀。创建 memory 目录，并仅在 L2 文件缺失时写入初始标题。
+- insight 文件缺失时才复制所选模板；模板也缺失时写空文件。已有 insight 不覆盖，后续语言切换也不重新初始化。初始化发生在模块加载阶段，而非每次 Run。
+- `get_system_prompt` 追加日期与 `get_global_memory`。后者通过 `load_L1` 取得 insight，再拼接所选语言的固定结构和路径；捕获 FileNotFoundError。不能将“模板已初始化”视为长期记忆整理、审核发布或检索已完成。
+
+目标归属：记忆初始化、已授权索引读取和提示编排；前端管理语言与个人/空间默认，服务端保存作用域和版本。共享源码目录写入、原始宿主路径及未实现能力索引需要显式适配；模板指令不得授予工具权限。此批不实现新的记忆行为。
+
+待验证：首次/重复初始化、缺失模板、已有用户内容保留、语言切换、固定结构缺失、并发初始化、个人/空间隔离与撤权后索引过滤。对 `frontends/tests` 的文件名引用检索未发现直接覆盖，不代表不存在间接测试；尚未运行上游测试。
+
 ## 当前进度口径
 
 [综合架构分析](open-source-agents-analysis-and-solution.md)覆盖九组项目的架构研究；[阶段方案](omni-agent-phased-implementation-plan.md)是待确认规划。两者不等于逐文件完整审查或实现验收。
