@@ -69,8 +69,8 @@ hyoga-nexus/
 
 ## P2 实际模块
 
-- `core/runtime.py`：厂商无关模型、工具、生命周期、取消、MemoryDraft 与 Sandbox 契约。
-- `platform/runs/execution.py`：执行准备、租约校验、持久消息/事件、工具审计、检查点与输入继续。
+- `core/runtime/`：按模型、工具、预算、事件、取消、记忆与 Sandbox 分布的厂商无关契约；`core/native/` 保存 Native 策略和 hook DTO，原导入路径继续导出。
+- `platform/runs/`：提交、查询/事件、领取、取消、执行准备、持久适配和输入恢复分别组织；`service.py`、`execution.py` 保留原导入入口；`platform/persistence/models/` 按领域组织实体，共用唯一 Base。
 - `runtimes/native/engine`、`context`、`models`：模型/工具循环、有界摘录、SDK 适配；`tools/registry`、`gateway`、`builtins`：工具注册、授权执行和安全内置工具。
 - `apps/worker/native.py`：模型凭据、工具与持久化的组合入口；`apps/web/src/api/chat.ts`、`types/chat.ts`、`composables/useConversation.ts`：类型化通信与对话状态。
 - `migrations/platform/versions/b5a16ed22801_native_runtime.py`：P2 增量迁移；`tests/test_native_*.py`、`tests/web/conversation.mjs`：隔离验证。

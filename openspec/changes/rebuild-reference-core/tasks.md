@@ -1,6 +1,6 @@
 # 重实现任务与实际状态
 
-状态：初轮核心调用链分析与具体方案已形成，待确认后实施。未创建新的业务实现，也未把全量深读标为完成。此前阶段交付保留为兼容基线。
+状态：用户已明确确认，正在实施。共享契约、平台实体与 Run 职责拆分已落地；仓储隔离只完成查询、事件和领取路径，不能据此宣称 P0–P2 源码迁移完成。实际证据与剩余项见 implementation-progress.md。
 
 ## A. 已完成的准备
 
@@ -11,7 +11,7 @@
 
 ## B0. 确认及逐模块深读门禁
 
-- [ ] 用户确认本提案范围、类分布、冲突解决与暂缓边界。
+- [x] 用户确认本提案范围、类分布、冲突解决与暂缓边界。
 - [ ] 补齐 GA 模型/历史/工具协议、prompt/schema、memory/SOP、插件与核心入口的全部适用分支及原测试。
 - [ ] 补齐 WK 流驱动/停滞、compaction/token/modelcontext、resume/hitl/approval/policy 及对应测试。
 - [ ] 补齐 WK P1 service/repository/handler/types/container 调用链与 Nexus 的主体/空间/事务映射。
@@ -21,9 +21,9 @@
 
 ## B1. P0/P1 结构与持久化边界
 
-- [ ] 拆 core 的共享契约与平台 ORM 各领域类，保留旧导入、唯一 metadata、表名与全部约束。
+- [x] 拆 core 的共享契约与平台 ORM 各领域类，保留旧导入、唯一 metadata、表名与全部约束。
 - [ ] 建立实际被使用的 Repository/UnitOfWork，分离平台领域服务与 SQLAlchemy；事务内授权和写入不分裂。
-- [ ] 拆 Run 提交/领取/取消/事件、ExecutionPreparer/DurableRuntimeStore/输入恢复，保留现有调用入口兼容。
+- [x] 拆 Run 提交/领取/取消/事件、ExecutionPreparer/DurableRuntimeStore/输入恢复，保留现有调用入口兼容。
 - [ ] 验证空库/已有库、metadata、外键与迁移往返；没有 schema 变化时不生成伪迁移。
 - [ ] 验证 P1 空间隔离、撤权、发布版本、Session 固定、幂等、Outbox/lease、事件顺序回归。
 

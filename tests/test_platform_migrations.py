@@ -1,6 +1,9 @@
 from alembic import command
 from alembic.config import Config
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, text
+from nexus_platform.persistence.models import Base
 
 
 def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
@@ -18,6 +21,7 @@ def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
             )
         }
         assert {"users", "workspace_memberships", "agent_versions", "runs", "run_events", "outbox_records"} <= tables
+        assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
     engine.dispose()
 
     command.downgrade(config, "base")

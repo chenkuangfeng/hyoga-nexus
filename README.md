@@ -11,7 +11,7 @@ Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / 
 ## 目录入口
 
 - apps/：API、worker、Element Plus 前端。
-- packages/：core、platform、runtimes、skills、tools、mcp、knowledge、sandbox、connectors、guanlan。
+- packages/：[core](packages/core/README.md)、[platform](packages/platform/README.md)、runtimes、skills、tools、mcp、knowledge、sandbox、connectors、guanlan。
 - skills/：通用与股票领域技能内容，当前只有草稿。
 - configs/、migrations/、infra/：配置、数据迁移和部署预留。
 - tests/：软件测试；evals/：Agent、检索、技能与股票分析质量评估预留。

@@ -1,13 +1,5 @@
-"""Vendor-neutral Native policy and typed hook contracts.
-
-Policies are immutable AgentVersion configuration, editable through user settings. They
-cannot grant resource access; execution continues through the platform authorization gateway.
-"""
+"""Immutable user-configured Native policy and validation; never grants authority."""
 from dataclasses import dataclass, field
-from typing import Literal
-
-from .runtime import ModelMessage
-
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory')
 
@@ -68,23 +60,3 @@ class NativePolicy:
                 raise ValueError('Retry delay must be finite and between 0 and 60 seconds')
         if not isinstance(self.project_name, str) or len(self.project_name) > 160 or not isinstance(self.project_context, str) or len(self.project_context) > 8000:
             raise ValueError('Project context is too large')
-
-
-@dataclass(frozen=True)
-class HookContext:
-    """Authorized model-visible messages offered to a trusted context transformer.
-
-    No SDK clients, credentials, mutable locals or database handles are exposed. A returned
-    message set cannot grant tools; the engine obtains definitions independently each turn.
-    """
-    run_id: str
-    phase: Literal['agent.before', 'turn.before', 'turn.after', 'agent.after']
-    turn: int
-    messages: tuple[ModelMessage, ...]
-
-
-@dataclass(frozen=True)
-class HookTransform:
-    """Append explicit model context or enqueue completion prompts; never change authority."""
-    append_messages: tuple[ModelMessage, ...] = ()
-    done_prompts: tuple[str, ...] = ()
