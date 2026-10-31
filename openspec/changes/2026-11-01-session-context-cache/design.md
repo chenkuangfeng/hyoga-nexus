@@ -11,8 +11,10 @@
 | R3 | 所有权用 lease + epoch，每次写库 fencing | 进程崩溃或网络分区后，旧进程的延迟写入必须被拒绝 | Hermes `runtime_epoch`、`_epoch()` 检查 |
 | R4 | 领取 Run 用 CAS + rowcount，不用先查后改 | 避免两个 worker 同时领取同一 Run | Hermes `claim_session_input`；本项目已有 SKIP LOCKED，PG 下两者可并存 |
 | R5 | 上一代 epoch 的执行标记 `unknown`，不自动重放，会话阻塞 | 工具可能已产生副作用，重放有风险；与架构 2.12 "中断不重放" 一致 | Hermes `recover_session_inputs` |
-| R6 | 同会话 Run 串行；新输入默认排队，中断与转向为可选 | 防止同一会话并发写入上下文；与 Hermes `busy_input_mode` 对齐 | Hermes `busy_input_mode`；DeepSeek inbox |
-| R7 | 排队有界：每会话队列上限、全局并发上限，超限拒绝而非无限排队 | 防止单用户占满 worker | WeKnora `maxQueue`、`maxPerUser`、`queueTimeout` |
+| R6 | 同会话 Run 串行。忙时新输入默认打断（interrupt）；排队（queue）、转向（steer）为可选。若有子任务或压缩进行中，打断降级为排队 | 与 Hermes 一致：默认 `interrupt`（`run_config_loaders.py:250`），TUI 默认 `queue`（`session_setting_commands.py:38`）；降级规则见 `run_inbound.py` 的 `_hm_handle_running_session_message` | Hermes |
+| R7 | 排队有界：每会话待处理队列上限 32，超限丢弃并记录；全局活跃会话上限 `max_concurrent_sessions`，超限直接拒绝新会话并返回提示，不排队 | 与 Hermes 一致：`_BUSY_QUEUE_MAX_PENDING = 32`（`gateway/run.py:3738`）、`ADMISSION_QUEUE_MAX = 32`（`hermes_state_runtime.py:121`）、拒绝路径（`run_inbound.py:1306`） | Hermes |
+| R7a | 持久化 FIFO 按 `seq` 取队首；队首被他人占用时返回 False，调用方重读 | Hermes `claim_session_input` 的 `head` 校验（`hermes_state_runtime.py:200-230`） | Hermes |
+| R7b | queue、steer 模式下的排队输入在进程重启后保留；interrupt 模式下的输入丢弃 | Hermes `_queue_during_drain_enabled`（`gateway/run_busy.py`） | Hermes |
 | R8 | 回复按请求 ID 路由，不使用全局回调广播 | 避免跨会话回复串线 | GenericAgent `ga.py:574` 的教训 |
 | R9 | 群聊默认按参与人隔离会话，线程可共享 | 避免群内 A 的上下文泄露给 B | Hermes `group_sessions_per_user` |
 | R10 | 缓存只存数据，超过上限后按 LRU 淘汰，淘汰后从库重建 | 缓存丢失不影响正确性 | 本提案 |
@@ -73,8 +75,8 @@ Run 对象（如 `NativeEngine`）是否缓存见第六节待确认项。
 1. **权限是否缓存（R1）**：推荐不缓存。若坚持"全部不读库"，权限撤销会有最长一个缓存周期的延迟，与架构原则 2 冲突。
 2. **Run 对象是否缓存**：Hermes 缓存整个 Agent 对象。推荐缓存无状态执行配置（exec_config），Run 对象每次重建；若要缓存 Run 对象，它必须只持有可重建的数据，且恢复逻辑不依赖它。
 3. **所有权是否改变领取规则（R2、R4）**：推荐改为"所有权感知领取"。代价是 worker 之间的会话亲和性，以及接管延迟（最多一个 `T_exp`）。
-4. **同会话新输入默认策略（R6）**：推荐排队（queue）。中断（interrupt）与转向（steer）作为可选模式。
-5. **排队超时与上限（R7）**：待定，建议初值参考 WeKnora：每会话队列 3 条、全局 50 条、等待超时 60 秒。
+4. **同会话新输入默认策略（R6）**：已按 Hermes 定为打断（interrupt），queue、steer 为可选。注意这与之前推荐的"排队"不同，需确认。
+5. **队列参数（R7）**：已按 Hermes 定为每会话 32、全局 `max_concurrent_sessions`（默认不限，由配置设定）。Hermes 没有排队超时，本方案也不加超时，除非确认需要。
 6. **群聊隔离（R9）**：推荐默认按参与人隔离。
 
 ## 七、测试要点
