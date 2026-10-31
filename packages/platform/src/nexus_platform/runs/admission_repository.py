@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import new_id
+from nexus_platform.errors import SessionQueueFull
 
 from . import session_ledger
 
@@ -21,11 +22,20 @@ class SqlAlchemyAdmissionRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def enqueue(self, session_id: UUID, run_id: UUID, at: datetime) -> None:
-        """Append the Run to its session FIFO as ``queued``; raises ``QueueFull`` at the cap."""
-        session_ledger.enqueue(
-            self.session, session_id=session_id, run_id=run_id, admission_id=new_id(), now=at,
-        )
+    def enqueue(self, session_id: UUID, run_id: UUID, at: datetime) -> int:
+        """Append the Run to its session FIFO and return its 1-based position.
+
+        Raises ``SessionQueueFull`` (HTTP 409) when the session already has the maximum queued.
+        """
+        try:
+            session_ledger.enqueue(
+                self.session, session_id=session_id, run_id=run_id, admission_id=new_id(), now=at,
+            )
+        except session_ledger.QueueFull as exc:
+            raise SessionQueueFull(str(exc)) from exc
+        position = session_ledger.queue_position(self.session, run_id)
+        assert position is not None
+        return position
 
     def blocked(self, session_id: UUID) -> bool:
         """True when the session has a ``started`` or ``unknown`` admission."""

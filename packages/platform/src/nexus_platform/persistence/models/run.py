@@ -33,9 +33,11 @@ class RunRecord(Base):
             "status IN ('queued','running','waiting_input','waiting_approval','completed','failed','cancelled','interrupted')",
             name="ck_runs_status",
         ),
+        # At most one executing Run per session. Queued Runs are not constrained here: their order
+        # and admission are owned by the dispatch ledger (session_admissions).
         Index("uq_runs_active_session", "session_id", unique=True,
-              sqlite_where=text("status IN ('queued','running','waiting_input','waiting_approval')"),
-              postgresql_where=text("status IN ('queued','running','waiting_input','waiting_approval')")),
+              sqlite_where=text("status IN ('running','waiting_input','waiting_approval')"),
+              postgresql_where=text("status IN ('running','waiting_input','waiting_approval')")),
         Index("ix_runs_session_created", "session_id", "created_at"),
         Index("ix_runs_lease", "status", "lease_until"),
     )

@@ -160,7 +160,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **会话状态**：会话状态是版本化的 JSON 快照（v2，只含数据，不含配置、客户端、租约句柄、令牌或模型对象）。Run 结束时（成功、失败、取消均要）在 `finally` 中保存终态快照；未执行的工具调用标记为 `interrupted`，使下一轮历史合法。快照读取失败、版本未知或状态损坏时拒绝该 Run，不静默丢弃历史。
 - **恢复**：恢复前校验快照版本、会话/空间/主体、Agent/模型版本、资源授权、审批消费状态与已完成的 invocation，再从挂起点继续。不依赖进程内锁、回调、SDK 句柄或临时资源。进程崩溃后，上一代际未完成的执行转为 `unknown`，会话阻塞，需显式解除（见 2.12）。
 - **钩子**：agent/turn/model/tool 的 before/after 类型化钩子，只接收稳定元数据 DTO，不暴露 locals、SDK 对象或凭据；异常隔离，超时忽略。
-- **Run 状态**：queued、running、waiting_input、waiting_approval、completed、failed、cancelled、interrupted。同一 Session 仅允许一个活跃 Run（含等待态），由服务检查与数据库部分唯一索引共同保证。
+- **Run 状态**：queued、running、waiting_input、waiting_approval、completed、failed、cancelled、interrupted。同一 Session 同一时刻只执行一个 Run（running、waiting_input、waiting_approval），由派发账本的队首领取与数据库部分唯一索引共同保证。忙时提交的 Run 为 queued，按 FIFO 等待（见 2.12）。
 
 ### 2.3 Codex 适配器
 
@@ -337,7 +337,9 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 - `runtime_epoch`：每次进程启动递增，所有账本写入带当前 `owner_epoch`；过期 epoch 的写入返回 `stale_epoch`。
 - `session_admissions`：状态为 `queued`、`started`、`unknown`、`terminal`。领取用条件更新 `UPDATE ... SET status='started', owner_epoch=:e WHERE id=:id AND status='queued'`，rowcount 必须为 1；按 `seq` 取队首。会话存在 `started` 或 `unknown` 记录时不领取。
 - 启动恢复：`owner_epoch` 小于当前值的 `started` 与执行记录转为 `unknown`，会话阻塞，不自动重放。显式解除需要用户确认或运维命令，并记录审计。
-- 排队与忙时：同一会话的 Run 串行。忙时默认打断，queue、steer 可选；打断时若有子任务或压缩进行中则降级为排队。每会话待处理上限 32；全局活跃会话上限 `max_concurrent_sessions`，超限拒绝而非排队。
+- 忙时排队：会话已有执行中的 Run 时，新提交的 Run 以 `queued` 入队，接口返回 202，`run.queued` 事件与响应带 `queue_position`（1 表示下一个执行）。每会话排队上限 32，超限返回 409 `session_queue_full`，不写入任何记录。
+- 派发：worker 在 Run 开始前检查 FIFO 队首。不是队首、会话被 unknown 阻塞、或领取冲突时，释放 Outbox 租约并延后 2 秒再次投递，Run 保持 `queued`，不写失败事件。
+- 默认不打断。打断与转向不是提交的默认行为；用户显式取消通过取消接口完成。取消排队中的 Run 时，其 FIFO 位置由终态写入释放，后续条目前移。全局活跃会话上限 `max_concurrent_sessions` 另行提案。
 
 **多租户队列**：PostgreSQL Outbox 表作为派发载体。Run 与 Outbox 记录在同一事务提交；worker 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取，写入带过期时间的租约。队列语义为至少一次，由账本的 CAS 领取与幂等约束阻止重复执行。租约丢失或进程崩溃后，未完成的执行转为 `unknown`，不自动重放副作用。
 

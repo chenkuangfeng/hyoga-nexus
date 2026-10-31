@@ -166,6 +166,8 @@ class RunView(BaseModel):
     created_at: datetime
     started_at: datetime | None
     ended_at: datetime | None
+    # 1-based place in the session queue while queued; None otherwise.
+    queue_position: int | None = None
 
 
 class RunEventView(BaseModel):

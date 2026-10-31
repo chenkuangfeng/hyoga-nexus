@@ -206,6 +206,53 @@ def cas_claim(db: Session, head: AdmissionView, *, epoch: int, now: datetime) ->
 _RELEASING_STATUSES = ("queued", "started")
 
 
+def run_admission(db: Session, run_id: UUID) -> AdmissionView | None:
+    """Return the admission belonging to ``run_id``, or None for Runs created before the ledger."""
+    row = db.scalar(select(SessionAdmissionRecord).where(SessionAdmissionRecord.run_id == run_id))
+    return None if row is None else _view(row)
+
+
+def queue_position(db: Session, run_id: UUID) -> int | None:
+    """1-based place of a queued Run in its session FIFO (1 runs next), or None if not queued."""
+    row = db.scalar(select(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.run_id == run_id, SessionAdmissionRecord.status == "queued",
+    ))
+    if row is None:
+        return None
+    return db.scalar(select(func.count()).select_from(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.session_id == row.session_id,
+        SessionAdmissionRecord.status == "queued",
+        SessionAdmissionRecord.seq <= row.seq,
+    )) or 0
+
+
+def claim_run(db: Session, *, epoch: int, run_id: UUID, session_id: UUID, now: datetime) -> bool:
+    """Decide whether a Run may execute now, claiming its admission if it is the FIFO head.
+
+    Returns True when the Run may proceed: it was claimed now, it already holds the claim under
+    this epoch (resumed after waiting for input), it has no admission (created before the ledger),
+    or it is already terminal (the caller completes the delivery). Returns False when the Run must
+    wait: it is not the head, the session is blocked by another run, or it is unknown.
+    Raises ``StaleEpoch`` when the epoch is not current.
+    """
+    require_epoch(db, epoch)
+    admission = run_admission(db, run_id)
+    if admission is None or admission.status == "terminal":
+        return True
+    if admission.status == "started":
+        return admission.owner_epoch == epoch
+    if admission.status != "queued" or session_blocked(db, session_id):
+        return False
+    head = select_head(db, session_id)
+    if head is None or head.run_id != run_id:
+        return False
+    try:
+        cas_claim(db, head, epoch=epoch, now=now)
+    except StaleClaim:
+        return False
+    return True
+
+
 def finish_run(db: Session, *, run_id: UUID, now: datetime) -> None:
     """Mark the run's ``queued`` or ``started`` admission ``terminal``.
 
@@ -303,6 +350,9 @@ __all__ = [
     "AdmissionView",
     "NotUnknown",
     "cas_claim",
+    "claim_run",
+    "queue_position",
+    "run_admission",
     "finish_run",
     "install_run_terminal_hook",
     "select_head",

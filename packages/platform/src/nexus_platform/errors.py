@@ -21,6 +21,11 @@ class Conflict(PlatformError):
     status_code = 409
 
 
+class SessionQueueFull(Conflict):
+    """The session already holds the maximum number of queued Runs."""
+    code = "session_queue_full"
+
+
 class InvalidConfiguration(PlatformError):
     code = "invalid_configuration"
     status_code = 422

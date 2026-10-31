@@ -1,6 +1,7 @@
 """Dispatch ledger wired into submission, the worker and terminal Run writes."""
 from __future__ import annotations
 
+from datetime import UTC
 from uuid import uuid4
 
 import pytest
@@ -83,12 +84,68 @@ def test_superseded_worker_cannot_claim_after_restart(database):
     _, _, session, run, _ = stack(database)
     old_epoch = start_process_epoch(database, 'worker-old')
     start_process_epoch(database, 'worker-new')
-    from nexus_worker.native import claim_session_admission
-
-    class _Ctx:
-        session_id = session.id
-        run_id = run.id
-
-    with pytest.raises(ledger.StaleEpoch):
-        claim_session_admission(database, old_epoch, _Ctx())
+    with database() as db:
+        with pytest.raises(ledger.StaleEpoch):
+            ledger.claim_run(db, epoch=old_epoch, run_id=run.id, session_id=session.id, now=utc_now())
     assert _status(database, _admission_for(database, run.id).admission_id) == "queued"
+
+
+def test_busy_session_queues_second_run_and_defers_its_delivery(database):
+    from nexus_platform.runs.service import queue_position
+    from nexus_worker.native import admit_or_defer
+    from nexus_platform.persistence.models.queue import OutboxRecord
+
+    principal, tenant, session, first, _ = stack(database)
+    with database() as db:
+        second, replayed = create_run(db, principal, tenant.id, session.id, message='second', idempotency_key='second')
+        db.commit()
+    assert not replayed
+    with database() as db:
+        assert queue_position(db, first.id) == 1
+        assert queue_position(db, second.id) == 2
+
+    # The second delivery is leased by a worker but must wait behind the first Run.
+    epoch = start_process_epoch(database, 'worker-a')
+    with database() as db:
+        second_task = db.scalar(select(OutboxRecord).where(OutboxRecord.run_id == second.id))
+        second_task.lease_owner, second_task.lease_until = 'worker-a', utc_now()
+        second_task_id = second_task.id
+        db.commit()
+    assert admit_or_defer(database, epoch, second_task_id, 'worker-a') is False
+    with database() as db:
+        task = db.get(OutboxRecord, second_task_id)
+        # SQLite returns naive datetimes; the stored instant is UTC.
+        assert task.lease_owner is None and task.available_at.replace(tzinfo=UTC) > utc_now()
+        assert run_row(database, second.id).status == RunStatus.QUEUED.value
+
+    # Once the first Run finishes, the second is admitted and completes.
+    run_once(database, 'worker-a', model_factory=lambda _: FakeModel([[ModelChunk('text', text='one')]]),
+             ledger_epoch=epoch)
+    assert run_row(database, first.id).status == RunStatus.COMPLETED.value
+    with database() as db:
+        db.get(OutboxRecord, second_task_id).available_at = utc_now()
+        db.commit()
+    run_once(database, 'worker-a', model_factory=lambda _: FakeModel([[ModelChunk('text', text='two')]]),
+             ledger_epoch=epoch)
+    assert run_row(database, second.id).status == RunStatus.COMPLETED.value
+
+
+def test_queue_cap_returns_session_queue_full_without_writes(database):
+    from nexus_platform.errors import SessionQueueFull
+    from nexus_platform.runs import session_ledger as sl
+
+    principal, tenant, session, _, _ = stack(database)
+    for index in range(sl.ADMISSION_QUEUE_MAX - 1):
+        with database() as db:
+            create_run(db, principal, tenant.id, session.id, message=f'm{index}', idempotency_key=f'k{index}')
+            db.commit()
+    with database() as db:
+        before = len(db.scalars(select(SessionAdmissionRecord)).all())
+    with database() as db:
+        with pytest.raises(SessionQueueFull) as caught:
+            create_run(db, principal, tenant.id, session.id, message='overflow', idempotency_key='overflow')
+        db.rollback()
+    assert caught.value.code == "session_queue_full"
+    assert caught.value.status_code == 409
+    with database() as db:
+        assert len(db.scalars(select(SessionAdmissionRecord)).all()) == before

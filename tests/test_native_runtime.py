@@ -123,8 +123,10 @@ def test_multitool_bad_arguments_hooks_and_session_history(database):
     with database() as db:
         second, _ = create_run(db, principal, tenant.id, session.id, message='Continue', idempotency_key='second')
         second_id = second.id
-        with pytest.raises(Conflict):
-            create_run(db, principal, tenant.id, session.id, message='Overlap', idempotency_key='overlap')
+        # A busy session queues the overlapping submission behind the Runs already admitted.
+        overlap, _ = create_run(db, principal, tenant.id, session.id, message='Overlap', idempotency_key='overlap')
+        assert overlap.status == 'queued'
+        db.rollback()
     next_model = FakeModel([[ModelChunk('text', text='Again')]])
     run_once(database, 'worker', model_factory=lambda _: next_model, registry_factory=lambda _: registry(echo))
     assert any(message.content == 'Finished' for message in next_model.requests[0].messages)

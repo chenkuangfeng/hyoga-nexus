@@ -65,33 +65,46 @@ class ToolAccess:
         self.approval = store.approval
 
 
-def claim_session_admission(factory, epoch: int, context) -> None:
-    """Move this Run's FIFO entry to ``started`` under the worker's epoch.
+#: Delay before a deferred delivery is offered again. Other sessions are not affected.
+DEFER_SECONDS = 2
 
-    Submission appends one admission per Run and refuses a session that is still blocked, so
-    the head of the session FIFO must be this Run. Any other state means the ledger and the
-    Run disagree; the function raises and writes nothing, and lease recovery takes over.
+
+def admit_or_defer(factory, epoch: int, task_id, worker_id: str) -> bool:
+    """Gate one ``run.execute`` delivery on its session FIFO before the Run starts.
+
+    Returns True when the Run may start (its admission is now claimed, or it needs no gate).
+    Returns False when the Run is queued behind another Run or the session is blocked: the
+    Outbox lease is released and the delivery is offered again after ``DEFER_SECONDS``. The Run
+    stays ``queued`` and no failure is written.
     """
+    from datetime import timedelta
+    from nexus_platform.persistence.models.queue import OutboxRecord
+    from nexus_platform.persistence.models.run import RunRecord
     from nexus_platform.runs import session_ledger as ledger
-    from nexus_platform.runs.session_ledger import LedgerError
+    now = utc_now()
     with factory() as db:
-        ledger.require_epoch(db, epoch)
-        if ledger.session_blocked(db, context.session_id):
-            raise LedgerError(f"session {context.session_id} is blocked; run {context.run_id} not started")
-        head = ledger.select_head(db, context.session_id)
-        if head is None or head.run_id != context.run_id:
-            raise LedgerError(f"run {context.run_id} is not the head of its session FIFO")
-        ledger.cas_claim(db, head, epoch=epoch, now=utc_now())
+        task = db.get(OutboxRecord, task_id)
+        if task is None or task.message_type != 'run.execute' or task.lease_owner != worker_id:
+            return True
+        run = db.get(RunRecord, task.run_id)
+        if run is None:
+            return True
+        if ledger.claim_run(db, epoch=epoch, run_id=run.id, session_id=run.session_id, now=now):
+            db.commit()
+            return True
+        task.lease_owner, task.lease_until = None, None
+        task.available_at = now + timedelta(seconds=DEFER_SECONDS)
         db.commit()
+        return False
 
 
 async def execute_native(factory, task_id, worker_id, *, model_factory=None, registry_factory=None,
                          resolver=None, hooks=(), stopped=None, ledger_epoch=None):
+    if ledger_epoch is not None and not admit_or_defer(factory, ledger_epoch, task_id, worker_id):
+        return
     context = prepare_execution(factory, task_id, worker_id)
     if context is None:
         return
-    if ledger_epoch is not None:
-        claim_session_admission(factory, ledger_epoch, context)
     store = DurableRuntimeStore(factory, context, worker_id, task_id)
     token = CancellationToken()
     monitor_error = None

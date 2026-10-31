@@ -399,7 +399,9 @@ def create_run(
         db, principal, tenant_id, session_id, message=body.message, idempotency_key=key
     )
     request.state.idempotent_replay = replayed
-    return RunView.model_validate(row, from_attributes=True)
+    view = RunView.model_validate(row, from_attributes=True)
+    view.queue_position = runs.queue_position(db, row.id)
+    return view
 
 
 @router.get("/tenants/{tenant_id}/runs/{run_id}", response_model=RunView)

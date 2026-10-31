@@ -59,8 +59,6 @@ class RunSubmissionService:
             existing = work.runs.by_key(tenant_id, member.user_id, idempotency_key)
             if existing is not None:
                 return self._replay(existing, request_hash)
-            if work.runs.has_active(session_id):
-                raise Conflict("Session already has an active Run")
             # A run left unknown by a crash blocks the session until an operator resolves it.
             if work.admissions.blocked(session_id):
                 raise Conflict("Session is blocked by an unresolved run")
@@ -91,9 +89,10 @@ class RunSubmissionService:
             if not inserted:
                 return self._replay(run, request_hash)
             work.messages.initial(run, message, now)
-            work.events.append(run.id, "run.queued", {"status": RunStatus.QUEUED.value}, now)
+            # Busy sessions queue behind the active Run; the FIFO position is part of the event.
+            position = work.admissions.enqueue(session_id, run.id, now)
+            work.events.append(run.id, "run.queued", {"status": RunStatus.QUEUED.value, "queue_position": position}, now)
             work.outbox.enqueue(run.id, "run.execute", now)
-            work.admissions.enqueue(session_id, run.id, now)
             work.catalog.touch_session(session_id, now)
             work.audit.write(tenant_id, member.user_id, "run.created", "run", str(run.id),
                              {"session_id": str(session_id), "agent_version_id": str(agent.id)})

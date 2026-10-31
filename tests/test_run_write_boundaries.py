@@ -80,6 +80,10 @@ def test_domain_values_are_independent_and_require_explicit_save(database):
 
 def test_savepoint_collision_replays_scoped_key_and_preserves_outer_transaction(database):
     _, tenant, _, run = submitted(database)
+    # Only executing Runs are unique per session; queued Runs may wait behind one another.
+    with database() as db:
+        db.get(RunRecord, run.id).status = 'running'
+        db.commit()
     with SqlAlchemyUnitOfWork(database) as work:
         value = work.runs.owned_for_update(tenant.id, run.principal_id, run.id)
         collided, inserted = work.runs.insert_or_replay(replace(value, id=new_id()))
