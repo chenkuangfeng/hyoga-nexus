@@ -6,13 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, RunStatus
 from nexus_platform.errors import Conflict, Forbidden, NotFound
-from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
+from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import ResourceBindingRecord, RunRecord
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
 
-def authorize_run_resource(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID, binding_id: UUID, *, permission: str='use'):
-    return RunResourceAccessService(SqlAlchemyUnitOfWork(session)).authorize(principal, workspace_id, run_id, binding_id, permission=permission)
+def authorize_run_resource(session: Session, principal: Principal, tenant_id: UUID, run_id: UUID, binding_id: UUID, *, permission: str='use'):
+    return RunResourceAccessService(SqlAlchemyUnitOfWork(session)).authorize(principal, tenant_id, run_id, binding_id, permission=permission)
 
 class RunResourceAccessService:
     """Own the access application operation and its transaction boundary."""
@@ -23,7 +23,7 @@ class RunResourceAccessService:
     def authorize(
         self,
         principal: Principal,
-        workspace_id: UUID,
+        tenant_id: UUID,
         run_id: UUID,
         binding_id: UUID,
         *,
@@ -33,12 +33,12 @@ class RunResourceAccessService:
         with self.unit_of_work as work:
             session = work.session
             user = resolve_user(session, principal)
-            require_workspace(session, workspace_id)
-            require_membership(session, workspace_id, user.id)
+            require_tenant(session, tenant_id)
+            require_membership(session, tenant_id, user.id)
             run = session.scalar(
                 select(RunRecord).where(
                     RunRecord.id == run_id,
-                    RunRecord.workspace_id == workspace_id,
+                    RunRecord.tenant_id == tenant_id,
                     RunRecord.principal_id == user.id,
                 ).with_for_update()
             )
@@ -55,11 +55,11 @@ class RunResourceAccessService:
             if binding is None or binding.binding_config.get("enabled") is False:
                 raise Forbidden("Resource is not bound or enabled for this Run")
             resource = authorize_resource(
-                session, workspace_id, binding.kind, binding.resource_id,
-                source_workspace_id=binding.source_workspace_id,
+                session, tenant_id, binding.kind, binding.resource_id,
+                source_tenant_id=binding.source_tenant_id,
                 resource_version_id=binding.resource_version_id,
                 permission=permission,
             )
-            audit(session, workspace_id, user.id, "run.resource_access", binding.kind, binding.resource_id,
+            audit(session, tenant_id, user.id, "run.resource_access", binding.kind, binding.resource_id,
                   {"run_id": str(run.id), "permission": permission})
             return resource

@@ -14,7 +14,7 @@ class ToolContext:
     invocation_id: str
     run_id: str
     session_id: str
-    workspace_id: str
+    tenant_id: str
     cancellation: CancellationTokenPort
 
 

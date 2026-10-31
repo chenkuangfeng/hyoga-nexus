@@ -10,10 +10,10 @@ from ..base import Base
 
 class CredentialReferenceRecord(Base):
     __tablename__ = "credential_references"
-    __table_args__ = (UniqueConstraint("id", "workspace_id", name="uq_credential_refs_id_workspace"),)
+    __table_args__ = (UniqueConstraint("id", "tenant_id", name="uq_credential_refs_id_tenant"),)
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     backend: Mapped[str] = mapped_column(String(80), nullable=False)
     handle: Mapped[str] = mapped_column(String(512), nullable=False)
     scope: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)

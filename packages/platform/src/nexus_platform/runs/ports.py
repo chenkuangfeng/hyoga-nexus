@@ -1,7 +1,7 @@
 """ORM-free query/transaction contracts consumed by Run application services.
 
 Repositories operate inside the caller's transaction. Visibility queries always require
-workspace and authenticated user scope; unscoped lookups are not public API operations.
+tenant and authenticated user scope; unscoped lookups are not public API operations.
 """
 from __future__ import annotations
 from datetime import datetime
@@ -13,7 +13,7 @@ from nexus_core.platform import Principal
 class VisibleRun(Protocol):
     """Structural legacy entity view; the persistence adapter owns its mapped identity."""
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     principal_id: UUID
     session_id: UUID
     status: str
@@ -31,7 +31,7 @@ class StoredEvent(Protocol):
 
 
 class RunRepository(Protocol):
-    def visible(self, workspace_id: UUID, user_id: UUID, run_id: UUID) -> VisibleRun | None: ...
+    def visible(self, tenant_id: UUID, user_id: UUID, run_id: UUID) -> VisibleRun | None: ...
 
 
 class RunEventRepository(Protocol):
@@ -43,8 +43,8 @@ class OutboxRepository(Protocol):
     def claim(self, worker_id: str, now: datetime, until: datetime) -> UUID | None: ...
 
 
-class WorkspaceAccess(Protocol):
-    def require_principal(self, principal: Principal, workspace_id: UUID) -> UUID: ...
+class TenantAccess(Protocol):
+    def require_principal(self, principal: Principal, tenant_id: UUID) -> UUID: ...
 
 
 class RunUnitOfWork(Protocol):
@@ -52,7 +52,7 @@ class RunUnitOfWork(Protocol):
     runs: RunRepository
     events: RunEventRepository
     outbox: OutboxRepository
-    access: WorkspaceAccess
+    access: TenantAccess
 
     def __enter__(self) -> RunUnitOfWork: ...
     def __exit__(self, exc_type, exc_value, traceback): ...

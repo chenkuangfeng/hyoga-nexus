@@ -1,5 +1,5 @@
 /** Validated Native configuration and owned-memory management API; no vendor keys are returned. */
-import { request, workspacePath } from './chat'
+import { request, tenantPath } from './chat'
 export type Scalar = string | number | boolean | string[]
 export interface NativePreferences { version: number; available_tools: { id: string; label: string; enabled: boolean }[]; can_enable_tools: boolean; settings: Record<string, Record<string, Scalar>>; fields: Record<string, { name: string; label: string; type: string }[]> }
 export interface MemoryEntry { id: string; title: string; kind: string; project: string; version: number }
@@ -11,7 +11,7 @@ const str = (v: unknown): string => { if (typeof v !== 'string') throw new Error
 const num = (v: unknown): number => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('Native 数值无效'); return v }
 const arr = <T>(v: unknown, parse: (value: unknown) => T): T[] => { if (!Array.isArray(v)) throw new Error('Native 列表无效'); return v.map(parse) }
 const json = (method: string, value?: unknown, key?: string): RequestInit => ({ method, headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) })
-const root = (workspace: string) => `${workspacePath(workspace)}/native`
+const root = (tenant: string) => `${tenantPath(tenant)}/native`
 function preferences(value: unknown): NativePreferences {
   const row = record(value), data = record(row.settings), fields = record(row.fields)
   const settings: NativePreferences['settings'] = {}, schema: NativePreferences['fields'] = {}
@@ -26,7 +26,7 @@ function preferences(value: unknown): NativePreferences {
   return { version: num(row.version), settings, fields: schema, available_tools: arr(row.available_tools || [], value => { const x = record(value); if (typeof x.enabled !== 'boolean') throw new Error('工具状态无效'); return { id: str(x.id), label: str(x.label), enabled: x.enabled } }), can_enable_tools: row.can_enable_tools === true }
 }
 export const nativeApi = {
-  enableTool: (w: string, name: string) => request(`${workspacePath(w)}/tools/${encodeURIComponent(name)}/enable`, record, json('POST')),
+  enableTool: (w: string, name: string) => request(`${tenantPath(w)}/tools/${encodeURIComponent(name)}/enable`, record, json('POST')),
   branch: (w: string, session: string, version: string) => request(`${root(w)}/sessions/${encodeURIComponent(session)}/model-branch`, value => { const row = record(value); return { id: str(row.id), title: str(row.title), agent_version_id: str(row.agent_version_id) } }, json('POST', { model_profile_version_id: version })),
   settings: (w: string, signal?: AbortSignal) => request(`${root(w)}/settings`, preferences, { signal }),
   saveSettings: (w: string, value: NativePreferences) => request(`${root(w)}/settings`, preferences, json('PUT', { settings: value.settings, expected_version: value.version })),

@@ -18,7 +18,7 @@ from test_platform import create_agent_stack, database
 
 def test_submission_failure_rolls_back_snapshot_message_event_audit_and_queue(database):
     principal = Principal(id="atomic", issuer="test")
-    workspace, _, _, _, _, session = create_agent_stack(database, principal)
+    tenant, _, _, _, _, session = create_agent_stack(database, principal)
     tables = (RunRecord, MessageRecord, RunEventRecord, AuditRecord, OutboxRecord)
     with database() as db:
         baseline = [db.scalar(select(func.count()).select_from(table)) for table in tables]
@@ -27,14 +27,14 @@ def test_submission_failure_rolls_back_snapshot_message_event_audit_and_queue(da
         "nexus_platform.runs.audit_repository.audit", side_effect=RuntimeError("audit unavailable")
     ):
         with pytest.raises(RuntimeError, match="audit unavailable"):
-            create_run(db, principal, workspace.id, session.id,
+            create_run(db, principal, tenant.id, session.id,
                        message="hello", idempotency_key="retry-after-rollback")
         assert not db.in_transaction()
     with database() as db:
         assert [db.scalar(select(func.count()).select_from(table)) for table in tables] == baseline
     with database() as db:
         # The failed key remains reusable; the failed transaction did not leave a Run.
-        run, replay = create_run(db, principal, workspace.id, session.id,
+        run, replay = create_run(db, principal, tenant.id, session.id,
                                  message="hello", idempotency_key="retry-after-rollback")
         assert not replay
     with database() as db:
@@ -44,9 +44,9 @@ def test_submission_failure_rolls_back_snapshot_message_event_audit_and_queue(da
 
 def test_claim_rollback_does_not_consume_lease_or_attempt(database):
     principal = Principal(id="lease-atomic", issuer="test")
-    workspace, _, _, _, _, session = create_agent_stack(database, principal)
+    tenant, _, _, _, _, session = create_agent_stack(database, principal)
     with database() as db:
-        create_run(db, principal, workspace.id, session.id, message="hello", idempotency_key="lease")
+        create_run(db, principal, tenant.id, session.id, message="hello", idempotency_key="lease")
     with database() as db:
         with pytest.raises(RuntimeError, match="worker died"):
             with SqlAlchemyUnitOfWork(db) as work:
@@ -81,7 +81,7 @@ def test_unit_of_work_ownership_reentry_and_failed_begin():
         with factory() as borrowed:
             work = SqlAlchemyUnitOfWork(borrowed)
             with work:
-                borrowed.add(UserRecord(id=user_id, issuer="test", subject="uow",
+                borrowed.add(UserRecord(id=user_id, display_name="uow",
                                         status="active", created_at=utc_now()))
                 with pytest.raises(RuntimeError, match="already active"):
                     work.__enter__()
@@ -95,13 +95,13 @@ def test_unit_of_work_ownership_reentry_and_failed_begin():
         assert owned.session in closed
         with pytest.raises(RuntimeError, match="rollback"):
             with SqlAlchemyUnitOfWork(factory) as failed:
-                failed.session.add(UserRecord(id=new_id(), issuer="test", subject="rolled-back",
+                failed.session.add(UserRecord(id=new_id(), display_name="rolled-back",
                                               status="active", created_at=utc_now()))
                 failed.session.flush()
                 raise RuntimeError("rollback")
         assert failed.session in closed
         with factory() as db:
-            assert list(db.scalars(select(UserRecord.subject))) == ["uow"]
+            assert list(db.scalars(select(UserRecord.display_name))) == ["uow"]
     finally:
         engine.dispose()
 
@@ -115,7 +115,7 @@ def test_split_modules_preserve_public_type_identity_and_metadata():
     from nexus_platform.persistence.models.identity import UserRecord as User
     assert (ModelMessage, ToolCall, NativePolicy, UserRecord) == (Message, Call, Policy, User)
     assert all(mapper.local_table.metadata is Base.metadata for mapper in Base.registry.mappers)
-    assert len(Base.metadata.tables) == 34
+    assert len(Base.metadata.tables) == 35
     # Resolve every cross-module string foreign key, rather than just count the tables.
     assert all(foreign_key.column is not None for table in Base.metadata.tables.values()
                for foreign_key in table.foreign_keys)

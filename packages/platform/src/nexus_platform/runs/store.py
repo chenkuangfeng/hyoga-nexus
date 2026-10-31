@@ -10,7 +10,7 @@ from nexus_core.platform import new_id, utc_now
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
 from nexus_platform.errors import PlatformError
 from nexus_platform.models.provider_settings import authorize_model
-from nexus_platform.identity.service import require_membership, require_workspace
+from nexus_platform.identity.service import require_membership, require_tenant
 from nexus_platform.persistence.models import (
     MessageRecord,
     NativeRunStateRecord,
@@ -49,10 +49,10 @@ class DurableRuntimeStore:
             run = self._run(db)
             if kind == 'model.started':
                 try:
-                    authorize_model(db, run.workspace_id, run.principal_id,
+                    authorize_model(db, run.tenant_id, run.principal_id,
                                     UUID(run.config_snapshot['model_profile_version_id']))
-                    require_workspace(db, run.workspace_id)
-                    require_membership(db, run.workspace_id, run.principal_id)
+                    require_tenant(db, run.tenant_id)
+                    require_membership(db, run.tenant_id, run.principal_id)
                     for source_id in self.context.history_run_ids:
                         source = db.get(RunRecord, source_id)
                         if not _history_allowed(db, source):
@@ -83,7 +83,7 @@ class DurableRuntimeStore:
             run = self._run(db)
             task.lease_until = run.lease_until = now + timedelta(seconds=60)
             try:
-                require_membership(db, run.workspace_id, run.principal_id)
+                require_membership(db, run.tenant_id, run.principal_id)
             except PlatformError:
                 return True
             return run.cancel_requested_at is not None
@@ -102,7 +102,7 @@ class DurableRuntimeStore:
             raise RuntimeFault('tool_authorization_denied')
         try:
             with self.factory() as db:
-                authorize_run_resource(db, self.context.principal, self.context.workspace_id,
+                authorize_run_resource(db, self.context.principal, self.context.tenant_id,
                                        self.context.run_id, UUID(binding_id))
         except PlatformError:
             raise RuntimeFault('tool_authorization_denied') from None
@@ -112,7 +112,7 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            audit(db, run.workspace_id, run.principal_id, 'tool.denied', 'run', str(run.id),
+            audit(db, run.tenant_id, run.principal_id, 'tool.denied', 'run', str(run.id),
                   {'tool_name': name[:64]}, result='denied')
 
     async def start(self, call: ToolCall, binding_id: str | None) -> str:
@@ -153,7 +153,7 @@ class DurableRuntimeStore:
             row.output_summary = {'text': summary[:4000]}
             append_event(db, run.id, 'tool.completed' if status == 'completed' else 'tool.failed',
                 {'invocation_id': invocation_id, 'status': status, 'summary': summary[:4000], 'error_code': error_code})
-            audit(db, run.workspace_id, run.principal_id, 'tool.' + status, 'tool_invocation', invocation_id,
+            audit(db, run.tenant_id, run.principal_id, 'tool.' + status, 'tool_invocation', invocation_id,
                   {'run_id': str(run.id), 'error_code': error_code})
 
     async def save_summary(self, summary: str, source_id: str) -> None:
@@ -166,12 +166,12 @@ class DurableRuntimeStore:
                 raise RuntimeFault('context_source_invalid')
             record = db.get(ContextSummaryRecord, run.session_id)
             if not record:
-                record = ContextSummaryRecord(session_id=run.session_id, workspace_id=run.workspace_id,
+                record = ContextSummaryRecord(session_id=run.session_id, tenant_id=run.tenant_id,
                     source_run_id=run.id, through_sequence=source.sequence, content=summary[:8000])
                 db.add(record)
             elif source.sequence >= record.through_sequence:
                 record.source_run_id, record.through_sequence, record.content = run.id, source.sequence, summary[:8000]
-            audit(db, run.workspace_id, run.principal_id, 'context.summary_saved', 'session', str(run.session_id))
+            audit(db, run.tenant_id, run.principal_id, 'context.summary_saved', 'session', str(run.session_id))
 
     async def drain_steer(self) -> list[ModelMessage]:
         """Consume corrections under the same lease/Run lock as message persistence."""
@@ -179,8 +179,8 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            require_workspace(db, run.workspace_id)
-            require_membership(db, run.workspace_id, run.principal_id)
+            require_tenant(db, run.tenant_id)
+            require_membership(db, run.tenant_id, run.principal_id)
             return consume(db, run, add_message)
 
     async def memory_index(self) -> str:
@@ -189,9 +189,9 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            require_membership(db, run.workspace_id, run.principal_id)
-            result = index(db, run.workspace_id, run.principal_id)
-            audit(db, run.workspace_id, run.principal_id, 'memory.index_read', 'run', str(run.id))
+            require_membership(db, run.tenant_id, run.principal_id)
+            result = index(db, run.tenant_id, run.principal_id)
+            audit(db, run.tenant_id, run.principal_id, 'memory.index_read', 'run', str(run.id))
             return result
 
     async def read_memory(self, entry_id: str) -> str:
@@ -200,8 +200,8 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            require_membership(db, run.workspace_id, run.principal_id)
-            return read_for_run(db, run.workspace_id, run.principal_id, UUID(entry_id), run.id)
+            require_membership(db, run.tenant_id, run.principal_id)
+            return read_for_run(db, run.tenant_id, run.principal_id, UUID(entry_id), run.id)
 
     async def checkpoint(self, content: str) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -209,10 +209,10 @@ class DurableRuntimeStore:
             run = self._run(db)
             row = db.get(WorkingCheckpointRecord, run.session_id)
             if not row:
-                row = WorkingCheckpointRecord(session_id=run.session_id, workspace_id=run.workspace_id)
+                row = WorkingCheckpointRecord(session_id=run.session_id, tenant_id=run.tenant_id)
                 db.add(row)
             row.source_run_id, row.content, row.updated_at = run.id, content[:8000], utc_now()
-            audit(db, run.workspace_id, run.principal_id, 'checkpoint.updated', 'session', str(run.session_id),
+            audit(db, run.tenant_id, run.principal_id, 'checkpoint.updated', 'session', str(run.session_id),
                   {'run_id': str(run.id)})
 
     async def propose(self, kind: str, scope: str, diff: str) -> str:
@@ -223,9 +223,9 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            row = MemoryDraftRecord(id=new_id(), workspace_id=run.workspace_id, source_run_id=run.id,
+            row = MemoryDraftRecord(id=new_id(), tenant_id=run.tenant_id, source_run_id=run.id,
                 kind=kind, scope=str(run.session_id), diff=diff[:8000], status='pending_review', created_at=utc_now())
             db.add(row)
             append_event(db, run.id, 'memory.draft_created', {'draft_id': str(row.id), 'kind': kind, 'scope': 'session'})
-            audit(db, run.workspace_id, run.principal_id, 'memory.draft_created', 'memory_draft', str(row.id))
+            audit(db, run.tenant_id, run.principal_id, 'memory.draft_created', 'memory_draft', str(row.id))
             return str(row.id)

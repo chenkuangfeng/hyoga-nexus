@@ -4,8 +4,8 @@ import { ElMessageBox } from 'element-plus'
 import { api } from '../../api/chat'
 import { modelSettingsApi } from '../../api/modelSettings'
 import { nativeApi, type NativePreferences, type MemoryData, type MemoryEntry, type MemoryDraft } from '../../api/native'
-import type { Workspace } from '../../types/chat'
-const workspaces = ref<Workspace[]>([]), workspace = ref(''), data = ref<NativePreferences | null>(null)
+import type { Tenant } from '../../types/chat'
+const tenants = ref<Tenant[]>([]), tenant = ref(''), data = ref<NativePreferences | null>(null)
 const memories = ref<MemoryData>({ entries: [], drafts: [] }), models = ref<{ id: string; label: string }[]>([])
 const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
 const title = ref(''), project = ref(''), selectedEntry = ref(''), selectedDraft = ref<MemoryDraft | null>(null)
@@ -13,10 +13,10 @@ const detail = ref(''), detailEntry = ref<MemoryEntry | null>(null), detailVersi
 let controller: AbortController | undefined, disposed = false
 async function load() {
   controller?.abort(); controller = new AbortController(); const signal = controller.signal
-  if (!workspace.value) return
+  if (!tenant.value) return
   loading.value = true; error.value = ''; data.value = null; memories.value = { entries: [], drafts: [] }; selectedDraft.value = null; detailEntry.value = null
   try {
-    const [preferences, memory, providers] = await Promise.all([nativeApi.settings(workspace.value, signal), nativeApi.memory(workspace.value, signal), modelSettingsApi.list(workspace.value, signal)])
+    const [preferences, memory, providers] = await Promise.all([nativeApi.settings(tenant.value, signal), nativeApi.memory(tenant.value, signal), modelSettingsApi.list(tenant.value, signal)])
     if (!signal.aborted && !disposed) { data.value = preferences; memories.value = memory; models.value = providers.providers.flatMap(p => p.models.map(m => ({ id: m.version_id, label: `${p.name} / ${m.name}` }))) }
   } catch (e) { if (!signal.aborted && !disposed) error.value = e instanceof Error ? e.message : '加载失败' }
   finally { if (!signal.aborted && !disposed) loading.value = false }
@@ -29,7 +29,7 @@ async function act(action: () => Promise<void>, message: string) {
   finally { if (!disposed) busy.value = false }
 }
 async function initialize() {
-  try { const rows = await api.workspaces(); if (!disposed) { workspaces.value = rows; workspace.value ||= rows[0]?.id || ''; await load() } }
+  try { const rows = await api.tenants(); if (!disposed) { tenants.value = rows; tenant.value ||= rows[0]?.id || ''; await load() } }
   catch (e) { error.value = e instanceof Error ? e.message : '空间加载失败' }
 }
 function review(draft: MemoryDraft) { selectedDraft.value = draft; selectedEntry.value = ''; title.value = ''; project.value = '' }
@@ -38,19 +38,19 @@ async function publish(approve: boolean) {
   if (!draft) return
   if (approve) { try { await ElMessageBox.confirm('请确认内容已验证、可长期复用且不含密钥。发布后将进入模型可读取的记忆索引。', '确认发布记忆', { confirmButtonText: '发布', cancelButtonText: '取消' }) } catch { return } }
   await act(async () => { const entry = memories.value.entries.find(e => e.id === selectedEntry.value)
-    await nativeApi.review(workspace.value, draft.id, { approve, title: title.value, project: project.value, ...(entry ? { entry_id: entry.id, expected_version: entry.version } : {}) }); await load()
+    await nativeApi.review(tenant.value, draft.id, { approve, title: title.value, project: project.value, ...(entry ? { entry_id: entry.id, expected_version: entry.version } : {}) }); await load()
   }, approve ? '记忆已发布' : '草稿已拒绝')
 }
 async function inspect(entry: MemoryEntry, version?: number) {
-  await act(async () => { const response = await nativeApi.readMemory(workspace.value, entry.id, version); detail.value = response.content; detailEntry.value = entry; detailVersion.value = response.version }, '')
+  await act(async () => { const response = await nativeApi.readMemory(tenant.value, entry.id, version); detail.value = response.content; detailEntry.value = entry; detailVersion.value = response.version }, '')
 }
 async function archive(entry: MemoryEntry) {
   try { await ElMessageBox.confirm(`归档“${entry.title}”后模型将无法继续读取，历史版本保留。`, '归档记忆', { confirmButtonText: '归档', cancelButtonText: '取消' }) } catch { return }
-  await act(async () => { await nativeApi.archive(workspace.value, entry.id); await load() }, '记忆已归档')
+  await act(async () => { await nativeApi.archive(tenant.value, entry.id); await load() }, '记忆已归档')
 }
-async function enableTool(name: string) { await act(async () => { await nativeApi.enableTool(workspace.value, name); await load() }, '工具已登记，可选择绑定') }
-async function savePreferences() { if (data.value) await act(async () => { data.value = await nativeApi.saveSettings(workspace.value, data.value!) }, '默认设置已保存') }
-async function restoreVersion() { if (detailEntry.value) await act(async () => { await nativeApi.restore(workspace.value, detailEntry.value!.id, detailVersion.value, detailEntry.value!.version); await load() }, '已创建恢复版本') }
+async function enableTool(name: string) { await act(async () => { await nativeApi.enableTool(tenant.value, name); await load() }, '工具已登记，可选择绑定') }
+async function savePreferences() { if (data.value) await act(async () => { data.value = await nativeApi.saveSettings(tenant.value, data.value!) }, '默认设置已保存') }
+async function restoreVersion() { if (detailEntry.value) await act(async () => { await nativeApi.restore(tenant.value, detailEntry.value!.id, detailVersion.value, detailEntry.value!.version); await load() }, '已创建恢复版本') }
 onMounted(initialize)
 onBeforeUnmount(() => { disposed = true; controller?.abort() })
 </script>
@@ -58,7 +58,7 @@ onBeforeUnmount(() => { disposed = true; controller?.abort() })
   <main class="native-settings" v-loading="loading" :aria-busy="busy || loading">
     <header><div><p class="eyebrow">HYOGA NEXUS / 用户设置</p><h1>Native 执行与记忆</h1></div><el-button :disabled="loading || busy" @click="initialize">刷新</el-button></header>
     <p class="intro">个人默认设置只应用于之后创建的智能体，已有版本和会话保持原配置。工具仍需单独授权。</p>
-    <label for="native-workspace">工作空间</label><el-select id="native-workspace" v-model="workspace" :disabled="busy || loading" @change="load"><el-option v-for="w in workspaces" :key="w.id" :value="w.id" :label="w.name" /></el-select>
+    <label for="native-tenant">工作空间</label><el-select id="native-tenant" v-model="tenant" :disabled="busy || loading" @change="load"><el-option v-for="w in tenants" :key="w.id" :value="w.id" :label="w.name" /></el-select>
     <el-alert v-if="error" type="error" :title="error" :closable="false" /><p role="status" aria-live="polite">{{ feedback }}</p>
     <template v-if="data">
       <section v-for="(fields, group) in data.fields" :key="group" class="panel">

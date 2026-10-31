@@ -48,38 +48,38 @@ def validate(settings: dict) -> dict:
     return {'budgets': budgets, 'behavior': behavior}
 
 
-def view(db, user_id, workspace_id) -> dict:
+def view(db, user_id, tenant_id) -> dict:
     """Read current preference in the caller's transaction, including typed form metadata."""
-    row = db.get(NativePreferenceRecord, (workspace_id, user_id))
+    row = db.get(NativePreferenceRecord, (tenant_id, user_id))
     settings = row.settings if row else defaults()
     schema = {group: [{'name': key, 'label': LABELS[key], 'type': 'boolean' if type(value) is bool else 'number' if type(value) in (int, float) else 'tools' if key == 'enabled_tools' else 'models' if isinstance(value, list) else 'string'}
                       for key, value in values.items()] for group, values in defaults().items()}
     from nexus_core.native import BUILTIN_TOOL_NAMES
     from nexus_platform.persistence.models import PlatformResourceRecord
     from nexus_platform.identity.service import require_membership
-    from nexus_platform.workspaces.service import ADMIN_ROLES
+    from nexus_platform.tenants.service import ADMIN_ROLES
     from sqlalchemy import select
-    enabled = set(db.scalars(select(PlatformResourceRecord.resource_id).where(PlatformResourceRecord.workspace_id == workspace_id, PlatformResourceRecord.kind == 'tool', PlatformResourceRecord.version_id == 'v1', PlatformResourceRecord.active.is_(True))))
-    membership = require_membership(db, workspace_id, user_id)
+    enabled = set(db.scalars(select(PlatformResourceRecord.resource_id).where(PlatformResourceRecord.tenant_id == tenant_id, PlatformResourceRecord.kind == 'tool', PlatformResourceRecord.version_id == 'v1', PlatformResourceRecord.active.is_(True))))
+    membership = require_membership(db, tenant_id, user_id)
     return {'version': row.version if row else 0, 'settings': settings, 'fields': schema,
             'available_tools': [{'id': name, 'label': name, 'enabled': name in enabled} for name in BUILTIN_TOOL_NAMES],
             'can_enable_tools': membership.role in ADMIN_ROLES}
 
 
-def load(db, principal, workspace_id) -> dict:
+def load(db, principal, tenant_id) -> dict:
     """Authorize and return personal defaults; no other user's settings are exposed."""
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        return view(db, user.id, workspace_id)
+        user, _ = context(db, principal, tenant_id)
+        return view(db, user.id, tenant_id)
 
 
-def save(db, principal, workspace_id, settings: dict, expected_version: int) -> dict:
+def save(db, principal, tenant_id, settings: dict, expected_version: int) -> dict:
     """Optimistically save validated defaults; concurrent edits must reload instead of overwrite."""
     settings = validate(settings)
     from sqlalchemy import select
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        row = db.scalar(select(NativePreferenceRecord).where(NativePreferenceRecord.workspace_id == workspace_id,
+        user, _ = context(db, principal, tenant_id)
+        row = db.scalar(select(NativePreferenceRecord).where(NativePreferenceRecord.tenant_id == tenant_id,
             NativePreferenceRecord.user_id == user.id).with_for_update())
         if (row.version if row else 0) != expected_version:
             raise Conflict('Native settings changed; reload before saving')
@@ -87,14 +87,14 @@ def save(db, principal, workspace_id, settings: dict, expected_version: int) -> 
         from uuid import UUID
         from nexus_platform.authz.resources import authorize_resource
         for name in settings['behavior']['enabled_tools']:
-            authorize_resource(db, workspace_id, 'tool', name, resource_version_id='v1')
+            authorize_resource(db, tenant_id, 'tool', name, resource_version_id='v1')
         for model_id in settings['behavior']['fallback_models']:
-            authorize_model(db, workspace_id, user.id, UUID(model_id))
+            authorize_model(db, tenant_id, user.id, UUID(model_id))
         if row:
             row.settings = settings; row.version += 1
         else:
-            row = NativePreferenceRecord(workspace_id=workspace_id, user_id=user.id, settings=settings, version=1)
+            row = NativePreferenceRecord(tenant_id=tenant_id, user_id=user.id, settings=settings, version=1)
             db.add(row)
         db.flush()
-        audit(db, workspace_id, user.id, 'native.settings_updated', 'native_preferences', str(user.id), {'version': row.version})
-        return view(db, user.id, workspace_id)
+        audit(db, tenant_id, user.id, 'native.settings_updated', 'native_preferences', str(user.id), {'version': row.version})
+        return view(db, user.id, tenant_id)

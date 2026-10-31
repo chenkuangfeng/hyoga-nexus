@@ -23,18 +23,18 @@ from ..base import Base
 class AgentRecord(Base):
     __tablename__ = "agents"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "name", name="uq_agents_workspace_name"),
-        UniqueConstraint("id", "workspace_id", name="uq_agents_id_workspace"),
+        UniqueConstraint("tenant_id", "name", name="uq_agents_tenant_name"),
+        UniqueConstraint("id", "tenant_id", name="uq_agents_id_tenant"),
         ForeignKeyConstraint(
-            ["draft_model_profile_version_id", "workspace_id"],
-            ["model_profile_versions.id", "model_profile_versions.workspace_id"],
-            ondelete="RESTRICT", name="fk_agents_draft_model_profile_workspace",
+            ["draft_model_profile_version_id", "tenant_id"],
+            ["model_profile_versions.id", "model_profile_versions.tenant_id"],
+            ondelete="RESTRICT", name="fk_agents_draft_model_profile_tenant",
         ),
         CheckConstraint("status IN ('draft', 'published', 'archived')", name="ck_agents_status"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
@@ -53,21 +53,21 @@ class AgentVersionRecord(Base):
     __tablename__ = "agent_versions"
     __table_args__ = (
         UniqueConstraint("agent_id", "version", name="uq_agent_versions_version"),
-        UniqueConstraint("id", "workspace_id", name="uq_agent_versions_id_workspace"),
+        UniqueConstraint("id", "tenant_id", name="uq_agent_versions_id_tenant"),
         ForeignKeyConstraint(
-            ["agent_id", "workspace_id"], ["agents.id", "agents.workspace_id"],
-            ondelete="CASCADE", name="fk_agent_versions_agent_workspace",
+            ["agent_id", "tenant_id"], ["agents.id", "agents.tenant_id"],
+            ondelete="CASCADE", name="fk_agent_versions_agent_tenant",
         ),
         ForeignKeyConstraint(
-            ["model_profile_version_id", "workspace_id"],
-            ["model_profile_versions.id", "model_profile_versions.workspace_id"],
-            ondelete="RESTRICT", name="fk_agent_versions_model_profile_workspace",
+            ["model_profile_version_id", "tenant_id"],
+            ["model_profile_versions.id", "model_profile_versions.tenant_id"],
+            ondelete="RESTRICT", name="fk_agent_versions_model_profile_tenant",
         ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     agent_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
-    workspace_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -84,12 +84,12 @@ class ResourceBindingRecord(Base):
     __tablename__ = "agent_resource_bindings"
     __table_args__ = (
         UniqueConstraint(
-            "agent_version_id", "kind", "resource_id", "resource_version_id", "source_workspace_id",
+            "agent_version_id", "kind", "resource_id", "resource_version_id", "source_tenant_id",
             name="uq_resource_binding"
         ),
         ForeignKeyConstraint(
-            ["source_workspace_id", "kind", "resource_id", "resource_version_id"],
-            ["platform_resources.workspace_id", "platform_resources.kind", "platform_resources.resource_id",
+            ["source_tenant_id", "kind", "resource_id", "resource_version_id"],
+            ["platform_resources.tenant_id", "platform_resources.kind", "platform_resources.resource_id",
              "platform_resources.version_id"],
             ondelete="RESTRICT", name="fk_resource_binding_registered_resource",
         ),
@@ -101,8 +101,8 @@ class ResourceBindingRecord(Base):
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(255), nullable=False)
     resource_version_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    source_workspace_id: Mapped[UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    source_tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
     )
     binding_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
@@ -111,12 +111,12 @@ class AgentDraftBindingRecord(Base):
     __tablename__ = "agent_draft_bindings"
     __table_args__ = (
         UniqueConstraint(
-            "agent_id", "kind", "resource_id", "resource_version_id", "source_workspace_id",
+            "agent_id", "kind", "resource_id", "resource_version_id", "source_tenant_id",
             name="uq_agent_draft_binding"
         ),
         ForeignKeyConstraint(
-            ["source_workspace_id", "kind", "resource_id", "resource_version_id"],
-            ["platform_resources.workspace_id", "platform_resources.kind", "platform_resources.resource_id",
+            ["source_tenant_id", "kind", "resource_id", "resource_version_id"],
+            ["platform_resources.tenant_id", "platform_resources.kind", "platform_resources.resource_id",
              "platform_resources.version_id"],
             ondelete="RESTRICT", name="fk_agent_draft_registered_resource",
         ),
@@ -128,7 +128,7 @@ class AgentDraftBindingRecord(Base):
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(255), nullable=False)
     resource_version_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    source_workspace_id: Mapped[UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    source_tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
     )
     binding_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)

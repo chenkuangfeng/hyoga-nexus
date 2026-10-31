@@ -37,7 +37,7 @@ SqlAlchemyUnitOfWork 接受 API 借用会话或 worker 的 sessionmaker；前者
 
 `runs/ports.py` 定义查询与事务协议，`command_ports.py` 定义写入端口。`repository.py` 实现 Run 可见性、所有者锁、幂等保存点和显式保存；`event_repository.py`、`queue_repository.py` 分别处理事件顺序和 Outbox 领取/投递；`identity/repository.py`、`submission_access.py` 在同一事务内复核用户、成员、模型和资源权限。事件写仓储只 flush，不自行 commit；调用者持有父 Run 锁（新建 Run 时依靠事务内尚不可见的新行），保持 sequence 唯一。共享实体唯一 Base 位于 `persistence/base.py`，模型包仅重新导出，Alembic 继续装配同一 metadata。
 
-`domain.py` 的 Run、PendingInput 与 `configuration.py` 的配置值对象独立于 SQLAlchemy。仓储复制字段和 JSON，应用更改必须显式调用 save/consume 等写入端口才会持久化。`configuration_repository.py` 读取已锁定 Session 和固定发布版本；消息、输入和审计各有事务适配器。提交先复核当前权限再允许幂等重放；取消和输入只用 workspace+principal 的所有者锁，不沿用较宽的读取可见性。已消费相同回答先于 Run 当前等待状态判断，保留推进或取消后的合法重放；实际回答 key 不做 trim。
+`domain.py` 的 Run、PendingInput 与 `configuration.py` 的配置值对象独立于 SQLAlchemy。仓储复制字段和 JSON，应用更改必须显式调用 save/consume 等写入端口才会持久化。`configuration_repository.py` 读取已锁定 Session 和固定发布版本；消息、输入和审计各有事务适配器。提交先复核当前权限再允许幂等重放；取消和输入只用 tenant+principal 的所有者锁，不沿用较宽的读取可见性。已消费相同回答先于 Run 当前等待状态判断，保留推进或取消后的合法重放；实际回答 key 不做 trim。
 
 `compatibility.py` 将原函数调用装配到应用服务，返回本次仓储已跟踪的 RunRecord；不在提交后重新 SELECT，不开启另一事务。`service.py`、`execution.py` 和先前的职责模块入口继续保留。应用服务返回独立 Run 对象，直接导入提交、取消、输入和租约应用服务不会加载 SQLAlchemy。事件 writer 不自行提交；写入消息、输入、审计或队列的后续失败使此前 flush 的内容一起回滚。
 
@@ -49,3 +49,11 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 ## 部署数据库配置
 
 `configuration.py` 使用标准库 tomllib 集中解析 `configs/nexus.toml`，`resolve_database_url()` 按显式 URL、文件、环境变量顺序选取并验证连接串。`DatabaseConfigurationError` 继承 RuntimeError，错误不携带秘密。数据库工厂与 API/worker/Alembic 共用；读取规则和使用方式见 [configs](../../../configs/README.md)。不加载 dotenv，不在模块导入时读取配置。
+
+## 租户与身份
+
+平台的组织单位统一称为 Tenant（表 `tenants`，成员关系 `tenant_memberships`，API 路径 `/api/v1/tenants/...`）。迁移 `f3a7c1e2b9d4` 完成从 Workspace 的重命名：表、`*_workspace_id` 列及索引/唯一约束名均改为 tenant。SQLite 通过 `ALTER TABLE ... RENAME COLUMN` 与重建约束完成，并已通过升级、回退、再升级的回归测试；PostgreSQL 的约束和索引重命名 DO 块尚未在目标环境验证。
+
+用户与外部身份分离：`users` 只保存平台内部用户与显示名；`user_identities(provider, scope, external_id)` 保存每个外部登录身份（Web/OIDC、企业微信、微信、QQ 等）。`scope` 为空串表示提供方没有租户级 ID，企业微信等需要按企业隔离时使用企业 ID。`identity/service.py` 的 `resolve_user` 按 (provider, scope, external_id) 解析或首次创建用户；`principal_for_user` 为已存在的内部用户选取一个可回解析的外部身份，供执行上下文复核授权。
+
+角色、菜单与后台 API 授权、智能体权限及智能体绑定的工具/技能/知识库尚未实现，见路线图。

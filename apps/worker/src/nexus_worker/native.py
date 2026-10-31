@@ -98,7 +98,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         registry = (registry_factory or builtins)(store)
         gateway = AuthorizedToolGateway(registry, ToolAccess(store),
             {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
-            session_id=str(context.session_id), workspace_id=str(context.workspace_id))
+            session_id=str(context.session_id), tenant_id=str(context.tenant_id))
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

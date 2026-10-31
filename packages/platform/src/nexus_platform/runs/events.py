@@ -15,12 +15,12 @@ class RunEventService:
     def __init__(self, unit_of_work: RunUnitOfWork):
         self.unit_of_work = unit_of_work
 
-    def list(self, principal: Principal, workspace_id: UUID, run_id: UUID,
+    def list(self, principal: Principal, tenant_id: UUID, run_id: UUID,
              after_sequence: int, limit: int = 200) -> list[StoredEvent]:
         """Return the exclusive cursor page; invisible Runs raise NotFound before reading events."""
         with self.unit_of_work as work:
-            user_id = work.access.require_principal(principal, workspace_id)
-            run = work.runs.visible(workspace_id, user_id, run_id)
+            user_id = work.access.require_principal(principal, tenant_id)
+            run = work.runs.visible(tenant_id, user_id, run_id)
             if run is None:
                 raise NotFound('Run not found')
             return work.events.after(run.id, after_sequence, limit)
@@ -36,10 +36,10 @@ class RunEventWriter:
         return self.repository.append(run_id, kind, payload, at)
 
 
-def list_events(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID,
+def list_events(session: Session, principal: Principal, tenant_id: UUID, run_id: UUID,
                 after_sequence: int, limit: int = 200):
     """Keep the existing API/SSE call signature while using scoped repositories."""
-    return RunEventService(SqlAlchemyUnitOfWork(session)).list(principal, workspace_id, run_id, after_sequence, limit)
+    return RunEventService(SqlAlchemyUnitOfWork(session)).list(principal, tenant_id, run_id, after_sequence, limit)
 
 
 def append_event(session: Session, run_id: UUID, event_type: str, payload: dict[str, Any], occurred_at=None):

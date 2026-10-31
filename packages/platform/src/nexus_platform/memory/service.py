@@ -32,50 +32,50 @@ def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-def index(db, workspace_id: UUID, user_id: UUID, project: str = '') -> str:
+def index(db, tenant_id: UUID, user_id: UUID, project: str = '') -> str:
     """Bounded published index for prompt injection; caller transaction, no commit."""
-    return rules.index(SqlMemoryRepository(db), workspace_id, user_id, project)
+    return rules.index(SqlMemoryRepository(db), tenant_id, user_id, project)
 
 
 @_translate
-def list_memory(db, principal: Principal, workspace_id: UUID) -> dict[str, Any]:
+def list_memory(db, principal: Principal, tenant_id: UUID) -> dict[str, Any]:
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        return rules.list_memory(SqlMemoryRepository(db), user.id, workspace_id)
+        user, _ = context(db, principal, tenant_id)
+        return rules.list_memory(SqlMemoryRepository(db), user.id, tenant_id)
 
 
 @_translate
-def read(db, principal: Principal, workspace_id: UUID, entry_id: UUID, version: int | None = None) -> dict[str, Any]:
+def read(db, principal: Principal, tenant_id: UUID, entry_id: UUID, version: int | None = None) -> dict[str, Any]:
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        return rules.read(SqlMemoryRepository(db), user.id, workspace_id, entry_id, version)
+        user, _ = context(db, principal, tenant_id)
+        return rules.read(SqlMemoryRepository(db), user.id, tenant_id, entry_id, version)
 
 
 @_translate
-def read_for_run(db, workspace_id: UUID, owner_id: UUID, entry_id: UUID, run_id: UUID) -> str:
+def read_for_run(db, tenant_id: UUID, owner_id: UUID, entry_id: UUID, run_id: UUID) -> str:
     """Model tool read inside an open run transaction; the run owner must already be verified."""
-    return rules.read_for_run(SqlMemoryRepository(db), workspace_id, owner_id, entry_id, run_id)
+    return rules.read_for_run(SqlMemoryRepository(db), tenant_id, owner_id, entry_id, run_id)
 
 
 @_translate
-def review(db, principal: Principal, workspace_id: UUID, draft_id: UUID, *, approve: bool, title: str,
+def review(db, principal: Principal, tenant_id: UUID, draft_id: UUID, *, approve: bool, title: str,
            entry_id: UUID | None = None, expected_version: int = 0, project: str = '') -> dict[str, Any]:
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        return rules.review(SqlMemoryRepository(db), user.id, workspace_id, draft_id, approve=approve,
+        user, _ = context(db, principal, tenant_id)
+        return rules.review(SqlMemoryRepository(db), user.id, tenant_id, draft_id, approve=approve,
                             title=title, entry_id=entry_id, expected_version=expected_version, project=project)
 
 
 @_translate
-def archive(db, principal: Principal, workspace_id: UUID, entry_id: UUID) -> None:
+def archive(db, principal: Principal, tenant_id: UUID, entry_id: UUID) -> None:
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        rules.archive(SqlMemoryRepository(db), user.id, workspace_id, entry_id)
+        user, _ = context(db, principal, tenant_id)
+        rules.archive(SqlMemoryRepository(db), user.id, tenant_id, entry_id)
 
 
 @_translate
-def restore(db, principal: Principal, workspace_id: UUID, entry_id: UUID, version: int,
+def restore(db, principal: Principal, tenant_id: UUID, entry_id: UUID, version: int,
             expected_version: int) -> dict[str, Any]:
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        return rules.restore(SqlMemoryRepository(db), user.id, workspace_id, entry_id, version, expected_version)
+        user, _ = context(db, principal, tenant_id)
+        return rules.restore(SqlMemoryRepository(db), user.id, tenant_id, entry_id, version, expected_version)

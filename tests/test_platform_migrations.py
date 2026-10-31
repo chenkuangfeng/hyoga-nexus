@@ -21,7 +21,7 @@ def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
                 text("SELECT name FROM sqlite_master WHERE type='table'")
             )
         }
-        assert {"users", "workspace_memberships", "agent_versions", "runs", "run_events", "outbox_records"} <= tables
+        assert {"users", "tenant_memberships", "agent_versions", "runs", "run_events", "outbox_records"} <= tables
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
     engine.dispose()
 

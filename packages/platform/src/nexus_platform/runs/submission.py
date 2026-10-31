@@ -19,7 +19,7 @@ class RunSubmissionService:
             raise Conflict("Idempotency key was already used for a different request")
         return existing, True
 
-    def submit(self, principal: Principal, workspace_id: UUID, session_id: UUID, *,
+    def submit(self, principal: Principal, tenant_id: UUID, session_id: UUID, *,
                message: str, idempotency_key: str) -> tuple[Run, bool]:
         """Submit or replay after current authorization, preserving the Session's fixed version.
 
@@ -32,8 +32,8 @@ class RunSubmissionService:
             raise ValueError("Idempotency-Key must contain 1 to 255 characters")
         now = utc_now()
         with self.unit_of_work as work:
-            member = work.access.require_member(principal, workspace_id)
-            session = work.catalog.owned_session(workspace_id, member.user_id, session_id)
+            member = work.access.require_member(principal, tenant_id)
+            session = work.catalog.owned_session(tenant_id, member.user_id, session_id)
             if session is None:
                 raise NotFound("Session not found")
             if session.status != "active":
@@ -41,21 +41,21 @@ class RunSubmissionService:
             agent = work.catalog.agent_version(session.agent_version_id)
             if agent is None:
                 raise Conflict("Session agent version is unavailable")
-            if work.catalog.agent_workspace(agent.agent_id) != workspace_id:
+            if work.catalog.agent_tenant(agent.agent_id) != tenant_id:
                 raise NotFound("Session not found")
             bindings = work.catalog.bindings(agent.id)
             for binding in bindings:
-                work.access.require_resource(workspace_id, binding)
-            work.access.require_model(workspace_id, member.user_id, agent.model_profile_version_id)
+                work.access.require_resource(tenant_id, binding)
+            work.access.require_model(tenant_id, member.user_id, agent.model_profile_version_id)
             model = work.catalog.model_version(agent.model_profile_version_id)
             if model is None:
                 raise Conflict("Agent model profile version is unavailable")
-            if work.catalog.model_workspace(model.profile_id) != workspace_id:
-                raise Forbidden("Model profile is not available in this workspace")
+            if work.catalog.model_tenant(model.profile_id) != tenant_id:
+                raise Forbidden("Model profile is not available in this tenant")
 
             # A replay never bypasses the current membership, model or resource checks.
             request_hash = digest({"session_id": str(session_id), "message": message})
-            existing = work.runs.by_key(workspace_id, member.user_id, idempotency_key)
+            existing = work.runs.by_key(tenant_id, member.user_id, idempotency_key)
             if existing is not None:
                 return self._replay(existing, request_hash)
             if work.runs.has_active(session_id):
@@ -78,7 +78,7 @@ class RunSubmissionService:
                 "authorized_at": now.isoformat(),
             }
             candidate = Run(
-                id=new_id(), workspace_id=workspace_id, session_id=session_id,
+                id=new_id(), tenant_id=tenant_id, session_id=session_id,
                 principal_id=member.user_id, status=RunStatus.QUEUED.value,
                 idempotency_key=idempotency_key, request_hash=request_hash,
                 config_snapshot=config_snapshot, created_at=now,
@@ -90,7 +90,7 @@ class RunSubmissionService:
             work.events.append(run.id, "run.queued", {"status": RunStatus.QUEUED.value}, now)
             work.outbox.enqueue(run.id, "run.execute", now)
             work.catalog.touch_session(session_id, now)
-            work.audit.write(workspace_id, member.user_id, "run.created", "run", str(run.id),
+            work.audit.write(tenant_id, member.user_id, "run.created", "run", str(run.id),
                              {"session_id": str(session_id), "agent_version_id": str(agent.id)})
         return run, False
 

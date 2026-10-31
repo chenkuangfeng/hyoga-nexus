@@ -18,7 +18,7 @@ from nexus_platform.agents.service import create_agent, publish_agent
 from nexus_platform.models.service import create_model_profile
 from nexus_platform.runs.service import claim_next, create_run
 from nexus_platform.sessions.service import create_session
-from nexus_platform.workspaces.service import create_workspace
+from nexus_platform.tenants.service import create_tenant
 
 
 def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
@@ -48,18 +48,18 @@ def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
         factory = sessionmaker(bind=scoped_engine, expire_on_commit=False, autoflush=False)
         principal = Principal(id="postgres-test-owner", issuer="integration-test")
         with factory() as session:
-            workspace = create_workspace(session, principal, "PostgreSQL integration")
+            tenant = create_tenant(session, principal, "PostgreSQL integration")
             _, model_version = create_model_profile(
-                session, principal, workspace.id, name="model", provider="test", model_name="test", options={}
+                session, principal, tenant.id, name="model", provider="test", model_name="test", options={}
             )
             agent = create_agent(
-                session, principal, workspace.id, name="agent", description="", runtime_type="native",
+                session, principal, tenant.id, name="agent", description="", runtime_type="native",
                 instructions="", model_profile_version_id=model_version.id, budgets={}, bindings=[],
             )
-            version = publish_agent(session, principal, workspace.id, agent.id)
-            platform_session = create_session(session, principal, workspace.id, agent_version_id=version.id)
+            version = publish_agent(session, principal, tenant.id, agent.id)
+            platform_session = create_session(session, principal, tenant.id, agent_version_id=version.id)
             run, _ = create_run(
-                session, principal, workspace.id, platform_session.id, message="first",
+                session, principal, tenant.id, platform_session.id, message="first",
                 idempotency_key="concurrent-claim",
             )
 
@@ -78,9 +78,9 @@ def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
         assert reclaimed_id == claimed_id
 
         with factory() as session:
-            second_session = create_session(session, principal, workspace.id, agent_version_id=version.id)
+            second_session = create_session(session, principal, tenant.id, agent_version_id=version.id)
             second_run, _ = create_run(
-                session, principal, workspace.id, second_session.id, message="second",
+                session, principal, tenant.id, second_session.id, message="second",
                 idempotency_key="lease-recovery",
             )
         with factory() as session:

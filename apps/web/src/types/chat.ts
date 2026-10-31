@@ -1,5 +1,5 @@
 export type RunStatus = 'queued' | 'running' | 'waiting_input' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
-export interface Workspace { id: string; name: string }
+export interface Tenant { id: string; name: string }
 export interface Agent { id: string; name: string; runtime_type: string; published_version_id: string | null }
 export interface Conversation { id: string; title: string; agent_version_id: string }
 export interface Run { id: string; status: RunStatus; error_code: string | null }

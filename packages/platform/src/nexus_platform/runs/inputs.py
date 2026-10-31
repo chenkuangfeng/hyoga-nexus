@@ -11,7 +11,7 @@ class RunInputService:
     def __init__(self, unit_of_work: RunCommandUnitOfWork):
         self.unit_of_work = unit_of_work
 
-    def respond(self, principal: Principal, workspace_id: UUID, run_id: UUID,
+    def respond(self, principal: Principal, tenant_id: UUID, run_id: UUID,
                 input_request_id: UUID, response: str, key: str) -> Run:
         """Reauthorize and lock the Run before checking input ownership and idempotency.
 
@@ -22,8 +22,8 @@ class RunInputService:
         if not key.strip() or len(key) > 255:
             raise ValueError('Idempotency-Key must contain 1 to 255 characters')
         with self.unit_of_work as work:
-            user_id = work.access.require_principal(principal, workspace_id)
-            run = work.runs.owned_for_update(workspace_id, user_id, run_id)
+            user_id = work.access.require_principal(principal, tenant_id)
+            run = work.runs.owned_for_update(tenant_id, user_id, run_id)
             if run is None:
                 raise NotFound('Run not found')
             request = work.inputs.get(input_request_id)
@@ -39,7 +39,7 @@ class RunInputService:
             work.messages.user_input(run, response)
             work.events.append(run.id, 'input.received', {'input_request_id': str(request.id)}, utc_now())
             work.outbox.requeue_execute(run.id, utc_now())
-            work.audit.write(workspace_id, user_id, 'input.received', 'run', str(run.id))
+            work.audit.write(tenant_id, user_id, 'input.received', 'run', str(run.id))
             return run
 
 

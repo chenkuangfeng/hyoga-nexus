@@ -13,13 +13,13 @@ class PlatformResourceRecord(Base):
     __tablename__ = "platform_resources"
     __table_args__ = (
         UniqueConstraint(
-            "workspace_id", "kind", "resource_id", "version_id", name="uq_platform_resources_version"
+            "tenant_id", "kind", "resource_id", "version_id", name="uq_platform_resources_version"
         ),
-        Index("ix_platform_resources_lookup", "workspace_id", "kind", "resource_id", "active"),
+        Index("ix_platform_resources_lookup", "tenant_id", "kind", "resource_id", "active"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(255), nullable=False)
     version_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
@@ -31,14 +31,14 @@ class ResourceGrantRecord(Base):
     __tablename__ = "resource_grants"
     __table_args__ = (
         UniqueConstraint(
-            "source_workspace_id", "target_workspace_id", "kind", "resource_id", name="uq_resource_grant"
+            "source_tenant_id", "target_tenant_id", "kind", "resource_id", name="uq_resource_grant"
         ),
-        Index("ix_resource_grants_target", "target_workspace_id", "kind", "resource_id", "revoked_at"),
+        Index("ix_resource_grants_target", "target_tenant_id", "kind", "resource_id", "revoked_at"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    source_workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
-    target_workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    source_tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    target_tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(255), nullable=False)
     permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

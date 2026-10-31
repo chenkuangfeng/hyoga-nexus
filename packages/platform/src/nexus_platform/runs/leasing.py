@@ -57,7 +57,7 @@ class RunLeaseService:
                 run.ended_at = now
                 work.runs.save(run)
                 work.events.append(run.id, 'run.cancelled', {'status': run.status}, now)
-                work.audit.write(run.workspace_id, run.principal_id, 'run.cancelled', 'run', str(run.id))
+                work.audit.write(run.tenant_id, run.principal_id, 'run.cancelled', 'run', str(run.id))
             elif task.message_type == 'run.execute':
                 if run.status == RunStatus.RUNNING.value or run.attempt > 0:
                     transition_run(run, RunStatus.INTERRUPTED)
@@ -68,7 +68,7 @@ class RunLeaseService:
                     work.events.append(run.id, 'run.interrupted', {
                         'status': run.status, 'error_code': run.error_code,
                     }, now)
-                    work.audit.write(run.workspace_id, run.principal_id, 'run.interrupted', 'run', str(run.id),
+                    work.audit.write(run.tenant_id, run.principal_id, 'run.interrupted', 'run', str(run.id),
                                      {'error_code': run.error_code})
                 else:
                     transition_run(run, RunStatus.RUNNING)
@@ -84,7 +84,7 @@ class RunLeaseService:
                     work.events.append(run.id, 'run.failed', {
                         'status': run.status, 'error_code': run.error_code,
                     }, now)
-                    work.audit.write(run.workspace_id, run.principal_id, 'run.failed', 'run', str(run.id),
+                    work.audit.write(run.tenant_id, run.principal_id, 'run.failed', 'run', str(run.id),
                                      {'error_code': run.error_code})
             work.outbox.complete_delivery(task.id, now, clear_lease=True)
         return True

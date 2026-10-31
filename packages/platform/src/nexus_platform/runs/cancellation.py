@@ -12,7 +12,7 @@ class RunCancellationService:
     def __init__(self, unit_of_work: RunCommandUnitOfWork):
         self.unit_of_work = unit_of_work
 
-    def cancel(self, principal: Principal, workspace_id: UUID, run_id: UUID) -> Run:
+    def cancel(self, principal: Principal, tenant_id: UUID, run_id: UUID) -> Run:
         """Cancel under the owner lock, raising NotFound for invisible Runs.
 
         A terminal Run is unchanged. Waiting/queued Runs complete pending deliveries and
@@ -21,8 +21,8 @@ class RunCancellationService:
         """
         now = utc_now()
         with self.unit_of_work as work:
-            user_id = work.access.require_principal(principal, workspace_id)
-            run = work.runs.owned_for_update(workspace_id, user_id, run_id)
+            user_id = work.access.require_principal(principal, tenant_id)
+            run = work.runs.owned_for_update(tenant_id, user_id, run_id)
             if run is None:
                 raise NotFound("Run not found")
             if RunStatus(run.status).terminal:
@@ -41,7 +41,7 @@ class RunCancellationService:
                 if not work.outbox.has_pending(run.id, 'run.cancel'):
                     work.outbox.enqueue(run.id, 'run.cancel', now)
             work.events.append(run.id, "run.cancel_requested", {"status": run.status}, now)
-            work.audit.write(workspace_id, user_id, "run.cancel_requested", "run", str(run.id))
+            work.audit.write(tenant_id, user_id, "run.cancel_requested", "run", str(run.id))
         return run
 
 

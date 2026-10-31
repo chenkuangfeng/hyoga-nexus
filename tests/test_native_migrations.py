@@ -17,7 +17,9 @@ def test_native_migration_preserves_existing_p1_data(tmp_path, monkeypatch):
     command.upgrade(config, 'head')
     command.upgrade(config, 'head')
     with engine.connect() as db:
-        assert db.execute(text('SELECT subject FROM users')).scalar_one() == 'existing'
+        # The identity split keeps the P1 subject as an identity with empty scope and as the display name.
+        assert db.execute(text("SELECT provider, scope, external_id FROM user_identities")).one() == ('test', '', 'existing')
+        assert db.execute(text('SELECT display_name FROM users')).scalar_one() == 'existing'
         tables = {row[0] for row in db.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
         assert {'native_run_states', 'run_input_requests', 'session_checkpoints', 'memory_drafts', 'model_providers', 'provider_models', 'provider_credentials', 'model_defaults',
                 'action_approvals', 'context_summaries', 'native_preferences', 'run_directives', 'memory_entries', 'memory_versions'} <= tables

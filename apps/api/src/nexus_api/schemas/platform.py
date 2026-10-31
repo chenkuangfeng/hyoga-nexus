@@ -7,11 +7,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class WorkspaceCreate(BaseModel):
+class TenantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
 
 
-class WorkspaceView(BaseModel):
+class TenantView(BaseModel):
     id: UUID
     name: str
     role: str
@@ -30,7 +30,7 @@ class MemberRoleUpdate(BaseModel):
 
 
 class MemberView(BaseModel):
-    workspace_id: UUID
+    tenant_id: UUID
     user_id: UUID
     role: str
     status: str
@@ -44,7 +44,7 @@ class CredentialReferenceInput(BaseModel):
 
 class CredentialReferenceView(BaseModel):
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     backend: str
     status: str
     created_at: datetime
@@ -77,7 +77,7 @@ class ModelProfileVersionView(BaseModel):
 
 class ModelProfileView(BaseModel):
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     name: str
     provider: str
     current_version: ModelProfileVersionView | None
@@ -88,7 +88,7 @@ class ResourceBindingInput(BaseModel):
     kind: str = Field(min_length=1, max_length=64)
     resource_id: str = Field(min_length=1, max_length=255)
     resource_version_id: str | None = Field(default=None, max_length=255)
-    source_workspace_id: UUID | None = None
+    source_tenant_id: UUID | None = None
     config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -117,7 +117,7 @@ class AgentVersionView(BaseModel):
 
 class AgentView(BaseModel):
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     name: str
     description: str
     status: str
@@ -140,7 +140,7 @@ class SessionCreate(BaseModel):
 
 class SessionView(BaseModel):
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     owner_user_id: UUID
     agent_version_id: UUID
     runtime_type: str
@@ -156,7 +156,7 @@ class RunCreate(BaseModel):
 
 class RunView(BaseModel):
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     session_id: UUID
     principal_id: UUID
     status: str
@@ -179,7 +179,7 @@ class RunEventView(BaseModel):
 
 
 class ResourceGrantCreate(BaseModel):
-    source_workspace_id: UUID
+    source_tenant_id: UUID
     kind: str = Field(min_length=1, max_length=64)
     resource_id: str = Field(min_length=1, max_length=255)
     permissions: list[Literal["read", "use"]] = Field(min_length=1)
@@ -187,8 +187,8 @@ class ResourceGrantCreate(BaseModel):
 
 class ResourceGrantView(BaseModel):
     id: UUID
-    source_workspace_id: UUID
-    target_workspace_id: UUID
+    source_tenant_id: UUID
+    target_tenant_id: UUID
     kind: str
     resource_id: str
     permissions: list[str]

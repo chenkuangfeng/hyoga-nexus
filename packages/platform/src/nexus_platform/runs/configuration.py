@@ -38,7 +38,7 @@ class BoundResource:
     kind: str
     resource_id: str
     resource_version_id: str
-    source_workspace_id: UUID
+    source_tenant_id: UUID
     binding_config: dict[str, Any]
 
     def snapshot(self) -> dict[str, Any]:
@@ -46,7 +46,7 @@ class BoundResource:
         return {
             "kind": self.kind, "resource_id": self.resource_id,
             "resource_version_id": self.resource_version_id or None,
-            "source_workspace_id": str(self.source_workspace_id),
+            "source_tenant_id": str(self.source_tenant_id),
             "binding_id": str(self.id), "config": self.binding_config,
         }
 

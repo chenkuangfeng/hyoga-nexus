@@ -10,6 +10,6 @@ class SqlAlchemyRunAuditRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def write(self, workspace_id: UUID, user_id: UUID, action: str,
+    def write(self, tenant_id: UUID, user_id: UUID, action: str,
               resource_type: str, resource_id: str, details: dict[str, Any] | None = None) -> None:
-        audit(self.session, workspace_id, user_id, action, resource_type, resource_id, details)
+        audit(self.session, tenant_id, user_id, action, resource_type, resource_id, details)

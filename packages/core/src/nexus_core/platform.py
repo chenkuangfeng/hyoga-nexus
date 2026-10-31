@@ -24,7 +24,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class WorkspaceRole(StrEnum):
+class TenantRole(StrEnum):
     OWNER = "owner"
     ADMIN = "admin"
     MEMBER = "member"
@@ -99,7 +99,7 @@ class ResourceAuthorizationPort(Protocol):
     def authorize(
         self,
         principal: Principal,
-        workspace_id: UUID,
+        tenant_id: UUID,
         run_id: UUID,
         binding_id: UUID,
         permission: str = "use",

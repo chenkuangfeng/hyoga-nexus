@@ -22,16 +22,16 @@ from ..base import Base
 class SessionRecord(Base):
     __tablename__ = "sessions"
     __table_args__ = (
-        UniqueConstraint("id", "workspace_id", name="uq_sessions_id_workspace"),
+        UniqueConstraint("id", "tenant_id", name="uq_sessions_id_tenant"),
         ForeignKeyConstraint(
-            ["agent_version_id", "workspace_id"], ["agent_versions.id", "agent_versions.workspace_id"],
-            ondelete="RESTRICT", name="fk_sessions_agent_version_workspace",
+            ["agent_version_id", "tenant_id"], ["agent_versions.id", "agent_versions.tenant_id"],
+            ondelete="RESTRICT", name="fk_sessions_agent_version_tenant",
         ),
-        Index("ix_sessions_workspace_updated", "workspace_id", "updated_at"),
+        Index("ix_sessions_tenant_updated", "tenant_id", "updated_at"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     agent_version_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     runtime_type: Mapped[str] = mapped_column(String(48), nullable=False)

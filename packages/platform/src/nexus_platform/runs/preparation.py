@@ -8,7 +8,7 @@ from nexus_core.platform import CredentialRef, Principal, RunStatus, utc_now
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
 from nexus_platform.errors import PlatformError
 from nexus_platform.models.provider_settings import authorize_model
-from nexus_platform.identity.service import require_membership, require_workspace
+from nexus_platform.identity.service import principal_for_user, require_membership, require_tenant
 from nexus_platform.persistence.models import (
     AgentVersionRecord,
     CredentialReferenceRecord,
@@ -72,20 +72,20 @@ class ExecutionPreparer:
                     return None
             try:
                 user = db.get(UserRecord, run.principal_id)
-                require_workspace(db, run.workspace_id)
-                require_membership(db, run.workspace_id, run.principal_id)
+                require_tenant(db, run.tenant_id)
+                require_membership(db, run.tenant_id, run.principal_id)
                 if not user or user.status != 'active':
                     raise RuntimeFault('run_authorization_denied')
                 version = db.get(AgentVersionRecord, UUID(run.config_snapshot['agent_version_id']))
-                authorize_model(db, run.workspace_id, run.principal_id, version.model_profile_version_id)
+                authorize_model(db, run.tenant_id, run.principal_id, version.model_profile_version_id)
                 model = db.get(ModelProfileVersionRecord, version.model_profile_version_id)
                 profile = db.get(ModelProfileRecord, model.profile_id)
                 credential = None
                 if model.credential_reference_id:
                     ref = db.get(CredentialReferenceRecord, model.credential_reference_id)
-                    if not ref or ref.status != 'active' or ref.workspace_id != run.workspace_id:
+                    if not ref or ref.status != 'active' or ref.tenant_id != run.tenant_id:
                         raise RuntimeFault('model_credential_unavailable')
-                    credential = CredentialRef(ref.id, ref.backend, ref.handle, str(run.workspace_id))
+                    credential = CredentialRef(ref.id, ref.backend, ref.handle, str(run.tenant_id))
                 if not _history_allowed(db, run):
                     raise RuntimeFault('run_authorization_denied')
                 history = []
@@ -105,7 +105,7 @@ class ExecutionPreparer:
                     history.append(ModelMessage(message.role, message.content,
                         tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), str(message.id)))
                 summary = db.get(ContextSummaryRecord, run.session_id)
-                if summary and summary.workspace_id == run.workspace_id and summary.source_run_id in allowed_runs:
+                if summary and summary.tenant_id == run.tenant_id and summary.source_run_id in allowed_runs:
                     covered = list(db.scalars(select(MessageRecord).where(MessageRecord.session_id == run.session_id, MessageRecord.sequence <= summary.through_sequence)))
                     if all(message.run_id is None or message.run_id in allowed_runs for message in covered):
                         covered_ids = {str(message.id) for message in covered}
@@ -113,13 +113,13 @@ class ExecutionPreparer:
                 checkpoint = db.get(WorkingCheckpointRecord, run.session_id)
                 system = version.instructions
                 from nexus_platform.memory.service import index as memory_index
-                published_index = memory_index(db, run.workspace_id, run.principal_id,
+                published_index = memory_index(db, run.tenant_id, run.principal_id,
                     version.budgets.get('behavior', {}).get('project_name', ''))
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
-                if checkpoint and checkpoint.workspace_id == run.workspace_id and checkpoint.source_run_id in allowed_runs:
+                if checkpoint and checkpoint.tenant_id == run.tenant_id and checkpoint.source_run_id in allowed_runs:
                     system += '\nSession working checkpoint:\n' + checkpoint.content
-                    audit(db, run.workspace_id, run.principal_id, 'checkpoint.read', 'session', str(run.session_id),
+                    audit(db, run.tenant_id, run.principal_id, 'checkpoint.read', 'session', str(run.session_id),
                           {'run_id': str(run.id)})
                 state = db.get(NativeRunStateRecord, run.id)
                 if not state:
@@ -133,15 +133,15 @@ class ExecutionPreparer:
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'tool')))
                 if len({name for name, _, _ in bindings}) != len(bindings):
                     raise RuntimeFault('tool_configuration_invalid')
-                audit(db, run.workspace_id, run.principal_id, 'session.context_read', 'session', str(run.session_id),
+                audit(db, run.tenant_id, run.principal_id, 'session.context_read', 'session', str(run.session_id),
                       {'run_id': str(run.id), 'message_count': len(history)})
                 transition_run(run, RunStatus.RUNNING)
                 run.attempt += 1
                 run.started_at = run.started_at or utc_now()
                 run.lease_owner, run.lease_until = worker_id, task.lease_until
                 append_event(db, run.id, 'run.started', {'status': 'running', 'attempt': run.attempt})
-                return ExecutionContext(run.id, run.session_id, run.workspace_id, run.principal_id,
-                    Principal(user.subject, user.issuer), version.runtime_type, profile.provider, model.model_name,
+                return ExecutionContext(run.id, run.session_id, run.tenant_id, run.principal_id,
+                    principal_for_user(db, user.id), version.runtime_type, profile.provider, model.model_name,
                     model.options, credential, (ModelMessage('system', system), *history), bindings,
                     version.budgets, RuntimeProgress(**state.progress), tuple(allowed_runs))
             except (PlatformError, RuntimeFault) as exc:

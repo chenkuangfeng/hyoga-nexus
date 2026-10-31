@@ -28,8 +28,8 @@ def add_message(db: Session, run: RunRecord | Run, message: ModelMessage, *, ori
 def _history_allowed(db: Session, run: RunRecord) -> bool:
     try:
         for resource in run.config_snapshot.get('resources', []):
-            authorize_resource(db, run.workspace_id, resource['kind'], resource['resource_id'],
-                source_workspace_id=UUID(resource['source_workspace_id']),
+            authorize_resource(db, run.tenant_id, resource['kind'], resource['resource_id'],
+                source_tenant_id=UUID(resource['source_tenant_id']),
                 resource_version_id=resource.get('resource_version_id'), permission='use')
         return True
     except PlatformError:

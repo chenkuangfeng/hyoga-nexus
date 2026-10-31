@@ -23,7 +23,7 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 3. 模型配置 `provider` 按供应商命名，`model_name` 填账号实际可用的模型，`options` 设置 `{"protocol":"openai_chat_completions","base_url":"https://api.openai.com/v1"}`，并关联凭据引用。兼容供应商须验证支持流式工具调用、usage 和 `max_completion_tokens`。
 4. 创建并发布 Native Agent，选择该模型版本，配置预算；前端选择已发布智能体新建会话。
 
-安全内置工具为 `ask_user`、`update_working_checkpoint`、`propose_memory_draft`。先由管理员调用 `POST /api/v1/workspaces/{workspace_id}/tools/{name}/enable` 登记，再在 Agent 中以 `kind=tool`、`resource_id=工具名`、`resource_version_id=v1` 显式绑定并发布。登记本身不授予调用权限，执行前继续复核 Workspace、主体、Run、绑定和 grant。
+安全内置工具为 `ask_user`、`update_working_checkpoint`、`propose_memory_draft`。先由管理员调用 `POST /api/v1/tenants/{tenant_id}/tools/{name}/enable` 登记，再在 Agent 中以 `kind=tool`、`resource_id=工具名`、`resource_version_id=v1` 显式绑定并发布。登记本身不授予调用权限，执行前继续复核 Tenant、主体、Run、绑定和 grant。
 
 自定义 Python 工具在应用组合入口通过 `ToolRegistry` 注册；处理器接收可信 `ToolContext` 和取消信号，显式声明副作用、deadline 和公开输出投影。不得注册阻塞宿主命令或把普通 Python 函数称作沙箱。
 

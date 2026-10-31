@@ -17,40 +17,40 @@ class FakeRepo:
         self.drafts: dict = {}
         self.audits: list = []
 
-    def add_draft(self, workspace_id, owner_id, *, kind='memory', diff='fact', status='pending_review'):
-        draft = DraftView(id=uuid4(), workspace_id=workspace_id, owner_user_id=owner_id, kind=kind, diff=diff,
+    def add_draft(self, tenant_id, owner_id, *, kind='memory', diff='fact', status='pending_review'):
+        draft = DraftView(id=uuid4(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, diff=diff,
                           status=status, source_run_id=uuid4())
         self.drafts[draft.id] = draft
         return draft
 
-    def published_entries(self, workspace_id, owner_id, project):
-        rows = [e for e in self.entries.values() if e.workspace_id == workspace_id and e.owner_user_id == owner_id and e.active]
+    def published_entries(self, tenant_id, owner_id, project):
+        rows = [e for e in self.entries.values() if e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active]
         if project:
             rows = [e for e in rows if e.project in ('', project)]
         return sorted(rows, key=lambda e: e.title)
 
-    def pending_drafts(self, workspace_id, owner_id):
-        return [d for d in self.drafts.values() if d.workspace_id == workspace_id and d.owner_user_id == owner_id
+    def pending_drafts(self, tenant_id, owner_id):
+        return [d for d in self.drafts.values() if d.tenant_id == tenant_id and d.owner_user_id == owner_id
                 and d.status == 'pending_review']
 
-    def owned_entry(self, workspace_id, owner_id, entry_id, *, lock=False):
+    def owned_entry(self, tenant_id, owner_id, entry_id, *, lock=False):
         e = self.entries.get(entry_id)
-        if e and e.workspace_id == workspace_id and e.owner_user_id == owner_id and e.active:
+        if e and e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active:
             return e
         return None
 
     def version(self, entry_id, version):
         return self.versions.get((entry_id, version))
 
-    def draft_for_review(self, workspace_id, draft_id):
+    def draft_for_review(self, tenant_id, draft_id):
         d = self.drafts.get(draft_id)
-        return d if d and d.workspace_id == workspace_id else None
+        return d if d and d.tenant_id == tenant_id else None
 
     def set_draft_status(self, draft_id, status):
         self.drafts[draft_id] = replace(self.drafts[draft_id], status=status)
 
-    def create_entry(self, *, workspace_id, owner_id, kind, title, project):
-        e = EntryView(id=uuid4(), workspace_id=workspace_id, owner_user_id=owner_id, kind=kind, title=title,
+    def create_entry(self, *, tenant_id, owner_id, kind, title, project):
+        e = EntryView(id=uuid4(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, title=title,
                       project=project, active=True, current_version=1)
         self.entries[e.id] = e
         return e
@@ -65,7 +65,7 @@ class FakeRepo:
     def append_version(self, *, entry_id, version, content, source_run_id, source_draft_id, reviewer_id):
         self.versions[(entry_id, version)] = VersionView(entry_id, version, content, source_run_id, source_draft_id)
 
-    def audit(self, workspace_id, actor_id, action, target_type, target_id, metadata=None):
+    def audit(self, tenant_id, actor_id, action, target_type, target_id, metadata=None):
         self.audits.append((action, target_id))
 
 
@@ -150,8 +150,8 @@ def test_restore_appends_and_archive_hides_entry(world):
 def test_index_is_bounded_and_respects_project_filter(world):
     repo, ws, owner = world
     for i in range(200):
-        repo.create_entry(workspace_id=ws, owner_id=owner, kind='sop', title=f'Entry {i:03d} ' + 'x' * 60, project='')
-    repo.create_entry(workspace_id=ws, owner_id=owner, kind='sop', title='Other', project='alpha')
+        repo.create_entry(tenant_id=ws, owner_id=owner, kind='sop', title=f'Entry {i:03d} ' + 'x' * 60, project='')
+    repo.create_entry(tenant_id=ws, owner_id=owner, kind='sop', title='Other', project='alpha')
     text = service.index(repo, ws, owner, 'beta')
     assert len(text) <= 6000
     assert 'Other' not in text

@@ -2,21 +2,21 @@
 import { onBeforeUnmount, ref } from 'vue'
 import { modelSettingsApi } from '../api/modelSettings'
 import { nativeApi } from '../api/native'
-const props = defineProps<{ workspace: string; session: string; disabled: boolean }>()
+const props = defineProps<{ tenant: string; session: string; disabled: boolean }>()
 const emit = defineEmits<{ created: [id: string] }>()
 const opened = ref(false), busy = ref(false), error = ref(''), selected = ref(''), models = ref<{ id: string; label: string }[]>([])
 let controller: AbortController | undefined, disposed = false
 async function open() {
   opened.value = true; busy.value = true; error.value = ''; selected.value = ''; models.value = []
   controller?.abort(); controller = new AbortController()
-  try { const rows = await modelSettingsApi.list(props.workspace, controller.signal); if (!disposed) models.value = rows.providers.flatMap(p => p.models.map(m => ({ id: m.version_id, label: `${p.name} / ${m.name}` }))) }
+  try { const rows = await modelSettingsApi.list(props.tenant, controller.signal); if (!disposed) models.value = rows.providers.flatMap(p => p.models.map(m => ({ id: m.version_id, label: `${p.name} / ${m.name}` }))) }
   catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '模型加载失败' }
   finally { if (!disposed) busy.value = false }
 }
 async function branch() {
   if (busy.value || !selected.value) return
   busy.value = true; error.value = ''
-  try { const result = await nativeApi.branch(props.workspace, props.session, selected.value); if (!disposed) { opened.value = false; emit('created', result.id) } }
+  try { const result = await nativeApi.branch(props.tenant, props.session, selected.value); if (!disposed) { opened.value = false; emit('created', result.id) } }
   catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '创建分支失败' }
   finally { if (!disposed) busy.value = false }
 }

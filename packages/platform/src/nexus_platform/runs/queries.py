@@ -12,16 +12,16 @@ class RunQueryService:
     def __init__(self, unit_of_work: RunUnitOfWork):
         self.unit_of_work = unit_of_work
 
-    def get(self, principal: Principal, workspace_id: UUID, run_id: UUID) -> VisibleRun:
+    def get(self, principal: Principal, tenant_id: UUID, run_id: UUID) -> VisibleRun:
         """Resolve current membership and Run visibility, raising NotFound for invisible rows."""
         with self.unit_of_work as work:
-            user_id = work.access.require_principal(principal, workspace_id)
-            run = work.runs.visible(workspace_id, user_id, run_id)
+            user_id = work.access.require_principal(principal, tenant_id)
+            run = work.runs.visible(tenant_id, user_id, run_id)
             if run is None:
                 raise NotFound('Run not found')
             return run
 
 
-def get_run(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID):
+def get_run(session: Session, principal: Principal, tenant_id: UUID, run_id: UUID):
     """Compatibility facade over the transaction-scoped read service."""
-    return RunQueryService(SqlAlchemyUnitOfWork(session)).get(principal, workspace_id, run_id)
+    return RunQueryService(SqlAlchemyUnitOfWork(session)).get(principal, tenant_id, run_id)

@@ -427,7 +427,7 @@ def test_explicit_200_error_never_succeeds(protocol):
 
 def test_worker_event_replay_and_repeated_delivery_do_not_request_again(database):
     from nexus_platform.runs.service import list_events
-    principal,workspace,_,run,_=stack(database)
+    principal,tenant,_,run,_=stack(database)
     requests=[]
     def handler(request):
         requests.append(request)
@@ -436,7 +436,7 @@ def test_worker_event_replay_and_repeated_delivery_do_not_request_again(database
     run_once(database,'worker',model_factory=factory)
     assert run_row(database,run.id).error_code=='model_response_failed'
     with database() as db:
-        events=list_events(db,principal,workspace.id,run.id,after_sequence=0)
+        events=list_events(db,principal,tenant.id,run.id,after_sequence=0)
         assert events
     run_once(database,'worker',model_factory=factory)
     assert len(requests)==1

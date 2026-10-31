@@ -16,35 +16,35 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.errors import NotFound, Conflict
 
 
-def fork(db, principal, workspace_id, session_id, model_version_id):
+def fork(db, principal, tenant_id, session_id, model_version_id):
     """Atomically fork an owned idle conversation to an authorized model with bound resources.
 
     Running source sessions cannot branch mid-tool exchange. Every copied result is checked
     against current source grants, and later execution rechecks its original Run as well.
     """
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
+        user, _ = context(db, principal, tenant_id)
         source = db.scalar(select(SessionRecord).where(SessionRecord.id == session_id,
-            SessionRecord.workspace_id == workspace_id, SessionRecord.owner_user_id == user.id).with_for_update())
+            SessionRecord.tenant_id == tenant_id, SessionRecord.owner_user_id == user.id).with_for_update())
         if not source:
             raise NotFound('Session unavailable')
         if db.scalar(select(RunRecord.id).where(RunRecord.session_id == session_id,
                 RunRecord.status.in_(['queued', 'running', 'waiting_input', 'waiting_approval']))):
             raise Conflict('Finish or cancel the active Run before branching')
-        target = authorize_model(db, workspace_id, user.id, model_version_id)
+        target = authorize_model(db, tenant_id, user.id, model_version_id)
         original = db.get(AgentVersionRecord, source.agent_version_id)
         bindings = list(db.scalars(select(ResourceBindingRecord).where(ResourceBindingRecord.agent_version_id == original.id)))
         for binding in bindings:
-            authorize_resource(db, workspace_id, binding.kind, binding.resource_id, source_workspace_id=binding.source_workspace_id,
+            authorize_resource(db, tenant_id, binding.kind, binding.resource_id, source_tenant_id=binding.source_tenant_id,
                 resource_version_id=binding.resource_version_id, permission='use')
         now, agent_id, version_id, branch_id = utc_now(), new_id(), new_id(), new_id()
         name = original.name[:110] + ' · ' + target.model_name[:25] + ' · ' + str(agent_id)[-8:]
-        agent = AgentRecord(id=agent_id, workspace_id=workspace_id, name=name, description=original.description,
+        agent = AgentRecord(id=agent_id, tenant_id=tenant_id, name=name, description=original.description,
             status='published', draft_runtime_type=original.runtime_type, draft_instructions=original.instructions,
             draft_model_profile_version_id=target.id, draft_budgets=original.budgets, published_version_id=None,
             version_counter=1, created_by=user.id, created_at=now, updated_at=now)
         db.add(agent); db.flush()
-        version = AgentVersionRecord(id=version_id, agent_id=agent_id, workspace_id=workspace_id, version=1,
+        version = AgentVersionRecord(id=version_id, agent_id=agent_id, tenant_id=tenant_id, version=1,
             name=name, description=original.description, runtime_type=original.runtime_type, instructions=original.instructions,
             model_profile_version_id=target.id, budgets=original.budgets,
             content_hash=content_hash({'source_agent_version': str(original.id), 'model_version': str(target.id), 'budgets': original.budgets}),
@@ -53,8 +53,8 @@ def fork(db, principal, workspace_id, session_id, model_version_id):
         for binding in bindings:
             db.add(ResourceBindingRecord(id=new_id(), agent_version_id=version_id, kind=binding.kind,
                 resource_id=binding.resource_id, resource_version_id=binding.resource_version_id,
-                source_workspace_id=binding.source_workspace_id, binding_config=binding.binding_config))
-        branch = SessionRecord(id=branch_id, workspace_id=workspace_id, owner_user_id=user.id,
+                source_tenant_id=binding.source_tenant_id, binding_config=binding.binding_config))
+        branch = SessionRecord(id=branch_id, tenant_id=tenant_id, owner_user_id=user.id,
             agent_version_id=version_id, runtime_type=original.runtime_type, title=(source.title or '对话')[:200] + ' · 模型分支',
             status='active', created_at=now, updated_at=now)
         db.add(branch); db.flush()
@@ -71,6 +71,6 @@ def fork(db, principal, workspace_id, session_id, model_version_id):
                 role=message.role, content=message.content, created_at=now,
                 runtime_metadata=message.runtime_metadata | {'source_session_id': str(source.id),
                     'source_message_id': str(message.id), 'source_run_id': origin_id}))
-        audit(db, workspace_id, user.id, 'session.model_forked', 'session', str(branch_id),
+        audit(db, tenant_id, user.id, 'session.model_forked', 'session', str(branch_id),
               {'source_session_id': str(source.id), 'model_profile_version_id': str(target.id)})
         return {'id': str(branch_id), 'agent_version_id': str(version_id), 'title': branch.title}

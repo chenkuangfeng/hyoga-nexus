@@ -24,10 +24,10 @@ from ..base import Base
 class RunRecord(Base):
     __tablename__ = "runs"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "principal_id", "idempotency_key", name="uq_runs_idempotency"),
+        UniqueConstraint("tenant_id", "principal_id", "idempotency_key", name="uq_runs_idempotency"),
         ForeignKeyConstraint(
-            ["session_id", "workspace_id"], ["sessions.id", "sessions.workspace_id"],
-            ondelete="CASCADE", name="fk_runs_session_workspace",
+            ["session_id", "tenant_id"], ["sessions.id", "sessions.tenant_id"],
+            ondelete="CASCADE", name="fk_runs_session_tenant",
         ),
         CheckConstraint(
             "status IN ('queued','running','waiting_input','waiting_approval','completed','failed','cancelled','interrupted')",
@@ -41,7 +41,7 @@ class RunRecord(Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     session_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     principal_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -81,7 +81,7 @@ class RunDirectiveRecord(Base):
 class NativePreferenceRecord(Base):
     """Versioned personal Native defaults; published AgentVersions keep their snapshots."""
     __tablename__ = 'native_preferences'
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

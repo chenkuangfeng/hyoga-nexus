@@ -1,11 +1,11 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { api, parseEvent, runPath } from '../api/chat'
-import type { Agent, Conversation, InputRequest, Message, Run, RunEvent, Workspace } from '../types/chat'
+import type { Agent, Conversation, InputRequest, Message, Run, RunEvent, Tenant } from '../types/chat'
 import { terminal } from '../types/chat'
 
 export function useConversation() {
-  const workspaces = ref<Workspace[]>([]), agents = ref<Agent[]>([]), sessions = ref<Conversation[]>([])
-  const workspace = ref(''), sessionId = ref(''), versionId = ref('')
+  const tenants = ref<Tenant[]>([]), agents = ref<Agent[]>([]), sessions = ref<Conversation[]>([])
+  const tenant = ref(''), sessionId = ref(''), versionId = ref('')
   const messages = ref<Message[]>([]), run = ref<Run | null>(null), events = ref<RunEvent[]>([])
   const pendingInput = ref<InputRequest | null>(null), error = ref(''), loading = ref(false), submitting = ref(false)
   const connection = ref<'idle' | 'connected' | 'reconnecting' | 'closed'>('idle'), cancelling = ref(false)
@@ -50,7 +50,7 @@ export function useConversation() {
     const current = run.value
     if (!current) return
     const epoch = generation, id = current.id
-    const stream = new EventSource(`/api/v1${runPath(workspace.value, id)}/events?after_sequence=${cursor}`)
+    const stream = new EventSource(`/api/v1${runPath(tenant.value, id)}/events?after_sequence=${cursor}`)
     source = stream
     let last = cursor
     stream.onopen = () => { if (source === stream && epoch === generation) connection.value = 'connected' }
@@ -88,22 +88,22 @@ export function useConversation() {
   async function initialize() {
     const epoch = ++generation
     controller?.abort(); controller = new AbortController(); resetConnection()
-    workspace.value = ''; sessionId.value = ''; run.value = null; messages.value = []; events.value = []
-    workspaces.value = []; agents.value = []; sessions.value = []; pendingInput.value = null; cancelling.value = false
+    tenant.value = ''; sessionId.value = ''; run.value = null; messages.value = []; events.value = []
+    tenants.value = []; agents.value = []; sessions.value = []; pendingInput.value = null; cancelling.value = false
     loading.value = true; error.value = ''
     try {
-      const rows = await api.workspaces(controller.signal)
+      const rows = await api.tenants(controller.signal)
       if (epoch !== generation) return
-      workspaces.value = rows
-      if (rows[0]) await selectWorkspace(rows[0].id)
+      tenants.value = rows
+      if (rows[0]) await selectTenant(rows[0].id)
     }
     catch (cause) { error.value = String(cause instanceof Error ? cause.message : cause) }
     finally { loading.value = false }
   }
-  async function selectWorkspace(id: string) {
+  async function selectTenant(id: string) {
     const epoch = ++generation
     controller?.abort(); controller = new AbortController(); resetConnection()
-    workspace.value = id; sessionId.value = ''; run.value = null; messages.value = []; events.value = []; sessions.value = []; agents.value = []; pendingInput.value = null; cancelling.value = false
+    tenant.value = id; sessionId.value = ''; run.value = null; messages.value = []; events.value = []; sessions.value = []; agents.value = []; pendingInput.value = null; cancelling.value = false
     error.value = ''; loading.value = true
     try {
       const [agentRows, sessionRows] = await Promise.all([api.agents(id, controller.signal), api.sessions(id, controller.signal)])
@@ -112,7 +112,7 @@ export function useConversation() {
       versionId.value = availableAgents.value[0]?.published_version_id || ''
       if (sessionRows[0]) await openSession(sessionRows[0].id)
     } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '无法加载空间' }
-    finally { if (epoch === generation || workspace.value === id) loading.value = false }
+    finally { if (epoch === generation || tenant.value === id) loading.value = false }
   }
   async function openSession(id: string) {
     const epoch = ++generation
@@ -121,7 +121,7 @@ export function useConversation() {
     try {
       let cursor = 0
       while (true) {
-        const history = await api.history(workspace.value, id, cursor, controller.signal)
+        const history = await api.history(tenant.value, id, cursor, controller.signal)
         if (epoch !== generation) return
         messages.value.push(...history.messages); run.value = history.latest_run
         if (history.messages.length < 200) break
@@ -136,7 +136,7 @@ export function useConversation() {
     submitting.value = true; error.value = ''
     const epoch = generation
     try {
-      const created = await api.createSession(workspace.value, versionId.value)
+      const created = await api.createSession(tenant.value, versionId.value)
       if (epoch !== generation) return
       sessions.value.unshift(created); await openSession(created.id)
     } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '创建失败' }
@@ -148,7 +148,7 @@ export function useConversation() {
     const epoch = generation
     if (sendAttempt?.text !== text || sendAttempt.session !== sessionId.value) sendAttempt = { text, key: crypto.randomUUID(), session: sessionId.value }
     try {
-      await api.send(workspace.value, sessionId.value, text, sendAttempt.key)
+      await api.send(tenant.value, sessionId.value, text, sendAttempt.key)
       sendAttempt = undefined
       if (epoch !== generation) return false
       await openSession(sessionId.value); return true
@@ -159,7 +159,7 @@ export function useConversation() {
     if (!run.value || cancelling.value) return
     const epoch = generation
     cancelling.value = true; error.value = ''
-    try { const result = await api.cancel(workspace.value, run.value.id); if (epoch === generation) { run.value = result; if (terminal(result.status)) { pendingInput.value = null; cancelling.value = false; resetConnection() } } }
+    try { const result = await api.cancel(tenant.value, run.value.id); if (epoch === generation) { run.value = result; if (terminal(result.status)) { pendingInput.value = null; cancelling.value = false; resetConnection() } } }
     catch (cause) { if (epoch === generation) { cancelling.value = false; error.value = cause instanceof Error ? cause.message : '停止失败' } }
   }
   async function respond(text: string): Promise<boolean> {
@@ -168,7 +168,7 @@ export function useConversation() {
     submitting.value = true; error.value = ''
     if (responseAttempt?.text !== text || responseAttempt.request !== request) responseAttempt = { text, key: crypto.randomUUID(), request }
     try {
-      await api.respond(workspace.value, run.value.id, request, text, responseAttempt.key)
+      await api.respond(tenant.value, run.value.id, request, text, responseAttempt.key)
       responseAttempt = undefined
       if (epoch !== generation) return false
       pendingInput.value = null; await openSession(sessionId.value); return true
@@ -176,7 +176,7 @@ export function useConversation() {
     finally { submitting.value = false }
   }
   onBeforeUnmount(() => { generation++; controller?.abort(); resetConnection() })
-  return { workspaces, agents: availableAgents, sessions, workspace, sessionId, versionId, timeline,
+  return { tenants, agents: availableAgents, sessions, tenant, sessionId, versionId, timeline,
     run, pendingInput, error, loading, submitting, connection, cancelling, active,
-    initialize, selectWorkspace, openSession, createSession, send, cancel, respond, reconnect: () => attach(events.value.at(-1)?.sequence || 0) }
+    initialize, selectTenant, openSession, createSession, send, cancel, respond, reconnect: () => attach(events.value.at(-1)?.sequence || 0) }
 }

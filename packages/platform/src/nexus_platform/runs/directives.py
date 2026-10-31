@@ -10,14 +10,14 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.runs.service import append_event
 
 
-def submit(db, principal, workspace_id, run_id, content: str, key: str):
+def submit(db, principal, tenant_id, run_id, content: str, key: str):
     """Append a correction to the owner's active Run; duplicate keys cannot change content."""
     if not content.strip() or len(content) > 8000 or not key.strip() or len(key) > 255:
         raise ValueError('Correction and idempotency key are required within size limits')
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
+        user, _ = context(db, principal, tenant_id)
         run = db.scalar(select(RunRecord).where(RunRecord.id == run_id,
-            RunRecord.workspace_id == workspace_id, RunRecord.principal_id == user.id).with_for_update())
+            RunRecord.tenant_id == tenant_id, RunRecord.principal_id == user.id).with_for_update())
         if not run:
             raise NotFound('Run not found')
         previous = db.scalar(select(RunDirectiveRecord).where(RunDirectiveRecord.run_id == run_id, RunDirectiveRecord.idempotency_key == key))
@@ -31,7 +31,7 @@ def submit(db, principal, workspace_id, run_id, content: str, key: str):
                                  idempotency_key=key, created_at=utc_now())
         db.add(row)
         append_event(db, run_id, 'input.queued', {'directive_id': str(row.id)})
-        audit(db, workspace_id, user.id, 'run.steered', 'run', str(run_id))
+        audit(db, tenant_id, user.id, 'run.steered', 'run', str(run_id))
         return row
 
 

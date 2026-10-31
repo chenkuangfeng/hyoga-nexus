@@ -39,7 +39,7 @@ flowchart TD
 | 模块 | 职责 | 借鉴的参考项目与模块 | 本项目的取舍 |
 |---|---|---|---|
 | `core` 运行时契约 | Runtime 端口、RunEvent、能力声明、错误码 | DeepSeek Harness `packages/core/agent-loop`（事件溯源、能力接缝） | 自研契约；不依赖厂商 SDK |
-| `platform` 身份/空间/会话/运行 | 组织与生命周期 | WeKnora 的 Tenant、Session busy 控制、`suspend.go` 版本化快照 | Tenant 映射为 Workspace；用 PostgreSQL Outbox 替代 Redis 队列 |
+| `platform` 身份/空间/会话/运行 | 组织与生命周期 | WeKnora 的 Tenant、Session busy 控制、`suspend.go` 版本化快照 | Tenant 映射为 Tenant；用 PostgreSQL Outbox 替代 Redis 队列 |
 | `platform` 授权与审批 | ResourceGrant、ActionGrant、ActionApproval、审计 | WeKnora `internal/agent/approval/`（gate、grants）、`types/agent_grant.go`；Hermes `tools/approval.py` | 三类授权严格分离；审批结果持久化 |
 | Native 引擎 | 单 Run 的回合循环、完成判断、挂起恢复 | GenericAgent `agent_loop.py`（生成器循环、StepOutcome、坏调用恢复）；WeKnora `engine.go`（loopGuards）；OpenClaw `run-loop.ts`（外层恢复与预算伸缩）；Dify `fc_agent_runner.py`（最后一轮禁用工具）；n8n `executeBatch`（动作与执行分离） | 拆为 RunOrchestrator、TurnExecutor、CompletionJudge、ToolDispatcher，不保留单文件循环 |
 | 上下文与压缩 | 前缀冻结、历史视图、压缩、证据句柄 | Hermes `memory_tool`（冻结快照）；WeKnora `compaction/`（cutpoint、overflow）；LobeHub `packages/context-engine`（可组合处理器）；RAGFlow `evidence_registry.go` | 处理器管线化，每个处理器可单独测试 |
@@ -92,7 +92,7 @@ hyoga-nexus/
 │   └── web/src/                     # Vue 3 + Element Plus 工作台
 ├── packages/
 │   ├── core/src/nexus_core/         # 公共协议、runtime、events、tools、tasks
-│   ├── platform/src/nexus_platform/ # identity、workspaces、authz、agents、sessions、runs、
+│   ├── platform/src/nexus_platform/ # identity、tenants、authz、agents、sessions、runs、
 │   │                                # resources、models、jobs、persistence、observability（memory 门面与仓储）
 │   ├── runtimes/src/nexus_runtimes/ # native（context、engine、hooks、models、prompts）、adapters
 │   ├── memory/src/nexus_memory/     # ports（存储端口）、service（规则）
@@ -117,7 +117,7 @@ hyoga-nexus/
 
 | 调整 | 状态 | 说明 | 参考 |
 |---|---|---|---|
-| 授权与审计拆为 `platform/authz/` | 已执行 | `audit.py` 与 `resources.py`（登记、授权、显式共享、撤销）从 `workspaces/service.py` 迁出；`workspaces` 只保留空间与成员 | WeKnora `approval/`、`agent_grant.go` |
+| 授权与审计拆为 `platform/authz/` | 已执行 | `audit.py` 与 `resources.py`（登记、授权、显式共享、撤销）从 `tenants/service.py` 迁出；`tenants` 只保留空间与成员 | WeKnora `approval/`、`agent_grant.go` |
 | `knowledge` 改为 `ingest/`、`index/`、`retrieval/`、`evidence/`、`graph/` | 已执行（占位） | `ingestion`→`ingest`，`indexing`→`index`，`citations`→`evidence`，`parsing` 并入 `ingest`，新增 `graph/`；`persistence`、`domain`、`providers` 保留 | RAGFlow 工具与判断拆分；WeKnora 图谱隔离 |
 | `sandbox` 后端放入 `backends/` | 已执行 | `local`、`docker` 移入 `backends/`；`ssh` 为候选，尚未创建目录 | Hermes `tools/environments/`；DeerFlow `sandbox/` |
 | `skills` 增加 `guard/`、`projection/`、`review/` | 已执行（占位） | 对应来源检疫、沙箱投射、审核发布，尚无实现 | Hermes `skills_guard.py`；DeerFlow `projection`、`mutations` |
@@ -209,7 +209,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **事件映射**：`item/agentMessage/delta` → `message.delta`；`item/started` / `item/completed`（命令、文件变更、动态工具）→ `tool.started` / `tool.completed`；审批请求 → `approval.requested`，平台决定后回复 `accept` / `acceptForSession` / `decline` / `cancel`；`acceptForSession` 必须先经 `action_grants` 批准；`thread/tokenUsage/updated` → `usage.updated`；`turn/completed` → 终态映射表。
 - **取消**：`turn/interrupt`，收到 `interrupted` 终态后才结束 Run。`turn/steer` 默认 `unsupported`。
 - **原生能力约束**：文件与 shell 通过 `Sandbox` 参数限制为 `workspace_write`，工作目录为平台分配的隔离工作区；多用户场景禁止 `full_access`。无法验证网络控制时能力标记 `unverified`，禁止绑定需要网络控制的技能。
-- **平台工具**：经平台 MCP 服务暴露，每次调用携带短时运行令牌；平台复核权限，不信任模型传入的 workspace 或 user 标识。
+- **平台工具**：经平台 MCP 服务暴露，每次调用携带短时运行令牌；平台复核权限，不信任模型传入的 tenant 或 user 标识。
 - **传输**：只使用 stdio。WebSocket 为实验性，启用前必须配置鉴权。`-32001` 过载错误使用指数退避与抖动，并计入预算。
 
 ### 5.4 Claude Code 适配器
@@ -281,7 +281,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 - **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端：`local`（仅开发模式，不能用于多用户）、`docker`（候选，R7 评估）、`ssh`（候选）。
 - **租约**：执行方持有租约，到期或任务结束后回收；超时与取消释放租约。
-- **虚拟路径**：模型看到 `/workspace`、`/outputs` 等虚拟路径，宿主路径由后端映射，不泄露宿主结构。
+- **虚拟路径**：模型看到 `/tenant`、`/outputs` 等虚拟路径，宿主路径由后端映射，不泄露宿主结构。
 - **文件写入**：临时文件加原子替换；不对并发写入做仲裁。
 - **产物**：记录为 Artifact，关联 Run 与来源；下载走授权检查。
 - **门禁**：只有通过隔离验收的后端才能注册任意代码、shell、文件写入工具。验收项：CPU、内存、时间、输出大小限制；网络隔离；用户隔离；清理；崩溃后残留检查。未通过时工具不出现在工具列表中，而不是返回错误。
@@ -324,7 +324,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 **身份**：`Principal` 由认证适配器提供（`issuer + subject`）。首次访问映射为本地用户；禁用用户拒绝访问。开发模式使用固定单一主体，不信任请求头中的用户标识。
 
-**空间与成员**：Workspace 是资源所属范围（参考 WeKnora Tenant）。`MembershipRecord` 保存角色；非成员返回 404，角色不足返回 403。
+**空间与成员**：Tenant 是资源所属范围（参考 WeKnora Tenant）。`MembershipRecord` 保存角色；非成员返回 404，角色不足返回 403。
 
 **三类授权严格分离**：
 
@@ -334,7 +334,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 | ActionGrant | 用户对某类动作的可记忆授权，绑定 session 或 automation 作用域、配置哈希、风险等级、过期与撤销 | 动作层（计划表 `action_grants`） |
 | ActionApproval | 单次审批决定 | 单个调用 |
 
-Workspace 角色与资源共享不能替代 ActionGrant 或审批。共享智能体不扩大其底层资源的权限。
+Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体不扩大其底层资源的权限。
 
 **执行时复核**：每次工具调用、检索和资源读取都重新查询成员、资源状态、绑定与授权。撤权在下一次调用时生效。
 
@@ -350,7 +350,7 @@ Workspace 角色与资源共享不能替代 ActionGrant 或审批。共享智能
 
 | 表 | 用途 |
 |---|---|
-| `users`、`workspaces`、`workspace_memberships` | 身份、空间与成员角色 |
+| `users`、`tenants`、`tenant_memberships` | 身份、空间与成员角色 |
 | `agents`、`agent_draft_bindings`、`agent_versions`、`agent_resource_bindings` | 智能体、草稿绑定、不可变版本、资源绑定 |
 | `platform_resources`、`resource_grants` | 资源登记与空间间显式共享 |
 | `sessions`、`messages`、`session_checkpoints` | 会话、消息（assistant/tool 消息带内部 Runtime 元数据）、工作检查点 |
@@ -382,7 +382,7 @@ Workspace 角色与资源共享不能替代 ActionGrant 或审批。共享智能
 
 借鉴：自研，无对应参考模块。
 
-- **配置**：供应商记录归属 Workspace；`owner_user_id` 非空时仅该用户可用，为空时为空间共享。每个供应商有多个 ModelProfile，修改产生不可变版本。
+- **配置**：供应商记录归属 Tenant；`owner_user_id` 非空时仅该用户可用，为空时为空间共享。每个供应商有多个 ModelProfile，修改产生不可变版本。
 - **协议**：`options.protocol` 必须显式设置（如 `openai_chat_completions`），不从供应商名称猜测。首个适配器使用锁定版本的 `openai` SDK 异步 Chat Completions 流；禁用 SDK 自动重试；工具执行后不重放整个回合。
 - **凭据**：Key 通过 API 一次性接收，使用 Fernet 加密保存在独立凭据表。主密钥经环境注入 API 与 worker，不写入数据库或仓库。缺少主密钥或密文无效时拒绝解析，不回退为明文。
 - **环境变量凭据**：`env://` 引用需同时登记在 `NEXUS_MODEL_CREDENTIAL_ALLOWLIST` 中，默认拒绝全部环境变量名。
@@ -408,7 +408,7 @@ Workspace 角色与资源共享不能替代 ActionGrant 或审批。共享智能
 - **界面约定**：浅色、扁平卡片、青绿色主色、系统字体，适配桌面与窄屏；键盘焦点可见、对比度达标、加载与错误有反馈、减少动态效果。规划功能显示"待接入"，不显示虚构的运行数据。
 - **信息结构**：智能体管理、会话工作台、技能/工具/MCP 资源、知识库、渠道、设置、观澜工作台。类型标签展示能力来源；资源绑定同时显示兼容状态与版本。
 - **安全**：模型输出按纯文本渲染，不作为 HTML 执行。
-- **API**：`/api/v1/workspaces/{workspace_id}/...` 为当前接口。规划中的 `/agents`、`/skills`、`/knowledge-bases`、`/channels`、`/artifacts` 等尚未实现。观澜接口使用 `/api/v1/guanlan/...`。
+- **API**：`/api/v1/tenants/{tenant_id}/...` 为当前接口。规划中的 `/agents`、`/skills`、`/knowledge-bases`、`/channels`、`/artifacts` 等尚未实现。观澜接口使用 `/api/v1/guanlan/...`。
 
 ### 5.16 观澜（股票研究，领域扩展）
 

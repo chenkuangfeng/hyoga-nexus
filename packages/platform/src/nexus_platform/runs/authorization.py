@@ -17,14 +17,14 @@ class SqlAlchemyResourceAuthorization:
     def authorize(
         self,
         principal: Principal,
-        workspace_id: UUID,
+        tenant_id: UUID,
         run_id: UUID,
         binding_id: UUID,
         permission: str = "use",
     ) -> ResourceReference:
         with self._sessions() as session:
             resource = authorize_run_resource(
-                session, principal, workspace_id, run_id, binding_id, permission=permission
+                session, principal, tenant_id, run_id, binding_id, permission=permission
             )
             return ResourceReference(
                 kind=resource.kind,

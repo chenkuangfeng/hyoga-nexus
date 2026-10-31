@@ -1,4 +1,4 @@
-"""Install all local workspace packages using the active Python environment."""
+"""Install all local uv workspace packages using the active Python environment."""
 from pathlib import Path
 import subprocess
 import sys

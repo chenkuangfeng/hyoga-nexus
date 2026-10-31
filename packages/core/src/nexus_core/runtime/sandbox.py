@@ -8,7 +8,7 @@ from .cancellation import CancellationTokenPort
 @dataclass(frozen=True)
 class SandboxRequest:
     """Describe one isolated execution request without carrying a host process or SDK handle."""
-    workspace_id: str
+    tenant_id: str
     run_id: str
     code: str
     timeout_seconds: float

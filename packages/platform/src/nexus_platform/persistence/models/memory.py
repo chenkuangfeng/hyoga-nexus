@@ -10,7 +10,7 @@ from ..base import Base
 class WorkingCheckpointRecord(Base):
     __tablename__ = 'session_checkpoints'
     session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id', ondelete='CASCADE'), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
     source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -19,7 +19,7 @@ class WorkingCheckpointRecord(Base):
 class MemoryDraftRecord(Base):
     __tablename__ = 'memory_drafts'
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
     source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     scope: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -32,7 +32,7 @@ class MemoryEntryRecord(Base):
     """Private published memory/SOP identity, separate from knowledge documents and drafts."""
     __tablename__ = 'memory_entries'
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False)
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -58,7 +58,7 @@ class ContextSummaryRecord(Base):
     """Cross-Run summary cutpoint tied to original stored messages and source authorization."""
     __tablename__ = 'context_summaries'
     session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id'), primary_key=True)
-    workspace_id: Mapped[UUID] = mapped_column(ForeignKey('workspaces.id'), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False)
     source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id'), nullable=False)
     through_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)

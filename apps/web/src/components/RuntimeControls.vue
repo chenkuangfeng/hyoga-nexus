@@ -2,29 +2,29 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { nativeApi, type Approval } from '../api/native'
 import type { Run } from '../types/chat'
-const props = defineProps<{ workspace: string; run: Run }>()
+const props = defineProps<{ tenant: string; run: Run }>()
 const emit = defineEmits<{ resume: [] }>()
 const correction = ref(''), approvals = ref<Approval[]>([]), busy = ref(false), feedback = ref(''), error = ref('')
 let generation = 0, disposed = false, pendingKey = ''
-watch(() => [props.workspace, props.run.id, props.run.status], async () => {
+watch(() => [props.tenant, props.run.id, props.run.status], async () => {
   const current = ++generation
   approvals.value = []; feedback.value = ''; error.value = ''; correction.value = ''; pendingKey = ''
   if (props.run.status === 'waiting_approval') {
-    try { const rows = await nativeApi.approvals(props.workspace, props.run.id); if (!disposed && current === generation) approvals.value = rows }
+    try { const rows = await nativeApi.approvals(props.tenant, props.run.id); if (!disposed && current === generation) approvals.value = rows }
     catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : '审批加载失败' }
   }
 }, { immediate: true })
 async function steer() {
   if (busy.value || !correction.value.trim()) return
   busy.value = true; error.value = ''; pendingKey ||= crypto.randomUUID(); const current = generation
-  try { await nativeApi.steer(props.workspace, props.run.id, correction.value, pendingKey); if (!disposed && current === generation) { correction.value = ''; pendingKey = ''; feedback.value = '指令已排队，将在下一回合生效' } }
+  try { await nativeApi.steer(props.tenant, props.run.id, correction.value, pendingKey); if (!disposed && current === generation) { correction.value = ''; pendingKey = ''; feedback.value = '指令已排队，将在下一回合生效' } }
   catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : '追加指令失败' }
   finally { busy.value = false }
 }
 async function approve(id: string, value: boolean) {
   if (busy.value) return
   busy.value = true; error.value = ''; const current = generation
-  try { await nativeApi.approve(props.workspace, props.run.id, id, value); if (!disposed && current === generation) { feedback.value = value ? '已批准，等待继续执行' : '已拒绝该操作'; emit('resume') } }
+  try { await nativeApi.approve(props.tenant, props.run.id, id, value); if (!disposed && current === generation) { feedback.value = value ? '已批准，等待继续执行' : '已拒绝该操作'; emit('resume') } }
   catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : '审批未完成' }
   finally { busy.value = false }
 }

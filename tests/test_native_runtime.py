@@ -22,7 +22,7 @@ from nexus_platform.persistence.models import (AuditRecord, InputRequestRecord, 
 from nexus_platform.runs.execution import prepare_execution, respond_input
 from nexus_platform.runs.service import claim_next, create_run, list_events, request_cancel
 from nexus_platform.sessions.service import create_session
-from nexus_platform.workspaces.service import create_workspace
+from nexus_platform.tenants.service import create_tenant
 from nexus_platform.authz.resources import grant_resource, register_resource, revoke_resource_grant
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.registry import RegisteredTool, ToolRegistry
@@ -58,25 +58,25 @@ def call(name, arguments='{}', id=None):
 def stack(factory, names=(), budgets=None, shared=False):
     principal = Principal('native-owner', 'test')
     with factory() as db:
-        workspace = create_workspace(db, principal, 'Native')
-        source = create_workspace(db, principal, 'Tools') if shared else workspace
+        tenant = create_tenant(db, principal, 'Native')
+        source = create_tenant(db, principal, 'Tools') if shared else tenant
         with db.begin():
             for name in names:
-                register_resource(db, workspace_id=source.id, kind='tool', resource_id=name, version_id='v1')
+                register_resource(db, tenant_id=source.id, kind='tool', resource_id=name, version_id='v1')
         grants = []
         if shared:
             for name in names:
-                grants.append(grant_resource(db, principal, source_workspace_id=source.id,
-                    target_workspace_id=workspace.id, kind='tool', resource_id=name, permissions=['use']))
-        _, model = create_model_profile(db, principal, workspace.id, name='model', provider='test', model_name='fake', options={})
-        agent = create_agent(db, principal, workspace.id, name='Native', description='', runtime_type='native',
+                grants.append(grant_resource(db, principal, source_tenant_id=source.id,
+                    target_tenant_id=tenant.id, kind='tool', resource_id=name, permissions=['use']))
+        _, model = create_model_profile(db, principal, tenant.id, name='model', provider='test', model_name='fake', options={})
+        agent = create_agent(db, principal, tenant.id, name='Native', description='', runtime_type='native',
             instructions='Use only authorized tools.', model_profile_version_id=model.id,
             budgets=budgets or {'max_tokens': 100000}, bindings=[{'kind': 'tool', 'resource_id': name,
-                'resource_version_id': 'v1', 'source_workspace_id': str(source.id), 'config': {}} for name in names])
-        version = publish_agent(db, principal, workspace.id, agent.id)
-        session = create_session(db, principal, workspace.id, agent_version_id=version.id)
-        run, _ = create_run(db, principal, workspace.id, session.id, message='Hello', idempotency_key='first')
-    return principal, workspace, session, run, grants
+                'resource_version_id': 'v1', 'source_tenant_id': str(source.id), 'config': {}} for name in names])
+        version = publish_agent(db, principal, tenant.id, agent.id)
+        session = create_session(db, principal, tenant.id, agent_version_id=version.id)
+        run, _ = create_run(db, principal, tenant.id, session.id, message='Hello', idempotency_key='first')
+    return principal, tenant, session, run, grants
 
 
 def run_row(factory, id):
@@ -93,7 +93,7 @@ def registry(handler, *, name='echo', side_effects=False, timeout=15):
 
 
 def test_multitool_bad_arguments_hooks_and_session_history(database):
-    principal, workspace, session, run, _ = stack(database, ['echo'])
+    principal, tenant, session, run, _ = stack(database, ['echo'])
     invoked = []
     async def echo(args, context):
         invoked.append(args['text'])
@@ -117,14 +117,14 @@ def test_multitool_bad_arguments_hooks_and_session_history(database):
         assert [row.status for row in invocations] == ['failed', 'failed', 'completed', 'completed']
         assert invocations[0].error_code == 'tool_arguments_invalid'
     with database() as db:
-        events = list_events(db, principal, workspace.id, run.id, 0)
+        events = list_events(db, principal, tenant.id, run.id, 0)
         assert [event.sequence for event in events] == list(range(1, len(events) + 1))
         assert 'private diagnostic' not in str([event.payload for event in events])
     with database() as db:
-        second, _ = create_run(db, principal, workspace.id, session.id, message='Continue', idempotency_key='second')
+        second, _ = create_run(db, principal, tenant.id, session.id, message='Continue', idempotency_key='second')
         second_id = second.id
         with pytest.raises(Conflict):
-            create_run(db, principal, workspace.id, session.id, message='Overlap', idempotency_key='overlap')
+            create_run(db, principal, tenant.id, session.id, message='Overlap', idempotency_key='overlap')
     next_model = FakeModel([[ModelChunk('text', text='Again')]])
     run_once(database, 'worker', model_factory=lambda _: next_model, registry_factory=lambda _: registry(echo))
     assert any(message.content == 'Finished' for message in next_model.requests[0].messages)
@@ -133,7 +133,7 @@ def test_multitool_bad_arguments_hooks_and_session_history(database):
 
 
 def test_waiting_input_checkpoint_and_memory_draft_are_durable(database):
-    principal, workspace, session, run, _ = stack(database, ['ask_user', 'update_working_checkpoint', 'propose_memory_draft'])
+    principal, tenant, session, run, _ = stack(database, ['ask_user', 'update_working_checkpoint', 'propose_memory_draft'])
     model = FakeModel([[call('update_working_checkpoint', '{"content":"remember this task"}'),
                        call('propose_memory_draft', '{"kind":"sop","diff":"proposed only"}'),
                        call('ask_user', '{"question":"Which market?"}')]])
@@ -147,10 +147,10 @@ def test_waiting_input_checkpoint_and_memory_draft_are_durable(database):
         assert draft.source_run_id == run.id
         assert db.get(NativeRunStateRecord, run.id).progress['turns'] == 1
     with database() as db:
-        respond_input(db, principal, workspace.id, run.id, request.id, 'A shares', 'answer-1')
-        respond_input(db, principal, workspace.id, run.id, request.id, 'A shares', 'answer-1')
+        respond_input(db, principal, tenant.id, run.id, request.id, 'A shares', 'answer-1')
+        respond_input(db, principal, tenant.id, run.id, request.id, 'A shares', 'answer-1')
         with pytest.raises(Conflict):
-            respond_input(db, principal, workspace.id, run.id, request.id, 'US', 'answer-2')
+            respond_input(db, principal, tenant.id, run.id, request.id, 'US', 'answer-2')
     resumed = FakeModel([[ModelChunk('text', text='Understood')]])
     run_once(database, 'worker', model_factory=lambda _: resumed)
     assert run_row(database, run.id).status == 'completed'
@@ -163,7 +163,7 @@ def test_waiting_input_checkpoint_and_memory_draft_are_durable(database):
 
 
 def test_revoke_grant_between_calls_denies_next_call(database):
-    principal, workspace, _, run, grants = stack(database, ['echo'], shared=True)
+    principal, tenant, _, run, grants = stack(database, ['echo'], shared=True)
     seen = []
     async def echo(args, context):
         seen.append(args['text'])
@@ -184,10 +184,10 @@ def test_revoke_grant_between_calls_denies_next_call(database):
 
 @pytest.mark.parametrize('side_effects,expected', [(False, 'cancelled'), (True, 'interrupted')])
 def test_tool_cancellation_classifies_uncertain_side_effects(database, side_effects, expected):
-    principal, workspace, _, run, _ = stack(database, ['echo'])
+    principal, tenant, _, run, _ = stack(database, ['echo'])
     async def echo(args, context):
         with database() as db:
-            request_cancel(db, principal, workspace.id, run.id)
+            request_cancel(db, principal, tenant.id, run.id)
         await asyncio.sleep(20)
         return ToolResult('should not finish')
     model = FakeModel([[call('echo', '{"text":"go"}')]])
@@ -201,13 +201,13 @@ def test_tool_cancellation_classifies_uncertain_side_effects(database, side_effe
 
 
 def test_active_model_cancellation_closes_stream(database):
-    principal, workspace, _, run, _ = stack(database)
+    principal, tenant, _, run, _ = stack(database)
     closed = []
     async def stream():
         try:
             yield ModelChunk('text', text='partial')
             with database() as db:
-                request_cancel(db, principal, workspace.id, run.id)
+                request_cancel(db, principal, tenant.id, run.id)
             await asyncio.sleep(20)
         finally:
             closed.append(True)
@@ -237,9 +237,9 @@ def test_model_timeout_and_lost_worker_do_not_replay(database):
     run_once(database, 'worker', model_factory=lambda _: FakeModel([hanging]))
     assert run_row(database, run.id).error_code == 'model_timeout'
     principal = Principal('other-owner', 'test')
-    workspace, _, _, _, _, session = create_agent_stack(database, principal)
+    tenant, _, _, _, _, session = create_agent_stack(database, principal)
     with database() as db:
-        recover_run, _ = create_run(db, principal, workspace.id, session.id, message='Recover', idempotency_key='recover')
+        recover_run, _ = create_run(db, principal, tenant.id, session.id, message='Recover', idempotency_key='recover')
         task = claim_next(db, 'lost-worker')
     context = prepare_execution(database, task, 'lost-worker')
     with database() as db, db.begin():
@@ -256,7 +256,7 @@ def test_model_timeout_and_lost_worker_do_not_replay(database):
 
 
 def test_sse_replay_cursor_input_and_session_isolation(database):
-    principal, workspace, session, run, _ = stack(database, ['ask_user'])
+    principal, tenant, session, run, _ = stack(database, ['ask_user'])
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[call('ask_user', '{"question":"Choose"}')]]))
     app.state.session_factory = database
     def override_db():
@@ -265,7 +265,7 @@ def test_sse_replay_cursor_input_and_session_isolation(database):
     app.dependency_overrides[get_database_session] = override_db
     identity = {'principal': principal}
     app.dependency_overrides[get_principal] = lambda: identity['principal']
-    base = f'/api/v1/workspaces/{workspace.id}/runs/{run.id}'
+    base = f'/api/v1/tenants/{tenant.id}/runs/{run.id}'
     try:
         with TestClient(app) as client:
             pending = client.get(base + '/input').json()
@@ -279,7 +279,7 @@ def test_sse_replay_cursor_input_and_session_isolation(database):
             body = {'input_request_id': pending['input_request_id'], 'response': 'yes'}
             assert client.post(base + '/input', json=body, headers={'Idempotency-Key': 'respond'}).status_code == 202
             assert client.post(base + '/input', json=body, headers={'Idempotency-Key': 'respond'}).status_code == 202
-            history_url = f'/api/v1/workspaces/{workspace.id}/sessions/{session.id}/messages'
+            history_url = f'/api/v1/tenants/{tenant.id}/sessions/{session.id}/messages'
             assert sum(row['content'] == 'yes' for row in client.get(history_url).json()['messages']) == 1
             identity['principal'] = Principal('stranger', 'test')
             assert client.get(base + '/events', headers={'Accept': 'text/event-stream'}).status_code == 404
@@ -326,7 +326,7 @@ def test_provider_fragmented_calls_usage_and_error_redaction():
 def test_environment_credentials_are_allowlisted_and_not_repr(monkeypatch):
     from nexus_core.platform import CredentialRef
     monkeypatch.setenv('MODEL_TEST_KEY', 'private-value')
-    reference = CredentialRef(new_id(), 'environment', 'env://MODEL_TEST_KEY', 'workspace')
+    reference = CredentialRef(new_id(), 'environment', 'env://MODEL_TEST_KEY', 'tenant')
     resolver = EnvironmentCredentialResolver()
     with pytest.raises(RuntimeFault):
         resolver.resolve(reference, principal_id=new_id(), run_id=new_id())
@@ -351,10 +351,10 @@ def test_context_compaction_preserves_tool_exchanges_and_original_messages(datab
     assert incomplete[1].role == 'tool'
     assert incomplete[1].tool_call_id == 'one'
     assert 'unknown' in incomplete[1].content
-    principal, workspace, session, run, _ = stack(database)
+    principal, tenant, session, run, _ = stack(database)
     other_session = None
     with database() as db:
-        other_session = create_session(db, principal, workspace.id, agent_version_id=session.agent_version_id)
+        other_session = create_session(db, principal, tenant.id, agent_version_id=session.agent_version_id)
         from nexus_platform.runs.execution import add_message
         with db.begin():
             db.add(MessageRecord(id=new_id(), session_id=other_session.id, sequence=1, role='user',
@@ -365,7 +365,7 @@ def test_context_compaction_preserves_tool_exchanges_and_original_messages(datab
 
 
 def test_tool_timeout_exit_and_continuation_protocol(database):
-    principal, workspace, session, run, _ = stack(database, ['echo'])
+    principal, tenant, session, run, _ = stack(database, ['echo'])
     async def slow(args, context):
         await asyncio.sleep(20)
         return ToolResult('late')
@@ -376,7 +376,7 @@ def test_tool_timeout_exit_and_continuation_protocol(database):
     with database() as db:
         assert db.scalar(select(ToolInvocationRecord).where(ToolInvocationRecord.run_id == run.id)).error_code == 'tool_timeout'
     with database() as db:
-        second, _ = create_run(db, principal, workspace.id, session.id, message='Next', idempotency_key='next')
+        second, _ = create_run(db, principal, tenant.id, session.id, message='Next', idempotency_key='next')
     async def continuing(args, context):
         return ToolResult('ok', continuation='Continue with evidence')
     model = FakeModel([[call('echo', '{"text":"a"}'), call('echo', '{"text":"b"}')], [ModelChunk('text', text='complete')]])
@@ -384,7 +384,7 @@ def test_tool_timeout_exit_and_continuation_protocol(database):
     roles = [message.role for message in model.requests[1].messages]
     assert roles[-4:] == ['assistant', 'tool', 'tool', 'user']
     with database() as db:
-        third, _ = create_run(db, principal, workspace.id, session.id, message='Exit', idempotency_key='exit')
+        third, _ = create_run(db, principal, tenant.id, session.id, message='Exit', idempotency_key='exit')
     async def exit_tool(args, context):
         return ToolResult('explicit failure', disposition=ToolDisposition.EXIT, exit_status='failed', error_code='explicit_exit')
     model = FakeModel([[call('echo', '{"text":"go"}')]])
@@ -394,14 +394,14 @@ def test_tool_timeout_exit_and_continuation_protocol(database):
 
 
 def test_waiting_cancel_and_unbound_tools_cannot_execute(database):
-    principal, workspace, _, run, _ = stack(database, ['ask_user'])
+    principal, tenant, _, run, _ = stack(database, ['ask_user'])
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[call('ask_user', '{"question":"Proceed?"}')]]))
     with database() as db:
         pending = db.scalar(select(InputRequestRecord).where(InputRequestRecord.run_id == run.id))
     with database() as db:
-        request_cancel(db, principal, workspace.id, run.id)
+        request_cancel(db, principal, tenant.id, run.id)
         with pytest.raises(Conflict):
-            respond_input(db, principal, workspace.id, run.id, pending.id, 'yes', 'answer')
+            respond_input(db, principal, tenant.id, run.id, pending.id, 'yes', 'answer')
     assert run_row(database, run.id).status == 'cancelled'
     assert not run_once(database, 'worker')
     _, _, _, second, _ = stack(database, [])

@@ -10,7 +10,7 @@ from nexus_core.runtime import ModelMessage, RuntimeProgress
 class ExecutionContext:
     run_id: UUID
     session_id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     principal_id: UUID
     principal: Principal
     runtime_type: str

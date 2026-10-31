@@ -7,9 +7,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
-from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
+from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import CredentialReferenceRecord
-from nexus_platform.workspaces.service import ADMIN_ROLES
+from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.audit import audit
 
 
@@ -23,7 +23,7 @@ EXPECTED_SCHEMES = {
 
 
 def create_credential_reference(
-    session: Session, principal: Principal, workspace_id: UUID, *, backend: str, handle: str
+    session: Session, principal: Principal, tenant_id: UUID, *, backend: str, handle: str
 ) -> CredentialReferenceRecord:
     backend = backend.strip().casefold()
     handle = handle.strip()
@@ -39,13 +39,13 @@ def create_credential_reference(
     now = utc_now()
     with session.begin():
         user = resolve_user(session, principal)
-        require_workspace(session, workspace_id)
-        require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
+        require_tenant(session, tenant_id)
+        require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
         row = CredentialReferenceRecord(
-            id=new_id(), workspace_id=workspace_id, backend=backend, handle=handle,
-            scope={"workspace_id": str(workspace_id)}, status="active", created_at=now,
+            id=new_id(), tenant_id=tenant_id, backend=backend, handle=handle,
+            scope={"tenant_id": str(tenant_id)}, status="active", created_at=now,
         )
         session.add(row)
-        audit(session, workspace_id, user.id, "credential_reference.created", "credential_reference", str(row.id),
+        audit(session, tenant_id, user.id, "credential_reference.created", "credential_reference", str(row.id),
               {"backend": backend})
     return row

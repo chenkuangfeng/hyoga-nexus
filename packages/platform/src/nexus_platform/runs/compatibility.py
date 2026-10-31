@@ -13,34 +13,34 @@ if TYPE_CHECKING:
     from nexus_platform.persistence.models import RunRecord
 
 
-def create_run(session: Session, principal: Principal, workspace_id: UUID, session_id: UUID, *,
+def create_run(session: Session, principal: Principal, tenant_id: UUID, session_id: UUID, *,
                message: str, idempotency_key: str) -> tuple[RunRecord, bool]:
     """Preserve the existing mapped return and idempotent replay flag for API callers."""
     from .submission import RunSubmissionService
     from nexus_platform.persistence.unit_of_work import SqlAlchemyUnitOfWork
     work = SqlAlchemyUnitOfWork(session)
     run, replayed = RunSubmissionService(work).submit(
-        principal, workspace_id, session_id, message=message, idempotency_key=idempotency_key,
+        principal, tenant_id, session_id, message=message, idempotency_key=idempotency_key,
     )
     return work.runs.legacy_record(run.id), replayed
 
 
-def request_cancel(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID) -> RunRecord:
+def request_cancel(session: Session, principal: Principal, tenant_id: UUID, run_id: UUID) -> RunRecord:
     """Preserve the owner-scoped cancellation signature and mapped identity."""
     from .cancellation import RunCancellationService
     from nexus_platform.persistence.unit_of_work import SqlAlchemyUnitOfWork
     work = SqlAlchemyUnitOfWork(session)
-    run = RunCancellationService(work).cancel(principal, workspace_id, run_id)
+    run = RunCancellationService(work).cancel(principal, tenant_id, run_id)
     return work.runs.legacy_record(run.id)
 
 
-def respond_input(db: Session, principal: Principal, workspace_id: UUID, run_id: UUID,
+def respond_input(db: Session, principal: Principal, tenant_id: UUID, run_id: UUID,
                   input_request_id: UUID, response: str, key: str) -> RunRecord:
     """Preserve mapped return identity without a second database lookup after commit."""
     from .inputs import RunInputService
     from nexus_platform.persistence.unit_of_work import SqlAlchemyUnitOfWork
     work = SqlAlchemyUnitOfWork(db)
-    run = RunInputService(work).respond(principal, workspace_id, run_id, input_request_id, response, key)
+    run = RunInputService(work).respond(principal, tenant_id, run_id, input_request_id, response, key)
     return work.runs.legacy_record(run.id)
 
 

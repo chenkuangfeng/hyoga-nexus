@@ -1,4 +1,4 @@
-"""WeKnora action approvals translated independently of Workspace ResourceGrant.
+"""WeKnora action approvals translated independently of Tenant ResourceGrant.
 
 A request is tied to the exact Run configuration and tool call. Approving does not execute
 anything: the resumed worker must reauthorize the tool and consume the decision once.
@@ -29,7 +29,7 @@ def request(db, run, call):
             raise Conflict('Approval configuration changed')
         if row.status == 'approved':
             row.status, row.consumed_at = 'consumed', utc_now()
-            audit(db, run.workspace_id, run.principal_id, 'approval.consumed', 'approval', str(row.id))
+            audit(db, run.tenant_id, run.principal_id, 'approval.consumed', 'approval', str(row.id))
             return row.modified_arguments or row.arguments
         if row.status == 'rejected':
             row.status, row.consumed_at = 'consumed', utc_now()
@@ -46,22 +46,22 @@ def request(db, run, call):
     return ToolResult('Approval required for ' + call.name, disposition=ToolDisposition.WAIT_APPROVAL)
 
 
-def list_pending(db, principal, workspace_id, run_id):
+def list_pending(db, principal, tenant_id, run_id):
     """Expose action arguments only to the Run owner, never through generic tool events."""
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
+        user, _ = context(db, principal, tenant_id)
         run = db.get(RunRecord, run_id)
-        if not run or run.workspace_id != workspace_id or run.principal_id != user.id:
+        if not run or run.tenant_id != tenant_id or run.principal_id != user.id:
             raise NotFound('Run unavailable')
         return [{'id': str(row.id), 'tool_name': row.tool_name, 'arguments': json.loads(row.arguments)} for row in db.scalars(
             select(ActionApprovalRecord).where(ActionApprovalRecord.run_id == run_id, ActionApprovalRecord.status == 'pending'))]
 
 
-def resolve(db, principal, workspace_id, run_id, approval_id, approve, arguments=None):
+def resolve(db, principal, tenant_id, run_id, approval_id, approve, arguments=None):
     """Resolve once, persist the decision, and requeue the original blocked Run."""
     with db.begin():
-        user, _ = context(db, principal, workspace_id)
-        run = db.scalar(select(RunRecord).where(RunRecord.id == run_id, RunRecord.workspace_id == workspace_id,
+        user, _ = context(db, principal, tenant_id)
+        run = db.scalar(select(RunRecord).where(RunRecord.id == run_id, RunRecord.tenant_id == tenant_id,
             RunRecord.principal_id == user.id).with_for_update())
         row = db.get(ActionApprovalRecord, approval_id)
         if not run or not row or row.run_id != run.id:
@@ -77,5 +77,5 @@ def resolve(db, principal, workspace_id, run_id, approval_id, approve, arguments
         task = db.scalar(select(OutboxRecord).where(OutboxRecord.run_id == run.id, OutboxRecord.message_type == 'run.execute').with_for_update())
         task.completed_at, task.lease_owner, task.lease_until, task.available_at = None, None, None, utc_now()
         append_event(db, run.id, 'approval.resolved', {'approval_id': str(row.id), 'approved': approve})
-        audit(db, workspace_id, user.id, 'approval.resolved', 'approval', str(row.id), {'approved': approve})
+        audit(db, tenant_id, user.id, 'approval.resolved', 'approval', str(row.id), {'approved': approve})
         return {'status': row.status}

@@ -13,7 +13,7 @@ class Run:
     save it under the original Run lock; legacy API callers receive mapped rows separately.
     """
     id: UUID
-    workspace_id: UUID
+    tenant_id: UUID
     session_id: UUID
     principal_id: UUID
     status: str

@@ -13,7 +13,7 @@ const makeEvent = (sequence, event_type, payload = {}) => ({ event_id: `event-${
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 await page.route('**/api/v1/**', async route => {
   const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method()
-  if (path.endsWith('/workspaces')) return route.fulfill(json([{ id: 'workspace', name: '开发空间' }]))
+  if (path.endsWith('/tenants')) return route.fulfill(json([{ id: 'tenant', name: '开发空间' }]))
   if (path.endsWith('/agents')) return route.fulfill(json([{ id: 'agent', name: '研究助手', runtime_type: 'native', published_version_id: 'version' }]))
   if (path.endsWith('/sessions') && method === 'POST') {
     const created = { id: 'session', title: '验收会话', agent_version_id: 'version' }; sessions = [created]
@@ -103,7 +103,7 @@ try {
   await page.getByLabel('你的消息', { exact: true }).focus()
   assert.equal(await page.getByLabel('你的消息', { exact: true }).evaluate(element => element === document.activeElement), true)
   await page.screenshot({ path: '/tmp/hyoga-p2-mobile.png', fullPage: true })
-  await page.route('**/api/v1/workspaces', route => route.fulfill({ status: 403, ...json({ error: { message: 'Access denied' } }) }))
+  await page.route('**/api/v1/tenants', route => route.fulfill({ status: 403, ...json({ error: { message: 'Access denied' } }) }))
   await page.getByRole('button', { name: '刷新会话', exact: true }).click()
   await page.getByText('无权访问或内容已不可用：Access denied', { exact: true }).waitFor()
   assert.equal(await page.locator('.chat-message').count(), 0)

@@ -11,21 +11,21 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.errors import Conflict, NotFound
-from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
+from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import (
     CredentialReferenceRecord,
     ModelProfileRecord,
     ModelProfileVersionRecord,
     ModelProviderRecord, ProviderModelRecord, ProviderCredentialRecord,
 )
-from nexus_platform.workspaces.service import ADMIN_ROLES
+from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.audit import audit
 
 
 def create_model_profile(
     session: Session,
     principal: Principal,
-    workspace_id: UUID,
+    tenant_id: UUID,
     *,
     name: str,
     provider: str,
@@ -40,17 +40,17 @@ def create_model_profile(
         raise ValueError("Model profile name, provider, and model name must not be empty")
     with session.begin():
         user = resolve_user(session, principal)
-        require_workspace(session, workspace_id)
-        require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
+        require_tenant(session, tenant_id)
+        require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
         if credential_reference_id is not None:
             if session.scalar(select(ProviderCredentialRecord.credential_id).where(ProviderCredentialRecord.credential_id == credential_reference_id)):
                 raise ValueError('Manage stored credentials through model settings')
             reference = session.get(CredentialReferenceRecord, credential_reference_id)
-            if reference is None or reference.workspace_id != workspace_id or reference.status != "active":
+            if reference is None or reference.tenant_id != tenant_id or reference.status != "active":
                 raise NotFound("Credential reference not found")
         profile = ModelProfileRecord(
             id=new_id(),
-            workspace_id=workspace_id,
+            tenant_id=tenant_id,
             name=name.strip(),
             provider=provider.strip(),
             current_version_id=None,
@@ -62,7 +62,7 @@ def create_model_profile(
         version = ModelProfileVersionRecord(
             id=new_id(),
             profile_id=profile.id,
-            workspace_id=workspace_id,
+            tenant_id=tenant_id,
             version=1,
             model_name=model_name.strip(),
             options=options,
@@ -76,14 +76,14 @@ def create_model_profile(
         session.add(version)
         session.flush()
         profile.current_version_id = version.id
-        audit(session, workspace_id, user.id, "model_profile.created", "model_profile", str(profile.id))
+        audit(session, tenant_id, user.id, "model_profile.created", "model_profile", str(profile.id))
     return profile, version
 
 
 def update_model_profile(
     session: Session,
     principal: Principal,
-    workspace_id: UUID,
+    tenant_id: UUID,
     profile_id: UUID,
     *,
     model_name: str,
@@ -97,11 +97,11 @@ def update_model_profile(
         raise ValueError("Model name must not be empty")
     with session.begin():
         user = resolve_user(session, principal)
-        require_workspace(session, workspace_id)
-        require_membership(session, workspace_id, user.id, roles=ADMIN_ROLES)
+        require_tenant(session, tenant_id)
+        require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
         profile = session.scalar(
             select(ModelProfileRecord).where(
-                ModelProfileRecord.id == profile_id, ModelProfileRecord.workspace_id == workspace_id
+                ModelProfileRecord.id == profile_id, ModelProfileRecord.tenant_id == tenant_id
             ).with_for_update()
         )
         if session.get(ProviderModelRecord, profile_id):
@@ -112,7 +112,7 @@ def update_model_profile(
             if session.scalar(select(ProviderCredentialRecord.credential_id).where(ProviderCredentialRecord.credential_id == credential_reference_id)):
                 raise ValueError('Manage stored credentials through model settings')
             reference = session.get(CredentialReferenceRecord, credential_reference_id)
-            if reference is None or reference.workspace_id != workspace_id or reference.status != "active":
+            if reference is None or reference.tenant_id != tenant_id or reference.status != "active":
                 raise NotFound("Credential reference not found")
         version_number = session.scalar(
             select(func.coalesce(func.max(ModelProfileVersionRecord.version), 0)).where(
@@ -120,7 +120,7 @@ def update_model_profile(
             )
         ) + 1
         version = ModelProfileVersionRecord(
-            id=new_id(), profile_id=profile.id, workspace_id=workspace_id,
+            id=new_id(), profile_id=profile.id, tenant_id=tenant_id,
             version=version_number, model_name=model_name.strip(),
             options=options, credential_reference_id=credential_reference_id,
             content_hash=content_hash({"provider": profile.provider, "model_name": model_name.strip(),
@@ -131,15 +131,15 @@ def update_model_profile(
         session.add(version)
         session.flush()
         profile.current_version_id = version.id
-        audit(session, workspace_id, user.id, "model_profile.version_created", "model_profile", str(profile.id),
+        audit(session, tenant_id, user.id, "model_profile.version_created", "model_profile", str(profile.id),
               {"version": version_number})
     return version
 
 
-def get_model_profile(session: Session, workspace_id: UUID, profile_id: UUID):
+def get_model_profile(session: Session, tenant_id: UUID, profile_id: UUID):
     profile = session.scalar(
         select(ModelProfileRecord).where(
-            ModelProfileRecord.workspace_id == workspace_id, ModelProfileRecord.id == profile_id
+            ModelProfileRecord.tenant_id == tenant_id, ModelProfileRecord.id == profile_id
         )
     )
     if profile is None:

@@ -2,7 +2,7 @@
 
 入口 `main.py` 装配平台与模型设置 router，身份和数据库通过依赖注入取得。
 
-模型设置前缀：`/api/v1/workspaces/{workspace_id}/model-settings`。
+模型设置前缀：`/api/v1/tenants/{tenant_id}/model-settings`。
 
 | 路径 | 方法 | 用途 |
 | --- | --- | --- |
@@ -11,7 +11,7 @@
 | `/providers/{id}` | PUT / DELETE | 修改/轮换或停用 |
 | `/providers/{id}/models` | POST | 添加模型 |
 | `/providers/{id}/models/{profile_id}` | PUT / DELETE | 生成模型版本或停用 |
-| `/default` | PUT | 设置/清除 personal 或 workspace 默认 |
+| `/default` | PUT | 设置/清除 personal 或 tenant 默认 |
 | `/agents` | POST | 显式模型或默认模型创建并发布 Native 智能体 |
 | `/providers/{id}/models/{profile_id}/test` | POST | 有界流式连接测试 |
 

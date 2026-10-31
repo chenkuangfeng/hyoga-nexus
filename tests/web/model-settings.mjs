@@ -11,8 +11,8 @@ let providers = [], defaults = {}, tested = 0, created = 0, saved = 0
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 await page.route('**/api/v1/**', async route => {
   const request = route.request(), path = new URL(request.url()).pathname, method = request.method()
-  if (path.endsWith('/workspaces')) return route.fulfill(json([{ id: 'workspace', name: '开发空间' }]))
-  if (path.endsWith('/model-settings')) return route.fulfill(json({ providers, defaults, can_manage_workspace: true }))
+  if (path.endsWith('/tenants')) return route.fulfill(json([{ id: 'tenant', name: '开发空间' }]))
+  if (path.endsWith('/model-settings')) return route.fulfill(json({ providers, defaults, can_manage_tenant: true }))
   if (path.endsWith('/providers') && method === 'POST') {
     saved++
     const value = request.postDataJSON()

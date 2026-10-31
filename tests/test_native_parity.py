@@ -34,7 +34,7 @@ class Tools:
 
 
 def test_empty_and_code_recovery_and_completion_hooks(database):
-    principal, workspace, session, run, _ = stack(database)
+    principal, tenant, session, run, _ = stack(database)
     model = FakeModel([[], [ModelChunk('text', text='```python\n' + 'print(1)\n' * 10 + '```')],
                        [ModelChunk('text', text='This code is only an example; no execution is needed.')]])
     run_once(database, 'worker', model_factory=lambda _: model)
@@ -59,10 +59,10 @@ def test_empty_and_code_recovery_and_completion_hooks(database):
 
 
 def test_empty_never_succeeds_and_candidate_checkpoint_compatibility(database):
-    principal, workspace, session, run, _ = stack(database)
+    principal, tenant, session, run, _ = stack(database)
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[], [], []]))
     assert run_row(database, run.id).error_code == 'model_response_unusable'
-    principal, workspace, session, run, _ = stack(database, ['ask_user', 'update_working_checkpoint'])
+    principal, tenant, session, run, _ = stack(database, ['ask_user', 'update_working_checkpoint'])
     model = FakeModel([[call('update_working_checkpoint', '{"key_info":"verified key context"}'),
                        call('ask_user', '{"question":"Market?","candidates":["A","B"]}')]])
     run_once(database, 'worker', model_factory=lambda _: model)
@@ -74,7 +74,7 @@ def test_empty_never_succeeds_and_candidate_checkpoint_compatibility(database):
 
 
 def test_generator_tools_project_only_public_progress(database):
-    principal, workspace, session, run, _ = stack(database, ['generate'])
+    principal, tenant, session, run, _ = stack(database, ['generate'])
     def generate(arguments, context):
         yield 'private intermediate'
         return ToolResult('private final')
@@ -86,14 +86,14 @@ def test_generator_tools_project_only_public_progress(database):
     assert run_row(database, run.id).status == 'completed'
     from nexus_platform.runs.service import list_events
     with database() as db:
-        events = list_events(db, principal, workspace.id, run.id, 0)
+        events = list_events(db, principal, tenant.id, run.id, 0)
         assert any(e.event_type == 'tool.progress' and e.payload['text'] == 'public output' for e in events)
         assert 'private intermediate' not in str([e.payload for e in events])
 
 
 def test_approval_resume_does_not_replay_completed_tool(settings_client, database):
     client, _, identity, *_ = settings_client
-    principal, workspace, session, run, _ = stack(database, ['echo', 'write'])
+    principal, tenant, session, run, _ = stack(database, ['echo', 'write'])
     identity[0] = principal
     invoked = []
     async def echo(arguments, context): invoked.append('echo'); return ToolResult('read')
@@ -107,7 +107,7 @@ def test_approval_resume_does_not_replay_completed_tool(settings_client, databas
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[call('echo'), call('write', '{"text":"original"}')]]), registry_factory=registry)
     assert run_row(database, run.id).status == 'waiting_approval'
     assert invoked == ['echo']
-    path = f'/api/v1/workspaces/{workspace.id}/native/runs/{run.id}/approvals'
+    path = f'/api/v1/tenants/{tenant.id}/native/runs/{run.id}/approvals'
     pending = client.get(path).json()
     assert len(pending) == 1
     response = client.post(path + '/' + pending[0]['id'], json={'approve': True, 'arguments': {'text': 'reviewed'}})
@@ -122,7 +122,7 @@ def test_approval_resume_does_not_replay_completed_tool(settings_client, databas
 
 
 def test_preferences_memory_publication_restore_and_steer(settings_client, database):
-    client, path, identity, owner, member, workspace_id = settings_client
+    client, path, identity, owner, member, tenant_id = settings_client
     root = path.removesuffix('/model-settings') + '/native'
     preferences = client.get(root + '/settings').json()
     preferences['settings']['budgets']['max_rounds'] = 33
@@ -131,9 +131,9 @@ def test_preferences_memory_publication_restore_and_steer(settings_client, datab
     assert client.put(root + '/settings', json={'settings': preferences['settings'], 'expected_version': 0}).status_code == 409
     identity[0] = member
     assert client.get(root + '/settings').json()['settings']['budgets']['max_rounds'] == 12
-    principal, workspace, session, run, _ = stack(database, ['propose_memory_draft'])
+    principal, tenant, session, run, _ = stack(database, ['propose_memory_draft'])
     identity[0] = principal
-    root = f'/api/v1/workspaces/{workspace.id}/native'
+    root = f'/api/v1/tenants/{tenant.id}/native'
     assert client.post(root + f'/runs/{run.id}/steer', json={'content': 'Use only verified evidence'}, headers={'Idempotency-Key': 'steer1'}).status_code == 202
     model = FakeModel([[call('propose_memory_draft', '{"kind":"sop","diff":"Verified reusable method"}')], [ModelChunk('text', text='done')]])
     run_once(database, 'worker', model_factory=lambda _: model)
@@ -155,13 +155,13 @@ def test_preferences_memory_publication_restore_and_steer(settings_client, datab
 
 def test_model_branch_preserves_source_and_history(settings_client, database):
     client, path, identity, *_ = settings_client
-    principal, workspace, session, run, _ = stack(database)
+    principal, tenant, session, run, _ = stack(database)
     identity[0] = principal
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[ModelChunk('text', text='original answer')]]))
     with database() as db:
         from nexus_platform.persistence.models import AgentVersionRecord
         target = db.get(AgentVersionRecord, session.agent_version_id).model_profile_version_id
-    response = client.post(f'/api/v1/workspaces/{workspace.id}/native/sessions/{session.id}/model-branch', json={'model_profile_version_id': str(target)})
+    response = client.post(f'/api/v1/tenants/{tenant.id}/native/sessions/{session.id}/model-branch', json={'model_profile_version_id': str(target)})
     assert response.status_code == 201, response.text
     with database() as db:
         branch = db.get(SessionRecord, UUID(response.json()['id']))

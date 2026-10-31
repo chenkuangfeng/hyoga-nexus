@@ -29,9 +29,9 @@ class SqlMemoryRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def published_entries(self, workspace_id: UUID, owner_id: UUID, project: str) -> list[EntryView]:
+    def published_entries(self, tenant_id: UUID, owner_id: UUID, project: str) -> list[EntryView]:
         query = select(MemoryEntryRecord).where(
-            MemoryEntryRecord.workspace_id == workspace_id,
+            MemoryEntryRecord.tenant_id == tenant_id,
             MemoryEntryRecord.owner_user_id == owner_id,
             MemoryEntryRecord.active.is_(True),
         )
@@ -39,12 +39,12 @@ class SqlMemoryRepository:
             query = query.where(MemoryEntryRecord.project.in_(['', project]))
         return [_entry(row) for row in self.db.scalars(query.order_by(MemoryEntryRecord.title))]
 
-    def pending_drafts(self, workspace_id: UUID, owner_id: UUID) -> list[DraftView]:
+    def pending_drafts(self, tenant_id: UUID, owner_id: UUID) -> list[DraftView]:
         query = (
             select(MemoryDraftRecord, RunRecord.principal_id)
             .join(RunRecord, RunRecord.id == MemoryDraftRecord.source_run_id)
             .where(
-                MemoryDraftRecord.workspace_id == workspace_id,
+                MemoryDraftRecord.tenant_id == tenant_id,
                 RunRecord.principal_id == owner_id,
                 MemoryDraftRecord.status == 'pending_review',
             )
@@ -52,10 +52,10 @@ class SqlMemoryRepository:
         )
         return [_draft(row, owner) for row, owner in self.db.execute(query).all()]
 
-    def owned_entry(self, workspace_id: UUID, owner_id: UUID, entry_id: UUID, *, lock: bool = False) -> EntryView | None:
+    def owned_entry(self, tenant_id: UUID, owner_id: UUID, entry_id: UUID, *, lock: bool = False) -> EntryView | None:
         query = select(MemoryEntryRecord).where(
             MemoryEntryRecord.id == entry_id,
-            MemoryEntryRecord.workspace_id == workspace_id,
+            MemoryEntryRecord.tenant_id == tenant_id,
             MemoryEntryRecord.owner_user_id == owner_id,
             MemoryEntryRecord.active.is_(True),
         )
@@ -68,11 +68,11 @@ class SqlMemoryRepository:
         row = self.db.get(MemoryVersionRecord, (entry_id, version))
         return _version(row) if row else None
 
-    def draft_for_review(self, workspace_id: UUID, draft_id: UUID) -> DraftView | None:
+    def draft_for_review(self, tenant_id: UUID, draft_id: UUID) -> DraftView | None:
         row = self.db.scalar(
             select(MemoryDraftRecord).where(MemoryDraftRecord.id == draft_id).with_for_update()
         )
-        if row is None or row.workspace_id != workspace_id:
+        if row is None or row.tenant_id != tenant_id:
             return None
         run = self.db.get(RunRecord, row.source_run_id)
         if run is None:
@@ -82,9 +82,9 @@ class SqlMemoryRepository:
     def set_draft_status(self, draft_id: UUID, status: str) -> None:
         self.db.get(MemoryDraftRecord, draft_id).status = status
 
-    def create_entry(self, *, workspace_id: UUID, owner_id: UUID, kind: str, title: str, project: str) -> EntryView:
+    def create_entry(self, *, tenant_id: UUID, owner_id: UUID, kind: str, title: str, project: str) -> EntryView:
         row = MemoryEntryRecord(
-            id=new_id(), workspace_id=workspace_id, owner_user_id=owner_id, kind=kind, title=title,
+            id=new_id(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, title=title,
             project=project, active=True, current_version=1, created_at=utc_now(),
         )
         self.db.add(row)
@@ -109,14 +109,14 @@ class SqlMemoryRepository:
             source_draft_id=source_draft_id, reviewed_by=reviewer_id, created_at=utc_now(),
         ))
 
-    def audit(self, workspace_id: UUID, actor_id: UUID, action: str, target_type: str,
+    def audit(self, tenant_id: UUID, actor_id: UUID, action: str, target_type: str,
               target_id: str, metadata: dict[str, Any] | None = None) -> None:
-        audit(self.db, workspace_id, actor_id, action, target_type, target_id, metadata)
+        audit(self.db, tenant_id, actor_id, action, target_type, target_id, metadata)
 
 
 def _entry(row: MemoryEntryRecord) -> EntryView:
     return EntryView(
-        id=row.id, workspace_id=row.workspace_id, owner_user_id=row.owner_user_id, kind=row.kind,
+        id=row.id, tenant_id=row.tenant_id, owner_user_id=row.owner_user_id, kind=row.kind,
         title=row.title, project=row.project, active=row.active, current_version=row.current_version,
     )
 
@@ -130,6 +130,6 @@ def _version(row: MemoryVersionRecord) -> VersionView:
 
 def _draft(row: MemoryDraftRecord, owner_id: UUID) -> DraftView:
     return DraftView(
-        id=row.id, workspace_id=row.workspace_id, owner_user_id=owner_id, kind=row.kind,
+        id=row.id, tenant_id=row.tenant_id, owner_user_id=owner_id, kind=row.kind,
         diff=row.diff, status=row.status, source_run_id=row.source_run_id,
     )

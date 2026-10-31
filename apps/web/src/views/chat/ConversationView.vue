@@ -5,11 +5,11 @@ import RuntimeControls from '../../components/RuntimeControls.vue'
 import { useConversation } from '../../composables/useConversation'
 import { errorLabels, statusLabels } from '../../types/chat'
 const chat = useConversation()
-const { workspaces, agents, sessions, workspace, sessionId, versionId, timeline, run, pendingInput,
+const { tenants, agents, sessions, tenant, sessionId, versionId, timeline, run, pendingInput,
   error, loading, submitting, connection, cancelling, active } = chat
 const prompt = ref(''), answer = ref('')
 onMounted(chat.initialize)
-async function openBranch(id: string) { await chat.selectWorkspace(workspace.value); await chat.openSession(id) }
+async function openBranch(id: string) { await chat.selectTenant(tenant.value); await chat.openSession(id) }
 async function send() { if (await chat.send(prompt.value)) prompt.value = '' }
 async function respond() { if (await chat.respond(answer.value)) answer.value = '' }
 </script>
@@ -24,17 +24,17 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="error" />
     <div class="conversation-layout">
       <aside class="conversation-sidebar" aria-label="空间和会话">
-        <label for="workspace-select">工作空间</label>
-        <el-select id="workspace-select" :model-value="workspace" :disabled="loading || submitting" placeholder="选择空间" @change="chat.selectWorkspace">
-          <el-option v-for="item in workspaces" :key="item.id" :label="item.name" :value="item.id" />
+        <label for="tenant-select">工作空间</label>
+        <el-select id="tenant-select" :model-value="tenant" :disabled="loading || submitting" placeholder="选择空间" @change="chat.selectTenant">
+          <el-option v-for="item in tenants" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
         <label for="agent-select">新会话使用的智能体</label>
         <el-select id="agent-select" v-model="versionId" :disabled="loading || submitting" placeholder="选择已发布的 Native 智能体">
           <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.published_version_id!" />
         </el-select>
         <el-button type="primary" :disabled="!versionId || loading" :loading="submitting" @click="chat.createSession">新建会话</el-button>
-        <p v-if="workspace && !agents.length && !loading" class="muted">暂无已发布的 Native 智能体，请先完成智能体配置和发布。</p>
-        <ModelBranchControls :workspace="workspace" :session="sessionId" :disabled="active || loading || submitting" @created="openBranch" />
+        <p v-if="tenant && !agents.length && !loading" class="muted">暂无已发布的 Native 智能体，请先完成智能体配置和发布。</p>
+        <ModelBranchControls :tenant="tenant" :session="sessionId" :disabled="active || loading || submitting" @created="openBranch" />
         <h2>会话记录</h2>
         <nav class="session-list" aria-label="选择会话">
           <button v-for="item in sessions" :key="item.id" type="button" :aria-current="item.id === sessionId ? 'page' : undefined"
@@ -76,7 +76,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
           <el-input id="prompt" v-model="prompt" type="textarea" :rows="4" :maxlength="100000" :disabled="!sessionId || submitting || active || loading" placeholder="输入问题，点击发送" />
           <div class="composer-actions"><el-button type="primary" native-type="submit" :loading="submitting" :disabled="!sessionId || !prompt.trim() || active || loading">发送消息</el-button></div>
         </form>
-        <RuntimeControls v-if="workspace && run" :workspace="workspace" :run="run" @resume="chat.openSession(sessionId)" />
+        <RuntimeControls v-if="tenant && run" :tenant="tenant" :run="run" @resume="chat.openSession(sessionId)" />
         <el-button v-if="active" class="stop-button" :loading="cancelling" :disabled="cancelling" @click="chat.cancel">停止运行</el-button>
       </section>
     </div>

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 def audit(
     session: Session,
-    workspace_id: UUID,
+    tenant_id: UUID,
     actor_user_id: UUID,
     action: str,
     target_type: str,
@@ -21,7 +21,7 @@ def audit(
     session.add(
         AuditRecord(
             id=new_id(),
-            workspace_id=workspace_id,
+            tenant_id=tenant_id,
             actor_user_id=actor_user_id,
             action=action,
             target_type=target_type,

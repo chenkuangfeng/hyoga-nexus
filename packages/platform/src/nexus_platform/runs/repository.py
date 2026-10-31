@@ -23,11 +23,11 @@ class SqlAlchemyRunRepository:
         self.session = session
         self._records: dict[UUID, RunRecord] = {}
 
-    def visible(self, workspace_id: UUID, user_id: UUID, run_id: UUID) -> RunRecord | None:
-        """Legacy read projection for Run principal or Session owner, scoped to one workspace."""
+    def visible(self, tenant_id: UUID, user_id: UUID, run_id: UUID) -> RunRecord | None:
+        """Legacy read projection for Run principal or Session owner, scoped to one tenant."""
         return self.session.scalar(
             select(RunRecord).join(SessionRecord, SessionRecord.id == RunRecord.session_id).where(
-                RunRecord.id == run_id, RunRecord.workspace_id == workspace_id,
+                RunRecord.id == run_id, RunRecord.tenant_id == tenant_id,
                 (RunRecord.principal_id == user_id) | (SessionRecord.owner_user_id == user_id),
             )
         )
@@ -36,10 +36,10 @@ class SqlAlchemyRunRepository:
         self._records[row.id] = row
         return Run(**{field.name: deepcopy(getattr(row, field.name)) for field in fields(Run)})
 
-    def owned_for_update(self, workspace_id: UUID, user_id: UUID, run_id: UUID) -> Run | None:
+    def owned_for_update(self, tenant_id: UUID, user_id: UUID, run_id: UUID) -> Run | None:
         """Lock a Run strictly owned by this principal; never reuse broader read visibility."""
         row = self.session.scalar(select(RunRecord).where(
-            RunRecord.id == run_id, RunRecord.workspace_id == workspace_id,
+            RunRecord.id == run_id, RunRecord.tenant_id == tenant_id,
             RunRecord.principal_id == user_id,
         ).with_for_update())
         return self._remember(row) if row is not None else None
@@ -54,10 +54,10 @@ class SqlAlchemyRunRepository:
         ).with_for_update())
         return self._remember(row) if row is not None else None
 
-    def by_key(self, workspace_id: UUID, user_id: UUID, key: str) -> Run | None:
+    def by_key(self, tenant_id: UUID, user_id: UUID, key: str) -> Run | None:
         """Look up the existing request only within its authenticated idempotency scope."""
         row = self.session.scalar(select(RunRecord).where(
-            RunRecord.workspace_id == workspace_id, RunRecord.principal_id == user_id,
+            RunRecord.tenant_id == tenant_id, RunRecord.principal_id == user_id,
             RunRecord.idempotency_key == key,
         ))
         return self._remember(row) if row is not None else None
@@ -77,7 +77,7 @@ class SqlAlchemyRunRepository:
                 self.session.add(row)
                 self.session.flush()
         except IntegrityError:
-            existing = self.by_key(run.workspace_id, run.principal_id, run.idempotency_key)
+            existing = self.by_key(run.tenant_id, run.principal_id, run.idempotency_key)
             if existing is None:
                 raise
             return existing, False

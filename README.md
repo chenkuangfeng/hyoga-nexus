@@ -4,9 +4,9 @@ Python 多类型智能体平台，已实现自研 Native，规划接入 Codex、
 
 ## 技术与状态
 
-Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / Vite，Node.js 22.12+。模块化单体部署，API 与后台 worker 分开启动。
+Python 3.11+ / FastAPI / 多包 uv workspace；Vue 3 / TypeScript / Element Plus / Vite，Node.js 22.12+。模块化单体部署，API 与后台 worker 分开启动。
 
-当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Workspace 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。P2 已实现 Native 多轮流式执行、授权 Python 工具、取消/等待输入、SSE 续读与对话工作台，并完成 SQLite/模拟模型验证。用户设置已支持多个模型供应商、多个模型、加密 Key、个人/空间默认模型和连接测试。尚未接入真实身份提供方、凭据保险库、外部 Runtime、知识库、技能/MCP、隔离沙箱、文件产物或股票分析。
+当前已实现健康/就绪检查、规划能力目录，以及 P1 平台 API：Tenant 成员与最小角色、模型配置版本、Agent 草稿/发布、Session、Run 幂等提交和事件游标。平台数据使用 PostgreSQL 与 Alembic；worker 通过 PostgreSQL Outbox/租约领取任务。P2 已实现 Native 多轮流式执行、授权 Python 工具、取消/等待输入、SSE 续读与对话工作台，并完成 SQLite/模拟模型验证。用户设置已支持多个模型供应商、多个模型、加密 Key、个人/空间默认模型和连接测试。尚未接入真实身份提供方、凭据保险库、外部 Runtime、知识库、技能/MCP、隔离沙箱、文件产物或股票分析。
 
 ## 目录入口
 

@@ -1,7 +1,7 @@
 """Public entity exports. Domain mappings share persistence.base.Base and unchanged table identities."""
 from ..base import Base
-from .identity import UserRecord
-from .workspace import WorkspaceRecord, MembershipRecord
+from .identity import UserIdentityRecord, UserRecord
+from .tenant import TenantRecord, MembershipRecord
 from .credential import CredentialReferenceRecord, ProviderCredentialRecord
 from .model import (
     ModelProfileRecord,
@@ -30,7 +30,8 @@ from .approval import InputRequestRecord, ActionApprovalRecord
 __all__ = [
     'Base',
     'UserRecord',
-    'WorkspaceRecord',
+    'UserIdentityRecord',
+    'TenantRecord',
     'MembershipRecord',
     'CredentialReferenceRecord',
     'ProviderCredentialRecord',

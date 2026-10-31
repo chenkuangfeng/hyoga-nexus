@@ -19,10 +19,10 @@ class SqlAlchemySubmissionCatalog:
         self.session = session
         self._sessions: dict[UUID, SessionRecord] = {}
 
-    def owned_session(self, workspace_id: UUID, user_id: UUID, session_id: UUID) -> SubmissionSession | None:
-        """Lock the caller's Session in the selected workspace; foreign rows are invisible."""
+    def owned_session(self, tenant_id: UUID, user_id: UUID, session_id: UUID) -> SubmissionSession | None:
+        """Lock the caller's Session in the selected tenant; foreign rows are invisible."""
         row = self.session.scalar(select(SessionRecord).where(
-            SessionRecord.id == session_id, SessionRecord.workspace_id == workspace_id,
+            SessionRecord.id == session_id, SessionRecord.tenant_id == tenant_id,
             SessionRecord.owner_user_id == user_id,
         ).with_for_update())
         if row is None:
@@ -37,13 +37,13 @@ class SqlAlchemySubmissionCatalog:
         return PublishedAgent(row.id, row.agent_id, row.version, row.content_hash, row.runtime_type,
                               row.model_profile_version_id, deepcopy(row.budgets))
 
-    def agent_workspace(self, agent_id: UUID) -> UUID | None:
+    def agent_tenant(self, agent_id: UUID) -> UUID | None:
         row = self.session.get(AgentRecord, agent_id)
-        return row.workspace_id if row is not None else None
+        return row.tenant_id if row is not None else None
 
     def bindings(self, version_id: UUID) -> list[BoundResource]:
         return [BoundResource(row.id, row.kind, row.resource_id, row.resource_version_id,
-                              row.source_workspace_id, deepcopy(row.binding_config))
+                              row.source_tenant_id, deepcopy(row.binding_config))
                 for row in self.session.scalars(select(ResourceBindingRecord).where(
                     ResourceBindingRecord.agent_version_id == version_id))]
 
@@ -53,9 +53,9 @@ class SqlAlchemySubmissionCatalog:
             return None
         return PublishedModel(row.id, row.profile_id, row.content_hash, row.credential_reference_id)
 
-    def model_workspace(self, profile_id: UUID) -> UUID | None:
+    def model_tenant(self, profile_id: UUID) -> UUID | None:
         row = self.session.get(ModelProfileRecord, profile_id)
-        return row.workspace_id if row is not None else None
+        return row.tenant_id if row is not None else None
 
     def touch_session(self, session_id: UUID, at: datetime) -> None:
         """Update only a Session already locked through this catalog; never acquire an unscoped row."""

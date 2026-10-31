@@ -21,5 +21,5 @@ def _finish(db: Session, run: RunRecord, outcome: RuntimeOutcome) -> None:
     elif outcome.status != 'waiting_approval':
         run.ended_at = utc_now()
     append_event(db, run.id, 'run.' + outcome.status, {'status': run.status, 'error_code': outcome.error_code})
-    audit(db, run.workspace_id, run.principal_id, 'run.' + outcome.status, 'run', str(run.id),
+    audit(db, run.tenant_id, run.principal_id, 'run.' + outcome.status, 'run', str(run.id),
           {'error_code': outcome.error_code})
