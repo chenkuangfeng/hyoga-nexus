@@ -1,65 +1,73 @@
-# 设计（单机版 Hermes 式网关）
+# 设计（每 Run 新建执行对象，数据快照，不可变 key 缓存）
 
-## 一、进程模型
+## 一、参考结论
 
-```text
-单个网关进程
-├── 入口：HTTP API、渠道适配器（后续）
-├── 会话调度器：每会话 FIFO，忙时策略，全局活跃会话上限
-├── 会话对象缓存：session_id → SessionObject（有界，LRU，空闲 TTL）
-│     ├── 会话数据：历史投影、检查点、绑定、记忆快照引用
-│     └── 执行对象：Run 执行器（可重建，恢复不依赖它）
-└── 账本（SQLite，单文件，BEGIN IMMEDIATE 写入）
-      ├── runtime_epoch：每次进程启动 +1
-      ├── session_admissions：queued / started / unknown / terminal
-      └── executions：执行记录，带 owner_epoch
+| 项目 | 执行对象 | 会话状态 | 缓存与一致性 |
+|---|---|---|---|
+| Hermes | 每会话 Agent 对象，进程内缓存 | SQLite | 单写者，不需要失效 |
+| deer-flow | 每 Run 新建（`make_lead_agent`） | 检查点（PG/SQLite） | 检查点历史缓存，不可变 key，无需失效 |
+| dify-agent | 每 Run 新建，Deps 每 Run 一个 | JSON 快照 v2，API 保存 | 无会话对象缓存 |
+| WeKnora | 每轮新建引擎 | PG，每轮 `LoadAgentHistory` | 无会话对象缓存 |
+
+采用 deer-flow 与 dify-agent 的模型，并保留 Hermes 的账本与忙时策略。
+
+## 二、Run 流程
+
+1. **领取**：从账本 CAS 领取队首（`queued → started`）。同一会话只能有一个 `started`。
+2. **读头**：读取会话头（当前水位 `watermark`、快照版本 `snapshot_version`）。这是一个主键查询。
+3. **装配**：
+   - 投影缓存：key `(session_id, watermark)`。命中则直接取视图；未命中则读取快照与水位之前的事件，投影后写入缓存。
+   - 进程级对象：模型客户端、工具注册表（按配置版本）。
+   - 执行对象：引擎、工具网关、运行上下文，全部新建。
+4. **执行**：运行引擎。权限检查在每次工具调用时查库。
+5. **保存**：在 `finally` 中写入终态快照，并追加事件。写入带预期水位。成功、失败、取消都要保存。
+   - 未执行的工具调用标记为 `interrupted`。
+   - 删除瞬态指令，只保留历史与状态层。
+6. **结束**：账本标记 `terminal`。
+
+## 三、快照
+
+```json
+{"schema_version": 2, "layers": {"history": {"messages": []}}}
 ```
 
-事实源：单机版的会话事件与账本都在 SQLite。进程内缓存只是副本。
+- 只保存 JSON 数据。禁止保存配置对象、客户端、租约句柄、令牌、模型对象和枚举。
+- 状态按名称存储，指令顺序不影响恢复；可选模块可以增删。
+- 读取时用版本化的校验器解析：v1（含无版本的旧列表）通过迁移函数转换为 v2，未知的显式版本拒绝。读取转换只在内存中进行，保存时才写回。
+- 快照读取失败、版本未知或状态损坏时，拒绝该 Run 并标记会话需要人工处理，不静默丢弃历史。
 
-## 二、会话对象缓存
+## 四、投影缓存
 
-- 键：`session_id`。值：会话数据 + 可选执行对象。
-- 写入：先写 SQLite（带当前 epoch），提交成功后更新缓存。
-- 读取：缓存命中则不读库；未命中则从 SQLite 全量装配一次。
-- 不缓存：权限判断、凭据明文、超阈值工具输出原文（只存句柄）。
-- 回收：LRU 超过 `max_sessions`；空闲超过 `idle_ttl`；单对象字节超限时只保留检查点与最近消息。
-- 进程内没有其他写者，因此不需要修订号或所有权校验。
+- key：`(session_id, watermark)`。事件只追加，水位只增加，同一个 key 的内容不会变化。
+- 因此不需要失效，多个进程读取同一个 key 得到相同结果，不需要协调。
+- 淘汰：LRU（`max_entries`）与空闲 TTL（`idle_ttl`）。旧水位的 key 会因为没人再用而自然淘汰。
+- 容量：单条目字节上限，超过时只缓存最近 N 条消息及检查点，较早内容按需从快照读取。
+- 缓存不含权限结果、凭据明文、超阈值工具输出原文（只存句柄）。
 
-## 三、会话调度（参考 Hermes）
+## 五、乐观并发与账本
 
-- 忙时策略（每会话）：默认 `interrupt`；`queue` 排队；`steer` 注入。打断时若有子任务或压缩进行中，降级为 `queue`。
-- 每会话待处理队列上限 32，超限丢弃并记录。
-- 全局 `max_concurrent_sessions`，超限拒绝新会话（返回提示，不排队）。
-- 同一会话的 Run 串行。
+- 追加事件与保存快照时带预期水位：`UPDATE sessions SET watermark=:new WHERE id=:id AND watermark=:expected`，rowcount 为 0 即拒绝并重新读取。
+- 同一会话只有一个 `started`（账本保证），因此正常情况下不会冲突；乐观并发用于防止异常路径（如两个进程同时运行）覆盖数据。
+- 领取保留 Hermes 的 CAS 与取队首规则（`ORDER BY seq`）。
+- 启动恢复：旧 epoch 的 `started` 与执行记录标记为 `unknown`，会话阻塞，需要显式解除。
 
-## 四、账本与 CAS 领取
+## 六、进程级对象
 
-- 入队：写入 `session_admissions`（`queued`）。
-- 领取：`UPDATE session_admissions SET status='started', owner_epoch=:e, generation=:g WHERE id=:id AND status='queued'`，rowcount 必须为 1。
-- 取队首：`ORDER BY seq LIMIT 1`。
-- 阻塞：会话有 `started` 或 `unknown` 记录时不领取。
-- 结束：`terminal`，写入结果。
+- 模型客户端、工具注册表、技能内容：按配置版本构建一次，所有 Run 共用。
+- 配置版本变化时，新 Run 使用新版本，旧版本在没有 Run 使用后释放。
+- 这些对象不含会话状态，因此不影响正确性。
 
-## 五、启动恢复
+## 七、权限
 
-1. `runtime_epoch` +1。
-2. 所有 `owner_epoch < 当前 epoch` 的 `started` 与执行记录改为 `unknown`。
-3. 对应会话进入阻塞态（`unknown_execution`），不自动重放。
-4. 显式解除（用户确认或运维命令）后，会话恢复为可领取，并记录审计事件。
+- 不缓存（已确定）。每次工具调用与资源访问查库。
+- 授权判断的结果不写入投影缓存或快照。
 
-这与架构 2.12 的"中断不重放"一致，只是把"中断"具体化为 `unknown` 状态。
+## 八、测试要点
 
-## 六、与当前代码的差异（确认后再改）
-
-- `apps/worker` 的单机入口与 `execute_native` 的每 Run 构建模式会被替代。
-- `packages/platform` 的 Outbox 与 lease 逻辑保留给多租户 PG 实现；单机版使用 SQLite 账本。
-- 架构 2.2 的恢复规则（不依赖进程内锁、回调、SDK 句柄）仍然适用。
-
-## 七、测试要点
-
-- 账本：CAS 领取只有一方成功；队首顺序；`queue_full` 与 `max_concurrent_sessions` 拒绝路径。
-- 缓存：命中时 Run 期间零会话数据读库（查询计数）；LRU 与 TTL 回收后从库重建结果一致。
-- 恢复：模拟进程崩溃重启，旧 epoch 的 started 变为 `unknown`，会话阻塞，不重放。
-- 权限：撤销权限后，同会话下一次工具调用被拒绝。
-- 关停：停止接收新 Run，未完成的标记为 `unknown`。
+- 每个 Run 构建的执行对象都是新的（对象标识不同），进程级对象是同一份。
+- 投影缓存：相同 key 的内容一致；新事件产生新水位和新 key；LRU 与 TTL 淘汰后从快照重建结果一致。
+- 快照：成功、失败、取消三种结束方式都保存；未执行的工具调用标记 `interrupted`；v1 迁移到 v2 结果正确；未知版本被拒绝。
+- 乐观并发：水位不一致时写入被拒绝，不覆盖。
+- 权限：撤销后，同会话下一次工具调用被拒绝。
+- 恢复：模拟崩溃重启，旧 epoch 的 `started` 变为 `unknown`，会话阻塞，不重放。
+- 忙时策略：interrupt 打断当前 Run 并保存快照；queue 排队；steer 注入。
