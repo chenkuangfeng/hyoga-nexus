@@ -13,6 +13,7 @@ from nexus_core.platform import Principal, CredentialRef
 from nexus_core.platform import new_id, utc_now
 from nexus_platform.errors import Forbidden, NotFound, ServiceUnavailable, Conflict
 from nexus_platform.identity.service import resolve_user, require_tenant, require_membership
+from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.models.service import content_hash
 from nexus_platform.models.ports import CredentialLease, CredentialResolver
 from nexus_platform.persistence.models import (
@@ -77,7 +78,8 @@ def provider_access(db: Session, tenant_id: UUID, user_id: UUID, provider_id: UU
     if row.owner_user_id is not None and row.owner_user_id != user_id:
         raise NotFound('Provider unavailable')
     if manage and row.owner_user_id is None:
-        require_membership(db, tenant_id, user_id, roles=ADMIN_ROLES)
+        require_membership(db, tenant_id, user_id)
+        require_api_permission(db, tenant_id, user_id, "models:manage")
     return row
 
 
@@ -151,7 +153,8 @@ def save_provider(db: Session, principal: Principal, tenant_id: UUID, *, name: s
                 raise Conflict('Provider scope cannot be changed')
         else:
             if scope == 'tenant':
-                require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+                require_membership(db, tenant_id, user.id)
+                require_api_permission(db, tenant_id, user.id, "models:manage")
             if not api_key:
                 raise ValueError('API Key is required')
             credential_id = new_id()
@@ -273,7 +276,8 @@ def set_default(db: Session, principal: Principal, tenant_id: UUID, scope: str, 
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         if scope == 'tenant':
-            require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+            require_membership(db, tenant_id, user.id)
+            require_api_permission(db, tenant_id, user.id, "models:manage")
         key = 'tenant' if scope == 'tenant' else str(user.id)
         row = db.get(Default, (tenant_id, key))
         if version_id:

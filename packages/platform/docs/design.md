@@ -62,4 +62,12 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 
 有效权限为成员的全部角色授权并集；owner 与 admin 隐式拥有完整目录。非活跃成员没有任何权限。管理角色需要 `roles:manage`，且只能授予操作者自己拥有的菜单与 API 权限，防止越权。API 位于 `/api/v1/tenants/{id}/roles`、`/members/{id}/roles/{role}` 与 `/me/permissions`。
 
-当前仅角色管理接口读取该权限；既有的智能体、会话、模型、审计等接口仍按原有成员角色判断，尚未逐接口接入目录。智能体级权限（view/run/edit/publish/manage）与智能体绑定的工具、技能、知识库尚未实现，见路线图。
+成员管理、模型配置与凭据、工具启用、审计查询分别要求 `members:manage`、`models:manage`、`tools:manage`、`audit:read`（owner/admin 隐式拥有）。创建智能体需要 `agents:write`。
+
+## 智能体授权
+
+`agents/access.py` 与 `tenant_agent_grants`（迁移 `b7d1e5c3a9f2`）按角色授予智能体级权限：`view`、`run`、`edit`、`publish`、`manage`。`manage` 蕴含全部，`publish` 蕴含 `edit` 与 `view`，`edit` 蕴含 `view`，规则见 `authz/catalog.py`。owner、admin 与智能体创建者保留原有完整权限。无 `view` 的成员看不到智能体（返回 404），其他缺失权限返回 403。智能体列表只返回可见智能体。创建会话需要 `run`；修改草稿需要 `edit`；发布需要 `publish`。角色管理者只能授予自己持有的智能体权限。
+
+智能体绑定的工具、技能与知识库沿用已有的资源绑定（`ResourceBindingRecord`），使用时按智能体配置执行，不逐用户重新检查。Run 提交阶段目前只复核会话所属用户的成员身份，尚未在每次 Run 提交时复核 `run` 权限，这是后续需要补齐的缺口。
+
+模型设置中的 `can_manage_tenant` 等 UI 标记、资源授权（`authz/resources.py`）仍按 owner/admin 判断，尚未迁移到目录权限。

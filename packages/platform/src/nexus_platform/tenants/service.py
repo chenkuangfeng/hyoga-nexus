@@ -9,6 +9,7 @@ from nexus_core.platform import Principal, TenantRole, new_id, utc_now
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.authz.audit import audit
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
+from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.persistence.models import MembershipRecord, TenantRecord
 
 
@@ -69,7 +70,8 @@ def add_member(
     with session.begin():
         actor = resolve_user(session, principal)
         require_tenant(session, tenant_id)
-        require_membership(session, tenant_id, actor.id, roles=ADMIN_ROLES)
+        require_membership(session, tenant_id, actor.id)
+        require_api_permission(session, tenant_id, actor.id, "members:manage")
         user = resolve_user(session, new_principal)
         membership = session.get(MembershipRecord, (tenant_id, user.id))
         if membership and membership.status == "active":
@@ -99,7 +101,8 @@ def update_member_role(
     with session.begin():
         actor = resolve_user(session, principal)
         lock_tenant(session, tenant_id)
-        actor_membership = require_membership(session, tenant_id, actor.id, roles=ADMIN_ROLES)
+        actor_membership = require_membership(session, tenant_id, actor.id)
+        require_api_permission(session, tenant_id, actor.id, "members:manage")
         member = session.get(MembershipRecord, (tenant_id, member_id))
         if member is None or member.status != "active":
             raise NotFound("Tenant member not found")
@@ -127,7 +130,8 @@ def remove_member(session: Session, principal: Principal, tenant_id: UUID, membe
     with session.begin():
         actor = resolve_user(session, principal)
         lock_tenant(session, tenant_id)
-        actor_membership = require_membership(session, tenant_id, actor.id, roles=ADMIN_ROLES)
+        actor_membership = require_membership(session, tenant_id, actor.id)
+        require_api_permission(session, tenant_id, actor.id, "members:manage")
         member = session.get(MembershipRecord, (tenant_id, member_id))
         if member is None or member.status != "active":
             raise NotFound("Tenant member not found")

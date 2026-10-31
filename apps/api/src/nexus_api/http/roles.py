@@ -10,10 +10,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response, status
 
 from nexus_core.platform import Principal
+from nexus_platform.agents.access import set_agent_grants
 from nexus_platform.authz.catalog import API_PERMISSIONS, MENUS
 from nexus_platform.tenants import roles as roles_service
 from nexus_api.dependencies.platform import get_database_session, get_principal
-from nexus_api.schemas.platform import PermissionCatalogView, PermissionsView, RoleGrantsInput, RoleInput, RoleView
+from nexus_api.schemas.platform import (
+    AgentGrantsInput, AgentGrantsView, PermissionCatalogView, PermissionsView, RoleGrantsInput, RoleInput, RoleView,
+)
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}", tags=["Tenant roles"])
 
@@ -72,3 +75,10 @@ def unassign_role(tenant_id: UUID, member_id: UUID, role_id: UUID,
                   principal: Principal = Depends(get_principal), db=Depends(get_database_session)):
     roles_service.unassign_role(db, principal, tenant_id, member_id, role_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/roles/{role_id}/agents/{agent_id}", response_model=AgentGrantsView)
+def set_role_agent_grants(tenant_id: UUID, role_id: UUID, agent_id: UUID, body: AgentGrantsInput,
+                          principal: Principal = Depends(get_principal), db=Depends(get_database_session)):
+    permissions = set_agent_grants(db, principal, tenant_id, role_id, agent_id, body.permissions)
+    return AgentGrantsView(role_id=role_id, agent_id=agent_id, permissions=sorted(permissions))

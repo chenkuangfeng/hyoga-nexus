@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole, new_id, utc_now
 from nexus_platform.authz.audit import audit
-from nexus_platform.authz.catalog import API_PERMISSIONS, MENUS, validate_grants
+from nexus_platform.authz.catalog import validate_grants
+from nexus_platform.authz.permissions import EffectivePermissions, FULL_ACCESS, effective_permissions, require_api_permission
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import (
@@ -29,44 +30,7 @@ from nexus_platform.persistence.models import (
 from nexus_platform.tenants.service import lock_tenant
 
 
-@dataclass(frozen=True)
-class EffectivePermissions:
-    menus: frozenset[str]
-    apis: frozenset[str]
-
-    def allows_api(self, permission: str) -> bool:
-        return permission in self.apis
-
-
-FULL_ACCESS = EffectivePermissions(MENUS, API_PERMISSIONS)
-
-
-def effective_permissions(session: Session, tenant_id: UUID, user_id: UUID) -> EffectivePermissions:
-    """Return the union of permissions for an active member; no membership yields no access."""
-    membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if membership is None or membership.status != "active":
-        return EffectivePermissions(frozenset(), frozenset())
-    if membership.role in {TenantRole.OWNER.value, TenantRole.ADMIN.value}:
-        return FULL_ACCESS
-    role_ids = select(TenantUserRoleRecord.role_id).where(
-        TenantUserRoleRecord.tenant_id == tenant_id, TenantUserRoleRecord.user_id == user_id
-    )
-    menus = set(session.scalars(
-        select(TenantRoleMenuGrantRecord.menu).where(TenantRoleMenuGrantRecord.role_id.in_(role_ids))
-    ))
-    apis = set(session.scalars(
-        select(TenantRoleApiGrantRecord.permission).where(TenantRoleApiGrantRecord.role_id.in_(role_ids))
-    ))
-    return EffectivePermissions(frozenset(menus), frozenset(apis))
-
-
-def require_api_permission(session: Session, tenant_id: UUID, user_id: UUID, permission: str) -> None:
-    """Raise Forbidden unless the user's effective permissions include `permission`."""
-    if not effective_permissions(session, tenant_id, user_id).allows_api(permission):
-        raise Forbidden("Your tenant role does not allow this action")
-
-
-def _actor_context(session: Session, principal: Principal, tenant_id: UUID) -> tuple[UUID, EffectivePermissions]:
+def require_role_manager(session: Session, principal: Principal, tenant_id: UUID) -> tuple[UUID, EffectivePermissions]:
     actor = resolve_user(session, principal)
     require_tenant(session, tenant_id)
     require_membership(session, tenant_id, actor.id)
@@ -105,7 +69,7 @@ def create_role(
     menu_set, api_set = validate_grants(menus, apis)
     now = utc_now()
     with session.begin():
-        actor_id, actor = _actor_context(session, principal, tenant_id)
+        actor_id, actor = require_role_manager(session, principal, tenant_id)
         lock_tenant(session, tenant_id)
         _ensure_within_actor(actor, menu_set, api_set)
         if session.scalar(select(TenantRoleRecord.id).where(
@@ -126,7 +90,7 @@ def update_role_grants(
 ) -> TenantRoleRecord:
     menu_set, api_set = validate_grants(menus, apis)
     with session.begin():
-        actor_id, actor = _actor_context(session, principal, tenant_id)
+        actor_id, actor = require_role_manager(session, principal, tenant_id)
         lock_tenant(session, tenant_id)
         role = _role_in_tenant(session, tenant_id, role_id)
         _ensure_within_actor(actor, menu_set, api_set)
@@ -139,7 +103,7 @@ def update_role_grants(
 
 def assign_role(session: Session, principal: Principal, tenant_id: UUID, member_id: UUID, role_id: UUID) -> None:
     with session.begin():
-        actor_id, actor = _actor_context(session, principal, tenant_id)
+        actor_id, actor = require_role_manager(session, principal, tenant_id)
         lock_tenant(session, tenant_id)
         role = _role_in_tenant(session, tenant_id, role_id)
         member = session.get(MembershipRecord, (tenant_id, member_id))
@@ -160,7 +124,7 @@ def assign_role(session: Session, principal: Principal, tenant_id: UUID, member_
 
 def unassign_role(session: Session, principal: Principal, tenant_id: UUID, member_id: UUID, role_id: UUID) -> None:
     with session.begin():
-        actor_id, _ = _actor_context(session, principal, tenant_id)
+        actor_id, _ = require_role_manager(session, principal, tenant_id)
         lock_tenant(session, tenant_id)
         _role_in_tenant(session, tenant_id, role_id)
         assignment = session.get(TenantUserRoleRecord, (tenant_id, member_id, role_id))
@@ -184,7 +148,7 @@ def effective_permissions_for_role(session: Session, role_id: UUID) -> tuple[fro
 
 def list_roles(session: Session, principal: Principal, tenant_id: UUID) -> list[dict]:
     with session.begin():
-        _actor_context(session, principal, tenant_id)
+        require_role_manager(session, principal, tenant_id)
         roles = list(session.scalars(
             select(TenantRoleRecord).where(TenantRoleRecord.tenant_id == tenant_id).order_by(TenantRoleRecord.name)
         ))
@@ -204,6 +168,5 @@ def my_permissions(session: Session, principal: Principal, tenant_id: UUID) -> E
 
 
 __all__ = [
-    "EffectivePermissions", "assign_role", "create_role", "effective_permissions", "list_roles",
-    "my_permissions", "require_api_permission", "unassign_role", "update_role_grants",
+    "assign_role", "create_role", "list_roles", "my_permissions", "unassign_role", "update_role_grants",
 ]

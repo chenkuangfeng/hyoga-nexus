@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.errors import NotFound
 from nexus_platform.models.provider_settings import authorize_model
+from nexus_platform.agents.access import require_agent_permission
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import AgentRecord, AgentVersionRecord, SessionRecord
 
@@ -32,6 +33,7 @@ def create_session(
         if row is None:
             raise NotFound("Published agent version not found")
         agent_version = row[1]
+        require_agent_permission(session, tenant_id, user.id, row[0], "run")
         authorize_model(session, tenant_id, user.id, agent_version.model_profile_version_id)
         created = SessionRecord(
             id=new_id(), tenant_id=tenant_id, owner_user_id=user.id,

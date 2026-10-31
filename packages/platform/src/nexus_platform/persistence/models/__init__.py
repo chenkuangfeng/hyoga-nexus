@@ -2,7 +2,7 @@
 from ..base import Base
 from .identity import UserIdentityRecord, UserRecord
 from .tenant import TenantRecord, MembershipRecord
-from .role import TenantRoleRecord, TenantRoleMenuGrantRecord, TenantRoleApiGrantRecord, TenantUserRoleRecord
+from .role import TenantRoleRecord, TenantRoleMenuGrantRecord, TenantRoleApiGrantRecord, TenantUserRoleRecord, TenantAgentGrantRecord
 from .credential import CredentialReferenceRecord, ProviderCredentialRecord
 from .model import (
     ModelProfileRecord,
@@ -38,6 +38,7 @@ __all__ = [
     'TenantRoleMenuGrantRecord',
     'TenantRoleApiGrantRecord',
     'TenantUserRoleRecord',
+    'TenantAgentGrantRecord',
     'CredentialReferenceRecord',
     'ProviderCredentialRecord',
     'ModelProfileRecord',

@@ -65,3 +65,24 @@ class TenantUserRoleRecord(Base):
     user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     role_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TenantAgentGrantRecord(Base):
+    """Agent-level permissions a role grants on one agent of the same tenant."""
+
+    __tablename__ = "tenant_agent_grants"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["agent_id", "tenant_id"], ["agents.id", "agents.tenant_id"],
+            ondelete="CASCADE", name="fk_tenant_agent_grants_agent_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["role_id", "tenant_id"], ["tenant_roles.id", "tenant_roles.tenant_id"],
+            ondelete="CASCADE", name="fk_tenant_agent_grants_role_tenant",
+        ),
+    )
+
+    role_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    agent_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    permission: Mapped[str] = mapped_column(String(16), primary_key=True)

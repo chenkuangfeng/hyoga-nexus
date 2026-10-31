@@ -287,6 +287,17 @@ def test_platform_api_publishes_agent_and_exposes_run_events(database):
             )
             assert member_response.status_code == 201, member_response.text
 
+            member_user_id = member_response.json()["user_id"]
+            role = client.post(f"/api/v1/tenants/{tenant_id}/roles",
+                               json={"name": "agent-viewer", "menus": ["agents"], "apis": ["agents:read"]})
+            assert role.status_code == 201, role.text
+            role_id = role.json()["id"]
+            grant = client.put(f"/api/v1/tenants/{tenant_id}/roles/{role_id}/agents/{agent_id}",
+                               json={"permissions": ["view", "run"]})
+            assert grant.status_code == 200, grant.text
+            assigned = client.put(f"/api/v1/tenants/{tenant_id}/members/{member_user_id}/roles/{role_id}")
+            assert assigned.status_code == 204, assigned.text
+
             current_principal["value"] = Principal(id="workflow-member", issuer="test")
             visible_agents = client.get(f"/api/v1/tenants/{tenant_id}/agents")
             assert visible_agents.status_code == 200, visible_agents.text

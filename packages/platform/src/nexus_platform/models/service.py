@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
+from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.persistence.models import (
     CredentialReferenceRecord,
     ModelProfileRecord,
@@ -41,7 +42,8 @@ def create_model_profile(
     with session.begin():
         user = resolve_user(session, principal)
         require_tenant(session, tenant_id)
-        require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
+        require_membership(session, tenant_id, user.id)
+        require_api_permission(session, tenant_id, user.id, "models:manage")
         if credential_reference_id is not None:
             if session.scalar(select(ProviderCredentialRecord.credential_id).where(ProviderCredentialRecord.credential_id == credential_reference_id)):
                 raise ValueError('Manage stored credentials through model settings')
@@ -98,7 +100,8 @@ def update_model_profile(
     with session.begin():
         user = resolve_user(session, principal)
         require_tenant(session, tenant_id)
-        require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
+        require_membership(session, tenant_id, user.id)
+        require_api_permission(session, tenant_id, user.id, "models:manage")
         profile = session.scalar(
             select(ModelProfileRecord).where(
                 ModelProfileRecord.id == profile_id, ModelProfileRecord.tenant_id == tenant_id

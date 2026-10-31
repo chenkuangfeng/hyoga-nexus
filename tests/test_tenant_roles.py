@@ -143,3 +143,100 @@ def test_roles_api_enforces_manage_permission(database):
     finally:
         app.dependency_overrides.clear()
         app.state.session_factory = None
+
+
+# ---- agent-level grants ----------------------------------------------------------------------
+
+from nexus_platform.agents import access as agent_access  # noqa: E402
+from nexus_platform.agents.service import update_agent_draft  # noqa: E402
+from nexus_platform.authz.catalog import expand_agent_permissions  # noqa: E402
+from nexus_platform.errors import InvalidConfiguration as _InvalidConfiguration  # noqa: E402
+from nexus_platform.persistence.models import AgentRecord  # noqa: E402
+from nexus_platform.sessions.service import create_session  # noqa: E402
+from nexus_platform.agents.service import publish_agent  # noqa: E402
+from test_platform import create_agent_stack  # noqa: E402
+
+
+def _grant_agent(factory, owner, tid, agent_id, perms, *, menus=("agents",), apis=("agents:read",)):
+    member = _uid(factory, MEMBER)
+    with factory() as db:
+        role = roles.create_role(db, owner, tid, f"agent-role-{len(perms)}-{'-'.join(perms)}", list(menus), list(apis))
+        role_id = role.id
+    with factory() as db:
+        agent_access.set_agent_grants(db, owner, tid, role_id, agent_id, perms)
+    with factory() as db:
+        roles.assign_role(db, owner, tid, member, role_id)
+    return role_id
+
+
+def test_agent_permissions_follow_implication_and_visibility(database):
+    owner_principal = Principal(id="agent-owner", issuer="test")
+    tenant, _, _, agent, _, _ = create_agent_stack(database, owner_principal)
+    tid = tenant.id
+    with database() as db:
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+    _grant_agent(database, owner_principal, tid, agent.id, ["edit"])
+    with database() as db:
+        record = db.get(AgentRecord, agent.id)
+        granted = agent_access.agent_permissions(db, tid, _uid(database, MEMBER), record)
+        assert granted == {"edit", "view"}
+        assert "run" not in granted
+        assert agent_access.visible_agent_ids(db, tid, _uid(database, MEMBER)) == {agent.id}
+    with database() as db:
+        with pytest.raises(Forbidden):
+            agent_access.require_agent_permission(db, tid, _uid(database, MEMBER), db.get(AgentRecord, agent.id), "run")
+    with database() as db:
+        assert expand_agent_permissions(["publish"]) == {"publish", "edit", "view"}
+        assert expand_agent_permissions(["manage"]) == agent_access.AGENT_PERMISSIONS
+
+
+def test_agent_without_grant_is_hidden_and_run_requires_run_permission(database):
+    owner_principal = Principal(id="agent-owner-2", issuer="test")
+    tenant, _, _, agent, version, session = create_agent_stack(database, owner_principal)
+    tid = tenant.id
+    with database() as db:
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+    member = _uid(database, MEMBER)
+    with database() as db:
+        assert agent_access.visible_agent_ids(db, tid, member) == set()
+        with pytest.raises(NotFound):
+            agent_access.require_agent_permission(db, tid, member, db.get(AgentRecord, agent.id), "view")
+    _grant_agent(database, owner_principal, tid, agent.id, ["view"])
+    with database() as db:
+        with pytest.raises(Forbidden):
+            create_session(db, MEMBER, tid, agent_version_id=version.id, title="blocked")
+    _grant_agent(database, owner_principal, tid, agent.id, ["run"])
+    with database() as db:
+        created = create_session(db, MEMBER, tid, agent_version_id=version.id, title="allowed")
+        assert created.agent_version_id == version.id
+
+
+def test_edit_and_publish_need_agent_permission_and_manager_cannot_over_grant(database):
+    owner_principal = Principal(id="agent-owner-3", issuer="test")
+    tenant, profile, model_version, agent, _, _ = create_agent_stack(database, owner_principal)
+    tid = tenant.id
+    with database() as db:
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+    _grant_agent(database, owner_principal, tid, agent.id, ["view"])
+    with database() as db:
+        with pytest.raises(Forbidden):
+            update_agent_draft(db, MEMBER, tid, agent.id, name="Hacked", description="x",
+                               runtime_type="native", instructions="x",
+                               model_profile_version_id=model_version.id, budgets={"max_rounds": 1}, bindings=[])
+    with database() as db:
+        with pytest.raises(Forbidden):
+            publish_agent(db, MEMBER, tid, agent.id)
+    # A member whose role may only view cannot grant edit on the agent to another role.
+    member = _uid(database, MEMBER)
+    with database() as db:
+        viewer_role = roles.create_role(db, owner_principal, tid, "viewer-manager", ["roles"],
+                                        ["roles:manage"])
+        roles.assign_role(db, owner_principal, tid, member, viewer_role.id)
+    with database() as db:
+        target = roles.create_role(db, owner_principal, tid, "target", [], [])
+    with database() as db:
+        with pytest.raises(Forbidden):
+            agent_access.set_agent_grants(db, MEMBER, tid, target.id, agent.id, ["edit"])
+    with database() as db:
+        with pytest.raises(_InvalidConfiguration):
+            agent_access.set_agent_grants(db, owner_principal, tid, target.id, agent.id, ["teleport"])

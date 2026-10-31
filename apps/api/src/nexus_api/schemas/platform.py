@@ -229,3 +229,13 @@ class PermissionsView(BaseModel):
 class PermissionCatalogView(BaseModel):
     menus: list[str]
     apis: list[str]
+
+
+class AgentGrantsInput(BaseModel):
+    permissions: list[Literal["view", "run", "edit", "publish", "manage"]] = Field(default_factory=list, max_length=5)
+
+
+class AgentGrantsView(BaseModel):
+    role_id: UUID
+    agent_id: UUID
+    permissions: list[str]

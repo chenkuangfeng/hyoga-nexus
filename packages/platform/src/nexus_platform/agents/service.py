@@ -20,7 +20,8 @@ from nexus_platform.persistence.models import (
     ModelProfileVersionRecord,
     ResourceBindingRecord,
 )
-from nexus_platform.tenants.service import ADMIN_ROLES
+from nexus_platform.agents.access import require_agent_permission
+from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
 
@@ -49,6 +50,7 @@ def create_agent(
         user = resolve_user(session, principal)
         require_tenant(session, tenant_id)
         require_membership(session, tenant_id, user.id)
+        require_api_permission(session, tenant_id, user.id, "agents:write")
         verify_model_version(session, tenant_id, model_profile_version_id)
         authorize_model(session, tenant_id, user.id, model_profile_version_id)
         agent = AgentRecord(
@@ -94,10 +96,9 @@ def update_agent_draft(
                 AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id
             ).with_for_update()
         )
-        if agent is not None and agent.created_by != user.id:
-            require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
         if agent is None:
             raise NotFound("Agent not found")
+        require_agent_permission(session, tenant_id, user.id, agent, "edit")
         verify_model_version(session, tenant_id, model_profile_version_id)
         authorize_model(session, tenant_id, user.id, model_profile_version_id)
         agent.name = name.strip()
@@ -124,10 +125,9 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
                 AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id
             ).with_for_update()
         )
-        if agent is not None and agent.created_by != user.id:
-            require_membership(session, tenant_id, user.id, roles=ADMIN_ROLES)
         if agent is None:
             raise NotFound("Agent not found")
+        require_agent_permission(session, tenant_id, user.id, agent, "publish")
         if agent.draft_runtime_type != "native":
             raise InvalidConfiguration("Only native configuration is supported in P1")
         if not agent.draft_model_profile_version_id:

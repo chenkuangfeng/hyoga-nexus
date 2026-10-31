@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole
 from nexus_platform.agents import service as agents
+from nexus_platform.agents.access import require_agent_permission, set_agent_grants, visible_agent_ids
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models import service as models
 from nexus_platform.models.credentials import create_credential_reference
@@ -32,6 +33,7 @@ from nexus_platform.tenants import service as tenants
 from nexus_platform.authz import resources as authz
 from nexus_platform.authz.audit import audit
 from nexus_platform.tenants.service import ADMIN_ROLES
+from nexus_platform.authz.permissions import require_api_permission
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.schemas.platform import (
     InputResponse,
@@ -102,7 +104,8 @@ def list_tenant_members(
     with db.begin():
         user = resolve_user(db, principal)
         require_tenant(db, tenant_id)
-        require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+        require_membership(db, tenant_id, user.id)
+        require_api_permission(db, tenant_id, user.id, "members:manage")
         rows = list(
             db.scalars(
                 select(MembershipRecord)
@@ -201,7 +204,8 @@ def list_model_profiles(
     with db.begin():
         user = resolve_user(db, principal)
         require_tenant(db, tenant_id)
-        require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+        require_membership(db, tenant_id, user.id)
+        require_api_permission(db, tenant_id, user.id, "models:manage")
         profiles = list(
             db.scalars(
                 select(ModelProfileRecord).where(ModelProfileRecord.tenant_id == tenant_id)
@@ -268,7 +272,8 @@ def list_agents(
         user = resolve_user(db, principal)
         require_tenant(db, tenant_id)
         membership = require_membership(db, tenant_id, user.id)
-        rows = agents.list_agents(db, tenant_id)
+        visible = visible_agent_ids(db, tenant_id, user.id)
+        rows = [row for row in agents.list_agents(db, tenant_id) if visible is None or row.id in visible]
         output = []
         for row in rows:
             from nexus_platform.models.provider_settings import authorize_model
@@ -307,6 +312,7 @@ def get_agent(
         require_tenant(db, tenant_id)
         membership = require_membership(db, tenant_id, user.id)
         row, bindings = agents.get_agent(db, tenant_id, agent_id)
+        require_agent_permission(db, tenant_id, user.id, row, "view")
         public_version = None
         from nexus_platform.models.provider_settings import authorize_model
         if membership.role in ADMIN_ROLES and row.draft_model_profile_version_id:
@@ -473,7 +479,8 @@ def list_audit_records(
     with db.begin():
         user = resolve_user(db, principal)
         require_tenant(db, tenant_id)
-        require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+        require_membership(db, tenant_id, user.id)
+        require_api_permission(db, tenant_id, user.id, "audit:read")
         rows = list(
             db.scalars(
                 select(AuditRecord).where(AuditRecord.tenant_id == tenant_id)
@@ -591,7 +598,8 @@ def enable_builtin(tenant_id: UUID, name: str, principal: Principal = Depends(ge
     with db.begin():
         user = resolve_user(db, principal)
         require_tenant(db, tenant_id)
-        require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+        require_membership(db, tenant_id, user.id)
+        require_api_permission(db, tenant_id, user.id, "tools:manage")
         authz.register_resource(db, tenant_id=tenant_id, kind='tool', resource_id=name, version_id='v1')
         audit(db, tenant_id, user.id, 'tool.enabled', 'tool', name)
     return {'kind': 'tool', 'resource_id': name, 'resource_version_id': 'v1', 'source_tenant_id': tenant_id}

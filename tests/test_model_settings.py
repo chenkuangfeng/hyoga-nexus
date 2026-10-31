@@ -49,6 +49,17 @@ def settings_client(database, monkeypatch):
     app.dependency_overrides.clear()
 
 
+def add_member_role(client, tenant_path, identity, owner):
+    """Give the seeded member a role that may create agents; built-in member roles have no agent access."""
+    identity[0] = owner
+    members = client.get(tenant_path + '/members').json()
+    member_user_id = next(item['user_id'] for item in members if item['role'] == 'member')
+    role = client.post(tenant_path + '/roles', json={'name': 'agent-builder', 'menus': ['agents'], 'apis': ['agents:write']})
+    assert role.status_code == 201, role.text
+    assigned = client.put(tenant_path + '/members/' + member_user_id + '/roles/' + role.json()['id'])
+    assert assigned.status_code == 204, assigned.text
+
+
 def add_provider(client, path, scope='personal', key='test-private-key'):
     response = client.post(path + '/providers', json={'name': 'Provider', 'base_url': 'https://model.example/v1', 'scope': scope, 'api_key': key})
     assert response.status_code == 201, response.text
@@ -128,6 +139,8 @@ def test_personal_isolation_and_tenant_admin(settings_client):
     personal = add_provider(client, path)
     member_model = add_model(client, path, personal)
     assert client.put(path + '/default', json={'version_id': member_model['version_id']}).status_code == 200
+    add_member_role(client, tenant_path, identity, owner)
+    identity[0] = member
     created = client.post(path + '/agents', json={'name': 'Member agent'})
     assert created.status_code == 201, created.text
 
@@ -224,6 +237,7 @@ def test_defaults_fallback_and_model_edit_advances_only_defaults(settings_client
     assert client.put(path + '/default', json={'scope': 'tenant', 'version_id': model['version_id']}).status_code == 200
     updated = client.put(path + '/providers/' + provider['id'] + '/models/' + model['id'], json={'name': 'next-model'}).json()
     assert client.get(path).json()['defaults']['tenant'] == updated['version_id']
+    add_member_role(client, path.removesuffix('/model-settings'), identity, owner)
     identity[0] = member
     assert client.post(path + '/agents', json={'name': 'Use space default'}).status_code == 201
     assert client.put(path + '/default', json={'version_id': updated['version_id']}).status_code == 200

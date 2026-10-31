@@ -20,7 +20,36 @@ API_PERMISSIONS: frozenset[str] = frozenset({
     "audit:read",
     "members:manage",
     "roles:manage",
+    "tools:manage",
 })
+
+
+# Agent-level permissions granted through roles. `manage` implies every other permission and
+# `publish` implies `edit`, which implies `view`; grants are stored explicitly as written.
+AGENT_PERMISSIONS: frozenset[str] = frozenset({"view", "run", "edit", "publish", "manage"})
+AGENT_IMPLIED: dict[str, frozenset[str]] = {
+    "manage": AGENT_PERMISSIONS,
+    "publish": frozenset({"publish", "edit", "view"}),
+    "edit": frozenset({"edit", "view"}),
+    "view": frozenset({"view"}),
+    "run": frozenset({"run"}),
+}
+
+
+def expand_agent_permissions(granted) -> frozenset[str]:
+    """Return every agent permission implied by the explicitly granted set."""
+    expanded: set[str] = set()
+    for permission in granted:
+        expanded |= AGENT_IMPLIED[permission]
+    return frozenset(expanded)
+
+
+def validate_agent_permissions(permissions) -> frozenset[str]:
+    permission_set = frozenset(permissions)
+    unknown = permission_set - AGENT_PERMISSIONS
+    if unknown:
+        raise InvalidConfiguration(f"Unknown agent permission: {', '.join(sorted(unknown))}")
+    return permission_set
 
 
 def validate_grants(menus, apis) -> tuple[frozenset[str], frozenset[str]]:
