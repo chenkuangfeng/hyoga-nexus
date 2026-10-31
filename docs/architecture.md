@@ -206,6 +206,22 @@ Hyoga Nexus 是通用多运行时智能体平台，观澜（股票研究）是�
 - 事件与上下文：DeepSeek Harness（事件溯源）+ LobeHub（上下文处理器管线）。
 - Codex/Claude：Hermes（Codex app-server 协议细节）+ 官方 SDK 文档。
 
+### 2.11 补充：其他智能体引擎
+
+本节依据对 `/project/opensource` 下各项目源码的抽样阅读，仅记录引擎循环与完成/终止机制，不逐文件审计，未运行这些项目的测试。固定版本见每项的 commit。
+
+| 项目（commit） | 循环形态 | 完成 / 终止机制 | 与本项目的关系 |
+|---|---|---|---|
+| AutoGen `d07c667`（Python） | 消息运行时（`autogen_core/_single_threaded_agent_runtime.py`）+ 群聊管理器 | `_assistant_agent.py` 的 `max_tool_iterations` 工具循环；群聊 `max_turns` 与终止条件；Magentic-One 账本编排 | 借鉴 Magentic-One 的停滞计数与重规划；不采用消息运行时作为 Native 循环 |
+| CrewAI `97bbfb6`（Python） | `AgentExecutor` 为 Flow 状态机（`agents/agent_executor.py`） | `max_iter`（默认 25）、重复工具调用上限、`max_replans`；`max_method_calls = max_iter × 10` | 各状态转移可单独测试，与本项目组件拆分方向一致；单类体量过大，不照搬 |
+| AutoGPT `07212df`（Python） | classic：`propose_action` → `execute` 周期；平台版：`util/tool_call_loop.py` 通用工具循环 | 平台版以 `finished_naturally` 区分自然结束与撞上限；撞上限时注入收尾提示 | 借鉴撞上限时的收尾语义 |
+| Dify `dcb33269`（Python） | `fc_agent_runner.py` 的原生工具调用 while 循环；另有文本 ReAct 的 CoT 运行器 | 最大步数 `min(max_iteration, 99) + 1`；最后一轮禁用工具，仍请求工具则抛 `AgentMaxIterationError` | 借鉴"最后一轮禁用工具"，可并入 CompletionJudge |
+| LangFlow `b5c54a6`（Python） | LangChain `AgentExecutor` + 图调度（`graph/graph/runnable_vertices_manager.py`） | `max_iterations` 交给 LangChain；环内节点首次执行与后续执行的就绪规则不同 | Agent 几乎完全依赖 LangChain，参考价值主要在图的环调度 |
+| n8n `a9874246`（TypeScript） | Agent 节点只产出动作（`EngineRequest.actions`），工作流引擎执行子节点后以 `EngineResponse` 恢复（`workflow-execute.ts`） | `maxIterations` 默认 10，经 `metadata.iterationCount` 跨恢复计数；HITL 门控工具执行后才恢复 | 动作产出与执行分离，与 ToolDispatcher 及检查点恢复思路相近 |
+| OpenClaw `7293e892`（TypeScript，版本 2026.10.9） | 外层重试循环（`embedded-agent-runner/run-loop.ts`）包住单次尝试（`run/attempt.ts`）；harness 可插拔（`harness-runtimes.ts`） | 重试预算基础 24 次、每个候选 profile 加 8 次，限定在 32–160 之间（`run/helpers.ts`） | 外层恢复与内层单次尝试分离、预算随候选数伸缩，可参考；整体实现复杂，不建议照搬 |
+
+未深读部分：AutoGPT SDK 版引擎（`copilot/sdk/service.py`）、OpenClaw harness 的具体实现、n8n `workflow-execute.ts` 主干。`finance-quant` 下的项目不属于通用智能体引擎，未纳入。
+
 ---
 
 ## 3. 总体架构
