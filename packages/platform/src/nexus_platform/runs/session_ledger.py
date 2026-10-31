@@ -1,0 +1,248 @@
+"""Dispatch ledger rules: process epochs, per-session FIFO admissions, CAS claims and recovery.
+
+Every function takes a SQLAlchemy ``Session`` and never commits; the caller owns the
+transaction. On SQLite the caller must begin the write with ``BEGIN IMMEDIATE`` so the
+read-then-write sequences below are serialized across processes. On PostgreSQL the
+conditional ``UPDATE`` statements are sufficient on their own.
+
+Rules (see docs/architecture.md 2.12):
+
+- Each process start increments ``runtime_epoch``. Every mutating call carries the
+  caller's epoch; a mismatch raises ``StaleEpoch`` and writes nothing.
+- A session's FIFO is ``session_admissions`` ordered by ``seq``. A claim moves the head
+  from ``queued`` to ``started`` with a conditional update whose rowcount must be 1.
+- A session with any ``started`` or ``unknown`` admission is blocked: no new claim.
+- Recovery marks ``started`` rows from an older epoch as ``unknown``. It never replays
+  them. ``unknown`` is cleared only by ``resolve_unknown``, an explicit operator action.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session
+
+from nexus_platform.persistence.models.ledger import RuntimeEpochRecord, SessionAdmissionRecord
+
+#: Maximum queued (not yet claimed) admissions per session. Matches Hermes' ADMISSION_QUEUE_MAX.
+ADMISSION_QUEUE_MAX = 32
+
+
+class LedgerError(RuntimeError):
+    """Base class for ledger rejections. Each subclass maps to one stable error code."""
+
+    code = "ledger_error"
+
+
+class StaleEpoch(LedgerError):
+    """The caller's process epoch is no longer current, or its claim was superseded."""
+
+    code = "stale_epoch"
+
+
+class StaleClaim(LedgerError):
+    """A conditional claim matched no row: another writer changed the admission first."""
+
+    code = "stale_claim"
+
+
+class QueueFull(LedgerError):
+    """The session already holds ``ADMISSION_QUEUE_MAX`` queued admissions."""
+
+    code = "queue_full"
+
+
+class AdmissionNotFound(LedgerError):
+    """No admission with the given id exists."""
+
+    code = "admission_not_found"
+
+
+@dataclass(frozen=True)
+class AdmissionView:
+    """Plain snapshot of an admission row, safe to use after the session closes."""
+
+    seq: int
+    admission_id: UUID
+    session_id: UUID
+    run_id: UUID
+    status: str
+    owner_epoch: int | None
+
+
+def _view(row: SessionAdmissionRecord) -> AdmissionView:
+    return AdmissionView(
+        seq=row.seq, admission_id=row.admission_id, session_id=row.session_id,
+        run_id=row.run_id, status=row.status, owner_epoch=row.owner_epoch,
+    )
+
+
+def begin_process(db: Session, *, instance_id: str, now: datetime) -> int:
+    """Start a new process generation: increment the singleton epoch and return it.
+
+    Call once at process startup, before any ledger write. The first call creates the row.
+    """
+    row = db.scalar(select(RuntimeEpochRecord).where(RuntimeEpochRecord.singleton == 1))
+    if row is None:
+        row = RuntimeEpochRecord(singleton=1, epoch=1, instance_id=instance_id, started_at=now)
+        db.add(row)
+    else:
+        row.epoch += 1
+        row.instance_id = instance_id
+        row.started_at = now
+    db.flush()
+    return row.epoch
+
+
+def current_epoch(db: Session) -> int:
+    """Return the current process epoch, or 0 when no process has started."""
+    value = db.scalar(select(RuntimeEpochRecord.epoch).where(RuntimeEpochRecord.singleton == 1))
+    return 0 if value is None else value
+
+
+def require_epoch(db: Session, epoch: int) -> None:
+    """Raise ``StaleEpoch`` unless ``epoch`` is the current process epoch.
+
+    Every mutating ledger function calls this first. A process that was superseded by a
+    restart therefore cannot write, even if it still holds in-memory state.
+    """
+    if current_epoch(db) != epoch:
+        raise StaleEpoch(f"epoch {epoch} is not current")
+
+
+def enqueue(
+    db: Session, *, epoch: int, session_id: UUID, run_id: UUID, admission_id: UUID, now: datetime,
+) -> AdmissionView:
+    """Append an admission to the session FIFO as ``queued``.
+
+    Raises ``QueueFull`` when the session already has ``ADMISSION_QUEUE_MAX`` queued rows.
+    The count and insert run in the caller's write transaction, so the cap holds under
+    concurrent submissions.
+    """
+    require_epoch(db, epoch)
+    queued = db.scalar(select(func.count()).select_from(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.session_id == session_id,
+        SessionAdmissionRecord.status == "queued",
+    )) or 0
+    if queued >= ADMISSION_QUEUE_MAX:
+        raise QueueFull(f"session {session_id} has {queued} queued admissions")
+    row = SessionAdmissionRecord(
+        admission_id=admission_id, session_id=session_id, run_id=run_id,
+        status="queued", owner_epoch=None, created_at=now, updated_at=now,
+    )
+    db.add(row)
+    db.flush()
+    return _view(row)
+
+
+def session_blocked(db: Session, session_id: UUID) -> bool:
+    """True when the session has a ``started`` or ``unknown`` admission.
+
+    A blocked session cannot be claimed. ``unknown`` blocks until ``resolve_unknown``.
+    """
+    return db.scalar(select(SessionAdmissionRecord.seq).where(
+        SessionAdmissionRecord.session_id == session_id,
+        SessionAdmissionRecord.status.in_(("started", "unknown")),
+    ).limit(1)) is not None
+
+
+def claim_next(db: Session, *, epoch: int, session_id: UUID, now: datetime) -> AdmissionView | None:
+    """Claim the FIFO head for ``session_id`` and return it, or ``None``.
+
+    Returns ``None`` when the session is blocked or has nothing queued. The claim is a
+    conditional update ``WHERE status = 'queued'``; if it matches no row, another writer
+    got there first and ``StaleClaim`` is raised so the caller re-reads the queue.
+    """
+    require_epoch(db, epoch)
+    if session_blocked(db, session_id):
+        return None
+    head = db.scalar(select(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.session_id == session_id,
+        SessionAdmissionRecord.status == "queued",
+    ).order_by(SessionAdmissionRecord.seq).limit(1))
+    if head is None:
+        return None
+    result = db.execute(update(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.admission_id == head.admission_id,
+        SessionAdmissionRecord.status == "queued",
+    ).values(status="started", owner_epoch=epoch, updated_at=now))
+    if result.rowcount != 1:
+        raise StaleClaim(f"admission {head.admission_id} was claimed concurrently")
+    db.refresh(head)
+    return _view(head)
+
+
+def finish(db: Session, *, epoch: int, admission_id: UUID, now: datetime) -> None:
+    """Mark a ``started`` admission ``terminal``. Only the claiming epoch may finish it.
+
+    Raises ``StaleEpoch`` if the caller's epoch is not current or the row is no longer
+    ``started`` under this epoch. Nothing is written in either case.
+    """
+    require_epoch(db, epoch)
+    result = db.execute(update(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.admission_id == admission_id,
+        SessionAdmissionRecord.status == "started",
+        SessionAdmissionRecord.owner_epoch == epoch,
+    ).values(status="terminal", updated_at=now))
+    if result.rowcount != 1:
+        raise StaleEpoch(f"admission {admission_id} is not started under epoch {epoch}")
+
+
+def recover_previous_epochs(db: Session, *, epoch: int, now: datetime) -> list[UUID]:
+    """Mark ``started`` admissions from older epochs as ``unknown``; return their run ids.
+
+    Called once after ``begin_process``. Rows claimed by the current epoch are left alone.
+    Nothing is replayed: the session stays blocked until ``resolve_unknown``.
+    """
+    require_epoch(db, epoch)
+    rows = db.scalars(select(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.status == "started",
+        SessionAdmissionRecord.owner_epoch != epoch,
+    )).all()
+    run_ids = [row.run_id for row in rows]
+    for row in rows:
+        row.status = "unknown"
+        row.updated_at = now
+    db.flush()
+    return run_ids
+
+
+def resolve_unknown(db: Session, *, epoch: int, admission_id: UUID, now: datetime) -> None:
+    """Explicitly clear an ``unknown`` admission so its session can run again.
+
+    This is the only transition out of ``unknown``. The caller must record an audit entry
+    stating who resolved it; the ledger does not decide that.
+    """
+    require_epoch(db, epoch)
+    row = db.scalar(select(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.admission_id == admission_id,
+    ))
+    if row is None:
+        raise AdmissionNotFound(str(admission_id))
+    if row.status != "unknown":
+        raise StaleEpoch(f"admission {admission_id} is {row.status}, not unknown")
+    row.status = "terminal"
+    row.updated_at = now
+    db.flush()
+
+
+__all__ = [
+    "ADMISSION_QUEUE_MAX",
+    "AdmissionNotFound",
+    "AdmissionView",
+    "LedgerError",
+    "QueueFull",
+    "StaleClaim",
+    "StaleEpoch",
+    "begin_process",
+    "claim_next",
+    "current_epoch",
+    "enqueue",
+    "finish",
+    "recover_previous_epochs",
+    "require_epoch",
+    "resolve_unknown",
+    "session_blocked",
+]
