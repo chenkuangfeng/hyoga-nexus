@@ -46,6 +46,7 @@ class RunSubmissionService:
             bindings = work.catalog.bindings(agent.id)
             for binding in bindings:
                 work.access.require_resource(tenant_id, binding)
+            work.access.require_agent_run(tenant_id, member.user_id, agent.agent_id)
             work.access.require_model(tenant_id, member.user_id, agent.model_profile_version_id)
             model = work.catalog.model_version(agent.model_profile_version_id)
             if model is None:

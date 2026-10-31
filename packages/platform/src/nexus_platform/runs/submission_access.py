@@ -5,6 +5,10 @@ from nexus_platform.identity.repository import SqlAlchemyTenantAccess
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.authz.resources import authorize_resource
+from nexus_platform.agents.access import require_agent_permission
+from nexus_platform.errors import NotFound
+from nexus_platform.persistence.models import AgentRecord
+from sqlalchemy import select
 from .configuration import AuthorizedMember, BoundResource
 
 
@@ -25,3 +29,12 @@ class SqlAlchemySubmissionAccess(SqlAlchemyTenantAccess):
 
     def require_model(self, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
         authorize_model(self.session, tenant_id, user_id, version_id)
+
+    def require_agent_run(self, tenant_id: UUID, user_id: UUID, agent_id: UUID) -> None:
+        """Re-check the run permission on every submission so revoked grants stop new Runs."""
+        agent = self.session.scalar(select(AgentRecord).where(
+            AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id
+        ))
+        if agent is None:
+            raise NotFound("Agent not found")
+        require_agent_permission(self.session, tenant_id, user_id, agent, "run")

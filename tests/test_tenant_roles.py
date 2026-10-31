@@ -240,3 +240,23 @@ def test_edit_and_publish_need_agent_permission_and_manager_cannot_over_grant(da
     with database() as db:
         with pytest.raises(_InvalidConfiguration):
             agent_access.set_agent_grants(db, owner_principal, tid, target.id, agent.id, ["teleport"])
+
+
+def test_revoking_run_grant_blocks_new_runs_in_existing_session(database):
+    from nexus_platform.runs.service import create_run
+    owner_principal = Principal(id="run-owner", issuer="test")
+    tenant, _, _, agent, version, _ = create_agent_stack(database, owner_principal)
+    tid = tenant.id
+    with database() as db:
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+    role_id = _grant_agent(database, owner_principal, tid, agent.id, ["view", "run"])
+    with database() as db:
+        session = create_session(db, MEMBER, tid, agent_version_id=version.id, title="ongoing")
+        session_id = session.id
+    with database() as db:
+        create_run(db, MEMBER, tid, session_id, message="first", idempotency_key="before-revoke")
+    with database() as db:
+        agent_access.set_agent_grants(db, owner_principal, tid, role_id, agent.id, ["view"])
+    with database() as db:
+        with pytest.raises(Forbidden):
+            create_run(db, MEMBER, tid, session_id, message="second", idempotency_key="after-revoke")

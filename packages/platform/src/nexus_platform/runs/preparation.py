@@ -10,6 +10,7 @@ from nexus_platform.errors import PlatformError
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.identity.service import principal_for_user, require_membership, require_tenant
 from nexus_platform.persistence.models import (
+    AgentRecord,
     AgentVersionRecord,
     CredentialReferenceRecord,
     InputRequestRecord,
@@ -27,6 +28,7 @@ from nexus_platform.persistence.models import (
 )
 from nexus_platform.runs.service import append_event, transition_run
 from nexus_platform.authz.audit import audit
+from nexus_platform.agents.access import require_agent_permission
 from .context import ExecutionContext
 from .messages import _history_allowed
 from .completion import _finish
@@ -77,6 +79,8 @@ class ExecutionPreparer:
                 if not user or user.status != 'active':
                     raise RuntimeFault('run_authorization_denied')
                 version = db.get(AgentVersionRecord, UUID(run.config_snapshot['agent_version_id']))
+                agent_row = db.get(AgentRecord, version.agent_id)
+                require_agent_permission(db, run.tenant_id, run.principal_id, agent_row, 'run')
                 authorize_model(db, run.tenant_id, run.principal_id, version.model_profile_version_id)
                 model = db.get(ModelProfileVersionRecord, version.model_profile_version_id)
                 profile = db.get(ModelProfileRecord, model.profile_id)
