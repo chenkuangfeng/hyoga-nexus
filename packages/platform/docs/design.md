@@ -8,7 +8,7 @@
 
 权限在设置查询/修改、Agent 创建与发布、Session/Run 创建、worker 准备与每次模型回合检查。模型设置之外的旧模型编辑接口拒绝操作受管理模型或引用其加密凭据，避免旁路。
 
-数据库迁移 `c8d240ab1701` 创建四张附加表，保留既有数据。PostgreSQL 并发专项最后执行；SQLite 回归不能替代目标环境验收。加密和网络决策见 [总体架构 4.13 节](../../../docs/architecture.md)。
+数据库迁移 `c8d240ab1701` 创建四张附加表，保留既有数据。PostgreSQL 并发专项最后执行；SQLite 回归不能替代目标环境验收。加密和网络决策见 [总体架构 5.13 节](../../../docs/architecture.md)。
 
 ## Native 状态与治理
 
@@ -41,7 +41,7 @@ SqlAlchemyUnitOfWork 接受 API 借用会话或 worker 的 sessionmaker；前者
 
 `compatibility.py` 将原函数调用装配到应用服务，返回本次仓储已跟踪的 RunRecord；不在提交后重新 SELECT，不开启另一事务。`service.py`、`execution.py` 和先前的职责模块入口继续保留。应用服务返回独立 Run 对象，直接导入提交、取消、输入和租约应用服务不会加载 SQLAlchemy。事件 writer 不自行提交；写入消息、输入、审计或队列的后续失败使此前 flush 的内容一起回滚。
 
-执行点资源授权、ExecutionPreparer 和 DurableRuntimeStore 仍有直接 ORM 使用，尚未完成全部服务隔离。此处没有迁移 WeKnora 的所有 Session 功能或 GenericAgent 循环。源码迁移范围与未完成项保留在已确认的 OpenSpec 变更中。
+执行点资源授权、ExecutionPreparer 和 DurableRuntimeStore 仍有直接 ORM 使用，尚未完成全部服务隔离。此处没有迁移 WeKnora 的所有 Session 功能或 GenericAgent 循环。源码迁移范围与未完成项以本模块文档为准。
 
 
 RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease owner、锁 Run；已开始或曾尝试的执行标记 interrupted，取消优先于重试，首次执行在无 Runtime 时记录 started/failed。只有常规处理完成才清理租约字段；已终态的早退路径保留既有租约值并完成投递。该入口保留历史兼容，Native worker 仍由 ExecutionPreparer 和 DurableRuntimeStore 驱动。Delivery 是独立数据对象，后台按投递锁读取 Run 的内部端口不能用作用户可见性回退。

@@ -16,7 +16,7 @@ Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / 
 - [configs/](configs/README.md)：部署数据库配置；migrations/、infra/：数据迁移和部署。
 - tests/：软件测试；evals/：Agent、检索、技能与股票分析质量评估预留。
 
-完整目录及边界见 [总体架构](docs/architecture.md) 第 3.2 节。
+完整目录及边界见 [总体架构](docs/architecture.md) 第 4 节。
 
 ## 开发计划
 

@@ -7,7 +7,7 @@
 - 每个阶段结束必须有可验收结果。验收未通过不进入下一阶段，除非明确记录为待办并告知用户。
 - 外部依赖（PostgreSQL、真实模型、Codex/Claude 账号、观澜数据源）未验证前，不宣称功能可用。
 - 涉及 API 契约、权限规则、持久化模型或 Runtime 行为变化的任务，先提出变更方案并获确认。
-- 参考项目只借鉴设计并按需等价翻译，不整体嵌入；迁移时保留来源、版本与许可声明（见 architecture.md 第 7 节）。
+- 参考项目只借鉴设计并按需等价翻译，不整体嵌入；迁移时保留来源、版本与许可声明（见 architecture.md 第 8 节）。
 
 ## 2. 当前状态
 
@@ -17,7 +17,7 @@
 | P1 平台底座 | 本地实现完成，目标环境待验收 | 身份/空间、模型配置版本、Agent 版本、Session、幂等 Run、事件、Outbox。PostgreSQL 并发、迁移、崩溃恢复待目标环境 |
 | P2 Native 基础闭环 | 本地实现完成，真实供应商待验收 | 流式模型、授权工具、取消、等待输入、检查点、SSE、对话工作台。SQLite 与模拟模型验证 |
 | 用户模型设置 | 已实现 | 供应商、个人/空间范围、加密 Key、默认模型、连接测试。真实供应商待用户在设置页配置后验收 |
-| 框架重构（本文件 R0–R9） | 已确认，未开始编码 | 按第 3 节执行 |
+| 框架重构（本文件 R0–R9） | 架构文档已重构，代码未开始 | 按第 3 节执行；R0 中 core 契约与目录调整待完成 |
 
 已知待办（来自 P1/P2 验收记录，未随重构关闭）：
 - PostgreSQL 专项测试（设置 `NEXUS_TEST_POSTGRES_URL` 后运行）：迁移、并发领取、租约恢复、崩溃后 interrupted 转换。
@@ -32,10 +32,10 @@
 
 - **目标**：确认架构文档，清理历史文档，锁定 core 契约。
 - **交付**：
-  - 本次重写的 `architecture.md` 与 `roadmap.md` 作为唯一设计与计划文档。
-  - `nexus_core.runtime` 中 `AgentRuntime` 端口、`RunEvent` 类型、`RuntimeCapabilities` 定义，并与现有 P2 契约对齐。
-  - 修复全部指向已删除文档的链接。
-- **验收**：契约测试通过；仓库中无指向已删除文档的链接（链接检查）；`git diff --check` 通过。
+  - 已完成：`architecture.md` 重构为以第 2 节"模块与参考来源"为核心的架构文档；删除 `openspec/` 目录（删除前的版本见 Git 提交 `2a9ee03`）；修复指向已删除内容的链接。
+  - 待完成：`nexus_core.runtime` 中 `AgentRuntime` 端口、`RunEvent` 类型、`RuntimeCapabilities` 定义，并与现有 P2 契约对齐。
+  - 待确认：architecture.md 第 4.2 节的目录调整方案（跨包重构，实施前需用户确认）。
+- **验收**：契约测试通过；仓库中无断链（链接检查）；`git diff --check` 通过。
 - **依赖**：无。
 
 ### R1 平台底座收敛
@@ -43,6 +43,7 @@
 - **目标**：补齐 PostgreSQL 验收，并为计划能力准备数据结构。
 - **交付**：
   - 增量迁移：`action_grants`（动作授权，与 `resource_grants` 分离）、`run_snapshots`（等待审批的版本化快照）。
+  - 待确认后实施：architecture.md 4.2 节的目录调整（`memory` 独立包、`platform/authz`），与上述迁移一并评估。
   - 运行 `NEXUS_TEST_POSTGRES_URL` 集成测试，覆盖迁移往返、并发领取、租约恢复、同 Session 单活跃 Run 约束。
 - **验收**：目标 PostgreSQL 上测试全部通过；记录环境、版本与结果。
 - **依赖**：R0。
@@ -50,14 +51,14 @@
 
 ### R2 Native 引擎补齐
 
-- **目标**：按 architecture.md 4.2 拆分引擎组件，补齐与 GenericAgent、WeKnora 的行为差距。
+- **目标**：按 architecture.md 5.2 拆分引擎组件，补齐与 GenericAgent、WeKnora 的行为差距。
 - **交付**：
   - `RunOrchestrator`、`TurnExecutor`、`CompletionJudge`、`ToolDispatcher`、`ContextAssembler` 拆分，每个组件有独立测试。
   - 完成判断：截断续写、空响应重试、重复内容停滞、不完整工具调用的处理。
   - 前缀冻结：系统提示与工具 schema 在 Run 内不变。
   - 工具结果投影与 Spill 工件存储（工件只在 run 级目录，不开放下载以外的访问）。
   - 证据句柄登记 `[ID:n]`，供 R5 使用。
-  - 行为矩阵：GenericAgent 与 WeKnora 的关键行为逐条映射到测试，记录于 `openspec` 变更的验收文件。
+  - 行为矩阵：GenericAgent 与 WeKnora 的关键行为逐条映射到测试，记录于 `packages/runtimes/docs/`。
 - **验收**：行为矩阵全部通过；现有 P2 测试保持通过；无隔离后端时执行类工具不可见。
 - **依赖**：R0、R1。
 
@@ -70,7 +71,7 @@
 - **交付**：
   - 能力探测（版本、`initialize` 能力）。
   - 会话映射（`runtime_session_bindings`）、`thread/start`、`thread/resume`、`thread/fork`。
-  - 事件映射与终态映射（architecture.md 4.1、4.3）。
+  - 事件映射与终态映射（architecture.md 5.1、5.3）。
   - 审批桥：命令与文件变更审批转为 `approval.requested`；`acceptForSession` 须先经 `action_grants` 批准。
   - 取消（`turn/interrupt`）与 `interrupted` 终态。
   - 平台 MCP 服务的运行令牌（与 R6 共用）。
@@ -81,7 +82,7 @@
 ### R4 Claude Code 适配器
 
 - **目标**：以 `claude-agent-sdk` 封装 `ClaudeSDKClient`。
-- **前置门禁**：读取官方文档，核对 `can_use_tool`、hooks、`resume`、`fork_session` 的实际行为，锁定版本。核对结果写入 architecture.md 4.4。
+- **前置门禁**：读取官方文档，核对 `can_use_tool`、hooks、`resume`、`fork_session` 的实际行为，锁定版本。核对结果写入 architecture.md 5.4。
 - **交付**：
   - `can_use_tool` 审批桥；`disallowed_tools` 禁用原生工具。
   - 会话 resume 与 fork。
@@ -92,7 +93,7 @@
 
 ### R5 知识库
 
-- **目标**：按 architecture.md 4.10 实现文档生命周期、混合检索、引用，图谱作为可选增强。
+- **目标**：按 architecture.md 5.10 实现文档生命周期、混合检索、引用，图谱作为可选增强。
 - **交付**：
   - P3.1：知识库、文档、版本、解析/索引任务、文本块与引用契约；上传、去重、版本；可恢复的后台解析（文本、Markdown、PDF）。
   - P3.2：Pre-Filter 授权后再检索；关键词与向量混合；`search_knowledge`、`read_document`、`list_documents`；证据登记。
@@ -141,13 +142,13 @@
   - 数据适配器与调度：行情、交易日历、财务、公告、热点、龙虎榜；逐接口验证；采集失败重试与降级标注。
   - 数据时点与来源：每条数据保留 provider、获取时间、数据时点、复权口径。
   - 领域工具：通过公共协议注册。
-  - 研究流程（architecture.md 4.14 的 8 步候选）：步骤 4、5、7、8 是否必选在本阶段确认。
+  - 研究流程（architecture.md 5.16 的 8 步候选）：步骤 4、5、7、8 是否必选在本阶段确认。
   - 规则治理：研报与规则入库审核，版本化。
   - 回测：`guanlan/backtesting`，处理复权、交易成本、停复牌、退市与未来信息泄漏。
 - **验收**：报告中每个数值与结论可追溯到来源、时点与版本；无权数据不可检索或读取；模型结果以版本化工具输出呈现；回测记录基准、成本与时间段；至少一个数据源通过逐接口验证并有失败与降级测试。
 - **依赖**：R5–R8。
 - **实施前需用户提供**：观澜数据源账号或授权信息；目标市场、标的范围、历史回溯与更新频率；专家研报与规则样例；已有模型产物（如有）。
-- **启动前**：按仓库规范提出 OpenSpec 变更并获确认。
+- **启动前**：提出变更方案并获用户确认。
 
 ## 4. 验收门禁汇总
 
