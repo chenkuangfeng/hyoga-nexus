@@ -6,7 +6,7 @@ from nexus_core.runtime import ModelMessage
 from nexus_platform.models.provider_settings import context
 from nexus_platform.persistence.models import RunRecord, RunDirectiveRecord
 from nexus_platform.errors import NotFound, Conflict
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 from nexus_platform.runs.service import append_event
 
 

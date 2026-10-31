@@ -2,7 +2,7 @@
 from typing import Any
 from uuid import UUID
 from sqlalchemy.orm import Session
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 
 
 class SqlAlchemyRunAuditRepository:

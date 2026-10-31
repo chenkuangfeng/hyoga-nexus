@@ -4,7 +4,7 @@ from nexus_core.platform import Principal
 from nexus_platform.identity.repository import SqlAlchemyWorkspaceAccess
 from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
 from nexus_platform.models.provider_settings import authorize_model
-from nexus_platform.workspaces.service import authorize_resource
+from nexus_platform.authz.resources import authorize_resource
 from .configuration import AuthorizedMember, BoundResource
 
 

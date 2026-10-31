@@ -10,7 +10,7 @@ from nexus_core.platform import new_id, utc_now
 from nexus_platform.models.provider_settings import context
 from nexus_platform.persistence.models import MemoryDraftRecord, MemoryEntryRecord, MemoryVersionRecord, RunRecord, SessionRecord, ToolInvocationRecord
 from nexus_platform.errors import NotFound, Conflict
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 from .repository import entries, authorized_entry, content
 
 

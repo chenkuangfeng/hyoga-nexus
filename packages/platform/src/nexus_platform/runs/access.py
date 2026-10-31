@@ -8,7 +8,8 @@ from nexus_core.platform import Principal, RunStatus
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
 from nexus_platform.persistence.models import ResourceBindingRecord, RunRecord
-from nexus_platform.workspaces.service import audit, authorize_resource
+from nexus_platform.authz.audit import audit
+from nexus_platform.authz.resources import authorize_resource
 
 def authorize_run_resource(session: Session, principal: Principal, workspace_id: UUID, run_id: UUID, binding_id: UUID, *, permission: str='use'):
     return RunResourceAccessService(SqlAlchemyUnitOfWork(session)).authorize(principal, workspace_id, run_id, binding_id, permission=permission)

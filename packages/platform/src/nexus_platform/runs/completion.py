@@ -5,7 +5,7 @@ from nexus_core.platform import RunStatus, new_id, utc_now
 from nexus_core.runtime import RuntimeOutcome
 from nexus_platform.persistence.models import InputRequestRecord, RunRecord
 from nexus_platform.runs.service import append_event, transition_run
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 
 
 def _finish(db: Session, run: RunRecord, outcome: RuntimeOutcome) -> None:

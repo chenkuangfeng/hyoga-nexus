@@ -20,7 +20,9 @@ from nexus_platform.persistence.models import (
     ModelProfileVersionRecord,
     ResourceBindingRecord,
 )
-from nexus_platform.workspaces.service import ADMIN_ROLES, audit, authorize_resource
+from nexus_platform.workspaces.service import ADMIN_ROLES
+from nexus_platform.authz.audit import audit
+from nexus_platform.authz.resources import authorize_resource
 
 
 def create_agent(

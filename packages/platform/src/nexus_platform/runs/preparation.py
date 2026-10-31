@@ -26,7 +26,7 @@ from nexus_platform.persistence.models import (
     ContextSummaryRecord,
 )
 from nexus_platform.runs.service import append_event, transition_run
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 from .context import ExecutionContext
 from .messages import _history_allowed
 from .completion import _finish

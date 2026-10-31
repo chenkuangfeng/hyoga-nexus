@@ -21,7 +21,8 @@ from nexus_platform.persistence.models import (
     ModelProfileVersionRecord as Version, RunRecord, ProviderCredentialRecord as StoredKey,
     UserRecord, MembershipRecord,
 )
-from nexus_platform.workspaces.service import ADMIN_ROLES, audit
+from nexus_platform.workspaces.service import ADMIN_ROLES
+from nexus_platform.authz.audit import audit
 
 
 def cipher() -> Fernet:

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.identity.service import require_membership, require_workspace, resolve_user
 from nexus_platform.persistence.models import CredentialReferenceRecord
-from nexus_platform.workspaces.service import ADMIN_ROLES, audit
+from nexus_platform.workspaces.service import ADMIN_ROLES
+from nexus_platform.authz.audit import audit
 
 
 ALLOWED_BACKENDS = {"vault", "environment", "keyring", "external"}

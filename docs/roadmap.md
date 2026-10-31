@@ -34,7 +34,7 @@
 - **交付**：
   - 已完成：`architecture.md` 重构为以第 2 节"模块与参考来源"为核心的架构文档；删除 `openspec/` 目录（删除前的版本见 Git 提交 `2a9ee03`）；修复指向已删除内容的链接。
   - 待完成：`nexus_core.runtime` 中 `AgentRuntime` 端口、`RunEvent` 类型、`RuntimeCapabilities` 定义，并与现有 P2 契约对齐。
-  - 待确认：architecture.md 第 4.2 节的目录调整方案（跨包重构，实施前需用户确认）。
+  - 已完成：architecture.md 第 4.2 节目录调整，除 `memory` 独立包与 context 处理器管线外（见该节状态列）。
 - **验收**：契约测试通过；仓库中无断链（链接检查）；`git diff --check` 通过。
 - **依赖**：无。
 
@@ -43,7 +43,7 @@
 - **目标**：补齐 PostgreSQL 验收，并为计划能力准备数据结构。
 - **交付**：
   - 增量迁移：`action_grants`（动作授权，与 `resource_grants` 分离）、`run_snapshots`（等待审批的版本化快照）。
-  - 待确认后实施：architecture.md 4.2 节的目录调整（`memory` 独立包、`platform/authz`），与上述迁移一并评估。
+  - 待确认设计后实施：architecture.md 4.2 节中未执行的 `memory` 独立包（需先定义存储端口以避免与 platform 循环依赖）。
   - 运行 `NEXUS_TEST_POSTGRES_URL` 集成测试，覆盖迁移往返、并发领取、租约恢复、同 Session 单活跃 Run 约束。
 - **验收**：目标 PostgreSQL 上测试全部通过；记录环境、版本与结果。
 - **依赖**：R0。

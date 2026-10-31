@@ -24,12 +24,8 @@ from nexus_platform.runs.service import (
     request_cancel,
     transition_run,
 )
-from nexus_platform.workspaces.service import (
-    create_workspace,
-    grant_resource,
-    register_resource,
-    revoke_resource_grant,
-)
+from nexus_platform.workspaces.service import create_workspace
+from nexus_platform.authz.resources import grant_resource, register_resource, revoke_resource_grant
 from nexus_platform.agents.service import create_agent
 from nexus_platform.sessions.service import create_session
 

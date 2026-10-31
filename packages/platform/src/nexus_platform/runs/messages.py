@@ -8,7 +8,7 @@ from nexus_core.platform import new_id, utc_now
 from nexus_core.runtime import ModelMessage
 from nexus_platform.errors import PlatformError
 from nexus_platform.persistence.models import MessageRecord, RunRecord, SessionRecord
-from nexus_platform.workspaces.service import authorize_resource
+from nexus_platform.authz.resources import authorize_resource
 from .domain import Run
 
 

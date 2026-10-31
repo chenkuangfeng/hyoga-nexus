@@ -16,7 +16,7 @@ from nexus_core.runtime import ModelRequest, ModelMessage, RuntimeFault
 from nexus_platform.models import provider_settings as settings
 from nexus_platform.persistence.models import ModelProfileRecord, ModelProfileVersionRecord
 from nexus_platform.errors import Conflict, NotFound
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 from nexus_runtimes.native.models.network import validate_url, provider_client
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 

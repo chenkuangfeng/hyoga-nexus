@@ -29,6 +29,8 @@ from nexus_platform.persistence.models import (
 from nexus_platform.runs import service as runs
 from nexus_platform.sessions import service as sessions
 from nexus_platform.workspaces import service as workspaces
+from nexus_platform.authz import resources as authz
+from nexus_platform.authz.audit import audit
 from nexus_platform.workspaces.service import ADMIN_ROLES
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.schemas.platform import (
@@ -140,7 +142,7 @@ def create_resource_grant(
     principal: Principal = Depends(get_principal),
     db: Session = Depends(get_database_session),
 ):
-    row = workspaces.grant_resource(
+    row = authz.grant_resource(
         db, principal, source_workspace_id=body.source_workspace_id, target_workspace_id=workspace_id,
         kind=body.kind, resource_id=body.resource_id, permissions=body.permissions,
     )
@@ -153,7 +155,7 @@ def revoke_resource_grant(
     principal: Principal = Depends(get_principal),
     db: Session = Depends(get_database_session),
 ):
-    workspaces.revoke_resource_grant(db, principal, grant_id)
+    authz.revoke_resource_grant(db, principal, grant_id)
 
 
 @router.post(
@@ -590,6 +592,6 @@ def enable_builtin(workspace_id: UUID, name: str, principal: Principal = Depends
         user = resolve_user(db, principal)
         require_workspace(db, workspace_id)
         require_membership(db, workspace_id, user.id, roles=ADMIN_ROLES)
-        workspaces.register_resource(db, workspace_id=workspace_id, kind='tool', resource_id=name, version_id='v1')
-        workspaces.audit(db, workspace_id, user.id, 'tool.enabled', 'tool', name)
+        authz.register_resource(db, workspace_id=workspace_id, kind='tool', resource_id=name, version_id='v1')
+        audit(db, workspace_id, user.id, 'tool.enabled', 'tool', name)
     return {'kind': 'tool', 'resource_id': name, 'resource_version_id': 'v1', 'source_workspace_id': workspace_id}

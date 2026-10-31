@@ -92,14 +92,14 @@ hyoga-nexus/
 │   └── web/src/                     # Vue 3 + Element Plus 工作台
 ├── packages/
 │   ├── core/src/nexus_core/         # 公共协议、runtime、events、tools、tasks
-│   ├── platform/src/nexus_platform/ # identity、workspaces、agents、sessions、runs、
+│   ├── platform/src/nexus_platform/ # identity、workspaces、authz、agents、sessions、runs、
 │   │                                # resources、models、memory、jobs、persistence、observability
 │   ├── runtimes/src/nexus_runtimes/ # native（context、engine、hooks、models、prompts）、adapters
 │   ├── tools/src/nexus_tools/       # registry、gateway、builtins
-│   ├── skills/src/nexus_skills/
+│   ├── skills/src/nexus_skills/     # loader、registry、versions、bindings、guard、projection、review（后三者占位）
 │   ├── mcp/src/nexus_mcp/
-│   ├── knowledge/src/nexus_knowledge/
-│   ├── sandbox/src/nexus_sandbox/
+│   ├── knowledge/src/nexus_knowledge/ # ingest、index、retrieval、evidence、graph（占位）、persistence、domain、providers
+│   ├── sandbox/src/nexus_sandbox/   # backends（local、docker）、contracts、artifacts
 │   ├── connectors/src/nexus_connectors/
 │   └── guanlan/src/guanlan/
 ├── skills/                          # 技能指令与资源内容（不是实现代码）
@@ -110,19 +110,19 @@ hyoga-nexus/
 └── docs/                            # architecture.md 与 roadmap.md
 ```
 
-### 4.2 目标调整（待确认，未实施）
+### 4.2 目录调整
 
-下列调整依据第 2 节的参考项目，属于跨包重构，按仓库规范实施前需用户确认。当前代码未改动。
+依据第 2 节的参考项目。执行状态列于下表；未执行项需单独确认设计后再实施。
 
-| 调整 | 理由 | 参考 |
-|---|---|---|
-| `platform/memory` 拆为独立包 `packages/memory` | Runtime 与知识库都需要记忆；后端契约应与平台解耦，便于替换存储 | DeerFlow `agents/memory/`（MemoryManager 契约）、Hermes `memory_tool` |
-| `platform/resources` 中的授权与审计拆为 `platform/authz` | 授权、审批、审计是独立的变更原因，应与资源登记分开 | WeKnora `approval/`、`agent_grant.go` |
-| `runtimes/native/context` 改为处理器管线 `context/processors/` | 冻结前缀、历史视图、压缩、证据登记各自独立 | LobeHub `context-engine`；WeKnora `compaction/` |
-| `knowledge` 拆为 `ingest/`、`index/`、`retrieval/`、`evidence/`、`graph/`（可选） | 解析、索引、检索、图谱的失败模式和依赖不同 | RAGFlow 工具与判断拆分；WeKnora 图谱隔离 |
-| `sandbox` 后端放入 `backends/`（`local`、`docker`、`ssh`） | 后端可替换，验收门禁按后端划分 | Hermes `tools/environments/`；DeerFlow `sandbox/` |
-| `skills` 增加 `guard/`（来源检疫）、`projection/`（沙箱投射）、`review/`（审核发布） | 三类职责分别对应 Hermes 与 DeerFlow 的不同机制 | Hermes `skills_guard.py`；DeerFlow `projection`、`mutations` |
-| 删除 `runtimes/adapters/deepseek` 占位 | 本方案不计划接入 | — |
+| 调整 | 状态 | 说明 | 参考 |
+|---|---|---|---|
+| 授权与审计拆为 `platform/authz/` | 已执行 | `audit.py` 与 `resources.py`（登记、授权、显式共享、撤销）从 `workspaces/service.py` 迁出；`workspaces` 只保留空间与成员 | WeKnora `approval/`、`agent_grant.go` |
+| `knowledge` 改为 `ingest/`、`index/`、`retrieval/`、`evidence/`、`graph/` | 已执行（占位） | `ingestion`→`ingest`，`indexing`→`index`，`citations`→`evidence`，`parsing` 并入 `ingest`，新增 `graph/`；`persistence`、`domain`、`providers` 保留 | RAGFlow 工具与判断拆分；WeKnora 图谱隔离 |
+| `sandbox` 后端放入 `backends/` | 已执行 | `local`、`docker` 移入 `backends/`；`ssh` 为候选，尚未创建目录 | Hermes `tools/environments/`；DeerFlow `sandbox/` |
+| `skills` 增加 `guard/`、`projection/`、`review/` | 已执行（占位） | 对应来源检疫、沙箱投射、审核发布，尚无实现 | Hermes `skills_guard.py`；DeerFlow `projection`、`mutations` |
+| 删除 `runtimes/adapters/deepseek` 占位 | 已执行 | 本方案不计划接入 | — |
+| `platform/memory` 拆为独立包 `packages/memory` | 未执行 | 当前 memory 服务直接依赖平台持久化模型、审计和 principal 上下文；`runs` 又反向导入 memory，直接迁出会形成循环依赖。需先定义端口（如记忆存储接口），由平台实现适配器，再迁移。待确认 | DeerFlow `agents/memory/`（MemoryManager 契约）、Hermes `memory_tool` |
+| `runtimes/native/context` 改为处理器管线 | 未执行 | 当前为 `working`、`compaction`、`assembly`、`history` 四个模块，未引入统一的处理器接口。待设计接口后再拆分 | LobeHub `context-engine`；WeKnora `compaction/` |
 
 ### 4.3 拆分理由
 
@@ -132,8 +132,8 @@ hyoga-nexus/
 
 ### 4.4 当前实现与目标的差异
 
-- 占位目录：`adapters/codex`、`adapters/claude_code`、`sandbox/docker`、`knowledge` 的解析与索引、`mcp` 的客户端与服务端、`guanlan` 的数据与分析。
-- 第 4.2 节的目标调整均未实施。
+- 占位目录：`adapters/codex`、`adapters/claude_code`、`sandbox/backends/docker`、`knowledge` 的 ingest、index、retrieval、evidence、graph，`skills` 的 guard、projection、review，`mcp` 的客户端与服务端，`guanlan` 的数据与分析。
+- 第 4.2 节中未执行的 `memory` 独立包与 context 处理器管线尚未实施。
 
 ---
 
@@ -531,6 +531,6 @@ Workspace 角色与资源共享不能替代 ActionGrant 或审批。共享智能
 - 观澜数据、分析与回测。
 - 渠道接入。
 - 运行快照与 ActionGrant（`action_grants`）等计划表。
-- 第 4.2 节的目录调整。
+- 第 4.2 节中未执行的 `memory` 独立包与 context 处理器管线。
 
 验证边界：SQLite 与模拟模型验证通过；PostgreSQL 并发、迁移与故障恢复未在目标环境验收；真实供应商未在线验收；浏览器测试使用 API 与 SSE 夹具，不是完整部署环境的端到端验收。

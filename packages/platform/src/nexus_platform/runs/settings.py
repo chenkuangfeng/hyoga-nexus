@@ -5,7 +5,7 @@ from nexus_core.runtime import ExecutionBudget
 from nexus_platform.models.provider_settings import context
 from nexus_platform.persistence.models import NativePreferenceRecord
 from nexus_platform.errors import Conflict
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 
 
 LABELS = {
@@ -85,7 +85,7 @@ def save(db, principal, workspace_id, settings: dict, expected_version: int) -> 
             raise Conflict('Native settings changed; reload before saving')
         from nexus_platform.models.provider_settings import authorize_model
         from uuid import UUID
-        from nexus_platform.workspaces.service import authorize_resource
+        from nexus_platform.authz.resources import authorize_resource
         for name in settings['behavior']['enabled_tools']:
             authorize_resource(db, workspace_id, 'tool', name, resource_version_id='v1')
         for model_id in settings['behavior']['fallback_models']:

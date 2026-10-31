@@ -22,7 +22,8 @@ from nexus_platform.persistence.models import (AuditRecord, InputRequestRecord, 
 from nexus_platform.runs.execution import prepare_execution, respond_input
 from nexus_platform.runs.service import claim_next, create_run, list_events, request_cancel
 from nexus_platform.sessions.service import create_session
-from nexus_platform.workspaces.service import create_workspace, grant_resource, register_resource, revoke_resource_grant
+from nexus_platform.workspaces.service import create_workspace
+from nexus_platform.authz.resources import grant_resource, register_resource, revoke_resource_grant
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.registry import RegisteredTool, ToolRegistry
 from nexus_worker.__main__ import run_once

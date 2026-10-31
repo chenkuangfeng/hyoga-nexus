@@ -13,7 +13,7 @@ from nexus_platform.models.provider_settings import context
 from nexus_platform.models.service import clean_public_options
 from nexus_platform.errors import NotFound, Conflict
 from nexus_platform.runs.service import append_event
-from nexus_platform.workspaces.service import audit
+from nexus_platform.authz.audit import audit
 
 
 def binding_hash(run) -> str:

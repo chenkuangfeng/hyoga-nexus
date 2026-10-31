@@ -11,7 +11,8 @@ from nexus_platform.models.service import content_hash
 from nexus_platform.persistence.models import (
     AgentRecord, AgentVersionRecord, ResourceBindingRecord, SessionRecord, MessageRecord, RunRecord,
 )
-from nexus_platform.workspaces.service import authorize_resource, audit
+from nexus_platform.authz.resources import authorize_resource
+from nexus_platform.authz.audit import audit
 from nexus_platform.errors import NotFound, Conflict
 
 
