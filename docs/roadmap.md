@@ -36,6 +36,7 @@
 ### 2. 平台底座
 
 - **目标**：身份、空间、授权、智能体、会话、幂等运行与事件的本地实现，并完成 PostgreSQL 目标环境验收。
+- **参考项目**：WeKnora（Tenant、Session 忙碌控制、`suspend.go`、`approval/`、`agent_grant.go`）；Hermes Agent（`tools/approval.py`）。队列使用 PostgreSQL Outbox，不参考 Redis 实现。
 - **子计划**：
   - [x] 2.1 身份与空间：用户、外部身份、租户与成员关系。
   - [x] 2.2 认证：本地账号密码、服务端会话、企业微信绑定与登录。
@@ -52,6 +53,7 @@
 ### 3. Native 运行时与引擎
 
 - **目标**：Native 智能体可运行并在对话工作台中使用；锁定运行时契约，把引擎拆分为独立组件并补齐功能，覆盖运行编排、回合执行、上下文、完成判断、工具、记忆、技能、取消、恢复和预算。行为与参考项目对齐。
+- **参考项目**：GenericAgent（`agent_loop.py`、`ga.py`、`memory/`）；WeKnora（`engine.go`、`suspend.go`、`compaction/`、`tools/`）；OpenClaw（`run-loop.ts`）；Dify（`fc_agent_runner.py`）；n8n（`executeBatch`）；DeepSeek Harness（`agent-loop`、`spill`）；Hermes Agent（`memory_tool.py`）；LobeHub（`context-engine`）；RAGFlow（`evidence_registry.go`）；DeerFlow（`agents/memory/`）。
 - **子计划**：
   - [x] 3.1 基础闭环：流式模型、授权工具、取消、等待输入、检查点、SSE、对话工作台。
   - [ ] 3.2 真实 OpenAI-compatible 供应商在线验收（用户在设置页配置后）。
@@ -75,6 +77,7 @@
 ### 4. Codex 适配器
 
 - **目标**：以 `openai-codex` SDK 管进程，事件与审批经 app-server 协议获取。
+- **参考项目**：Hermes Agent（`agent/transports/codex_app_server.py`）；官方 `openai-codex` SDK 与 App Server 文档（无开源参考，实施时重新核对）。
 - **门禁**：确认 SDK 是否暴露底层 JSON-RPC 通道。结论决定连接方案，方案变更通过 OpenSpec 记录。
 - **子计划**：
   - [ ] 4.1 能力探测（版本、`initialize` 能力）。
@@ -90,6 +93,7 @@
 ### 5. Claude Code 适配器
 
 - **目标**：以 `claude-agent-sdk` 封装 `ClaudeSDKClient`。
+- **参考项目**：官方 `claude-agent-sdk`（无开源参考实现，实施前核对官方文档）。
 - **门禁**：读取官方文档，核对 `can_use_tool`、hooks、`resume`、`fork_session` 的实际行为并锁定版本，结果同步更新 [architecture.md](architecture.md) 第 2.4 节。
 - **子计划**：
   - [ ] 5.1 `can_use_tool` 审批桥；`disallowed_tools` 禁用原生工具。
@@ -102,6 +106,7 @@
 ### 6. 知识库
 
 - **目标**：文档生命周期、混合检索、引用；图谱作为可选增强。
+- **参考项目**：RAGFlow（`internal/agentic_rag/`）；WeKnora（Pre-Filter、图谱按空间隔离）；FastGPT（数据集模型，仅参考）。
 - **子计划**：
   - [ ] 6.1 知识库、文档、版本、解析与索引任务、文本块与引用契约；上传、去重、版本；可恢复的后台解析（文本、Markdown、PDF）。
   - [ ] 6.2 Pre-Filter 授权后再检索；关键词与向量混合；`search_knowledge`、`read_document`、`list_documents` 工具（接入第 3.10 步的预留接口）；证据登记 `[ID:n]`。
@@ -114,6 +119,7 @@
 ### 7. 技能与 MCP
 
 - **目标**：版本化技能、来源检疫、依赖校验；MCP 按工具启用。
+- **参考项目**：Hermes Agent（`skills_guard.py`、`skills_hub`）；DeerFlow（`skills/`）；WeKnora（`approval/mcp_risk.go`）。
 - **子计划**：
   - [ ] 7.1 技能：版本、`SKILL.md` 与资源、依赖声明、发布前依赖校验、来源检疫、草稿与审核发布。
   - [ ] 7.2 MCP 客户端：发现工具、按工具启用、凭据引用、高风险工具审批。
@@ -124,6 +130,7 @@
 ### 8. 沙箱后端
 
 - **目标**：评估候选后端，选择通过隔离验收的实现。
+- **参考项目**：DeerFlow（`sandbox/`）；Hermes Agent（`tools/environments/`）；DeepSeek Harness（接缝设计）；FastGPT（`agent-sandbox`，仅参考）。
 - **子计划**：
   - [ ] 8.1 `CommandExecutorPort` 与 `FileStorePort` 的实现（候选：docker、ssh）。
   - [ ] 8.2 租约、虚拟路径映射、原子写入、产物收集。
@@ -135,6 +142,7 @@
 ### 9. 渠道与治理
 
 - **目标**：IM 渠道接入与运行评估。
+- **参考项目**：LobeHub（`chat-adapter-*` 的组织方式）。
 - **子计划**：
   - [ ] 9.1 企业微信优先，随后微信、QQ：消息标准化、身份映射、会话映射、去重、鉴权、回复限制、重试。
   - [ ] 9.2 运行评估集：固定任务、检索引用正确率、技能选择准确率。
@@ -146,6 +154,7 @@
 ### 10. 股票研究
 
 - **目标**：观澜数据平台与股票研究技能合并交付。
+- **参考项目**：TradingAgents（`graph/setup.py`、`memory/reflection.py`）；daily_stock_analysis（分工与分析深度分级，未深读）；Qlib（训练与推理分离，未深读）。
 - **子计划**：
   - [ ] 10.1 数据适配器与调度：行情、交易日历、财务、公告、热点、龙虎榜；逐接口验证；失败重试与降级标注。
   - [ ] 10.2 数据时点与来源：每条数据保留 provider、获取时间、数据时点、复权口径。
