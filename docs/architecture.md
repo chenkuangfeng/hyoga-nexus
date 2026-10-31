@@ -96,12 +96,6 @@ hyoga-nexus/
 └── docs/                            # architecture.md 与 roadmap.md
 ```
 
-拆分理由：
-
-- `core` 是稳定协议；`platform` 是应用服务；`runtimes` 是执行器。三者不混入同一个 Agent 类。
-- 技能机制（`packages/skills`）与技能内容（顶层 `skills/`）职责不同。
-- `packages/` 是可安装包，内部目录是模块，不等于独立服务。
-
 ---
 
 ## 2. 模块设计
