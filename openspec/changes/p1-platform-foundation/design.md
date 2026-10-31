@@ -80,7 +80,7 @@ P1 角色动作矩阵：
 
 RunEvent 的 sequence 在数据库事务或专用 Run 计数器下分配，确保并发写不会重复/乱序。事件存储保留期/归档策略为部署决策，但 P1 至少承诺在产品保留期内可按游标重放。读 SSE 不获得队列消费权。
 
-Outbox 与 Run 在同一 PostgreSQL 事务提交，worker 轮询并租赁到期记录。ADR-0002 选择该方式作为 P1 初始队列，并比较 Redis Streams、RabbitMQ 的运维与解耦成本。多 worker 并发领取及 PostgreSQL 崩溃恢复尚待目标数据库验收；出现 ADR 所列的积压、资源竞争或路由需求时再做实测和新 ADR。
+Outbox 与 Run 在同一 PostgreSQL 事务提交，worker 轮询并租赁到期记录。总体架构第 4.12 节记录该选择（原 ADR-0002），并比较 Redis Streams、RabbitMQ 的运维与解耦成本。多 worker 并发领取及 PostgreSQL 崩溃恢复尚待目标数据库验收；出现 ADR 所列的积压、资源竞争或路由需求时再做实测和新 ADR。
 
 ## 6. API 契约草案
 
@@ -119,7 +119,7 @@ API 路径仅作为契约设计，不代表当前存在路由：
 ## 9. 决策与待验证项
 
 - PostgreSQL 作为平台主关系库：已由用户确认；是否与观澜关系数据共用集群不属于本变更定论。迁移工具仍需验证并记录 ADR。
-- 队列选择：P1 使用 PostgreSQL Outbox/lease polling，见 ADR-0002；目标 PostgreSQL 并发与故障验收仍未完成。
+- 队列选择：P1 使用 PostgreSQL Outbox/lease polling，见总体架构第 4.12 节；目标 PostgreSQL 并发与故障验收仍未完成。
 - 身份认证提供方、凭据存储后端、事件保留时长、附件对象存储、加密密钥管理：先定义适配边界，产品/部署条件明确后在 ADR 决定。
 - UUIDv7 为 ID 候选，需核对 Python 版本/库策略后定案。
 - P1 首个可验收闭环限定 Native 配置类型、Agent/Session/Run 持久化及事件重放；不表示 Native 执行循环已纳入 P1。

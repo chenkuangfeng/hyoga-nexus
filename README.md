@@ -16,11 +16,11 @@ Python 3.11+ / FastAPI / 多包 workspace；Vue 3 / TypeScript / Element Plus / 
 - [configs/](configs/README.md)：部署数据库配置；migrations/、infra/：数据迁移和部署。
 - tests/：软件测试；evals/：Agent、检索、技能与股票分析质量评估预留。
 
-完整目录及边界见 [目录设计](docs/directory-layout.md)。
+完整目录及边界见 [总体架构](docs/architecture.md) 第 3.2 节。
 
 ## 开发计划
 
-[总体架构](docs/architecture.md) · [资源模型](docs/resource-model.md) · [Runtime 契约](docs/runtime-contract.md) · [实施计划](docs/roadmap.md) · [参考项目分析](docs/reference-analysis.md) · [智能体框架重构方案](docs/pending/agent-framework-redesign.md)
+[总体架构](docs/architecture.md) · [实施路线图](docs/roadmap.md)
 
 顺序：平台底座 → 自研智能体 → Python 知识库与技能/MCP → Codex/Claude Code → 股票数据与研究技能 → 多渠道；企业微信可以在基础执行稳定后提前。
 

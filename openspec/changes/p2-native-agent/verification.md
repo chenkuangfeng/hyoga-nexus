@@ -1,6 +1,6 @@
 # P2 本地验收与参考行为映射
 
-本记录仅证明已选基础闭环的本地验证，不代表 GenericAgent / WeKnora 全功能迁移完成。后续设计讨论见 [智能体框架重构方案](../../../docs/pending/agent-framework-redesign.md)。
+本记录仅证明已选基础闭环的本地验证，不代表 GenericAgent / WeKnora 全功能迁移完成。后续设计讨论见 [总体架构](../../../docs/architecture.md)。
 
 用户于 2026-10-25 确认开始实现。本轮以 SQLite 隔离数据库、真实锁定 SDK + 模拟 HTTP 流、FakeChatModel/FakeTool 和 Chromium API/SSE 夹具进行验证，不发送真实模型请求。PostgreSQL 专项按用户安排留到新环境执行。
 

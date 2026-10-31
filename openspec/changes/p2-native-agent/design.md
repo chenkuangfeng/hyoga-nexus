@@ -116,4 +116,4 @@ Event schema 需向后兼容，新增事件包括 `turn.started/turn.completed`�
 - waiting_input 继续同一 Run，通过输入请求和 execute Outbox 幂等恢复，预算累计；不保留阻塞 worker。
 - 流事件与消息分别保留，不自动清理原件；模型上下文使用有界历史摘录并记录 compaction 事件，超限显式失败。retention/归档策略仍由 P1/P9 治理待办追踪。
 - 工具原始结果不自动落盘，只有显式公开投影（最多 4000 字符）进入事件、模型和历史；详细 Artifact 存储尚未接入。
-- 具体决策见 [ADR-0003](../../../docs/adr/0003-native-model-and-execution.md)，行为证据见 [验收记录](verification.md)。
+- 具体决策见 [总体架构第 4.2、4.12 节](../../../docs/architecture.md)，行为证据见 [验收记录](verification.md)。

@@ -6,7 +6,7 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 通过 httpx transport 注入假 HTTP 的既有 Provider 单元测试仍可执行；用户配置的真实请求由 API/worker 装配安全 transport。
 
-完整参考实现迁移尚未完成，后续设计讨论见 [智能体框架重构方案](../../../docs/pending/agent-framework-redesign.md)。当前实现不代表两个项目的完整等价迁移。
+完整参考实现迁移尚未完成，后续设计见 [总体架构](../../../docs/architecture.md)。当前实现不代表两个项目的完整等价迁移。
 
 ## Native 迁移批次
 

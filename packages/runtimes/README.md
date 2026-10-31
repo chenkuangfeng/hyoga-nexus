@@ -6,4 +6,4 @@
 
 - [功能需求](docs/requirements.md)
 - [模块设计](docs/design.md)
-- [智能体框架重构方案](../../docs/pending/agent-framework-redesign.md)
+- [总体架构](../../docs/architecture.md)

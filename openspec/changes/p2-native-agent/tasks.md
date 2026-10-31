@@ -3,7 +3,7 @@
 用户于 2026-10-25 明确要求继续 P2 代码实现，已进入实施与本地验收。以下勾选表示实现和对应本地验证已完成，不代表 PostgreSQL、真实供应商或隔离后端的部署验收。验收证据与边界见 [verification.md](verification.md)。
 
 - [x] 1. 参考行为与公共契约
-  - [x] 1.1 按 `docs/reference-analysis.md` 对照 GenericAgent 固定版本的 loop、handler、StepOutcome、工具、hooks、abort、history、checkpoint、memory/SOP 建立行为验收矩阵
+  - [x] 1.1 按 `docs/architecture.md` 第 2 节 对照 GenericAgent 固定版本的 loop、handler、StepOutcome、工具、hooks、abort、history、checkpoint、memory/SOP 建立行为验收矩阵
   - [x] 1.2 设计并评审兼容的 `ChatModelPort`、ModelChunk/ToolCall、ToolResult/ToolDisposition、CancellationToken、RuntimeLifecycleHook 契约；core 不引入厂商类型
   - [x] 1.3 对照 P1 Runtime/Run/Event/ToolInvocation schema，确定事件向后兼容和助手/工具消息存储迁移
 - [x] 2. Provider 与 Native Engine
