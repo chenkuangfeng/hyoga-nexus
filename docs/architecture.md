@@ -16,24 +16,37 @@
 
 ### 1.2 总体结构
 
-```mermaid
-flowchart TD
-    W[Web 工作台 / IM 渠道] --> API[API 应用服务]
-    API --> PLAT[platform: 身份 / 空间 / 授权 / 智能体版本 / 会话 / 运行 / 审批 / 审计]
-    PLAT --> ROUTER[Runtime Router]
-    ROUTER --> N[Native Engine]
-    ROUTER --> C[Codex Adapter]
-    ROUTER --> A[Claude Code Adapter]
-    N --> GW[ToolGateway 授权工具网关]
-    C --> MCP[平台 MCP 服务: 仅已授权工具]
-    A --> MCP
-    C -. 原生 shell/文件 .-> SB[受控工作区 / 沙箱]
-    A -. 原生 shell/文件 .-> SB
-    GW --> TOOLS[工具 / 技能 / 知识库 / 记忆 / 观澜工具]
-    GW --> SB
-    N & C & A --> EV[统一 RunEvent]
-    EV --> DB[(PostgreSQL: 事件 / 调用 / 审批 / 审计)]
-    EV --> SSE[SSE 续读]
+```text
+        Web 工作台 / IM 渠道
+                  │
+                  ▼
+            API 应用服务
+                  │
+                  ▼
+  platform：身份 / 空间 / 授权 / 智能体版本 / 会话 / 运行 / 审批 / 审计
+                  │
+                  ▼
+            Runtime Router
+          ┌───────┼────────────┐
+          ▼       ▼            ▼
+   Native Engine  Codex      Claude Code
+                  Adapter    Adapter
+       │            │            │
+       │            └─────┬──────┘
+       │                  ▼
+       │        平台 MCP 服务（仅已授权工具）
+       │
+       ▼
+  ToolGateway（授权工具网关）
+       │
+       ▼
+  工具 / 技能 / 知识库 / 记忆 / 观澜工具
+
+  Codex、Claude Code 的原生 shell/文件 ⋯⋯⋯⋯ 受控工作区 / 沙箱
+  ToolGateway ─────────────────────────────▶ 受控工作区 / 沙箱
+
+  Native / Codex / Claude Code ─▶ 统一 RunEvent ─▶ PostgreSQL（事件 / 调用 / 审批 / 审计）
+                                                └─▶ SSE 续读
 ```
 
 ### 1.3 包职责与依赖规则
