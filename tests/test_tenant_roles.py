@@ -260,3 +260,28 @@ def test_revoking_run_grant_blocks_new_runs_in_existing_session(database):
     with database() as db:
         with pytest.raises(Forbidden):
             create_run(db, MEMBER, tid, session_id, message="second", idempotency_key="after-revoke")
+
+
+def test_role_assignments_listed_for_managers_only(database):
+    tid = _setup(database)
+    member = _uid(database, MEMBER)
+    with database() as db:
+        role = roles.create_role(db, OWNER, tid, "listed", ["audit"], ["audit:read"])
+        roles.assign_role(db, OWNER, tid, member, role.id)
+    with database() as db:
+        rows = roles.list_assignments(db, OWNER, tid)
+        assert {"user_id": member, "role_id": role.id} in rows
+    with database() as db:
+        with pytest.raises(Forbidden):
+            roles.list_assignments(db, MEMBER, tid)
+
+
+def test_agent_grants_listed_for_managers(database):
+    owner_principal = Principal(id="grant-list-owner", issuer="test")
+    tenant, _, _, agent, _, _ = create_agent_stack(database, owner_principal)
+    with database() as db:
+        add_member(db, owner_principal, tenant.id, MEMBER, TenantRole.MEMBER)
+    role_id = _grant_agent(database, owner_principal, tenant.id, agent.id, ["edit"])
+    with database() as db:
+        rows = roles.list_agent_grants(db, owner_principal, tenant.id)
+    assert {"role_id": role_id, "agent_id": agent.id, "permission": "edit"} in rows

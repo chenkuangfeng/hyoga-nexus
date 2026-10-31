@@ -239,3 +239,14 @@ class AgentGrantsView(BaseModel):
     role_id: UUID
     agent_id: UUID
     permissions: list[str]
+
+
+class RoleAssignmentView(BaseModel):
+    user_id: UUID
+    role_id: UUID
+
+
+class AgentGrantRowView(BaseModel):
+    role_id: UUID
+    agent_id: UUID
+    permission: str

@@ -22,6 +22,7 @@ from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import (
     MembershipRecord,
+    TenantAgentGrantRecord,
     TenantRoleApiGrantRecord,
     TenantRoleMenuGrantRecord,
     TenantRoleRecord,
@@ -168,5 +169,33 @@ def my_permissions(session: Session, principal: Principal, tenant_id: UUID) -> E
 
 
 __all__ = [
-    "assign_role", "create_role", "list_roles", "my_permissions", "unassign_role", "update_role_grants",
+    "assign_role", "create_role", "list_agent_grants", "list_assignments", "list_roles", "my_permissions",
+    "unassign_role",
+    "update_role_grants",
 ]
+
+
+def list_assignments(session: Session, principal: Principal, tenant_id: UUID) -> list[dict]:
+    """Return active member-to-role assignments for a caller who may manage roles."""
+    with session.begin():
+        require_role_manager(session, principal, tenant_id)
+        rows = session.execute(
+            select(TenantUserRoleRecord.user_id, TenantUserRoleRecord.role_id)
+            .join(MembershipRecord, (MembershipRecord.tenant_id == TenantUserRoleRecord.tenant_id)
+                  & (MembershipRecord.user_id == TenantUserRoleRecord.user_id))
+            .where(TenantUserRoleRecord.tenant_id == tenant_id, MembershipRecord.status == "active")
+            .order_by(TenantUserRoleRecord.assigned_at)
+        ).all()
+    return [{"user_id": row[0], "role_id": row[1]} for row in rows]
+
+
+def list_agent_grants(session: Session, principal: Principal, tenant_id: UUID) -> list[dict]:
+    """Return role-to-agent grants of the tenant for a caller who may manage roles."""
+    with session.begin():
+        require_role_manager(session, principal, tenant_id)
+        rows = session.execute(
+            select(TenantAgentGrantRecord.role_id, TenantAgentGrantRecord.agent_id, TenantAgentGrantRecord.permission)
+            .where(TenantAgentGrantRecord.tenant_id == tenant_id)
+            .order_by(TenantAgentGrantRecord.agent_id, TenantAgentGrantRecord.permission)
+        ).all()
+    return [{"role_id": row[0], "agent_id": row[1], "permission": row[2]} for row in rows]

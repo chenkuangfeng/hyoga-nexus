@@ -33,7 +33,8 @@ function parseSession(value: unknown): Conversation {
 }
 export async function request<T>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> {
   const response = await fetch('/api/v1' + path, init)
-  const data: unknown = await response.json()
+  // 204 responses carry no body; parse receives null and must not read it.
+  const data: unknown = response.status === 204 ? null : await response.json()
   if (!response.ok) {
     const code = response.status === 403 || response.status === 404 ? '无权访问或内容已不可用' :
       response.status === 503 ? '服务尚未就绪，请检查连接与登录配置' : '请求未完成'

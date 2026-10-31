@@ -15,7 +15,8 @@ from nexus_platform.authz.catalog import API_PERMISSIONS, MENUS
 from nexus_platform.tenants import roles as roles_service
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.schemas.platform import (
-    AgentGrantsInput, AgentGrantsView, PermissionCatalogView, PermissionsView, RoleGrantsInput, RoleInput, RoleView,
+    AgentGrantsInput, AgentGrantsView, PermissionCatalogView, PermissionsView, RoleAssignmentView, RoleGrantsInput,
+    AgentGrantRowView, RoleInput, RoleView,
 )
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}", tags=["Tenant roles"])
@@ -45,6 +46,18 @@ def my_permissions(tenant_id: UUID, principal: Principal = Depends(get_principal
 def list_roles(tenant_id: UUID, principal: Principal = Depends(get_principal),
                db=Depends(get_database_session)):
     return [role_view(row) for row in roles_service.list_roles(db, principal, tenant_id)]
+
+
+@router.get("/role-assignments", response_model=list[RoleAssignmentView])
+def list_role_assignments(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                          db=Depends(get_database_session)):
+    return roles_service.list_assignments(db, principal, tenant_id)
+
+
+@router.get("/agent-grants", response_model=list[AgentGrantRowView])
+def list_agent_grants(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                      db=Depends(get_database_session)):
+    return roles_service.list_agent_grants(db, principal, tenant_id)
 
 
 @router.post("/roles", response_model=RoleView, status_code=status.HTTP_201_CREATED)

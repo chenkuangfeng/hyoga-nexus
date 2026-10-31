@@ -60,7 +60,7 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 
 `tenants/roles.py` 管理租户自定义角色。角色是菜单键（`authz/catalog.py` 中的 `MENUS`）与后台 API 权限键（`API_PERMISSIONS`）的集合，只能引用目录内的键，否则返回 422。表：`tenant_roles`、`tenant_role_menu_grants`、`tenant_role_api_grants`、`tenant_user_roles`（迁移 `a6c2d8e4f1b7`）。`tenant_user_roles` 用复合外键保证成员与角色属于同一租户。
 
-有效权限为成员的全部角色授权并集；owner 与 admin 隐式拥有完整目录。非活跃成员没有任何权限。管理角色需要 `roles:manage`，且只能授予操作者自己拥有的菜单与 API 权限，防止越权。API 位于 `/api/v1/tenants/{id}/roles`、`/members/{id}/roles/{role}` 与 `/me/permissions`。
+有效权限为成员的全部角色授权并集；owner 与 admin 隐式拥有完整目录。非活跃成员没有任何权限。管理角色需要 `roles:manage`，且只能授予操作者自己拥有的菜单与 API 权限，防止越权。API 位于 `/api/v1/tenants/{id}/roles`、`/members/{id}/roles/{role}`、`/me/permissions`、`/role-assignments` 与 `/agent-grants`（后两者供管理界面回显）。
 
 成员管理、模型配置与凭据、工具启用、审计查询分别要求 `members:manage`、`models:manage`、`tools:manage`、`audit:read`（owner/admin 隐式拥有）。创建智能体需要 `agents:write`。
 
