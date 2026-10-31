@@ -40,6 +40,8 @@ Runtime 执行智能体任务；平台负责资源授权、身份、记录、调
 
 Claude Code、DeepSeek Harness 在各自阶段核对官方文档和真实项目；本阶段只保留边界，不宣称与 Codex 功能对等。
 
+2026-10-31 决策：Codex 采用 `openai-codex` SDK 管进程，事件与审批经 app-server 协议获取；R3 开始前须验证 SDK 是否暴露底层 JSON-RPC 通道，否则回退直连协议。Claude Code 采用 `claude-agent-sdk`。细节见 [智能体框架重构方案](pending/agent-framework-redesign.md) 第 5、7 节。
+
 ## P2 实际接口
 
 `nexus_core.runtime` 定义 `ChatModelPort`、`ModelMessage/Request/Chunk`、`ToolDefinition/Call/Result/Disposition`、预算、取消、持久化、生命周期、MemoryDraft 和 Sandbox 端口。`ToolDisposition` 显式区分 continue、complete、wait_input、exit；exit 必须提供完成/失败状态。原 `contracts.AgentRuntime` 保留兼容。

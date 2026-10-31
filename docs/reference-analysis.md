@@ -60,4 +60,4 @@ WeKnora 的 `internal/agent` 包含实际执行循环、完成判断、压缩、
 
 当前 P2 本地验证不等于 GenericAgent 完整功能兼容。no_tool 判断、done hooks、回合收尾、完整工作记忆/长期 SOP、上下文变换 hooks、多模型协议/故障转移等尚未完整实现；六项代码/文件/浏览器工具按用户此前确认继续暂缓。未审查、未实现、暂缓和部署未验收分别登记，不再以“接口预留”或“已参考”代替功能迁移完成。
 
-后续设计讨论见 [综合架构分析](pending/open-source-agents-analysis-and-solution.md)与[分阶段实施方案](pending/omni-agent-phased-implementation-plan.md)。
+后续设计见 [智能体框架重构方案](pending/agent-framework-redesign.md)。
