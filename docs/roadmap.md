@@ -8,7 +8,7 @@
 - 每个步骤结束时必须有可验收结果；验收未通过不进入依赖它的步骤。未通过的门禁须明确记录并告知用户。
 - 外部依赖（PostgreSQL、真实模型、Codex/Claude 账号、观澜数据源）未验证前，不宣称对应功能可用。
 - 涉及 API 契约、权限规则、持久化模型或 Runtime 行为变化的调整，先通过 OpenSpec 提案并获确认，再修改本路线图。
-- 参考项目只借鉴设计并按需等价翻译，不整体嵌入；迁移时保留来源、版本与许可声明（见 [architecture.md](architecture.md)）。
+- 参考项目只借鉴设计并按需等价翻译，不整体嵌入；迁移时保留来源、版本与许可声明，记录在迁移提交或代码文件头中。
 
 ## 2. 总览
 
@@ -103,7 +103,7 @@
 ### 7. Claude Code 适配器
 
 - **目标**：以 `claude-agent-sdk` 封装 `ClaudeSDKClient`。
-- **门禁**：读取官方文档，核对 `can_use_tool`、hooks、`resume`、`fork_session` 的实际行为并锁定版本，结果写入 [architecture.md](architecture.md)。
+- **门禁**：读取官方文档，核对 `can_use_tool`、hooks、`resume`、`fork_session` 的实际行为并锁定版本，结果同步更新 [architecture.md](architecture.md) 第 2.4 节。
 - **子计划**：
   - [ ] 7.1 `can_use_tool` 审批桥；`disallowed_tools` 禁用原生工具。
   - [ ] 7.2 会话 resume 与 fork。

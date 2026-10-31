@@ -82,7 +82,7 @@ xxx-xxx/                     ← 每个包或者应用（或前端 app/package�
 
 仓库根目录采用现有全局文档结构，不另建重复的 `docs/requirements.md`、`docs/design.md`：
 
-- 根 `docs/` 仅保留 `architecture.md`（架构、模块设计、参考分析与关键决策）和 `roadmap.md`（阶段计划与验收）；[项目 README](README.md) 作为入口并链接模块文档。
+- 根 `docs/` 仅保留 `architecture.md`（总体设计与模块设计）和 `roadmap.md`（最终计划的步骤、子步骤与验收）；[项目 README](README.md) 作为入口并链接模块文档。
 - 全局需求和分阶段验收范围由 `docs/roadmap.md` 与 OpenSpec 规格表达；总体设计由 `docs/architecture.md`、目录和契约文档表达。模块文档描述自身需求与设计，父模块汇总并链接子模块内容，避免复制全文。
 - 代码必须有详细的说明：模块文档说明职责、结构、关键流程和使用方式；公共接口、核心类与函数通过 docstring/JSDoc 说明用途、输入输出、异常及重要约束，复杂逻辑通过注释解释设计意图和边界条件。说明须与代码同步，避免逐行复述代码。
 - 功能或接口变化同步更新相关 doc 文档和 OpenSpec 规格。文档记录当前结果、约束及明确标注的计划，不记录中间变更的说明；过程记录保留在变更提案和 Git 历史中。
