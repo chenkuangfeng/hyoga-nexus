@@ -11,12 +11,14 @@ from fastapi import APIRouter, Depends, Response, status
 
 from nexus_core.platform import Principal
 from nexus_platform.agents.access import set_agent_grants
+from nexus_platform.auth import accounts
 from nexus_platform.authz.catalog import API_PERMISSIONS, MENUS
+from nexus_core.platform import TenantRole
 from nexus_platform.tenants import roles as roles_service
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.schemas.platform import (
     AgentGrantsInput, AgentGrantsView, PermissionCatalogView, PermissionsView, RoleAssignmentView, RoleGrantsInput,
-    AgentGrantRowView, RoleInput, RoleView,
+    AccountCreate, AccountView, AgentGrantRowView, RoleInput, RoleView,
 )
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}", tags=["Tenant roles"])
@@ -95,3 +97,14 @@ def set_role_agent_grants(tenant_id: UUID, role_id: UUID, agent_id: UUID, body: 
                           principal: Principal = Depends(get_principal), db=Depends(get_database_session)):
     permissions = set_agent_grants(db, principal, tenant_id, role_id, agent_id, body.permissions)
     return AgentGrantsView(role_id=role_id, agent_id=agent_id, permissions=sorted(permissions))
+
+
+@router.post("/accounts", response_model=AccountView, status_code=status.HTTP_201_CREATED)
+def create_account(tenant_id: UUID, body: AccountCreate, principal: Principal = Depends(get_principal),
+                   db=Depends(get_database_session)):
+    """Create a password account for a member of this tenant (members:manage). Password is write-only."""
+    user = accounts.create_password_account(
+        db, principal, tenant_id, username=body.username, display_name=body.display_name,
+        password=body.password, role=TenantRole(body.role),
+    )
+    return AccountView(user_id=user.id, username=body.username.strip().lower(), role=body.role)

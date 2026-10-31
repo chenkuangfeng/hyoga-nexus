@@ -13,6 +13,7 @@ const makeEvent = (sequence, event_type, payload = {}) => ({ event_id: `event-${
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 await page.route('**/api/v1/**', async route => {
   const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method()
+  if (new URL(request.url()).pathname.endsWith('/auth/me')) return route.fulfill(json({ user_id: 'user-1', display_name: '测试用户', providers: ['password'] }))
   if (path.endsWith('/tenants')) return route.fulfill(json([{ id: 'tenant', name: '开发空间' }]))
   if (path.endsWith('/agents')) return route.fulfill(json([{ id: 'agent', name: '研究助手', runtime_type: 'native', published_version_id: 'version' }]))
   if (path.endsWith('/sessions') && method === 'POST') {

@@ -29,3 +29,10 @@ class InvalidConfiguration(PlatformError):
 class ServiceUnavailable(PlatformError):
     code = "service_unavailable"
     status_code = 503
+
+
+class Unauthenticated(PlatformError):
+    """No valid login session or the session expired; the client must sign in again."""
+
+    code = "unauthorized"
+    status_code = 401

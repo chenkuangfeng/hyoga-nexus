@@ -31,16 +31,28 @@ function parseSession(value: unknown): Conversation {
   const row = record(value)
   return { id: string(row.id), title: string(row.title), agent_version_id: string(row.agent_version_id) }
 }
+/** Dispatched when a request is rejected as unauthenticated; the app then shows the sign-in page. */
+export const AUTH_REQUIRED_EVENT = 'nexus-auth-required'
+/** Error from a failed API request. `status` lets callers branch (for example, 401 on the session probe). */
+export class ApiError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) { super(message); this.status = status }
+}
 export async function request<T>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> {
-  const response = await fetch('/api/v1' + path, init)
+  // Every request carries the CSRF header; the server requires it for session-cookie writes.
+  const headers = new Headers(init?.headers)
+  headers.set('X-Nexus-Request', '1')
+  const response = await fetch('/api/v1' + path, { ...init, headers })
   // 204 responses carry no body; parse receives null and must not read it.
   const data: unknown = response.status === 204 ? null : await response.json()
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/auth/login')) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
     const code = response.status === 403 || response.status === 404 ? '无权访问或内容已不可用' :
+      response.status === 401 ? '请先登录' :
       response.status === 503 ? '服务尚未就绪，请检查连接与登录配置' : '请求未完成'
     let detail = ''
     try { detail = string(record(record(data).error).message) } catch { /* keep safe fallback */ }
-    throw new Error(detail ? `${code}：${detail}` : code)
+    throw new ApiError(detail ? `${code}：${detail}` : code, response.status)
   }
   return parse(data)
 }

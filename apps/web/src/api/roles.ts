@@ -48,5 +48,6 @@ export const roleApi = {
   agentGrants: (tenant: string, signal?: AbortSignal) => request<AgentGrantRow[]>(`${base(tenant)}/agent-grants`, value => rows(value, row => ({
     role_id: text(row.role_id), agent_id: text(row.agent_id), permission: agentPermission(row.permission),
   })), { signal }),
+  createAccount: (tenant: string, username: string, display_name: string, password: string, role: 'admin' | 'member') => request(`${base(tenant)}/accounts`, empty, json('POST', { username, display_name, password, role })),
   setAgentGrants: (tenant: string, roleId: string, agentId: string, permissions: AgentPermission[]) => request(`${base(tenant)}/roles/${encodeURIComponent(roleId)}/agents/${encodeURIComponent(agentId)}`, empty, json('PUT', { permissions })),
 }

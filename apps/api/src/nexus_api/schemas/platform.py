@@ -250,3 +250,16 @@ class AgentGrantRowView(BaseModel):
     role_id: UUID
     agent_id: UUID
     permission: str
+
+
+class AccountCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    display_name: str = Field(default="", max_length=160)
+    password: str = Field(min_length=10, max_length=256)
+    role: Literal["admin", "member"] = "member"
+
+
+class AccountView(BaseModel):
+    user_id: UUID
+    username: str
+    role: str

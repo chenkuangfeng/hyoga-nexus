@@ -63,8 +63,14 @@ class RunStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Principal:
+    """External identity presented to the platform.
+
+    `issuer` names the provider (for example `wecom`, `password`). `scope` narrows the external
+    id to a provider namespace such as a WeCom corp id; it is empty when the provider has none.
+    """
     id: str
     issuer: str
+    scope: str = ""
 
 
 @dataclass(frozen=True, slots=True)

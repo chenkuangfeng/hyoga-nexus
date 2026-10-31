@@ -11,6 +11,7 @@ let providers = [], defaults = {}, tested = 0, created = 0, saved = 0
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 await page.route('**/api/v1/**', async route => {
   const request = route.request(), path = new URL(request.url()).pathname, method = request.method()
+  if (new URL(request.url()).pathname.endsWith('/auth/me')) return route.fulfill(json({ user_id: 'user-1', display_name: '测试用户', providers: ['password'] }))
   if (path.endsWith('/tenants')) return route.fulfill(json([{ id: 'tenant', name: '开发空间' }]))
   if (path.endsWith('/model-settings')) return route.fulfill(json({ providers, defaults, can_manage_tenant: true }))
   if (path.endsWith('/providers') && method === 'POST') {

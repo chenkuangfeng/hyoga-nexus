@@ -83,6 +83,12 @@ export function useRoles() {
     await load()
   }, '智能体权限已保存')
 
+  /** Create a password account in the selected tenant. The caller clears its password input after this settles. */
+  const createAccount = (username: string, displayName: string, password: string, role: 'admin' | 'member') => perform(async () => {
+    await roleApi.createAccount(tenant.value, username.trim(), displayName.trim(), password, role)
+    await load()
+  }, '账号已创建，请把账号与初始密码交给成员并提醒其修改')
+
   async function initialize() {
     loading.value = true
     try { const rows = await api.tenants(); if (!disposed) { tenants.value = rows; tenant.value = rows[0]?.id || ''; await load() } }
@@ -93,5 +99,5 @@ export function useRoles() {
   onBeforeUnmount(() => { disposed = true; controller?.abort() })
   return { tenants, tenant, loading, busy, error, feedback, catalog, mine, canManage, roles, members, assignments, agents,
     grants, roleDialog, editingRoleId, roleForm, grantRoleId, grantAgentId, grantPermissions, agentPermissions,
-    memberRows, assignableMembers, rolesOf, load, initialize, openRole, saveRole, setMemberRoles, saveGrant }
+    memberRows, assignableMembers, rolesOf, load, initialize, openRole, saveRole, setMemberRoles, saveGrant, createAccount }
 }

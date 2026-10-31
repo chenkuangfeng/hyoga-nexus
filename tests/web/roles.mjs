@@ -17,6 +17,7 @@ let manager = true
 let assignCalls = 0
 await page.route('**/api/v1/**', async route => {
   const request = route.request(), path = new URL(request.url()).pathname, method = request.method()
+  if (new URL(request.url()).pathname.endsWith('/auth/me')) return route.fulfill(json({ user_id: 'user-1', display_name: '测试用户', providers: ['password'] }))
   if (path.endsWith('/tenants')) return route.fulfill(json([{ id: 'tenant', name: '开发空间' }]))
   if (path.endsWith('/me/permissions')) return route.fulfill(json({ menus: manager ? menus : ['chat'], apis: manager ? apis : [] }))
   if (path.endsWith('/permission-catalog')) return route.fulfill(json({ menus, apis }))

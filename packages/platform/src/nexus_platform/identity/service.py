@@ -19,7 +19,7 @@ def resolve_user(session: Session, principal: Principal) -> UserRecord:
     identity = session.scalar(
         select(UserIdentityRecord).where(
             UserIdentityRecord.provider == principal.issuer,
-            UserIdentityRecord.scope == "",
+            UserIdentityRecord.scope == principal.scope,
             UserIdentityRecord.external_id == principal.id,
         )
     )
@@ -34,7 +34,7 @@ def resolve_user(session: Session, principal: Principal) -> UserRecord:
     session.flush()  # the identity row references the user; insert the user first
     session.add(
         UserIdentityRecord(
-            id=new_id(), user_id=user.id, provider=principal.issuer, scope="", external_id=principal.id,
+            id=new_id(), user_id=user.id, provider=principal.issuer, scope=principal.scope, external_id=principal.id,
             verified_at=now, created_at=now,
         )
     )
@@ -56,7 +56,7 @@ def principal_for_user(session: Session, user_id: UUID) -> Principal:
     )
     if identity is None:
         raise NotFound("User identity not found")
-    return Principal(id=identity.external_id, issuer=identity.provider)
+    return Principal(id=identity.external_id, issuer=identity.provider, scope=identity.scope)
 
 
 def require_membership(

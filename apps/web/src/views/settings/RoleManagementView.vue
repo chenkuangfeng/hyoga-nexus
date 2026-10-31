@@ -1,10 +1,18 @@
 <script setup lang="ts">
+import { reactive } from 'vue'
 import { useRoles } from '../../composables/useRoles'
 import { agentPermissionLabels, apiLabels, menuLabels } from '../../types/roles'
 const roles = useRoles()
 const { tenants, tenant, loading, busy, error, feedback, catalog, canManage, roles: roleRows, assignableMembers, agents,
   grantRoleId, grantAgentId, grantPermissions, agentPermissions, roleDialog, editingRoleId, roleForm, rolesOf } = roles
 const menuName = (key: string) => menuLabels[key] || key
+const account = reactive({ username: '', displayName: '', password: '', role: 'member' as 'admin' | 'member' })
+async function submitAccount() {
+  if (busy.value) return
+  try { await roles.createAccount(account.username, account.displayName, account.password, account.role) }
+  finally { account.password = '' }
+  if (!error.value) account.username = ''
+}
 const apiName = (key: string) => apiLabels[key] || key
 </script>
 <template>
@@ -31,6 +39,24 @@ const apiName = (key: string) => apiLabels[key] || key
             <el-button :disabled="busy" @click="roles.openRole(item)">编辑 {{ item.name }}</el-button>
           </li>
         </ul>
+      </section>
+      <section class="settings-section" aria-labelledby="account-title">
+        <h2 id="account-title">添加账号</h2>
+        <p class="intro">账号由管理员创建并加入当前空间。初始密码至少 10 个字符，成员首次登录后应立即修改。</p>
+        <form class="account-form" @submit.prevent="submitAccount">
+          <label for="new-account-username">账号</label>
+          <el-input id="new-account-username" v-model="account.username" maxlength="64" autocomplete="off" :disabled="busy" />
+          <label for="new-account-name">显示名称</label>
+          <el-input id="new-account-name" v-model="account.displayName" maxlength="160" :disabled="busy" />
+          <label for="new-account-password">初始密码</label>
+          <el-input id="new-account-password" v-model="account.password" type="password" maxlength="256" show-password autocomplete="new-password" :disabled="busy" />
+          <label for="new-account-role">空间角色</label>
+          <el-select id="new-account-role" v-model="account.role" :disabled="busy">
+            <el-option label="普通成员" value="member" />
+            <el-option label="管理员" value="admin" />
+          </el-select>
+          <el-button type="primary" native-type="submit" :disabled="busy || !account.username.trim() || account.password.length < 10">创建账号</el-button>
+        </form>
       </section>
       <section class="settings-section" aria-labelledby="assign-title">
         <h2 id="assign-title">成员角色</h2>
@@ -90,6 +116,8 @@ const apiName = (key: string) => apiLabels[key] || key
 .role-list p { margin: 4px 0; color: var(--el-text-color-secondary); font-size: 14px; }
 .grant-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .api-grants { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.account-form { display: grid; gap: 8px; max-width: 420px; }
+.account-form label { font-size: 14px; color: var(--el-text-color-regular); }
 .member-id { font-family: var(--el-font-family-mono, monospace); }
 @media (max-width: 640px) { .api-grants { grid-template-columns: 1fr; } .role-list li, .assign-list li { flex-direction: column; align-items: flex-start; } }
 </style>

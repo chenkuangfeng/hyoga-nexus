@@ -18,6 +18,8 @@ from nexus_api.http.native import router as native_router
 app.include_router(native_router)
 from nexus_api.http.roles import router as roles_router
 app.include_router(roles_router)
+from nexus_api.http.auth import router as auth_router
+app.include_router(auth_router)
 
 
 @app.middleware("http")

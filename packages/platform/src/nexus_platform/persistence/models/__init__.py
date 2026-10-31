@@ -27,6 +27,7 @@ from .memory import (
     ContextSummaryRecord,
 )
 from .approval import InputRequestRecord, ActionApprovalRecord
+from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 
 __all__ = [
     'Base',
@@ -39,6 +40,9 @@ __all__ = [
     'TenantRoleApiGrantRecord',
     'TenantUserRoleRecord',
     'TenantAgentGrantRecord',
+    'LocalCredentialRecord',
+    'AuthSessionRecord',
+    'AuthStateRecord',
     'CredentialReferenceRecord',
     'ProviderCredentialRecord',
     'ModelProfileRecord',
