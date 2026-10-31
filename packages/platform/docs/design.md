@@ -56,4 +56,10 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 
 用户与外部身份分离：`users` 只保存平台内部用户与显示名；`user_identities(provider, scope, external_id)` 保存每个外部登录身份（Web/OIDC、企业微信、微信、QQ 等）。`scope` 为空串表示提供方没有租户级 ID，企业微信等需要按企业隔离时使用企业 ID。`identity/service.py` 的 `resolve_user` 按 (provider, scope, external_id) 解析或首次创建用户；`principal_for_user` 为已存在的内部用户选取一个可回解析的外部身份，供执行上下文复核授权。
 
-角色、菜单与后台 API 授权、智能体权限及智能体绑定的工具/技能/知识库尚未实现，见路线图。
+## 租户角色
+
+`tenants/roles.py` 管理租户自定义角色。角色是菜单键（`authz/catalog.py` 中的 `MENUS`）与后台 API 权限键（`API_PERMISSIONS`）的集合，只能引用目录内的键，否则返回 422。表：`tenant_roles`、`tenant_role_menu_grants`、`tenant_role_api_grants`、`tenant_user_roles`（迁移 `a6c2d8e4f1b7`）。`tenant_user_roles` 用复合外键保证成员与角色属于同一租户。
+
+有效权限为成员的全部角色授权并集；owner 与 admin 隐式拥有完整目录。非活跃成员没有任何权限。管理角色需要 `roles:manage`，且只能授予操作者自己拥有的菜单与 API 权限，防止越权。API 位于 `/api/v1/tenants/{id}/roles`、`/members/{id}/roles/{role}` 与 `/me/permissions`。
+
+当前仅角色管理接口读取该权限；既有的智能体、会话、模型、审计等接口仍按原有成员角色判断，尚未逐接口接入目录。智能体级权限（view/run/edit/publish/manage）与智能体绑定的工具、技能、知识库尚未实现，见路线图。

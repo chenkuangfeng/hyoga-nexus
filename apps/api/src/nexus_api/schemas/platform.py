@@ -198,3 +198,34 @@ class ResourceGrantView(BaseModel):
 class InputResponse(BaseModel):
     input_request_id: UUID
     response: str = Field(min_length=1, max_length=100000)
+
+
+class RoleInput(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    menus: list[str] = Field(default_factory=list, max_length=32)
+    apis: list[str] = Field(default_factory=list, max_length=64)
+
+
+class RoleGrantsInput(BaseModel):
+    menus: list[str] = Field(default_factory=list, max_length=32)
+    apis: list[str] = Field(default_factory=list, max_length=64)
+
+
+class RoleView(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    name: str
+    menus: list[str]
+    apis: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class PermissionsView(BaseModel):
+    menus: list[str]
+    apis: list[str]
+
+
+class PermissionCatalogView(BaseModel):
+    menus: list[str]
+    apis: list[str]
