@@ -61,6 +61,9 @@ class RunSubmissionService:
                 return self._replay(existing, request_hash)
             if work.runs.has_active(session_id):
                 raise Conflict("Session already has an active Run")
+            # A run left unknown by a crash blocks the session until an operator resolves it.
+            if work.admissions.blocked(session_id):
+                raise Conflict("Session is blocked by an unresolved run")
             config_snapshot = {
                 "agent_id": str(agent.agent_id),
                 "agent_version_id": str(agent.id),
@@ -90,6 +93,7 @@ class RunSubmissionService:
             work.messages.initial(run, message, now)
             work.events.append(run.id, "run.queued", {"status": RunStatus.QUEUED.value}, now)
             work.outbox.enqueue(run.id, "run.execute", now)
+            work.admissions.enqueue(session_id, run.id, now)
             work.catalog.touch_session(session_id, now)
             work.audit.write(tenant_id, member.user_id, "run.created", "run", str(run.id),
                              {"session_id": str(session_id), "agent_version_id": str(agent.id)})

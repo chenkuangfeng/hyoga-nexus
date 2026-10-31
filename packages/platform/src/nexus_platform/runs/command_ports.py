@@ -73,6 +73,13 @@ class RunAuditRepository(Protocol):
               resource_type: str, resource_id: str, details: dict[str, Any] | None = None) -> None: ...
 
 
+class RunAdmissionRepository(Protocol):
+    """Dispatch-ledger operations used by submission: append a FIFO entry, check blocking."""
+
+    def enqueue(self, session_id: UUID, run_id: UUID, at: datetime) -> None: ...
+    def blocked(self, session_id: UUID) -> bool: ...
+
+
 class RunCommandUnitOfWork(RunUnitOfWork, Protocol):
     """One write transaction with configuration, permissions, event, message and queue adapters."""
     runs: RunWriteRepository
@@ -82,5 +89,6 @@ class RunCommandUnitOfWork(RunUnitOfWork, Protocol):
     messages: RunMessageRepository
     inputs: RunInputRepository
     audit: RunAuditRepository
+    admissions: RunAdmissionRepository
 
     def __enter__(self) -> 'RunCommandUnitOfWork': ...

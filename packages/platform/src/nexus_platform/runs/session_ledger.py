@@ -21,10 +21,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.orm import Session
 
+from nexus_core.platform import RunStatus, utc_now
+from nexus_platform.authz.audit import audit
 from nexus_platform.persistence.models.ledger import RuntimeEpochRecord, SessionAdmissionRecord
+from nexus_platform.persistence.models.run import RunRecord
 
 #: Maximum queued (not yet claimed) admissions per session. Matches Hermes' ADMISSION_QUEUE_MAX.
 ADMISSION_QUEUE_MAX = 32
@@ -52,6 +55,12 @@ class QueueFull(LedgerError):
     """The session already holds ``ADMISSION_QUEUE_MAX`` queued admissions."""
 
     code = "queue_full"
+
+
+class NotUnknown(LedgerError):
+    """``resolve_unknown`` was asked to clear an admission that is not ``unknown``."""
+
+    code = "not_unknown"
 
 
 class AdmissionNotFound(LedgerError):
@@ -113,15 +122,15 @@ def require_epoch(db: Session, epoch: int) -> None:
 
 
 def enqueue(
-    db: Session, *, epoch: int, session_id: UUID, run_id: UUID, admission_id: UUID, now: datetime,
+    db: Session, *, session_id: UUID, run_id: UUID, admission_id: UUID, now: datetime,
 ) -> AdmissionView:
     """Append an admission to the session FIFO as ``queued``.
 
-    Raises ``QueueFull`` when the session already has ``ADMISSION_QUEUE_MAX`` queued rows.
-    The count and insert run in the caller's write transaction, so the cap holds under
-    concurrent submissions.
+    Creation is not fenced: any API or worker process may submit work, and only claims,
+    finishes and recovery belong to a process generation. Raises ``QueueFull`` when the
+    session already has ``ADMISSION_QUEUE_MAX`` queued rows. The count and insert run in
+    the caller's write transaction, so the cap holds under concurrent submissions.
     """
-    require_epoch(db, epoch)
     queued = db.scalar(select(func.count()).select_from(SessionAdmissionRecord).where(
         SessionAdmissionRecord.session_id == session_id,
         SessionAdmissionRecord.status == "queued",
@@ -158,20 +167,55 @@ def claim_next(db: Session, *, epoch: int, session_id: UUID, now: datetime) -> A
     require_epoch(db, epoch)
     if session_blocked(db, session_id):
         return None
+    head = select_head(db, session_id)
+    if head is None:
+        return None
+    return cas_claim(db, head, epoch=epoch, now=now)
+
+
+def select_head(db: Session, session_id: UUID) -> AdmissionView | None:
+    """Read the oldest queued admission of a session without changing it."""
     head = db.scalar(select(SessionAdmissionRecord).where(
         SessionAdmissionRecord.session_id == session_id,
         SessionAdmissionRecord.status == "queued",
     ).order_by(SessionAdmissionRecord.seq).limit(1))
-    if head is None:
-        return None
+    return None if head is None else _view(head)
+
+
+def cas_claim(db: Session, head: AdmissionView, *, epoch: int, now: datetime) -> AdmissionView:
+    """Move ``head`` from ``queued`` to ``started`` under ``epoch``, or raise ``StaleClaim``.
+
+    The update matches only a row that is still ``queued``. A concurrent claimer that got
+    there first makes rowcount 0, and the caller must re-read the queue.
+    """
     result = db.execute(update(SessionAdmissionRecord).where(
         SessionAdmissionRecord.admission_id == head.admission_id,
         SessionAdmissionRecord.status == "queued",
     ).values(status="started", owner_epoch=epoch, updated_at=now))
     if result.rowcount != 1:
         raise StaleClaim(f"admission {head.admission_id} was claimed concurrently")
-    db.refresh(head)
-    return _view(head)
+    row = db.scalar(select(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.admission_id == head.admission_id,
+    ))
+    db.refresh(row)
+    return _view(row)
+
+
+#: Run statuses that release the session's admission. Leaving ``unknown`` untouched is the
+#: point: a run that the lease path later marks interrupted must not unblock the session.
+_RELEASING_STATUSES = ("queued", "started")
+
+
+def finish_run(db: Session, *, run_id: UUID, now: datetime) -> None:
+    """Mark the run's ``queued`` or ``started`` admission ``terminal``.
+
+    Called from the ORM hook when a Run reaches a terminal status. Not fenced by epoch:
+    rows left ``unknown`` by recovery are not matched, and a stale writer cannot revive them.
+    """
+    db.execute(update(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.run_id == run_id,
+        SessionAdmissionRecord.status.in_(_RELEASING_STATUSES),
+    ).values(status="terminal", updated_at=now))
 
 
 def finish(db: Session, *, epoch: int, admission_id: UUID, now: datetime) -> None:
@@ -209,11 +253,13 @@ def recover_previous_epochs(db: Session, *, epoch: int, now: datetime) -> list[U
     return run_ids
 
 
-def resolve_unknown(db: Session, *, epoch: int, admission_id: UUID, now: datetime) -> None:
+def resolve_unknown(
+    db: Session, *, epoch: int, admission_id: UUID, tenant_id: UUID, actor_id: UUID, now: datetime,
+) -> None:
     """Explicitly clear an ``unknown`` admission so its session can run again.
 
-    This is the only transition out of ``unknown``. The caller must record an audit entry
-    stating who resolved it; the ledger does not decide that.
+    This is the only transition out of ``unknown``. It writes an audit record naming the
+    actor, in the same transaction. Rejects rows that are not ``unknown``.
     """
     require_epoch(db, epoch)
     row = db.scalar(select(SessionAdmissionRecord).where(
@@ -222,16 +268,44 @@ def resolve_unknown(db: Session, *, epoch: int, admission_id: UUID, now: datetim
     if row is None:
         raise AdmissionNotFound(str(admission_id))
     if row.status != "unknown":
-        raise StaleEpoch(f"admission {admission_id} is {row.status}, not unknown")
+        raise NotUnknown(f"admission {admission_id} is {row.status}, not unknown")
     row.status = "terminal"
     row.updated_at = now
+    audit(db, tenant_id, actor_id, "run.unknown_resolved", "session_admission", str(admission_id),
+          {"run_id": str(row.run_id), "session_id": str(row.session_id)})
     db.flush()
+
+
+def install_run_terminal_hook() -> None:
+    """Release admissions when a Run reaches a terminal status, for every ORM session.
+
+    Terminal writes reach the database through several paths (repository, compatibility
+    facade, lease and cancellation code). Hooking the flush covers all of them without
+    touching each path. Idempotent: calling it twice registers one listener.
+    """
+    if event.contains(Session, "before_flush", _release_terminal_runs):
+        return
+    event.listen(Session, "before_flush", _release_terminal_runs)
+
+
+def _release_terminal_runs(db: Session, _flush_context, _instances) -> None:
+    now = utc_now()
+    for obj in list(db.dirty):
+        if not isinstance(obj, RunRecord):
+            continue
+        if RunStatus(obj.status).terminal:
+            finish_run(db, run_id=obj.id, now=now)
 
 
 __all__ = [
     "ADMISSION_QUEUE_MAX",
     "AdmissionNotFound",
     "AdmissionView",
+    "NotUnknown",
+    "cas_claim",
+    "finish_run",
+    "install_run_terminal_hook",
+    "select_head",
     "LedgerError",
     "QueueFull",
     "StaleClaim",
@@ -246,3 +320,7 @@ __all__ = [
     "resolve_unknown",
     "session_blocked",
 ]
+
+
+# Importing this module (which submission and the worker both do) installs the terminal hook.
+install_run_terminal_hook()

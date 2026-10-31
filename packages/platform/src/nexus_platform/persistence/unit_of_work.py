@@ -68,6 +68,8 @@ class SqlAlchemyUnitOfWork:
         self.messages = SqlAlchemyRunMessageRepository(self.session)
         self.inputs = SqlAlchemyRunInputRepository(self.session)
         self.audit = SqlAlchemyRunAuditRepository(self.session)
+        from nexus_platform.runs.admission_repository import SqlAlchemyAdmissionRepository
+        self.admissions = SqlAlchemyAdmissionRepository(self.session)
 
     def __exit__(self, exc_type, exc_value, traceback):
         try:

@@ -22,6 +22,9 @@ def create_database_engine(url: str | None = None, *, echo: bool = False) -> Eng
 
 
 def session_factory(engine: Engine) -> sessionmaker[Session]:
+    # Releasing admissions on terminal Runs must apply to every session this factory creates.
+    from nexus_platform.runs.session_ledger import install_run_terminal_hook
+    install_run_terminal_hook()
     return sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
 
 

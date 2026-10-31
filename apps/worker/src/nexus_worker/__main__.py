@@ -10,10 +10,28 @@ import threading
 
 from nexus_platform.configuration import DatabaseConfigurationError, resolve_database_url
 from nexus_platform.persistence.database import create_database_engine, session_factory
+from nexus_core.platform import utc_now
+from nexus_platform.runs import session_ledger as ledger
 from nexus_platform.runs.service import claim_next, process_claimed
 
 logging.basicConfig(level=os.getenv("NEXUS_LOG_LEVEL", "INFO"))
 logger = logging.getLogger("nexus_worker")
+
+
+def start_process_epoch(factory, instance_id: str) -> int:
+    """Begin a new process generation and mark earlier unfinished admissions ``unknown``.
+
+    Runs once at worker startup, before any claim. Recovered runs are logged, never replayed;
+    their sessions stay blocked until an operator resolves them.
+    """
+    with factory() as db:
+        epoch = ledger.begin_process(db, instance_id=instance_id, now=utc_now())
+        recovered = ledger.recover_previous_epochs(db, epoch=epoch, now=utc_now())
+        db.commit()
+    if recovered:
+        logger.error("Unknown Run outcomes after restart; sessions blocked until resolved",
+                     extra={"run_ids": [str(run_id) for run_id in recovered], "epoch": epoch})
+    return epoch
 
 
 def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> bool:
@@ -31,6 +49,7 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     factory = session_factory(engine)
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     stopped = threading.Event()
+    epoch = start_process_epoch(factory, worker_id)
 
     def stop(signum, _frame):
         logger.info("Shutdown requested", extra={"signal": signum, "worker_id": worker_id})
@@ -42,7 +61,7 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     try:
         while not stopped.is_set():
             try:
-                processed = run_once(factory, worker_id, stopped=stopped)
+                processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch)
             except Exception:
                 logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id})
                 processed = False

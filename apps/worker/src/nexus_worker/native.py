@@ -65,11 +65,33 @@ class ToolAccess:
         self.approval = store.approval
 
 
+def claim_session_admission(factory, epoch: int, context) -> None:
+    """Move this Run's FIFO entry to ``started`` under the worker's epoch.
+
+    Submission appends one admission per Run and refuses a session that is still blocked, so
+    the head of the session FIFO must be this Run. Any other state means the ledger and the
+    Run disagree; the function raises and writes nothing, and lease recovery takes over.
+    """
+    from nexus_platform.runs import session_ledger as ledger
+    from nexus_platform.runs.session_ledger import LedgerError
+    with factory() as db:
+        ledger.require_epoch(db, epoch)
+        if ledger.session_blocked(db, context.session_id):
+            raise LedgerError(f"session {context.session_id} is blocked; run {context.run_id} not started")
+        head = ledger.select_head(db, context.session_id)
+        if head is None or head.run_id != context.run_id:
+            raise LedgerError(f"run {context.run_id} is not the head of its session FIFO")
+        ledger.cas_claim(db, head, epoch=epoch, now=utc_now())
+        db.commit()
+
+
 async def execute_native(factory, task_id, worker_id, *, model_factory=None, registry_factory=None,
-                         resolver=None, hooks=(), stopped=None):
+                         resolver=None, hooks=(), stopped=None, ledger_epoch=None):
     context = prepare_execution(factory, task_id, worker_id)
     if context is None:
         return
+    if ledger_epoch is not None:
+        claim_session_admission(factory, ledger_epoch, context)
     store = DurableRuntimeStore(factory, context, worker_id, task_id)
     token = CancellationToken()
     monitor_error = None
