@@ -203,7 +203,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 借鉴：Hermes `codex_app_server.py`（JSON-RPC over stdio、initialize 握手、版本门槛 0.125.0）；官方 `openai-codex` SDK 与 App Server 文档（实施时重新核对）。
 
 - **集成方式（方案 A）**：SDK 负责进程与基础调用；流式事件与审批经 app-server 协议获取。
-- **验证门禁（R3 前必须完成）**：确认 SDK 是否暴露底层 JSON-RPC 通道。能暴露则事件、审批与 SDK 调用共用一个连接；不能则回退为直连 app-server 协议，SDK 仅用于 CLI 版本锁定。回退须记录并告知用户，不静默切换。
+- **验证门禁（路线图第 6 步前必须完成）**：确认 SDK 是否暴露底层 JSON-RPC 通道。能暴露则事件、审批与 SDK 调用共用一个连接；不能则回退为直连 app-server 协议，SDK 仅用于 CLI 版本锁定。回退须记录并告知用户，不静默切换。
 - **版本**：SDK 与 CLI 版本一并锁定；启动时读取版本与 `initialize` 能力，不匹配则能力标记 `unsupported`。
 - **会话**：平台 `session_id` ↔ Codex `thread_id`，记录在 `runtime_session_bindings`。`thread/resume` 恢复，`thread/fork` 分支，`thread/compact/start` 仅在平台压缩不可用时使用。
 - **事件映射**：`item/agentMessage/delta` → `message.delta`；`item/started` / `item/completed`（命令、文件变更、动态工具）→ `tool.started` / `tool.completed`；审批请求 → `approval.requested`，平台决定后回复 `accept` / `acceptForSession` / `decline` / `cancel`；`acceptForSession` 必须先经 `action_grants` 批准；`thread/tokenUsage/updated` → `usage.updated`；`turn/completed` → 终态映射表。
@@ -279,7 +279,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）。
 
-- **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端：`local`（仅开发模式，不能用于多用户）、`docker`（候选，R7 评估）、`ssh`（候选）。
+- **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端：`local`（仅开发模式，不能用于多用户）、`docker`（候选，路线图第 10 步评估）、`ssh`（候选）。
 - **租约**：执行方持有租约，到期或任务结束后回收；超时与取消释放租约。
 - **虚拟路径**：模型看到 `/tenant`、`/outputs` 等虚拟路径，宿主路径由后端映射，不泄露宿主结构。
 - **文件写入**：临时文件加原子替换；不对并发写入做仲裁。
@@ -291,7 +291,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 借鉴：RAGFlow `internal/agentic_rag/`（证据登记 `[ID:n]`、判断与断路、检索工具正交化）；WeKnora（先按权限过滤再检索，图谱按空间隔离）；FastGPT（数据集模型，仅参考）。
 
-**存储**：PostgreSQL 保存知识库、文档、不可变文档版本、索引任务、文本块定位与引用关系；原文件走可替换的对象存储接口；向量索引由独立向量服务承载（R5 验证后确定）。
+**存储**：PostgreSQL 保存知识库、文档、不可变文档版本、索引任务、文本块定位与引用关系；原文件走可替换的对象存储接口；向量索引由独立向量服务承载（路线图第 8 步技术验证后确定）。
 
 **生命周期**：
 1. 知识库、文档、版本、解析与索引任务、文本块、来源定位与引用契约。
@@ -420,7 +420,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 **时点与来源**：每条数据保留 provider、获取时间、数据对应时间、复权与口径；无法确认的字段明确标记，不推断补齐。采集由 worker 定时调度。
 
-**研究流程（候选，步骤 4、5、7、8 是否必选待 R9 确认）**：
+**研究流程（候选，步骤 4、5、7、8 是否必选待路线图第 12 步确认）**：
 
 | 步骤 | 目的 | 产物 |
 |---|---|---|
@@ -457,11 +457,11 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | D6 | 没有验收隔离后端时不注册任意代码与宿主文件工具 | 已实现 |
 | D7 | 用户模型设置：Fernet 加密凭据，主密钥经环境注入；HTTPX 目的地址策略 | 已实现 |
 | D8 | Memory/SOP 只产生待审核草稿，不自动注入提示 | 已实现 |
-| D9 | Codex 采用 `openai-codex` SDK 管进程，事件与审批经 app-server 协议；R3 前验证 SDK 通道，不通过则回退直连 | 已确认，验证待执行 |
+| D9 | Codex 采用 `openai-codex` SDK 管进程，事件与审批经 app-server 协议；路线图第 6 步前验证 SDK 通道，不通过则回退直连 | 已确认，验证待执行 |
 | D10 | Claude Code 采用 `claude-agent-sdk` 封装 | 已确认，官方文档核对待执行 |
 | D11 | Native 迁移采用"等价翻译 + 按职责拆分"，不采用单文件保留 | 已确认 |
 | D12 | 沙箱后端验收前，Native 不提供任意代码执行 | 已确认 |
-| D13 | 观澜股票研究为最后一期（R9） | 已确认 |
+| D13 | 观澜股票研究为最后一期（路线图第 12 步） | 已确认 |
 | D14 | 真实账号与数据源在对应实施阶段由用户提供 | 已确认 |
 | D15 | 参考项目只借鉴设计并按需等价翻译；每个模块在第 2 节标明借鉴来源 | 已确认 |
 
@@ -471,7 +471,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 - **软件回归**：`tests/`，覆盖平台、Native、工具、配置、迁移与前端。
 - **契约测试**：同一组用例（文本流、多工具、审批拒绝、取消、超时、崩溃后恢复）在 Native、Codex、Claude 上运行，断言统一终态与事件序列。
-- **行为矩阵**：GenericAgent 与 WeKnora 的关键行为逐条映射到测试（R2 建立，记录位于 `packages/runtimes/docs/`）。
+- **行为矩阵**：GenericAgent 与 WeKnora 的关键行为逐条映射到测试（路线图第 5 步建立，记录位于 `packages/runtimes/docs/`）。
 - **安全测试**：越权调用、撤权后的下一次调用、运行令牌过期、原生工具禁用、秘密不进入事件与审计。
 - **智能体与检索评估**：`evals/`，固定任务、检索引用正确率、技能选择准确率、运行能力契约。
 - **策略回测**：观澜 `guanlan/backtesting`，与软件回归分开记录输入版本、结果和失败原因。
