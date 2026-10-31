@@ -10,6 +10,7 @@ members = [
     "hyoga-nexus-guanlan",
     "hyoga-nexus-knowledge",
     "hyoga-nexus-mcp",
+    "hyoga-nexus-memory",
     "hyoga-nexus-platform",
     "hyoga-nexus-runtimes",
     "hyoga-nexus-sandbox",
@@ -329,6 +330,7 @@ dependencies = [
     { name = "hyoga-nexus-guanlan" },
     { name = "hyoga-nexus-knowledge" },
     { name = "hyoga-nexus-mcp" },
+    { name = "hyoga-nexus-memory" },
     { name = "hyoga-nexus-platform" },
     { name = "hyoga-nexus-runtimes" },
     { name = "hyoga-nexus-sandbox" },
@@ -352,6 +354,7 @@ requires-dist = [
     { name = "hyoga-nexus-guanlan", editable = "packages/guanlan" },
     { name = "hyoga-nexus-knowledge", editable = "packages/knowledge" },
     { name = "hyoga-nexus-mcp", editable = "packages/mcp" },
+    { name = "hyoga-nexus-memory", editable = "packages/memory" },
     { name = "hyoga-nexus-platform", editable = "packages/platform" },
     { name = "hyoga-nexus-runtimes", editable = "packages/runtimes" },
     { name = "hyoga-nexus-sandbox", editable = "packages/sandbox" },
@@ -412,6 +415,17 @@ dependencies = [
 requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
 
 [[package]]
+name = "hyoga-nexus-memory"
+version = "0.1.0"
+source = { editable = "packages/memory" }
+dependencies = [
+    { name = "hyoga-nexus-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+
+[[package]]
 name = "hyoga-nexus-platform"
 version = "0.1.0"
 source = { editable = "packages/platform" }
@@ -419,6 +433,7 @@ dependencies = [
     { name = "alembic" },
     { name = "cryptography" },
     { name = "hyoga-nexus-core" },
+    { name = "hyoga-nexus-memory" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlalchemy" },
 ]
@@ -428,6 +443,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13,<2" },
     { name = "cryptography", specifier = ">=46,<48" },
     { name = "hyoga-nexus-core", editable = "packages/core" },
+    { name = "hyoga-nexus-memory", editable = "packages/memory" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
 ]

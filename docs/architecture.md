@@ -70,7 +70,7 @@ flowchart TD
 | `tools` | 工具定义、注册、授权网关、通用内置工具 | 领域工具属于领域包 |
 | `skills` | 技能发现、解析、版本、依赖、来源检疫 | 技能只描述流程，不授予权限 |
 | `mcp` | MCP 客户端、服务端、按工具暴露 | 不默认开放整个服务 |
-| `memory` | 记忆契约、草稿、审核、检索注入（目标包，见第 4 节） | 不依赖 Runtime；写入带来源与作用域 |
+| `memory` | 记忆规则：草稿审核、版本、归档、有界索引；经存储端口访问数据 | 只依赖 core，不导入数据库或平台包；写入带来源与作用域 |
 | `knowledge` | 文档、解析、分块、索引、检索、引用 | 全 Python；不与记忆或结构化行情数据混用 |
 | `sandbox` | 执行后端接缝、工作区、租约、产物 | `local` 只用于显式开发模式 |
 | `connectors` | 渠道消息标准化与投递 | 不复制智能体循环 |
@@ -93,8 +93,9 @@ hyoga-nexus/
 ├── packages/
 │   ├── core/src/nexus_core/         # 公共协议、runtime、events、tools、tasks
 │   ├── platform/src/nexus_platform/ # identity、workspaces、authz、agents、sessions、runs、
-│   │                                # resources、models、memory、jobs、persistence、observability
+│   │                                # resources、models、jobs、persistence、observability（memory 门面与仓储）
 │   ├── runtimes/src/nexus_runtimes/ # native（context、engine、hooks、models、prompts）、adapters
+│   ├── memory/src/nexus_memory/     # ports（存储端口）、service（规则）
 │   ├── tools/src/nexus_tools/       # registry、gateway、builtins
 │   ├── skills/src/nexus_skills/     # loader、registry、versions、bindings、guard、projection、review（后三者占位）
 │   ├── mcp/src/nexus_mcp/
@@ -121,7 +122,7 @@ hyoga-nexus/
 | `sandbox` 后端放入 `backends/` | 已执行 | `local`、`docker` 移入 `backends/`；`ssh` 为候选，尚未创建目录 | Hermes `tools/environments/`；DeerFlow `sandbox/` |
 | `skills` 增加 `guard/`、`projection/`、`review/` | 已执行（占位） | 对应来源检疫、沙箱投射、审核发布，尚无实现 | Hermes `skills_guard.py`；DeerFlow `projection`、`mutations` |
 | 删除 `runtimes/adapters/deepseek` 占位 | 已执行 | 本方案不计划接入 | — |
-| `platform/memory` 拆为独立包 `packages/memory` | 未执行 | 当前 memory 服务直接依赖平台持久化模型、审计和 principal 上下文；`runs` 又反向导入 memory，直接迁出会形成循环依赖。需先定义端口（如记忆存储接口），由平台实现适配器，再迁移。待确认 | DeerFlow `agents/memory/`（MemoryManager 契约）、Hermes `memory_tool` |
+| `platform/memory` 拆为独立包 `packages/memory` | 已执行 | 规则迁入 `nexus_memory`，依赖存储端口 `MemoryRepository`；SQLAlchemy 适配器与门面留在 `nexus_platform.memory`，依赖方向为 platform → memory → core | DeerFlow `agents/memory/`（MemoryManager 契约）、Hermes `memory_tool` |
 | `runtimes/native/context` 改为处理器管线 | 未执行 | 当前为 `working`、`compaction`、`assembly`、`history` 四个模块，未引入统一的处理器接口。待设计接口后再拆分 | LobeHub `context-engine`；WeKnora `compaction/` |
 
 ### 4.3 拆分理由
@@ -133,7 +134,7 @@ hyoga-nexus/
 ### 4.4 当前实现与目标的差异
 
 - 占位目录：`adapters/codex`、`adapters/claude_code`、`sandbox/backends/docker`、`knowledge` 的 ingest、index、retrieval、evidence、graph，`skills` 的 guard、projection、review，`mcp` 的客户端与服务端，`guanlan` 的数据与分析。
-- 第 4.2 节中未执行的 `memory` 独立包与 context 处理器管线尚未实施。
+- 第 4.2 节中未执行的 context 处理器管线尚未实施。
 
 ---
 
@@ -257,7 +258,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 5.8 记忆
 
-借鉴：GenericAgent `memory/`（四层结构、SOP、写入约束）；Hermes `memory_tool.py`（冻结快照、用户画像）；DeerFlow `agents/memory/`（后端无关契约、prescreen 预筛、异步去抖）；TradingAgents `memory/log.py`（决策记录与事后回填）。
+借鉴：GenericAgent `memory/`（四层结构、SOP、写入约束）；实现位于独立包 `packages/memory`（规则）与 `nexus_platform.memory`（存储）；Hermes `memory_tool.py`（冻结快照、用户画像）；DeerFlow `agents/memory/`（后端无关契约、prescreen 预筛、异步去抖）；TradingAgents `memory/log.py`（决策记录与事后回填）。
 
 | 层 | 内容 | 生命周期 | 写入规则 |
 |---|---|---|---|
@@ -531,6 +532,6 @@ Workspace 角色与资源共享不能替代 ActionGrant 或审批。共享智能
 - 观澜数据、分析与回测。
 - 渠道接入。
 - 运行快照与 ActionGrant（`action_grants`）等计划表。
-- 第 4.2 节中未执行的 `memory` 独立包与 context 处理器管线。
+- 第 4.2 节中未执行的 context 处理器管线。
 
 验证边界：SQLite 与模拟模型验证通过；PostgreSQL 并发、迁移与故障恢复未在目标环境验收；真实供应商未在线验收；浏览器测试使用 API 与 SSE 夹具，不是完整部署环境的端到端验收。

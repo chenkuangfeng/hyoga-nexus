@@ -196,16 +196,12 @@ class DurableRuntimeStore:
 
     async def read_memory(self, entry_id: str) -> str:
         """Authorize each model memory read at execution time, independently of old indexes."""
-        from nexus_platform.memory.repository import authorized_entry, content
+        from nexus_platform.memory.service import read_for_run
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
             require_membership(db, run.workspace_id, run.principal_id)
-            entry = authorized_entry(db, run.workspace_id, run.principal_id, UUID(entry_id))
-            version = content(db, entry)
-            audit(db, run.workspace_id, run.principal_id, 'memory.read', 'memory', entry_id,
-                  {'run_id': str(run.id), 'version': version.version})
-            return version.content
+            return read_for_run(db, run.workspace_id, run.principal_id, UUID(entry_id), run.id)
 
     async def checkpoint(self, content: str) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:

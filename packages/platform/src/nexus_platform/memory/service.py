@@ -1,110 +1,81 @@
-"""GA L1/L2/L3 memory navigation with reviewed publication and immutable version history.
+"""Platform facade over `nexus_memory`: resolves principals, opens the transaction and maps errors.
 
-Source behavior: GenericAgent memory_management_sop.md and start_long_term_update,
-plus WeKnora engine memory injection. Approval replaces direct shared-file mutation;
-raw Run history remains the L4 provenance and is not rewritten during consolidation.
+API handlers and runs call these functions with a database session. The memory rules
+themselves live in `nexus_memory.service`; this module only adapts them to platform
+conventions (`NotFound`/`Conflict` responses, `context()` for the acting user).
 """
+from __future__ import annotations
+
+from functools import wraps
+from typing import Any, Callable
 from uuid import UUID
-from sqlalchemy import select
-from nexus_core.platform import new_id, utc_now
+
+from nexus_core.platform import Principal
+from nexus_memory import service as rules
+from nexus_memory.ports import MemoryConflict, MemoryNotFound
+from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.models.provider_settings import context
-from nexus_platform.persistence.models import MemoryDraftRecord, MemoryEntryRecord, MemoryVersionRecord, RunRecord, SessionRecord, ToolInvocationRecord
-from nexus_platform.errors import NotFound, Conflict
-from nexus_platform.authz.audit import audit
-from .repository import entries, authorized_entry, content
+
+from .repository import SqlMemoryRepository
 
 
-def index(db, workspace_id, user_id, project='') -> str:
-    """Produce a bounded pointer index; facts/SOP bodies are read on demand by ID."""
-    return '\n'.join(f'{row.id} | {row.kind} | {row.title} | v{row.current_version}'
-                     for row in entries(db, workspace_id, user_id, project))[:6000]
+def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Re-raise memory-domain denials as the platform exceptions the API maps to HTTP."""
+    @wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except MemoryNotFound as exc:
+            raise NotFound(str(exc)) from exc
+        except MemoryConflict as exc:
+            raise Conflict(str(exc)) from exc
+    return wrapper
 
 
-def list_memory(db, principal, workspace_id):
-    """List published entries and owned pending drafts, preserving isolation for administrators."""
+def index(db, workspace_id: UUID, user_id: UUID, project: str = '') -> str:
+    """Bounded published index for prompt injection; caller transaction, no commit."""
+    return rules.index(SqlMemoryRepository(db), workspace_id, user_id, project)
+
+
+@_translate
+def list_memory(db, principal: Principal, workspace_id: UUID) -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, workspace_id)
-        published = [{'id': str(row.id), 'title': row.title, 'kind': row.kind, 'project': row.project,
-                      'version': row.current_version} for row in entries(db, workspace_id, user.id)]
-        drafts = db.scalars(select(MemoryDraftRecord).join(RunRecord, RunRecord.id == MemoryDraftRecord.source_run_id).where(
-            MemoryDraftRecord.workspace_id == workspace_id, RunRecord.principal_id == user.id,
-            MemoryDraftRecord.status == 'pending_review').order_by(MemoryDraftRecord.created_at))
-        return {'entries': published, 'drafts': [{'id': str(d.id), 'kind': d.kind, 'diff': d.diff,
-            'source_run_id': str(d.source_run_id)} for d in drafts]}
+        return rules.list_memory(SqlMemoryRepository(db), user.id, workspace_id)
 
 
-def read(db, principal, workspace_id, entry_id, version=None):
-    """Return an owned published version with source Run/Draft and reviewer metadata."""
+@_translate
+def read(db, principal: Principal, workspace_id: UUID, entry_id: UUID, version: int | None = None) -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, workspace_id)
-        entry = authorized_entry(db, workspace_id, user.id, entry_id)
-        selected = db.get(MemoryVersionRecord, (entry.id, version or entry.current_version))
-        if not selected:
-            raise NotFound('Memory version unavailable')
-        audit(db, workspace_id, user.id, 'memory.read', 'memory', str(entry.id), {'version': selected.version})
-        return {'id': str(entry.id), 'title': entry.title, 'kind': entry.kind, 'content': selected.content,
-                'version': selected.version, 'source_run_id': str(selected.source_run_id)}
+        return rules.read(SqlMemoryRepository(db), user.id, workspace_id, entry_id, version)
 
 
-def review(db, principal, workspace_id, draft_id, *, approve: bool, title: str, entry_id=None, expected_version=0, project=''):
-    """Publish/reject a draft only for its owner; edits/rollback always append a version.
+@_translate
+def read_for_run(db, workspace_id: UUID, owner_id: UUID, entry_id: UUID, run_id: UUID) -> str:
+    """Model tool read inside an open run transaction; the run owner must already be verified."""
+    return rules.read_for_run(SqlMemoryRepository(db), workspace_id, owner_id, entry_id, run_id)
 
-    The user reviews the actual diff and its source. No model callback can invoke this
-    management service. A selected existing entry must match the optimistic version.
-    """
-    if approve and (not title.strip() or len(title) > 160 or len(project) > 160):
-        raise ValueError('Memory title/project is invalid')
+
+@_translate
+def review(db, principal: Principal, workspace_id: UUID, draft_id: UUID, *, approve: bool, title: str,
+           entry_id: UUID | None = None, expected_version: int = 0, project: str = '') -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, workspace_id)
-        draft = db.scalar(select(MemoryDraftRecord).where(MemoryDraftRecord.id == draft_id).with_for_update())
-        run = db.get(RunRecord, draft.source_run_id) if draft else None
-        if not draft or not run or draft.workspace_id != workspace_id or run.principal_id != user.id:
-            raise NotFound('Draft unavailable')
-        if draft.status != 'pending_review':
-            raise Conflict('Draft already reviewed')
-        if not approve:
-            draft.status = 'rejected'
-            audit(db, workspace_id, user.id, 'memory.rejected', 'memory_draft', str(draft.id))
-            return {'status': 'rejected'}
-        if entry_id:
-            entry = authorized_entry(db, workspace_id, user.id, entry_id)
-            db.refresh(entry, with_for_update=True)
-            if entry.current_version != expected_version or entry.kind != draft.kind:
-                raise Conflict('Memory changed or kind mismatch')
-            entry.current_version += 1; entry.title = title.strip(); entry.project = project
-        else:
-            entry = MemoryEntryRecord(id=new_id(), workspace_id=workspace_id, owner_user_id=user.id,
-                kind=draft.kind, title=title.strip(), project=project, active=True, current_version=1, created_at=utc_now())
-            db.add(entry); db.flush()
-        db.add(MemoryVersionRecord(entry_id=entry.id, version=entry.current_version, content=draft.diff,
-            source_run_id=run.id, source_draft_id=draft.id, reviewed_by=user.id, created_at=utc_now()))
-        draft.status = 'approved'
-        audit(db, workspace_id, user.id, 'memory.published', 'memory', str(entry.id), {'version': entry.current_version, 'draft_id': str(draft.id)})
-        return {'status': 'published', 'id': str(entry.id), 'version': entry.current_version}
+        return rules.review(SqlMemoryRepository(db), user.id, workspace_id, draft_id, approve=approve,
+                            title=title, entry_id=entry_id, expected_version=expected_version, project=project)
 
 
-def archive(db, principal, workspace_id, entry_id):
-    """Remove an entry from navigation/future prompts while retaining immutable source history."""
+@_translate
+def archive(db, principal: Principal, workspace_id: UUID, entry_id: UUID) -> None:
     with db.begin():
         user, _ = context(db, principal, workspace_id)
-        entry = authorized_entry(db, workspace_id, user.id, entry_id)
-        entry.active = False
-        audit(db, workspace_id, user.id, 'memory.archived', 'memory', str(entry.id))
+        rules.archive(SqlMemoryRepository(db), user.id, workspace_id, entry_id)
 
 
-def restore(db, principal, workspace_id, entry_id, version: int, expected_version: int):
-    """Restore a historical version by appending a new one; never erase intervening versions."""
+@_translate
+def restore(db, principal: Principal, workspace_id: UUID, entry_id: UUID, version: int,
+            expected_version: int) -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, workspace_id)
-        entry = authorized_entry(db, workspace_id, user.id, entry_id)
-        db.refresh(entry, with_for_update=True)
-        old = db.get(MemoryVersionRecord, (entry.id, version))
-        if not old:
-            raise NotFound('Memory version unavailable')
-        if entry.current_version != expected_version:
-            raise Conflict('Memory changed')
-        entry.current_version += 1
-        db.add(MemoryVersionRecord(entry_id=entry.id, version=entry.current_version, content=old.content,
-            source_run_id=old.source_run_id, source_draft_id=old.source_draft_id, reviewed_by=user.id, created_at=utc_now()))
-        audit(db, workspace_id, user.id, 'memory.restored', 'memory', str(entry.id), {'version': entry.current_version})
-        return {'version': entry.current_version}
+        return rules.restore(SqlMemoryRepository(db), user.id, workspace_id, entry_id, version, expected_version)

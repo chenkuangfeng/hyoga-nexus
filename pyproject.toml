@@ -17,6 +17,7 @@ dependencies = [
     "hyoga-nexus-tools",
     "hyoga-nexus-mcp",
     "hyoga-nexus-knowledge",
+    "hyoga-nexus-memory",
     "hyoga-nexus-sandbox",
     "hyoga-nexus-connectors",
     "hyoga-nexus-guanlan",
@@ -35,6 +36,7 @@ hyoga-nexus-skills = { workspace = true }
 hyoga-nexus-tools = { workspace = true }
 hyoga-nexus-mcp = { workspace = true }
 hyoga-nexus-knowledge = { workspace = true }
+hyoga-nexus-memory = { workspace = true }
 hyoga-nexus-sandbox = { workspace = true }
 hyoga-nexus-connectors = { workspace = true }
 hyoga-nexus-guanlan = { workspace = true }
