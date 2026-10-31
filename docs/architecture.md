@@ -12,7 +12,7 @@
 - **授权在执行时复核**：每次工具调用、检索和资源读取都重新查询数据库，不信任快照、模型参数或技能声明。
 - **事件先持久化再推送**：所有 Runtime 输出统一为 `RunEvent`；只有明确的 `completed` 才是成功。
 - **参考项目借鉴设计，按职责拆分实现**：每个模块的借鉴来源与取舍见第 2 节；不嵌入整个第三方项目，不保留参考项目的超大单文件结构。
-- **不确定即显式失败**：未知结果标记 `interrupted`，不自动重放有副作用的工具；未验证的能力标记 `unverified`，不对外宣称可用。
+- **不确定即显式失败**：结果未知的执行标记为 `unknown` 并阻塞会话，直到显式解除，不自动重放有副作用的工具；未验证的能力标记 `unverified`，不对外宣称可用。
 
 ### 1.2 总体结构
 
@@ -48,6 +48,8 @@
   Native / Codex / Claude Code ─▶ 统一 RunEvent ─▶ PostgreSQL（事件 / 调用 / 审批 / 审计）
                                                 └─▶ SSE 续读
 ```
+
+**进程与存储**：API 与 worker 始终是两个进程。多租户部署使用 PostgreSQL 作为事实源，Outbox 派发。单机部署使用单个 SQLite 文件作为事实源，两个进程共用该文件；写入使用 `BEGIN IMMEDIATE`，派发使用同一套账本规则（见 2.12）。两种部署的执行模型相同（见 2.2）。
 
 ### 1.3 包职责与依赖规则
 
@@ -122,7 +124,7 @@ class AgentRuntime(Protocol):
 
 - 事件先持久化后推送；同一 Run 内 `sequence` 单调递增；`event_id` 全局唯一。
 - 进程退出、连接断开或流结束但无终态，归为 `interrupted` 或 `failed`。
-- 有副作用的工具结果未知时标记 `interrupted`，不自动重放。
+- 有副作用的工具结果未知时，执行记录标记为 `unknown`，会话阻塞，不自动重放（见 2.12 派发账本）。
 
 **终态映射**：
 
@@ -154,7 +156,9 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **压缩**：优先完整保留最近的消息与工具交换；较早内容压缩为标注过的局部摘录；仍装不下则显式失败 `model_context_exceeded`。
 - **工具顺序**：同一回合内按模型声明顺序执行，每个调用独立记录 invocation；有副作用的工具之间不并发。
 - **取消与等待**：取消信号在模型流、工具和沙箱调用的每个等待点检查；`ask_user` 类工具产生 `wait_input`，释放 worker，回答后在同一 Run 中幂等继续。
-- **恢复**：恢复前校验快照版本、会话/空间/主体、Agent/模型版本、资源授权、审批消费状态与已完成的 invocation，再从挂起点继续。不依赖进程内锁、回调、SDK 句柄或临时资源。
+- **执行模型**：每个 Run 新建执行对象（引擎、工具网关、运行上下文），Run 结束即释放；不按会话缓存执行对象。模型客户端与工具注册表是进程级共享对象，按配置版本构建，不含会话状态。参考 deer-flow 与 dify-agent。
+- **会话状态**：会话状态是版本化的 JSON 快照（v2，只含数据，不含配置、客户端、租约句柄、令牌或模型对象）。Run 结束时（成功、失败、取消均要）在 `finally` 中保存终态快照；未执行的工具调用标记为 `interrupted`，使下一轮历史合法。快照读取失败、版本未知或状态损坏时拒绝该 Run，不静默丢弃历史。
+- **恢复**：恢复前校验快照版本、会话/空间/主体、Agent/模型版本、资源授权、审批消费状态与已完成的 invocation，再从挂起点继续。不依赖进程内锁、回调、SDK 句柄或临时资源。进程崩溃后，上一代际未完成的执行转为 `unknown`，会话阻塞，需显式解除（见 2.12）。
 - **钩子**：agent/turn/model/tool 的 before/after 类型化钩子，只接收稳定元数据 DTO，不暴露 locals、SDK 对象或凭据；异常隔离，超时忽略。
 - **Run 状态**：queued、running、waiting_input、waiting_approval、completed、failed、cancelled、interrupted。同一 Session 仅允许一个活跃 Run（含等待态），由服务检查与数据库部分唯一索引共同保证。
 
@@ -317,7 +321,9 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | `platform_resources`、`resource_grants` | 资源登记与空间间显式共享 |
 | `sessions`、`messages`、`session_checkpoints` | 会话、消息（assistant/tool 消息带内部 Runtime 元数据）、工作检查点 |
 | `runtime_session_bindings` | 平台会话与外部 Runtime 会话 ID 的映射 |
-| `runs`、`run_events`、`outbox_records` | 运行、事件（sequence 游标）、Outbox 队列 |
+| `runs`、`run_events`、`outbox_records` | 运行、事件（sequence 游标）、Outbox 队列（多租户派发载体） |
+| `runtime_epoch`、`session_admissions` | 派发账本：进程代际、会话入队记录（queued、started、unknown、terminal） |
+| `session_snapshots`（或会话表快照列） | 版本化的会话状态快照（JSON，v2）与水位 |
 | `native_run_states`、`run_directives` | Native 预算累计与运行指令 |
 | `run_input_requests`、`action_approvals` | 等待输入的问题与回答；单次审批 |
 | `tool_invocations` | 工具调用记录（幂等键、副作用标记、结果状态） |
@@ -327,7 +333,13 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | `audit_records` | 审计记录 |
 | `action_grants`、`run_snapshots` | ActionGrant；等待审批时的版本化运行快照 |
 
-**队列**：PostgreSQL Outbox 表作为持久队列。Run 与 Outbox 记录在同一事务提交；worker 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取，写入带过期时间的租约。队列语义为至少一次，由 Run 状态与幂等约束阻止重复执行。租约丢失后，结果未知的 Run 转为 `interrupted`，不自动重放副作用。
+**派发账本**：所有部署共用同一套规则，只有存储后端不同。
+- `runtime_epoch`：每次进程启动递增，所有账本写入带当前 `owner_epoch`；过期 epoch 的写入返回 `stale_epoch`。
+- `session_admissions`：状态为 `queued`、`started`、`unknown`、`terminal`。领取用条件更新 `UPDATE ... SET status='started', owner_epoch=:e WHERE id=:id AND status='queued'`，rowcount 必须为 1；按 `seq` 取队首。会话存在 `started` 或 `unknown` 记录时不领取。
+- 启动恢复：`owner_epoch` 小于当前值的 `started` 与执行记录转为 `unknown`，会话阻塞，不自动重放。显式解除需要用户确认或运维命令，并记录审计。
+- 排队与忙时：同一会话的 Run 串行。忙时默认打断，queue、steer 可选；打断时若有子任务或压缩进行中则降级为排队。每会话待处理上限 32；全局活跃会话上限 `max_concurrent_sessions`，超限拒绝而非排队。
+
+**多租户队列**：PostgreSQL Outbox 表作为派发载体。Run 与 Outbox 记录在同一事务提交；worker 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取，写入带过期时间的租约。队列语义为至少一次，由账本的 CAS 领取与幂等约束阻止重复执行。租约丢失或进程崩溃后，未完成的执行转为 `unknown`，不自动重放副作用。
 
 备选方案：Redis Streams 与数据库不在同一事务，需要持续对账；RabbitMQ 增加运维成本。当前规模不需要。复评条件：队列积压、数据库连接争用、Outbox 维护成本，或需要多类型消息路由。
 
@@ -340,7 +352,15 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 - 长任务不在 HTTP 请求中执行；提交即返回 Run，状态通过事件与游标读取。
 - 启动、迁移与配置错误必须以可读信息失败，不输出凭据。
 
-**数据库**：PostgreSQL 为事实源，SQLAlchemy 2.x 与 psycopg 3。Alembic 迁移由发布或运维命令显式执行，不在 API 或 worker 启动时自动运行。API 与 worker 使用同步 Session；core 不暴露 ORM 类型。SQLite 仅用于隔离单元测试与迁移方言检查，不作为应用后端。
+**数据库**：
+- 多租户：PostgreSQL 为事实源，SQLAlchemy 2.x 与 psycopg 3。
+- 单机：SQLite 单文件为事实源，两个进程共用；写入使用 `BEGIN IMMEDIATE`，WAL 模式。它是本方案的应用后端，不再只用于测试。
+- 两种后端通过同一组端口（账本、快照、事件）接入，业务代码不区分后端。
+- Alembic 迁移由发布或运维命令显式执行，不在 API 或 worker 启动时自动运行。API 与 worker 使用同步 Session；core 不暴露 ORM 类型。
+
+**会话缓存**：投影缓存的 key 为 `(session_id, watermark)`。事件只追加、水位只增加，同一 key 的内容不变，因此不需要失效，多个进程共用也不需要协调。缓存不含权限结果、凭据明文和超阈值工具输出原文。权限在每次工具调用与资源访问时查库，不缓存。容量用 LRU、空闲 TTL 与单条目字节上限约束。进程重启后缓存为空。
+
+**乐观并发**：追加事件与保存快照带预期水位，不一致则拒绝并重新读取。
 
 **连接配置**：`configs/nexus.toml` 的 `[database].url` 为默认来源，优先级为显式参数 > TOML > `NEXUS_DATABASE_URL`。API、worker 与 Alembic 共用解析逻辑，不自动加载 `.env`。
 
