@@ -9,7 +9,7 @@
 - [x] 增加三张表的迁移 `c4e8a2f6d1b9`。
 - [x] 增加后端测试 `tests/test_auth.py`（12 项）与 Web 浏览器测试 `tests/web/auth.mjs`。
 - [ ] 在 PostgreSQL 上执行迁移与登录流程验证。
-- [ ] 将 `create-owner` 注册为正式脚本入口，或在部署文档中写明调用方式。
-- [ ] 更新 `apps/api` 与 `packages/platform` 的模块文档及 README，说明登录配置与环境变量。
-- [ ] 运行 `tests/web/auth.mjs` 浏览器测试（需先启动 Vite，见 Web 使用说明）。
-- [ ] 同步规格到 `openspec/specs/`，归档本变更，检查差异，提交并推送归档。
+- [x] 在部署文档中写明 `create-owner` 调用方式（`apps/api/README.md`；暂不注册为 pyproject 脚本入口）。
+- [x] 更新 `apps/api` 与 `packages/platform` 的 README，说明登录配置、环境变量与认证模块位置。
+- [x] 运行 Web 浏览器测试 `auth.mjs`，并补跑 `conversation`、`model-settings`、`roles` 共四项，全部通过。
+- [ ] 同步规格到 `openspec/specs/`，归档本变更，检查差异，提交并推送归档。（规格已同步；待 PostgreSQL 验证完成后归档。）
