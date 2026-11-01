@@ -30,6 +30,7 @@ from .memory import (
 )
 from .approval import InputRequestRecord, ActionApprovalRecord
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
+from .org import OrgUnitRecord, UserOrgUnitRecord, TenantOrgBindingRecord, OrgAuditRecord
 
 __all__ = [
     'Base',
@@ -77,4 +78,8 @@ __all__ = [
     'ContextSummaryRecord',
     'InputRequestRecord',
     'ActionApprovalRecord',
+    'OrgUnitRecord',
+    'UserOrgUnitRecord',
+    'TenantOrgBindingRecord',
+    'OrgAuditRecord',
 ]

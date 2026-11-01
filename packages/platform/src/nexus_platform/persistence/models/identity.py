@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -21,6 +21,9 @@ class UserRecord(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     display_name: Mapped[str | None] = mapped_column(String(160))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    # Platform-wide flag: may manage organization trees and bind them to spaces. Set by an operator
+    # (see `nexus_platform.orgs.service.set_platform_admin`), never through a tenant role.
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

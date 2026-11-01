@@ -42,44 +42,41 @@
 - 绑定的是节点，覆盖该节点的整个子树。绑定集团根节点时，子树包括所有子公司和部门。
 - 绑定和解绑由组织管理员完成，空间 owner 也可以解绑。
 
-### `org_admins`：组织管理员（待定，见 proposal.md 第 6 节第 3 项）
+### 平台管理员标识（方案 C）
 
-| 字段 | 说明 |
-| --- | --- |
-| `unit_id`、`user_id` | 联合主键；`unit_id` 为管理范围的根节点，管理权限覆盖该节点的子树 |
-| `role` | `owner` 或 `admin` |
-
-推荐方案：管理范围限定在节点子树内，集团管理员管整棵树，子公司管理员只管本子公司。方案确定前，本表的结构只是草案。
+`users.is_platform_admin`（布尔，默认 false）。由 `nexus_api.cli set-platform-admin --username` 设置或撤销，只针对密码账号。它不是租户角色，也不带范围：平台管理员可以管理全部组织树、节点人员、空间绑定和用户目录。
 
 ## 权限
 
-- 新增 API 权限 `orgs:manage`，加入 `authz/catalog.py` 的 `API_PERMISSIONS`，并新增菜单 `orgs`。
-- 组织管理接口：调用者需要在目标节点的管理范围内（`org_admins`，含祖先节点的授权）并拥有 `orgs:manage`。
-- 空间侧的组织信息接口：要求空间成员身份（`require_membership`）。空间成员可以看到绑定节点的子树（名称、结构、人员列表）。
-- 绑定与解绑接口：组织侧要求对该节点有管理权限；空间侧解绑要求空间 `owner`（`ADMIN_ROLES` 中的 owner）。
+- 组织树、节点人员、用户目录与绑定的管理接口要求 `users.is_platform_admin`。不新增 API 权限键或菜单键，`authz/catalog.py` 不变。
+- 空间侧的组织视图只要求空间成员身份（`require_membership`）。空间成员可以看到绑定节点的子树和其中的人员。
+- 解绑：平台管理员，或空间的 owner（`require_membership` 指定 `owner`）。
+- 加入空间：需要 `members:manage`，且人员必须位于本空间的绑定子树内，否则返回 404。owner 不能通过此途径创建。
 
-## 接口草案
+## 接口
 
-组织（组织管理员）：
+组织（平台管理员）：
 
-- `POST /api/v1/orgs`：创建组织树（根节点）。
-- `GET /api/v1/orgs`：列出调用者可管理的根节点。
-- `GET /api/v1/orgs/{root_id}/tree`：返回整棵树，含节点状态与人数。
-- `POST /api/v1/org-units`：在某节点下新建子节点，请求体含 `parent_id`、`name`。
-- `PATCH /api/v1/org-units/{unit_id}`：重命名、移动（检查环）、启停。
-- `DELETE /api/v1/org-units/{unit_id}`：仅当节点无子节点、无人员归属、无空间绑定时允许。
-- `PUT /api/v1/org-units/{unit_id}/members/{user_id}`：加入节点，请求体含 `is_primary`。
+- `GET /api/v1/users?q=`：用户目录，按姓名或账号搜索，供选人。
+- `POST /api/v1/orgs`、`GET /api/v1/orgs`：创建组织（根节点），列出组织。
+- `GET /api/v1/orgs/{root_id}/tree`：整棵树，含节点状态与直接人数。
+- `POST /api/v1/org-units`：在某节点下新增子节点，请求体 `parent_id`、`name`。
+- `PATCH /api/v1/org-units/{unit_id}`：重命名、移动（`parent_id`）、启停（`status`）。
+- `DELETE /api/v1/org-units/{unit_id}`：仅当无子节点、人员和绑定时允许。
+- `PUT /api/v1/org-units/{unit_id}/members/{user_id}`：加入节点，请求体 `is_primary`。
 - `DELETE /api/v1/org-units/{unit_id}/members/{user_id}`：移出节点。
-- `GET /api/v1/org-units/{unit_id}/members`：子树内的人员列表（去重），标注所在节点与是否主节点。
+- `GET /api/v1/org-units/{unit_id}/people`：子树内去重后的人员（实际路径；此前草案写作 `/members`）。
+- `GET /api/v1/org-units/{unit_id}/bindings`：绑定到该节点的空间。
 
 绑定：
 
-- `PUT /api/v1/tenants/{tenant_id}/organization-bindings/{unit_id}`：组织管理员绑定。
-- `DELETE /api/v1/tenants/{tenant_id}/organization-bindings/{unit_id}`：组织管理员或空间 owner 解绑。
+- `PUT /api/v1/tenants/{tenant_id}/organization-bindings/{unit_id}`：平台管理员绑定。
+- `DELETE /api/v1/tenants/{tenant_id}/organization-bindings/{unit_id}`：平台管理员或空间 owner 解绑。
 
-空间视图（空间成员）：
+空间（空间成员）：
 
-- `GET /api/v1/tenants/{tenant_id}/organization`：返回所有绑定节点，每个节点包含：名称、所在组织名称、子树结构、子树内去重后的人员列表（用户名、显示名、所在节点、是否主节点）。
+- `GET /api/v1/tenants/{tenant_id}/organization`：绑定节点、子树结构和去重人员。
+- `POST /api/v1/tenants/{tenant_id}/members/from-organization`：从绑定子树选人加入空间（方案 A）。
 
 ## 业务规则
 
@@ -92,12 +89,18 @@
 
 ## 审计事件
 
-- `org.created`、`org.unit_created`、`org.unit_updated`、`org.unit_moved`、`org.unit_deleted`
-- `org.member_assigned`、`org.member_unassigned`、`org.primary_changed`
-- `org.admin_changed`（待定项确认后）
-- `org.binding_created`、`org.binding_removed`
+组织侧（`org_audit_records`，以 `root_id` 标识组织树）：
 
-`audit_records.tenant_id` 目前为非空，而组织事件可能发生在没有绑定任何空间的组织上。推荐新增独立的 `org_audit_records` 表（字段与 `audit_records` 相同，但以 `root_id` 代替 `tenant_id`），不改动现有审计表。绑定与解绑事件同时写入两张表：组织表记录组织侧，空间的 `audit_records` 记录空间侧。
+- `org.created`、`org.unit_created`、`org.unit_updated`（含改名、移动、启停的变更内容）、`org.unit_deleted`
+- `org.member_assigned`、`org.member_unassigned`
+- `org.space_bound`、`org.space_unbound`
+
+空间侧（`audit_records`）：
+
+- `tenant.org_bound`、`tenant.org_unbound`
+- `tenant.member_added`，并在元数据中记录 `source: organization`
+
+`audit_records.tenant_id` 为非空，因此组织侧事件单独建表，不写入空间的审计表。
 
 ## 测试计划
 

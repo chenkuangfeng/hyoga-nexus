@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:browser": "node ../../tests/web/auth.mjs && node ../../tests/web/conversation.mjs && node ../../tests/web/model-settings.mjs && node ../../tests/web/roles.mjs"
+    "test:browser": "node ../../tests/web/auth.mjs && node ../../tests/web/conversation.mjs && node ../../tests/web/model-settings.mjs && node ../../tests/web/roles.mjs && node ../../tests/web/organization.mjs"
   },
   "dependencies": {
     "element-plus": "^2.11.0",

@@ -71,3 +71,11 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 智能体绑定的工具、技能与知识库沿用已有的资源绑定（`ResourceBindingRecord`），使用时按智能体配置执行，不逐用户重新检查。Run 提交阶段目前只复核会话所属用户的成员身份，尚未在每次 Run 提交时复核 `run` 权限，这是后续需要补齐的缺口。
 
 模型设置中的 `can_manage_tenant` 等 UI 标记、资源授权（`authz/resources.py`）仍按 owner/admin 判断，尚未迁移到目录权限。
+
+## 组织与人员
+
+表：`org_units`（节点，`root_id` 指向所在树的根，`parent_id` 为空表示根）、`user_org_units`（人员与节点，`is_primary` 在每个用户上最多一个为真，由部分唯一索引保证）、`tenant_org_bindings`（空间与节点的多对多绑定，绑定覆盖节点子树）、`org_audit_records`（组织侧审计，`root_id` 不设外键，历史不随树消失）。迁移 `d1f5b8c2a9e4`；`users.is_platform_admin` 默认为假，由 `nexus_api.cli set-platform-admin` 设置。
+
+服务位于 `orgs/service.py`。树的结构性修改在事务内锁定整棵树；移动节点时拒绝移入自身子树，并要求同一棵树内移动。主节点切换在同一事务中完成。删除节点要求没有子节点、人员和绑定。
+
+空间视图按绑定节点的子树读取节点结构，并按用户去重列出人员。加入空间的接口只接受绑定子树内的人员，并需要 `members:manage`；owner 不能经此途径创建。组织管理接口只接受平台管理员，不使用租户角色，因此也不受空间的角色升级检查约束。

@@ -7,11 +7,13 @@ import ConversationView from './views/chat/ConversationView.vue'
 import NativeSettingsView from './views/settings/NativeSettingsView.vue'
 import ModelSettingsView from './views/settings/ModelSettingsView.vue'
 import RoleManagementView from './views/settings/RoleManagementView.vue'
+import SpaceOrganizationView from './views/settings/SpaceOrganizationView.vue'
+import OrganizationManagementView from './views/settings/OrganizationManagementView.vue'
 import LoginView from './views/auth/LoginView.vue'
 import AccountView from './views/auth/AccountView.vue'
 
 /** Hash routes: `#page?query`. Query values only carry result keys set by the server redirects. */
-const pages = ['chat', 'settings', 'roles', 'account', 'native-settings', 'overview'] as const
+const pages = ['chat', 'settings', 'roles', 'space-org', 'orgs', 'account', 'native-settings', 'overview'] as const
 type Page = typeof pages[number]
 const hashPath = () => location.hash.replace(/^#/, '').split('?')[0]
 const hashQuery = (key: string) => new URLSearchParams(location.hash.split('?')[1] || '').get(key) || ''
@@ -50,6 +52,8 @@ onBeforeUnmount(() => {
       <button type="button" :aria-current="page === 'chat' ? 'page' : undefined" @click="select('chat')">对话工作台</button>
       <button type="button" :aria-current="page === 'settings' ? 'page' : undefined" @click="select('settings')">用户设置</button>
       <button type="button" :aria-current="page === 'roles' ? 'page' : undefined" @click="select('roles')">角色与权限</button>
+      <button type="button" :aria-current="page === 'space-org' ? 'page' : undefined" @click="select('space-org')">空间组织</button>
+      <button v-if="user.is_platform_admin" type="button" :aria-current="page === 'orgs' ? 'page' : undefined" @click="select('orgs')">组织与人员</button>
       <button type="button" :aria-current="page === 'native-settings' ? 'page' : undefined" @click="select('native-settings')">Native 与记忆</button>
       <button type="button" :aria-current="page === 'account' ? 'page' : undefined" @click="select('account')">我的账号</button>
       <button type="button" :aria-current="page === 'overview' ? 'page' : undefined" @click="select('overview')">平台能力</button>
@@ -57,6 +61,8 @@ onBeforeUnmount(() => {
     </nav>
     <ConversationView v-if="page === 'chat'" /><ModelSettingsView v-else-if="page === 'settings'" />
     <RoleManagementView v-else-if="page === 'roles'" />
+    <SpaceOrganizationView v-else-if="page === 'space-org'" />
+    <OrganizationManagementView v-else-if="page === 'orgs' && user.is_platform_admin" />
     <AccountView v-else-if="page === 'account'" :user="user" :wecom-result="wecomResult" @signed-out="signedOut" />
     <NativeSettingsView v-else-if="page === 'native-settings'" /><OverviewView v-else />
   </template>

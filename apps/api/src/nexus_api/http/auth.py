@@ -39,6 +39,7 @@ class CurrentUser(BaseModel):
     user_id: UUID
     display_name: str | None
     providers: list[str]
+    is_platform_admin: bool = False
 
 
 def _cookie_secure() -> bool:
@@ -84,7 +85,8 @@ def current_user(principal: Principal = Depends(get_principal), db: Session = De
     user_id = _user_id_for(db, principal)
     user = db.get(UserRecord, user_id)
     providers = list(db.scalars(select(UserIdentityRecord.provider).where(UserIdentityRecord.user_id == user_id)))
-    return CurrentUser(user_id=user.id, display_name=user.display_name, providers=sorted(set(providers)))
+    return CurrentUser(user_id=user.id, display_name=user.display_name, providers=sorted(set(providers)),
+                       is_platform_admin=user.is_platform_admin)
 
 
 def _user_id_for(db: Session, principal: Principal) -> UUID:

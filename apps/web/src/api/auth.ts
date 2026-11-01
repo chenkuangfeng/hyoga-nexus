@@ -1,6 +1,6 @@
 import { ApiError, request } from './chat'
 
-export interface CurrentUser { user_id: string; display_name: string | null; providers: string[] }
+export interface CurrentUser { user_id: string; display_name: string | null; providers: string[]; is_platform_admin: boolean }
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('登录数据格式无效')
@@ -17,7 +17,7 @@ export const authApi = {
       return await request<CurrentUser>('/auth/me', value => {
         const row = record(value)
         if (!Array.isArray(row.providers)) throw new Error('登录数据格式无效')
-        return { user_id: text(row.user_id), display_name: row.display_name === null ? null : text(row.display_name), providers: row.providers.map(text) }
+        return { user_id: text(row.user_id), display_name: row.display_name === null ? null : text(row.display_name), providers: row.providers.map(text), is_platform_admin: row.is_platform_admin === true }
       }, { signal })
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) return null
