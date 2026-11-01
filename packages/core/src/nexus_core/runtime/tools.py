@@ -32,6 +32,12 @@ class ToolDefinition:
     idempotent: bool = False
     requires_approval: bool = False
 
+    def __post_init__(self):
+        # A read-only declaration is a scheduling promise (P9): such a tool may run in parallel,
+        # so it must not carry side effects or require approval.
+        if self.read_only and (self.side_effects or self.requires_approval):
+            raise ValueError(f'Read-only tool {self.name!r} must not declare side effects or approval')
+
 
 class ToolDisposition(StrEnum):
     """Control result consumed by the single Native execution loop."""

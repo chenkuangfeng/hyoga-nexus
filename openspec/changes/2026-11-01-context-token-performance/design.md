@@ -12,7 +12,7 @@
 
 ## 二、P1：工作记忆位置
 
-把 `append_context` 的插入位置从 `index 1` 改为"最后一条 user 消息之后"（若最后一条是 tool 结果，则追加在其后且作为独立 user 消息）。
+把 `append_context` 的插入位置从 `index 1` 改为消息列表末尾，作为独立的 user 消息。不选择"最后一条 user 之后"：那样会在 assistant 的 tool_calls 与其 tool 结果之间插入一条消息，违反 OpenAI 的工具调用配对格式。`working_memory_tail` 开关控制该行为，默认关闭直到评测通过。
 
 - 不改变内容，只改变位置。
 - 稳定前缀：`[system][tools][历史 1..N]` 在相邻两轮之间保持字节一致，供应商可以命中缓存。

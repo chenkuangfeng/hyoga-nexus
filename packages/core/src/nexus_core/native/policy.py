@@ -24,7 +24,7 @@ class NativePolicy:
     model_retries: int = 2
     retry_delay_seconds: float = 1
     max_retry_delay_seconds: float = 60
-    parallel_reads: bool = False
+    parallel_reads: bool = True
     summarize_context: bool = True
     reminder_interval: int = 17
     memory_interval: int = 15

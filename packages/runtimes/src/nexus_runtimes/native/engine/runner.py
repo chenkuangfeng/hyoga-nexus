@@ -139,7 +139,7 @@ class NativeEngine:
                     await self._hook(run_id, 'turn.before', turn)
                     await self._transform(run_id, 'turn.before', turn, history, done)
                     await self.store.emit('turn.started', {'turn': turn})
-                    model_history = append_context(history, working.anchor(turn))
+                    model_history = append_context(history, working.anchor(turn), tail=self.policy.working_memory_tail)
                     # Per-message accounting (P5): avoids repr() of the whole history on every turn.
                     input_estimate = _message_bytes(model_history) + definitions_chars
                     remaining = budget.max_tokens - progress.tokens - input_estimate
