@@ -134,10 +134,19 @@ def test_preferences_memory_publication_restore_and_steer(settings_client, datab
     principal, tenant, session, run, _ = stack(database, ['propose_memory_draft'])
     identity[0] = principal
     root = f'/api/v1/tenants/{tenant.id}/native'
-    assert client.post(root + f'/runs/{run.id}/steer', json={'content': 'Use only verified evidence'}, headers={'Idempotency-Key': 'steer1'}).status_code == 202
-    model = FakeModel([[call('propose_memory_draft', '{"kind":"sop","diff":"Verified reusable method"}')], [ModelChunk('text', text='done')]])
+    # A queued Run accepts only cancellation; corrections are rejected before the Run starts.
+    rejected = client.post(root + f'/runs/{run.id}/steer', json={'content': 'Use only verified evidence'}, headers={'Idempotency-Key': 'steer0'})
+    assert rejected.status_code == 409
+    steered = []
+    async def first_turn():
+        # Steer while the Run is running; it is drained at the start of the next turn.
+        steered.append(client.post(root + f'/runs/{run.id}/steer', json={'content': 'Use only verified evidence'}, headers={'Idempotency-Key': 'steer1'}).status_code)
+        yield call('propose_memory_draft', '{"kind":"sop","diff":"Verified reusable method"}')
+        yield ModelChunk('done', finish_reason='tool_calls')  # callable turns do not get FakeModel's terminal chunk
+    model = FakeModel([first_turn, [ModelChunk('text', text='done')]])
     run_once(database, 'worker', model_factory=lambda _: model)
-    assert any(m.content == 'Use only verified evidence' for m in model.requests[0].messages)
+    assert steered == [202]
+    assert any(m.content == 'Use only verified evidence' for m in model.requests[1].messages)
     data = client.get(root + '/memory').json()
     assert data['entries'] == [] and len(data['drafts']) == 1
     draft = data['drafts'][0]

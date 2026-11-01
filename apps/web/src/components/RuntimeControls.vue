@@ -31,8 +31,8 @@ async function approve(id: string, value: boolean) {
 onBeforeUnmount(() => { disposed = true; generation++ })
 </script>
 <template>
-  <section v-if="run.status === 'running' || run.status === 'queued' || run.status === 'waiting_approval'" class="runtime-controls" aria-label="运行控制">
-    <form v-if="run.status === 'running' || run.status === 'queued'" @submit.prevent="steer">
+  <section v-if="run.status === 'running' || run.status === 'waiting_approval'" class="runtime-controls" aria-label="运行控制">
+    <form v-if="run.status === 'running'" @submit.prevent="steer">
       <label for="run-correction">追加执行指令</label><el-input id="run-correction" v-model="correction" type="textarea" :rows="2" :disabled="busy" maxlength="8000" @input="pendingKey = ''" />
       <el-button native-type="submit" :disabled="busy || !correction.trim()">追加指令</el-button>
     </form>
