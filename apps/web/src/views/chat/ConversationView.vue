@@ -6,7 +6,7 @@ import { useConversation } from '../../composables/useConversation'
 import { errorLabels, statusLabels } from '../../types/chat'
 const chat = useConversation()
 const { tenants, agents, sessions, tenant, sessionId, versionId, timeline, run, pendingInput,
-  error, loading, submitting, connection, cancelling, active } = chat
+  error, loading, submitting, connection, cancelling, active, queueLabel } = chat
 const prompt = ref(''), answer = ref('')
 onMounted(chat.initialize)
 async function openBranch(id: string) { await chat.selectTenant(tenant.value); await chat.openSession(id) }
@@ -46,7 +46,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
       </aside>
       <section class="chat-panel" aria-label="会话内容" :aria-busy="loading">
         <div class="run-status" role="status" aria-live="polite">
-          <span>{{ cancelling ? '正在停止，请等待执行结果确认' : run ? statusLabels[run.status] : '准备开始对话' }}</span>
+          <span>{{ cancelling ? '正在停止，请等待执行结果确认' : queueLabel || (run ? statusLabels[run.status] : '准备开始对话') }}</span>
           <span v-if="connection === 'reconnecting'">连接中断，正在自动重连</span>
           <span v-if="run?.error_code" class="muted">{{ errorLabels[run.error_code] || '运行未完成，请检查配置后重试' }}</span>
         </div>

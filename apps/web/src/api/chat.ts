@@ -20,7 +20,9 @@ function array<T>(value: unknown, parse: (value: unknown) => T): T[] {
 export function parseRun(value: unknown): Run {
   const row = record(value), status = string(row.status)
   if (!['queued', 'running', 'waiting_input', 'waiting_approval', 'completed', 'failed', 'cancelled', 'interrupted'].includes(status)) throw new Error('未知运行状态')
-  return { id: string(row.id), status: status as RunStatus, error_code: nullable(row.error_code) }
+  const position = row.queue_position
+  if (position !== undefined && position !== null && (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1)) throw new Error('排队位置无效')
+  return { id: string(row.id), status: status as RunStatus, error_code: nullable(row.error_code), queue_position: typeof position === 'number' ? position : null }
 }
 export function parseEvent(value: unknown): RunEvent {
   const row = record(value)

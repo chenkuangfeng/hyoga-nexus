@@ -25,7 +25,8 @@ def submit(db, principal, tenant_id, run_id, content: str, key: str):
             if previous.content != content:
                 raise Conflict('Idempotency key already has another correction')
             return previous
-        if run.status not in ('queued', 'running') or run.cancel_requested_at:
+        # Confirmed busy-queue rule: a queued Run may only be cancelled, so corrections are accepted only while running.
+        if run.status != 'running' or run.cancel_requested_at:
             raise Conflict('Run is not accepting corrections')
         row = RunDirectiveRecord(id=new_id(), run_id=run_id, principal_id=user.id, content=content,
                                  idempotency_key=key, created_at=utc_now())
