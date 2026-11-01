@@ -21,7 +21,7 @@
 ## 执行与缓存（路线图第 3 步）
 
 - [ ] 每 Run 新建执行对象；进程级共享模型客户端与工具注册表（按配置版本）。
-- [ ] 终态快照：成功、失败、取消均在 `finally` 中保存；未执行的工具调用标记 `interrupted`。
+- [x] 终态快照：成功、失败、取消、中断均在 Run 终态写入路径（`runs/completion.py::_finish`，同一事务）中保存 v2 快照，只记录 `last_run` 的稳定码并保留其他键；仍为 `running` 的工具调用标记 `interrupted`。等待态不保存。（未放在运行器 `finally` 中，因为运行器的 `finally` 不负责持久化终态。）
 - [x] 投影缓存模块：key `(session_id, watermark)`，LRU、空闲 TTL、单条目字节上限，不缓存权限（`nexus_platform/sessions/projection_cache.py`，测试 `tests/test_projection_cache.py`）。接入运行时待做。
 - [ ] 忙时策略（interrupt 默认，queue、steer 可选）与队列上限 32；`max_concurrent_sessions` 拒绝路径。
 - [ ] 权限不缓存；每次工具调用查库。

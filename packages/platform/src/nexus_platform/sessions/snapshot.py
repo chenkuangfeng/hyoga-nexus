@@ -96,3 +96,24 @@ def save(db: Session, session_id: UUID, *, expected_watermark: int, payload: dic
         raise WatermarkConflict(f"session {session_id} is not at watermark {expected_watermark}")
     db.flush()
     return expected_watermark + 1
+
+
+#: Retries when a concurrent writer moves the watermark between read and save.
+_TERMINAL_RETRIES = 3
+
+
+def record_terminal(db: Session, session_id: UUID, *, run_id: UUID, status: str, error_code: str | None) -> int:
+    """Save the v2 terminal snapshot of a finished Run, keeping earlier keys.
+
+    Called inside the Run's completion transaction. Only stable codes are stored, never
+    exception or provider text. Returns the watermark after the save.
+    """
+    for _ in range(_TERMINAL_RETRIES):
+        watermark, current = read(db, session_id)
+        payload = dict(current or {})
+        payload['last_run'] = {'id': str(run_id), 'status': status, 'error_code': error_code}
+        try:
+            return save(db, session_id, expected_watermark=watermark, payload=payload)
+        except WatermarkConflict:
+            db.expire_all()
+    raise WatermarkConflict(f"session {session_id} kept changing; terminal snapshot not saved")
