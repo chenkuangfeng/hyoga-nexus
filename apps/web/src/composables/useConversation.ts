@@ -13,6 +13,14 @@ export function useConversation() {
   let sendAttempt: { text: string; key: string; session: string } | undefined
   let responseAttempt: { text: string; key: string; request: string } | undefined
   const active = computed(() => !!run.value && !terminal(run.value.status))
+  // Position from the most recent 202 response only. It is a snapshot: the server does not push
+  // position changes, so it is not replayed from the event stream after a reload.
+  const queued = ref<{ run: string; position: number } | null>(null)
+  const queueLabel = computed(() => {
+    const current = run.value, position = queued.value
+    if (!current || current.status !== 'queued' || !position || position.run !== current.id) return ''
+    return position.position === 1 ? '排队中，即将开始' : `排队中，前方还有 ${position.position - 1} 个请求`
+  })
   const availableAgents = computed(() => agents.value.filter(agent => agent.runtime_type === 'native' && agent.published_version_id))
   type TimelineItem = { kind: 'message'; id: string; role: string; content: string } |
     { kind: 'tool'; id: string; name: string; status: string; summary: string }
@@ -148,8 +156,9 @@ export function useConversation() {
     const epoch = generation
     if (sendAttempt?.text !== text || sendAttempt.session !== sessionId.value) sendAttempt = { text, key: crypto.randomUUID(), session: sessionId.value }
     try {
-      await api.send(tenant.value, sessionId.value, text, sendAttempt.key)
+      const accepted = await api.send(tenant.value, sessionId.value, text, sendAttempt.key)
       sendAttempt = undefined
+      queued.value = accepted.queue_position === null ? null : { run: accepted.id, position: accepted.queue_position }
       if (epoch !== generation) return false
       await openSession(sessionId.value); return true
     } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '发送失败'; return false }
@@ -176,7 +185,7 @@ export function useConversation() {
     finally { submitting.value = false }
   }
   onBeforeUnmount(() => { generation++; controller?.abort(); resetConnection() })
-  return { tenants, agents: availableAgents, sessions, tenant, sessionId, versionId, timeline,
+  return { tenants, agents: availableAgents, sessions, tenant, sessionId, versionId, timeline, queueLabel,
     run, pendingInput, error, loading, submitting, connection, cancelling, active,
     initialize, selectTenant, openSession, createSession, send, cancel, respond, reconnect: () => attach(events.value.at(-1)?.sequence || 0) }
 }

@@ -2,7 +2,8 @@ export type RunStatus = 'queued' | 'running' | 'waiting_input' | 'waiting_approv
 export interface Tenant { id: string; name: string }
 export interface Agent { id: string; name: string; runtime_type: string; published_version_id: string | null }
 export interface Conversation { id: string; title: string; agent_version_id: string }
-export interface Run { id: string; status: RunStatus; error_code: string | null }
+/** `queue_position` is the 1-based FIFO place returned when a submission is queued (null otherwise). */
+export interface Run { id: string; status: RunStatus; error_code: string | null; queue_position: number | null }
 export interface Message { id: string; run_id: string | null; sequence: number; role: string; content: string }
 export interface RunEvent { event_id: string; run_id: string; sequence: number; event_type: string; payload: Record<string, unknown> }
 export interface History { messages: Message[]; latest_run: Run | null }
