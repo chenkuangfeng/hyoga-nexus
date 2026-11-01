@@ -14,7 +14,7 @@ from nexus_core.runtime import (
     RuntimeOutcome, RuntimeProgress, ToolDisposition,
 )
 from nexus_runtimes.native.context import compact_history, resolve_incomplete_exchanges
-from nexus_runtimes.native.context.assembly import append_context
+from nexus_runtimes.native.context.assembly import append_context, trim_tool_results
 from nexus_runtimes.native.context.working import WorkingMemory
 from nexus_runtimes.native.hooks import HookRegistry
 from .completion import CompletionPolicy
@@ -139,7 +139,8 @@ class NativeEngine:
                     await self._hook(run_id, 'turn.before', turn)
                     await self._transform(run_id, 'turn.before', turn, history, done)
                     await self.store.emit('turn.started', {'turn': turn})
-                    model_history = append_context(history, working.anchor(turn), tail=self.policy.working_memory_tail)
+                    model_history = append_context(trim_tool_results(history, self.policy.tool_result_window_rounds),
+                                                   working.anchor(turn), tail=self.policy.working_memory_tail)
                     # Per-message accounting (P5): avoids repr() of the whole history on every turn.
                     input_estimate = _message_bytes(model_history) + definitions_chars
                     remaining = budget.max_tokens - progress.tokens - input_estimate

@@ -19,7 +19,7 @@ from nexus_runtimes.native.models.factory import create_model
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_runtimes.native.engine import CancellationToken, NativeEngine
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
-from nexus_tools.gateway import AuthorizedToolGateway
+from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
 from nexus_tools.builtins import builtins
 
 
@@ -65,6 +65,7 @@ class ToolAccess:
         self.finish = store.finish_tool
         self.progress = store.tool_progress
         self.approval = store.approval
+        self.spill = store.spill_tool_output
 
 
 #: Delay before a deferred delivery is offered again. Other sessions are not affected.
@@ -134,9 +135,14 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             raise RuntimeFault('runtime_not_configured')
         # Builtin definitions are shared for the process; the Run's store reaches handlers via services.
         registry = registry_factory(store) if registry_factory else builtins()
+        try:
+            policy = NativePolicy(**context.budgets.get('behavior', {}))
+        except (ValueError, TypeError):
+            raise RuntimeFault('runtime_budget_invalid') from None
+        spill = OutputSpill(policy.tool_output_inline_limit, policy.tool_preview_chars, policy.tool_output_page_chars)
         gateway = AuthorizedToolGateway(registry, ToolAccess(store),
             {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
-            session_id=str(context.session_id), tenant_id=str(context.tenant_id), services=store)
+            session_id=str(context.session_id), tenant_id=str(context.tenant_id), services=store, spill=spill)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):
@@ -147,10 +153,6 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         try:
             budget = ExecutionBudget(**options)
         except ValueError:
-            raise RuntimeFault('runtime_budget_invalid') from None
-        try:
-            policy = NativePolicy(**context.budgets.get('behavior', {}))
-        except (ValueError, TypeError):
             raise RuntimeFault('runtime_budget_invalid') from None
         outcome = await NativeEngine(model, gateway, store, hooks=hooks, policy=policy).run(
             str(context.run_id), context.messages, token, budget, context.progress)

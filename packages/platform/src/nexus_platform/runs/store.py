@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
+from nexus_core.native.policy import NativePolicy, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
 from nexus_platform.errors import PlatformError
 from nexus_platform.models.provider_settings import authorize_model
@@ -20,6 +21,7 @@ from nexus_platform.persistence.models import (
     WorkingCheckpointRecord,
     MemoryDraftRecord,
     ContextSummaryRecord,
+    ToolOutputRecord,
 )
 from nexus_platform.runs.service import append_event, authorize_run_resource
 from nexus_platform.authz.audit import audit
@@ -30,9 +32,22 @@ from .messages import _history_allowed
 from .completion import _finish
 
 
+def _page_chars(context: ExecutionContext) -> int:
+    """Page size for paged tool-output reads: the Run's configured value, or the default if it is invalid.
+
+    Invalid behavior settings are rejected by the worker before execution; this fallback only keeps
+    the store constructible for read paths that never run a model.
+    """
+    try:
+        return NativePolicy(**(context.budgets.get('behavior') or {})).tool_output_page_chars
+    except (ValueError, TypeError):
+        return NativePolicy().tool_output_page_chars
+
+
 class DurableRuntimeStore:
     def __init__(self, factory: sessionmaker[Session], context: ExecutionContext, worker_id: str, task_id: UUID):
         self.factory, self.context, self.worker_id, self.task_id = factory, context, worker_id, task_id
+        self.page_chars = _page_chars(context)
 
     def _run(self, db: Session) -> RunRecord:
         task = db.get(OutboxRecord, self.task_id)
@@ -176,6 +191,49 @@ class DurableRuntimeStore:
                 {'invocation_id': invocation_id, 'status': status, 'summary': summary[:4000], 'error_code': error_code})
             audit(db, run.tenant_id, run.principal_id, 'tool.' + status, 'tool_invocation', invocation_id,
                   {'run_id': str(run.id), 'error_code': error_code})
+
+    async def spill_tool_output(self, invocation_id: str, content: str) -> str:
+        """Store the full text of one running invocation's result and return its handle (P2).
+
+        Only the current Run's running invocation may own an output, so a handle cannot be attached
+        to another Run's call. Content beyond TOOL_OUTPUT_STORE_LIMIT is not kept.
+        """
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            invocation = db.get(ToolInvocationRecord, UUID(invocation_id))
+            if not invocation or invocation.run_id != run.id or invocation.status != 'running':
+                raise RuntimeFault('interrupted')
+            require_membership(db, run.tenant_id, run.principal_id)
+            stored = content[:TOOL_OUTPUT_STORE_LIMIT]
+            row = ToolOutputRecord(id=new_id(), run_id=run.id, tenant_id=run.tenant_id, invocation_id=invocation.id,
+                                   content=stored, size_chars=len(content), created_at=utc_now())
+            db.add(row)
+            return str(row.id)
+
+    async def read_tool_output(self, handle: str, offset: int) -> tuple[str, int, int | None] | None:
+        """Return one page of an output of this Run: (text, total_chars, next_offset or None).
+
+        Returns None for unknown handles, handles of other Runs, and malformed handles. The caller
+        turns None into a tool error, so a bad handle never fails the Run.
+        """
+        try:
+            identifier = UUID(handle)
+        except (ValueError, TypeError):
+            return None
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            require_membership(db, run.tenant_id, run.principal_id)
+            row = db.scalar(select(ToolOutputRecord).where(
+                ToolOutputRecord.id == identifier, ToolOutputRecord.run_id == run.id))
+            if row is None:
+                return None
+            end = min(offset + self.page_chars, len(row.content))
+            audit(db, run.tenant_id, run.principal_id, 'tool_output.read', 'tool_output', handle,
+                  {'run_id': str(run.id), 'offset': offset, 'end': end})
+            # Total is the original size, which may exceed the stored text when the store limit applied.
+            return row.content[offset:end], row.size_chars, end if end < len(row.content) else None
 
     async def save_summary(self, summary: str, source_id: str) -> None:
         """Persist only a cutpoint belonging to this Session; later reads recheck source grants."""
