@@ -56,8 +56,9 @@ export const orgApi = {
       people: rows(row.people, person),
     }
   }, { signal }),
-  joinFromOrganization: (tenant: string, userIds: string[], role: 'admin' | 'member') => request<JoinResult>(`${tenantPath(tenant)}/members/from-organization`, value => {
+  /** Gives bound-subtree people one or more of the space's custom roles; owner and admin are not roles. */
+  joinFromOrganization: (tenant: string, userIds: string[], roleIds: string[]) => request<JoinResult>(`${tenantPath(tenant)}/members/from-organization`, value => {
     const row = record(value)
     return { added: strings(row.added), skipped: strings(row.skipped) }
-  }, json('POST', { user_ids: userIds, role })),
+  }, json('POST', { user_ids: userIds, role_ids: roleIds })),
 }

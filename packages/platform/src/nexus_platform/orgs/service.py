@@ -32,10 +32,13 @@ from nexus_platform.persistence.models import (
     OrgAuditRecord,
     OrgUnitRecord,
     TenantOrgBindingRecord,
+    TenantRoleRecord,
+    TenantUserRoleRecord,
     UserIdentityRecord,
     UserOrgUnitRecord,
     UserRecord,
 )
+from nexus_platform.orgs.access import SOURCE_ORGANIZATION, bound_unit_ids, subtree_ids
 from nexus_platform.tenants.service import lock_tenant
 
 UNIT_STATUSES = frozenset({"active", "disabled"})
@@ -78,13 +81,6 @@ def _check_sibling_name(session: Session, parent_id: UUID | None, name: str, *, 
         query = query.where(OrgUnitRecord.id != exclude)
     if session.scalar(query.limit(1)) is not None:
         raise Conflict("A node with this name already exists here")
-
-
-def subtree_ids(session: Session, unit_id: UUID) -> set[UUID]:
-    """Ids of a node and all its descendants, via a recursive CTE (works on SQLite and PostgreSQL)."""
-    base = select(OrgUnitRecord.id).where(OrgUnitRecord.id == unit_id).cte("subtree", recursive=True)
-    step = select(OrgUnitRecord.id).join(base, OrgUnitRecord.parent_id == base.c.id)
-    return set(session.scalars(select(base.union_all(step).c.id)))
 
 
 def _audit_org(session: Session, root_id: UUID, actor_id: UUID, action: str, target_type: str,
@@ -376,24 +372,27 @@ def organization_people(session: Session, principal: Principal, unit_id: UUID) -
 
 
 def add_members_from_organization(session: Session, principal: Principal, tenant_id: UUID,
-                                  user_ids: list[UUID], role: TenantRole) -> dict:
-    """Explicitly add chosen people from a bound subtree to a space. Needs `members:manage`.
+                                  user_ids: list[UUID], role_ids: list[UUID]) -> dict:
+    """Give chosen people from a bound subtree one or more of this space's custom roles.
 
-    Each person must sit inside a node bound to this space. Already-active members are reported,
-    not changed. Owners cannot be created this way (ownership transfer is a separate action).
+    Needs `members:manage`. Each person must sit inside a node bound to this space (404 otherwise).
+    A person without a membership row gets one with source `organization` and role `member`; a person
+    already in the space keeps their existing row. Roles are added where missing, so re-running is safe.
+    Owner and admin are not roles, so they cannot be granted this way.
+    Returns `added` (people newly joined) and `skipped` (people who were already members).
     """
-    if role == TenantRole.OWNER:
-        raise Forbidden("Owner membership must use the ownership transfer action")
     now = utc_now()
     with session.begin():
         actor = resolve_user(session, principal)
         lock_tenant(session, tenant_id)
         require_membership(session, tenant_id, actor.id)
         require_api_permission(session, tenant_id, actor.id, "members:manage")
-        bound_ids: set[UUID] = set()
-        for unit_id in session.scalars(select(TenantOrgBindingRecord.unit_id).where(
-                TenantOrgBindingRecord.tenant_id == tenant_id)):
-            bound_ids |= subtree_ids(session, unit_id)
+        roles = list(dict.fromkeys(role_ids))
+        for role_id in roles:
+            role = session.get(TenantRoleRecord, role_id)
+            if role is None or role.tenant_id != tenant_id:
+                raise NotFound("Tenant role not found")
+        bound_ids = bound_unit_ids(session, tenant_id)
         added: list[UUID] = []
         skipped: list[UUID] = []
         for user_id in dict.fromkeys(user_ids):
@@ -405,18 +404,24 @@ def add_members_from_organization(session: Session, principal: Principal, tenant
             if user is None or user.status != "active":
                 raise NotFound("User not found")
             membership = session.get(MembershipRecord, (tenant_id, user_id))
-            if membership is not None and membership.status == "active":
-                skipped.append(user_id)
-                continue
             if membership is None:
-                session.add(MembershipRecord(tenant_id=tenant_id, user_id=user_id, role=role.value,
-                                             status="active", joined_at=now))
-            else:
-                membership.role, membership.status = role.value, "active"
+                session.add(MembershipRecord(tenant_id=tenant_id, user_id=user_id, role=TenantRole.MEMBER.value,
+                                             status="active", source=SOURCE_ORGANIZATION, joined_at=now))
+                joined = True
+            elif membership.status != "active":
+                # A revoked row returns through the organization path; it is no longer a manual join.
+                membership.role, membership.status, membership.source = TenantRole.MEMBER.value, "active", SOURCE_ORGANIZATION
                 membership.joined_at, membership.revoked_at = now, None
+                joined = True
+            else:
+                joined = False
+            session.flush()
+            for role_id in roles:
+                if session.get(TenantUserRoleRecord, (tenant_id, user_id, role_id)) is None:
+                    session.add(TenantUserRoleRecord(tenant_id=tenant_id, user_id=user_id, role_id=role_id, assigned_at=now))
             audit(session, tenant_id, actor.id, "tenant.member_added", "user", str(user_id),
-                  {"role": role.value, "source": "organization"})
-            added.append(user_id)
+                  {"source": "organization", "role_ids": [str(role_id) for role_id in roles], "joined": joined})
+            (added if joined else skipped).append(user_id)
         session.flush()
     return {"added": added, "skipped": skipped}
 

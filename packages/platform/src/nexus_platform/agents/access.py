@@ -18,6 +18,7 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.authz.catalog import AGENT_PERMISSIONS, expand_agent_permissions, validate_agent_permissions
 from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
+from nexus_platform.orgs.access import membership_is_active
 from nexus_platform.persistence.models import (
     AgentRecord,
     MembershipRecord,
@@ -34,7 +35,7 @@ FULL_ROLES = {TenantRole.OWNER.value, TenantRole.ADMIN.value}
 def agent_permissions(session: Session, tenant_id: UUID, user_id: UUID, agent: AgentRecord) -> frozenset[str]:
     """Return the effective agent permissions of an active member for one agent."""
     membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if membership is None or membership.status != "active":
+    if not membership_is_active(session, membership):
         return frozenset()
     if membership.role in FULL_ROLES or agent.created_by == user_id:
         return AGENT_PERMISSIONS
@@ -66,7 +67,7 @@ def require_agent_permission(
 def visible_agent_ids(session: Session, tenant_id: UUID, user_id: UUID) -> set[UUID] | None:
     """Return agent ids the user may view, or None when every agent is visible (owner/admin)."""
     membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if membership is None or membership.status != "active":
+    if not membership_is_active(session, membership):
         return set()
     if membership.role in FULL_ROLES:
         return None

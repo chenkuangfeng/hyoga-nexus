@@ -24,6 +24,7 @@ class MembershipRecord(Base):
     __table_args__ = (
         CheckConstraint("role IN ('owner', 'admin', 'member')", name="ck_membership_role"),
         CheckConstraint("status IN ('active', 'revoked')", name="ck_membership_status"),
+        CheckConstraint("source IN ('manual', 'organization')", name="ck_membership_source"),
         Index("ix_memberships_user_status", "user_id", "status"),
     )
 
@@ -35,3 +36,6 @@ class MembershipRecord(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "manual": joined directly. "organization": created when a role was given to a bound-subtree person;
+    # it grants access only while the user stays inside a bound subtree (see orgs/access.py).
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual", server_default="manual")

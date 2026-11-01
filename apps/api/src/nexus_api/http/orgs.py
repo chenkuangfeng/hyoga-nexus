@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel
 
-from nexus_core.platform import Principal, TenantRole
+from nexus_core.platform import Principal
 from nexus_platform.orgs import service as orgs
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.schemas.orgs import (
@@ -139,5 +139,5 @@ def space_organization(tenant_id: UUID, principal: Principal = Depends(get_princ
 @router.post("/tenants/{tenant_id}/members/from-organization", response_model=JoinResult)
 def join_from_organization(tenant_id: UUID, body: JoinFromOrganization,
                            principal: Principal = Depends(get_principal), db=Depends(get_database_session)):
-    result = orgs.add_members_from_organization(db, principal, tenant_id, body.user_ids, TenantRole(body.role))
+    result = orgs.add_members_from_organization(db, principal, tenant_id, body.user_ids, body.role_ids)
     return JoinResult(**result)

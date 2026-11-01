@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, TenantRole, new_id, utc_now
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.authz.audit import audit
+from nexus_platform.orgs.access import membership_is_active
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.persistence.models import MembershipRecord, TenantRecord
@@ -45,7 +46,7 @@ def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRec
     with session.begin():
         user = resolve_user(session, principal)
         rows = session.execute(
-            select(TenantRecord, MembershipRecord.role)
+            select(TenantRecord, MembershipRecord)
             .join(MembershipRecord, MembershipRecord.tenant_id == TenantRecord.id)
             .where(
                 MembershipRecord.user_id == user.id,
@@ -54,7 +55,8 @@ def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRec
             )
             .order_by(TenantRecord.created_at)
         ).all()
-    return [(row[0], row[1]) for row in rows]
+        # Organization-sourced rows only list the space while the user is still in a bound subtree.
+        return [(tenant, membership.role) for tenant, membership in rows if membership_is_active(session, membership)]
 
 
 def add_member(

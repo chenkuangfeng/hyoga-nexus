@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.errors import Forbidden, NotFound
+from nexus_platform.orgs.access import membership_is_active
 from nexus_platform.persistence.models import MembershipRecord, TenantRecord, UserIdentityRecord, UserRecord
 
 
@@ -63,7 +64,7 @@ def require_membership(
     session: Session, tenant_id: UUID, user_id: UUID, *, roles: set[str] | None = None
 ) -> MembershipRecord:
     membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if membership is None or membership.status != "active":
+    if not membership_is_active(session, membership):
         raise NotFound("Tenant not found")
     if roles is not None and membership.role not in roles:
         raise Forbidden("Your tenant role does not allow this action")

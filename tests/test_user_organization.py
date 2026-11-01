@@ -1,4 +1,6 @@
 """Organization tree, primary node, space bindings and joining people from a bound subtree."""
+from uuid import uuid4
+
 import pytest
 
 from nexus_core.platform import Principal, TenantRole
@@ -162,6 +164,13 @@ def test_space_binds_group_and_subsidiary_and_sees_distinct_people(database):
             orgs.space_organization(db, OUTSIDER, tid)
 
 
+def _role(factory, tid, name="使用者"):
+    """A custom space role that opens the chat menu; owners and admins can create roles."""
+    from nexus_platform.tenants.roles import create_role
+    with factory() as db:
+        return create_role(db, OWNER, tid, name, ["chat"], []).id
+
+
 def test_owner_adds_people_from_bound_subtree_only(database):
     _make_admin(database, ADMIN)
     tid = _space(database)
@@ -174,21 +183,22 @@ def test_owner_adds_people_from_bound_subtree_only(database):
         orgs.assign_member(db, ADMIN, sub, inside)
     with database() as db:
         orgs.bind_space(db, ADMIN, tid, sub)
+    role = _role(database, tid)
     with database() as db:
-        result = orgs.add_members_from_organization(db, OWNER, tid, [inside], TenantRole.MEMBER)
+        result = orgs.add_members_from_organization(db, OWNER, tid, [inside], [role])
     assert result == {"added": [inside], "skipped": []}
     with database() as db:
-        again = orgs.add_members_from_organization(db, OWNER, tid, [inside], TenantRole.MEMBER)
+        again = orgs.add_members_from_organization(db, OWNER, tid, [inside], [role])
     assert again == {"added": [], "skipped": [inside]}
     with database() as db:
         with pytest.raises(NotFound):
-            orgs.add_members_from_organization(db, OWNER, tid, [outside], TenantRole.MEMBER)
+            orgs.add_members_from_organization(db, OWNER, tid, [outside], [role])
     with database() as db:
         with pytest.raises(Forbidden):  # members:manage is required
-            orgs.add_members_from_organization(db, MEMBER, tid, [inside], TenantRole.MEMBER)
+            orgs.add_members_from_organization(db, MEMBER, tid, [inside], [role])
     with database() as db:
-        with pytest.raises(Forbidden):  # owners are not created this way
-            orgs.add_members_from_organization(db, OWNER, tid, [inside], TenantRole.OWNER)
+        with pytest.raises(NotFound):  # owner and admin are not roles, so they cannot be granted this way
+            orgs.add_members_from_organization(db, OWNER, tid, [inside], [uuid4()])
 
 
 def test_unbinding_is_allowed_to_owner_and_refused_to_plain_members(database):
@@ -260,11 +270,12 @@ def test_organization_api_enforces_platform_admin_and_space_view(database):
             assert view.status_code == 200, view.text
             assert [p["user_id"] for p in view.json()["people"]] == [str(inside)]
             assert client.post(f"/api/v1/tenants/{tid}/members/from-organization",
-                               json={"user_ids": [str(inside)]}).status_code == 403
+                               json={"user_ids": [str(inside)], "role_ids": [str(_role(database, tid, "x"))]}
+                               ).status_code == 403
 
             current["principal"] = OWNER
             joined = client.post(f"/api/v1/tenants/{tid}/members/from-organization",
-                                 json={"user_ids": [str(inside)], "role": "member"})
+                                 json={"user_ids": [str(inside)], "role_ids": [str(_role(database, tid, "api角色"))]})
             assert joined.status_code == 200, joined.text
             assert joined.json() == {"added": [str(inside)], "skipped": []}
 

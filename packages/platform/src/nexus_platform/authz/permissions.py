@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import TenantRole
 from nexus_platform.authz.catalog import API_PERMISSIONS, MENUS
 from nexus_platform.errors import Forbidden
+from nexus_platform.orgs.access import membership_is_active
 from nexus_platform.persistence.models import (
     MembershipRecord,
     TenantRoleApiGrantRecord,
@@ -37,7 +38,7 @@ FULL_ACCESS = EffectivePermissions(MENUS, API_PERMISSIONS)
 def effective_permissions(session: Session, tenant_id: UUID, user_id: UUID) -> EffectivePermissions:
     """Return the union of permissions for an active member; no membership yields no access."""
     membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if membership is None or membership.status != "active":
+    if not membership_is_active(session, membership):
         return EffectivePermissions(frozenset(), frozenset())
     if membership.role in {TenantRole.OWNER.value, TenantRole.ADMIN.value}:
         return FULL_ACCESS

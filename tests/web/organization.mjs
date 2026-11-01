@@ -27,6 +27,7 @@ await page.route('**/api/v1/**', async route => {
   if (path.endsWith('/people') && path.includes('/org-units/')) return route.fulfill(json(path.endsWith('/org-units/dept/people') ? people : []))
   if (path.endsWith('/bindings') && path.includes('/org-units/')) return route.fulfill(json([]))
   if (path.endsWith('/users')) return route.fulfill(json([{ user_id: 'u-bob', display_name: '李四', username: 'lisi' }]))
+  if (path.endsWith('/tenants/tenant/roles')) return route.fulfill(json([{ id: 'r-user', tenant_id: 'tenant', name: '使用者', menus: ['chat'], apis: [] }]))
   if (path.endsWith('/tenants/tenant/organization')) return route.fulfill(json({
     bindings: [{ unit_id: 'sub', unit_name: '子公司甲', organization_name: '集团', status: 'active',
       nodes: [{ id: 'sub', parent_id: null, name: '子公司甲', status: 'active' }, { id: 'dept', parent_id: 'sub', name: '研发部', status: 'active' }] }],
@@ -52,10 +53,14 @@ try {
   await page.locator('label', { hasText: '张三' }).click()
   await page.getByRole('checkbox', { name: /张三/ }).waitFor({ state: 'attached' })
   assert.equal(await page.getByRole('checkbox', { name: /张三/ }).isChecked(), true)
-  await page.getByRole('button', { name: '加入空间（1）' }).waitFor()
-  await page.getByRole('button', { name: '加入空间（1）' }).click()
+  // Assigning needs at least one space role; the button stays disabled until one is picked.
+  assert.equal(await page.getByRole('button', { name: '分配角色（1）' }).isDisabled(), true)
+  await page.locator('.role-select .el-select__wrapper').click()
+  await page.getByRole('option', { name: '使用者' }).click()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '分配角色（1）' }).click()
   await page.getByText('已加入 1 人', { exact: true }).waitFor()
-  assert.deepEqual(joinBody, { user_ids: ['u-alice'], role: 'member' })
+  assert.deepEqual(joinBody, { user_ids: ['u-alice'], role_ids: ['r-user'] })
 
   // A user who is not a platform admin gets no organization-management entry.
   isAdmin = false

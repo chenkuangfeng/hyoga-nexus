@@ -89,8 +89,9 @@ class SpaceOrganizationView(BaseModel):
 
 
 class JoinFromOrganization(BaseModel):
+    """People from a bound subtree and the space's custom roles to give them (owner/admin are not roles)."""
     user_ids: list[UUID] = Field(min_length=1, max_length=500)
-    role: Literal["admin", "member"] = "member"
+    role_ids: list[UUID] = Field(min_length=1, max_length=50)
 
 
 class JoinResult(BaseModel):

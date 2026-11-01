@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from nexus_platform.orgs.access import is_space_manager
 from nexus_platform.persistence.models import RunRecord, SessionRecord
 from .domain import Delivery, Run
 from .event_repository import SqlAlchemyRunEventRepository
@@ -25,12 +26,13 @@ class SqlAlchemyRunRepository:
 
     def visible(self, tenant_id: UUID, user_id: UUID, run_id: UUID) -> RunRecord | None:
         """Legacy read projection for Run principal or Session owner, scoped to one tenant."""
-        return self.session.scalar(
-            select(RunRecord).join(SessionRecord, SessionRecord.id == RunRecord.session_id).where(
-                RunRecord.id == run_id, RunRecord.tenant_id == tenant_id,
-                (RunRecord.principal_id == user_id) | (SessionRecord.owner_user_id == user_id),
-            )
+        query = select(RunRecord).join(SessionRecord, SessionRecord.id == RunRecord.session_id).where(
+            RunRecord.id == run_id, RunRecord.tenant_id == tenant_id,
         )
+        # Space owners and admins can read every run in their space; others only their own.
+        if not is_space_manager(self.session, tenant_id, user_id):
+            query = query.where((RunRecord.principal_id == user_id) | (SessionRecord.owner_user_id == user_id))
+        return self.session.scalar(query)
 
     def _remember(self, row: RunRecord) -> Run:
         self._records[row.id] = row

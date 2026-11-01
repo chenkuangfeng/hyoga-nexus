@@ -4,6 +4,7 @@ import { api } from '../../api/chat'
 import { orgApi } from '../../api/orgs'
 import { roleApi } from '../../api/roles'
 import type { Tenant } from '../../types/chat'
+import type { TenantRole } from '../../types/roles'
 import type { SpaceBinding, SpaceBindingNode, SpaceOrganization } from '../../types/orgs'
 
 /** Space page: the organizations bound to this space, their subtrees, and the people in them.
@@ -11,7 +12,7 @@ import type { SpaceBinding, SpaceBindingNode, SpaceOrganization } from '../../ty
  */
 const tenants = ref<Tenant[]>([]), tenant = ref('')
 const data = ref<SpaceOrganization>({ bindings: [], people: [] })
-const canJoin = ref(false), role = ref<'admin' | 'member'>('member'), picked = ref<string[]>([])
+const canJoin = ref(false), roles = ref<TenantRole[]>([]), roleIds = ref<string[]>([]), picked = ref<string[]>([])
 const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
 
 const message = (err: unknown) => (err instanceof Error ? err.message : '请求未完成')
@@ -36,15 +37,18 @@ async function load() {
     data.value = organization
     canJoin.value = perms.apis.includes('members:manage')
     picked.value = []
+    // Roles are only needed by people who can add members; a viewer without role access simply sees none.
+    roles.value = canJoin.value ? await roleApi.roles(tenant.value).catch(() => []) : []
   } catch (err) { error.value = message(err); data.value = { bindings: [], people: [] } }
   finally { loading.value = false }
 }
 async function join() {
-  if (!picked.value.length || !tenant.value) return
+  if (!picked.value.length || !roleIds.value.length || !tenant.value) return
   busy.value = true; error.value = ''; feedback.value = ''
   try {
-    const result = await orgApi.joinFromOrganization(tenant.value, picked.value, role.value)
+    const result = await orgApi.joinFromOrganization(tenant.value, picked.value, roleIds.value)
     picked.value = []
+    roleIds.value = []
     await load()
     // load() clears the feedback line, so the result message is set after the reload.
     feedback.value = `已加入 ${result.added.length} 人${result.skipped.length ? `，${result.skipped.length} 人已是成员` : ''}`
@@ -96,12 +100,12 @@ onMounted(async () => {
         </el-checkbox>
       </el-checkbox-group>
       <form v-if="canJoin" class="join-form" @submit.prevent="join">
-        <label for="join-role">加入后的角色</label>
-        <el-select id="join-role" v-model="role" :disabled="busy" class="role-select">
-          <el-option label="普通成员" value="member" />
-          <el-option label="管理员" value="admin" />
+        <label for="join-roles">分配的角色</label>
+        <el-select id="join-roles" v-model="roleIds" multiple collapse-tags :disabled="busy || !roles.length" placeholder="选择本空间的角色" class="role-select">
+          <el-option v-for="item in roles" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
-        <el-button type="primary" native-type="submit" :disabled="busy || !picked.length || !joinable">加入空间（{{ picked.length }}）</el-button>
+        <p v-if="!roles.length" class="muted">本空间还没有角色，请先在角色管理中创建。</p>
+        <el-button type="primary" native-type="submit" :disabled="busy || !picked.length || !roleIds.length || !joinable">分配角色（{{ picked.length }}）</el-button>
       </form>
     </section>
   </main>
@@ -124,5 +128,5 @@ label { display: block; margin-top: 12px; font-size: 14px; font-weight: 600; }
 .person-units { color: var(--muted-text); font-size: 13px; }
 .join-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
 .join-form label { margin: 0; }
-.role-select { width: 160px; }
+.role-select { width: 280px; }
 </style>
