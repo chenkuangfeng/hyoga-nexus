@@ -35,6 +35,14 @@
 - [ ] P3：摘要落库、滞后阈值（`T_high` / `T_low`）、降级不落库。测试：边界在阈值之间保持不变；摘要失败降级正确。
 - [ ] P2：工具输出外置与滚动裁剪；artifact 读取工具（若确认）。测试：外置内容的授权与审计；视图确定性。
 
+## 四之一、配置接入（design.md 第十四节）
+
+- [ ] 在 `NativePolicy` 增加 `tool_output_inline_limit`、`tool_preview_chars`、`tool_output_page_chars`、`tool_result_window_rounds`、`compact_high_ratio`、`compact_low_ratio`、`summary_max_chars`、`compaction_model_profile_version_id`，默认值见规格。
+- [ ] `runs/settings.py`：`LABELS` 登记中文名；`validate()` 增加范围与跨字段校验；`compaction_model_profile_version_id` 发布时做 `authorize_model` 检查。
+- [ ] `view()` 与旧记录合并 `defaults()`，保证旧设置缺键时表单完整。
+- [ ] 测试：旧版本缺键读取为默认值；非法取值（越界、预览大于阈值、低比例不小于高比例）发布被拒绝；无权限的压缩模型被拒绝。
+- [ ] 基线完成后，依据测量结果调整 `tool_output_inline_limit` 默认值，并记录依据。
+
 ## 四之二、消息存储与回放（P10、P11，已确认）
 
 - [ ] P10：准备阶段区分当前 Run 与历史 Run；历史 Run 只取 user 与最终 assistant 行。测试：同一 Run 内多步工具调用的上下文与改造前逐条一致；历史 tool 行不出现在模型输入中。

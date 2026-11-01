@@ -199,3 +199,43 @@
 - 不改变忙时排队、派发账本与快照的语义。
 - 不把摘要或外置结果作为新的 system 指令；它们保持 `[untrusted historical content]` 的标注。
 - 不另存工具步骤的 JSON 副本用于展示（见 12.3）。
+
+## 十四、可配置项（智能体版本参数）
+
+### 14.1 配置归属与生效规则
+
+- 所有新参数都是**智能体的配置参数**，接入现有的 Native 设置机制：`NativePolicy`（行为，`budgets.behavior`）与 `ExecutionBudget`（预算，`budgets.budgets`），由 `runs/settings.py` 的 `defaults()` 与 `validate()` 统一定义默认值与校验。
+- 个人默认值（`NativePreference`）只作用于之后创建的智能体版本，发布时快照进 `AgentVersion.budgets`。已有版本与已有会话不受影响，修改参数需要发布新版本。这与现有语义一致。
+- 旧版本缺少新键时，读取时使用 dataclass 默认值。`view()` 当前直接返回已存储的设置，实施时需要与 `defaults()` 合并，否则旧记录缺键会导致表单显示不全。这一点列入实施任务。
+- 每个参数都要在 `LABELS` 中登记中文名称，前端表单由 `defaults()` 自动生成，无需单独做界面。
+
+### 14.2 参数清单
+
+| 参数 | 归属 | 默认值 | 取值范围 | 含义 |
+|---|---|---|---|---|
+| `tool_output_inline_limit` | behavior | 2000 | 200–100000 | 工具输出超过该字符数即外置（P2）。 |
+| `tool_preview_chars` | behavior | 500 | 0–`tool_output_inline_limit` | 外置后模型可见的预览长度。 |
+| `tool_output_page_chars` | behavior | 4000 | 500–20000 | 分页读取工具单页返回的最大字符数。 |
+| `tool_result_window_rounds` | behavior | 6 | 1–100 | 当前 Run 内，超过该模型调用次数的工具结果滚动裁剪为单行索引。 |
+| `summarize_context` | behavior | `False`（目标 `True`） | 布尔 | 是否启用模型摘要压缩（P3）。默认值切换须经评测。 |
+| `compact_high_ratio` | behavior | 1.0 | 0.5–1.0 | 历史字符数达到 `max_context_chars × 该比例` 时触发压缩。 |
+| `compact_low_ratio` | behavior | 0.6 | 0.1–`compact_high_ratio` | 压缩后目标字符数占 `max_context_chars` 的比例。 |
+| `summary_max_chars` | behavior | 8000 | 500–32000 | 单条摘要的最大字符数。 |
+| `compaction_model_profile_version_id` | behavior | 空（使用智能体自身的模型） | 已发布的模型配置版本 | 压缩摘要使用的模型，便于用更便宜的模型做摘要。 |
+| `max_context_chars` | budgets | 100000 | 已有 | 压缩与比例阈值的基准，沿用现有值。 |
+| `max_output_tokens` | budgets | 2048 | 已有 | 沿用现有值。 |
+
+模型本身（主模型）仍由智能体版本绑定的 `model_profile_version_id` 决定，本次不新增。
+
+### 14.3 校验规则
+
+- 所有数值参数只接受 `int` 或 `float`，越界拒绝，错误码沿用 `Native budget exceeds service limits` 风格。
+- 跨字段约束：`tool_preview_chars ≤ tool_output_inline_limit`；`compact_low_ratio < compact_high_ratio`。
+- `compaction_model_profile_version_id` 在发布时必须通过 `authorize_model` 检查，与主模型的授权规则一致；为空时使用主模型。
+- 发布时写入快照前完成全部校验，不在运行时才发现非法配置。
+
+### 14.4 与 P2 的关系
+
+- P2 的阈值是 `tool_output_inline_limit`，默认 2000，**这是先给出的默认值，不是测量结论**。基线数据出来后按第一节的测量结果调整默认值，不改变参数本身。
+- 预览与外置的规则：超过 `tool_output_inline_limit` 时，tool 行保存前 `tool_preview_chars` 个字符加句柄；完整内容落盘。
+- 分页读取工具每次返回不超过 `tool_output_page_chars` 个字符，并且自身的输出不再外置（避免循环，见 12.6）。
