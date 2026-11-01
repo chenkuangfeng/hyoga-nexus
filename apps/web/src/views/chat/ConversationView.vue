@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import ModelBranchControls from '../../components/ModelBranchControls.vue'
+import MemorySnapshotControl from '../../components/MemorySnapshotControl.vue'
 import RuntimeControls from '../../components/RuntimeControls.vue'
 import { useConversation } from '../../composables/useConversation'
 import { errorLabels, statusLabels } from '../../types/chat'
@@ -35,6 +36,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
         <el-button type="primary" :disabled="!versionId || loading" :loading="submitting" @click="chat.createSession">新建会话</el-button>
         <p v-if="tenant && !agents.length && !loading" class="muted">暂无已发布的 Native 智能体，请先完成智能体配置和发布。</p>
         <ModelBranchControls :tenant="tenant" :session="sessionId" :disabled="active || loading || submitting" @created="openBranch" />
+        <MemorySnapshotControl v-if="sessionId" :tenant="tenant" :session="sessionId" :disabled="active || loading || submitting" />
         <h2>会话记录</h2>
         <nav class="session-list" aria-label="选择会话">
           <button v-for="item in sessions" :key="item.id" type="button" :aria-current="item.id === sessionId ? 'page' : undefined"

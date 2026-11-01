@@ -5,7 +5,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from nexus_memory import service
-from nexus_memory.ports import DraftView, EntryView, MemoryConflict, MemoryNotFound, VersionView
+from nexus_memory import text as memtext
+from nexus_memory.ports import DraftView, EntryView, MemoryConflict, MemoryNotFound, SearchRow, SizedEntry, VersionView
 
 
 class FakeRepo:
@@ -16,12 +17,61 @@ class FakeRepo:
         self.versions: dict = {}
         self.drafts: dict = {}
         self.audits: list = []
+        self.tombstones: set = set()
 
-    def add_draft(self, tenant_id, owner_id, *, kind='memory', diff='fact', status='pending_review'):
+    def add_draft(self, tenant_id, owner_id, *, kind='memory', diff='fact', status='pending_review', base_version=None):
         draft = DraftView(id=uuid4(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, diff=diff,
-                          status=status, source_run_id=uuid4())
+                          status=status, source_run_id=uuid4(), fingerprint=memtext.fingerprint(diff),
+                          base_version=base_version)
         self.drafts[draft.id] = draft
         return draft
+
+    def create_draft(self, *, tenant_id, source_run_id, kind, diff, fingerprint, base_version, origin, source_message_ids):
+        draft = DraftView(id=uuid4(), tenant_id=tenant_id, owner_user_id=self.run_owner, kind=kind, diff=diff,
+                          status='pending_review', source_run_id=source_run_id, fingerprint=fingerprint,
+                          base_version=base_version, origin=origin, source_message_ids=tuple(source_message_ids))
+        self.drafts[draft.id] = draft
+        return draft.id
+
+    run_owner = None
+
+    def find_duplicate(self, tenant_id, owner_id, fingerprint):
+        for e in self.entries.values():
+            v = self.versions.get((e.id, e.current_version))
+            if e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active and v and v.fingerprint == fingerprint:
+                return ('entry', e.id)
+        for d in self.drafts.values():
+            if d.tenant_id == tenant_id and d.owner_user_id == owner_id and d.status == 'pending_review' and d.fingerprint == fingerprint:
+                return ('draft', d.id)
+        return None
+
+    def is_tombstoned(self, tenant_id, owner_id, fingerprint):
+        return (tenant_id, owner_id, fingerprint) in self.tombstones
+
+    def add_tombstone(self, tenant_id, owner_id, fingerprint):
+        self.tombstones.add((tenant_id, owner_id, fingerprint))
+
+    def sized_entries(self, tenant_id, owner_id):
+        out = []
+        for e in self.entries.values():
+            if e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active:
+                v = self.versions[(e.id, e.current_version)]
+                out.append(SizedEntry(id=e.id, title=e.title, chars=len(v.content)))
+        return sorted(out, key=lambda item: item.title)
+
+    def search(self, tenant_id, owner_id, tokens, now, limit):
+        rows = []
+        for e in self.entries.values():
+            if e.tenant_id != tenant_id or e.owner_user_id != owner_id or not (e.active and e.enabled):
+                continue
+            if e.valid_until is not None and e.valid_until <= now:
+                continue
+            v = self.versions[(e.id, e.current_version)]
+            haystack = memtext.tokenize(v.content)
+            if all(f' {t} ' in f' {haystack} ' or (memtext.is_single_cjk(t) and t in v.content) for t in tokens):
+                rows.append(SearchRow(entry_id=e.id, title=e.title, kind=e.kind, version=v.version,
+                                      content=v.content, score=1.0))
+        return rows[:limit]
 
     def published_entries(self, tenant_id, owner_id, project):
         rows = [e for e in self.entries.values() if e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active]
@@ -51,19 +101,25 @@ class FakeRepo:
 
     def create_entry(self, *, tenant_id, owner_id, kind, title, project):
         e = EntryView(id=uuid4(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, title=title,
-                      project=project, active=True, current_version=1)
+                      project=project, active=True, current_version=1, enabled=True, valid_until=None)
         self.entries[e.id] = e
         return e
 
-    def bump_entry(self, entry_id, *, current_version, title=None, project=None, active=None):
+    def bump_entry(self, entry_id, *, current_version, title=None, project=None, active=None,
+                   enabled=None, valid_until=None):
+        from nexus_memory.ports import UNSET
         e = self.entries[entry_id]
         self.entries[entry_id] = replace(e, current_version=current_version,
                                          title=e.title if title is None else title,
                                          project=e.project if project is None else project,
-                                         active=e.active if active is None else active)
+                                         active=e.active if active is None else active,
+                                         enabled=e.enabled if enabled is None else enabled,
+                                         valid_until=e.valid_until if valid_until is UNSET else valid_until)
 
-    def append_version(self, *, entry_id, version, content, source_run_id, source_draft_id, reviewer_id):
-        self.versions[(entry_id, version)] = VersionView(entry_id, version, content, source_run_id, source_draft_id)
+    def append_version(self, *, entry_id, version, content, source_run_id, source_draft_id, reviewer_id,
+                       fingerprint='', source_message_ids=()):
+        self.versions[(entry_id, version)] = VersionView(entry_id, version, content, source_run_id, source_draft_id,
+                                                         fingerprint, tuple(source_message_ids))
 
     def audit(self, tenant_id, actor_id, action, target_type, target_id, metadata=None):
         self.audits.append((action, target_id))

@@ -10,9 +10,9 @@ from functools import wraps
 from typing import Any, Callable
 from uuid import UUID
 
-from nexus_core.platform import Principal
+from nexus_core.platform import Principal, utc_now
 from nexus_memory import service as rules
-from nexus_memory.ports import MemoryConflict, MemoryNotFound
+from nexus_memory.ports import UNSET, MemoryConflict, MemoryNotFound
 from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.models.provider_settings import context
 
@@ -33,8 +33,32 @@ def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def index(db, tenant_id: UUID, user_id: UUID, project: str = '') -> str:
-    """Bounded published index for prompt injection; caller transaction, no commit."""
-    return rules.index(SqlMemoryRepository(db), tenant_id, user_id, project)
+    """Bounded published index for prompt injection (live entries only); caller transaction, no commit."""
+    return rules.index(SqlMemoryRepository(db), tenant_id, user_id, project, now=utc_now())
+
+
+@_translate
+def propose(db, tenant_id: UUID, owner_id: UUID, run_id: UUID, kind: str, diff: str, *,
+            entry_id: UUID | None = None, base_version: int | None = None,
+            origin: str = 'foreground', source_message_ids: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Screen and record a draft inside the caller's Run transaction; the owner is the Run's principal."""
+    return rules.propose(SqlMemoryRepository(db), tenant_id, owner_id, run_id, kind, diff, entry_id=entry_id,
+                         base_version=base_version, origin=origin, source_message_ids=source_message_ids)
+
+
+@_translate
+def search(db, tenant_id: UUID, owner_id: UUID, query: str, limit: int = rules.SEARCH_LIMIT_DEFAULT) -> list[dict[str, Any]]:
+    """Keyword search over the owner's live published entries; caller transaction, no commit."""
+    return rules.search(SqlMemoryRepository(db), tenant_id, owner_id, query, limit=limit, now=utc_now())
+
+
+@_translate
+def set_availability(db, principal: Principal, tenant_id: UUID, entry_id: UUID, *,
+                     enabled: bool | None = None, valid_until: Any = UNSET) -> dict[str, Any]:
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        return rules.set_availability(SqlMemoryRepository(db), user.id, tenant_id, entry_id,
+                                      enabled=enabled, valid_until=valid_until)
 
 
 @_translate

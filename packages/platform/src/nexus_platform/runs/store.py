@@ -291,17 +291,47 @@ class DurableRuntimeStore:
             audit(db, run.tenant_id, run.principal_id, 'checkpoint.updated', 'session', str(run.session_id),
                   {'run_id': str(run.id)})
 
-    async def propose(self, kind: str, scope: str, diff: str) -> str:
-        from nexus_platform.models.service import clean_public_options
-        clean_public_options(diff, 'memory')
+    async def propose(self, kind: str, scope: str, diff: str, *, entry_id: str | None = None,
+                      base_version: int | None = None) -> str:
+        """Screen and record a draft for review; returns a short outcome line the model can read.
+
+        Refusals (threat rules, tombstones, duplicates, budget, stale base) do not fail the Run:
+        they are reported as text so the model can adjust. Only an invalid kind or scope fails.
+        """
+        from nexus_platform.memory.service import propose as propose_draft
+        from nexus_platform.errors import Conflict, NotFound
         if kind not in ('memory', 'sop') or scope != 'session':
             raise RuntimeFault('memory_scope_invalid')
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            row = MemoryDraftRecord(id=new_id(), tenant_id=run.tenant_id, source_run_id=run.id,
-                kind=kind, scope=str(run.session_id), diff=diff[:8000], status='pending_review', created_at=utc_now())
-            db.add(row)
-            append_event(db, run.id, 'memory.draft_created', {'draft_id': str(row.id), 'kind': kind, 'scope': 'session'})
-            audit(db, run.tenant_id, run.principal_id, 'memory.draft_created', 'memory_draft', str(row.id))
-            return str(row.id)
+            try:
+                outcome = propose_draft(db, run.tenant_id, run.principal_id, run.id, kind, diff,
+                                        entry_id=UUID(entry_id) if entry_id else None, base_version=base_version)
+            except (Conflict, NotFound) as exc:
+                return f'Draft not created: {exc}'
+            status = outcome['status']
+            if status == 'pending':
+                append_event(db, run.id, 'memory.draft_created', {'draft_id': outcome['id'], 'kind': kind, 'scope': 'session'})
+                return 'Draft pending review: ' + outcome['id']
+            if status == 'duplicate':
+                return f"Not created: the same content already exists as {outcome['target']} {outcome['id']}."
+            if status == 'budget_exceeded':
+                titles = '; '.join(f"{e['title']} ({e['id']}, {e['chars']} chars)" for e in outcome['entries'])
+                return (f"Not created: memory budget {outcome['budget']} chars would be exceeded. "
+                        f"Merge or propose removal of existing entries first: {titles}")
+            if outcome.get('reason') == 'threat':
+                return 'Not created: the content matched prohibited instruction patterns: ' + ', '.join(outcome['rules'])
+            return 'Not created: the owner previously rejected this content.'
+
+    async def search_memory(self, query: str, limit: int) -> str:
+        """Keyword search over the principal's live published memory; pointers and snippets only."""
+        from nexus_platform.memory.service import search as search_entries
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            require_membership(db, run.tenant_id, run.principal_id)
+            hits = search_entries(db, run.tenant_id, run.principal_id, query, limit)
+            if not hits:
+                return 'No matching published memory.'
+            return '\n'.join(f"[{h['id']}] {h['kind']} | {h['title']} | v{h['version']} | {h['snippet']}" for h in hits)

@@ -1,7 +1,7 @@
 """Immutable user-configured Native policy and validation; never grants authority."""
 from dataclasses import dataclass, field
 
-BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory',
+BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
                       'read_tool_output')
 #: Builtin that pages through externalized tool output (P2). Its presence in a Run's bindings enables spilling.
 TOOL_OUTPUT_READER = 'read_tool_output'

@@ -8,7 +8,7 @@ const baseURL = process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173'
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const consoleErrors = []
 page.on('pageerror', error => consoleErrors.push(error.message))
-let sessions = [], messages = [], run = null, events = [], sends = 0, responses = 0, reconnects = 0, corrections = 0
+let snapshotRefreshes = 0, sessions = [], messages = [], run = null, events = [], sends = 0, responses = 0, reconnects = 0, corrections = 0
 const makeEvent = (sequence, event_type, payload = {}) => ({ event_id: `event-${run.id}-${sequence}`, run_id: run.id, sequence, event_type, payload })
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 await page.route('**/api/v1/**', async route => {
@@ -20,6 +20,8 @@ await page.route('**/api/v1/**', async route => {
     const created = { id: 'session', title: '验收会话', agent_version_id: 'version' }; sessions = [created]
     return route.fulfill(json(created))
   }
+  if (path.endsWith('/memory-snapshot') && method === 'GET') return route.fulfill(json({ exists: true, created_at: '2026-11-01T08:00:00Z', stale: false }))
+  if (path.endsWith('/memory-snapshot/refresh') && method === 'POST') { snapshotRefreshes++; return route.fulfill({ status: 204, body: '' }) }
   if (path.endsWith('/sessions')) return route.fulfill(json(sessions))
   if (path.endsWith('/messages')) return route.fulfill(json({ messages, latest_run: run }))
   if (path.endsWith('/runs') && method === 'POST') {
@@ -67,6 +69,12 @@ await page.route('**/api/v1/**', async route => {
 try {
   await page.goto(baseURL)
   await page.getByRole('button', { name: '新建会话', exact: true }).click()
+  // The memory snapshot control is shown for the open session and refreshes it on request.
+  await page.getByText('记忆索引已固定，与当前记忆一致。', { exact: true }).waitFor()
+  const refreshed = page.waitForResponse(response => response.url().endsWith('/memory-snapshot/refresh'))
+  await page.getByRole('button', { name: '刷新记忆快照', exact: true }).click()
+  await refreshed
+  assert.equal(snapshotRefreshes, 1)
   await page.getByLabel('你的消息', { exact: true }).fill('研究市场')
   await page.getByRole('button', { name: '发送消息', exact: true }).click()
   await page.getByLabel('智能体需要你的回答', { exact: true }).waitFor()

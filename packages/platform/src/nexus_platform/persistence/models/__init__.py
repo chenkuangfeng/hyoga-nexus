@@ -22,10 +22,12 @@ from .queue import OutboxRecord
 from .ledger import RuntimeEpochRecord, SessionAdmissionRecord
 from .audit import AuditRecord
 from .memory import (
+    SessionMemorySnapshotRecord,
     WorkingCheckpointRecord,
     MemoryDraftRecord,
     MemoryEntryRecord,
     MemoryVersionRecord,
+    MemoryTombstoneRecord,
     ContextSummaryRecord,
 )
 from .approval import InputRequestRecord, ActionApprovalRecord
@@ -33,6 +35,7 @@ from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, TenantOrgBindingRecord, OrgAuditRecord
 
 __all__ = [
+    'SessionMemorySnapshotRecord',
     'Base',
     'UserRecord',
     'UserIdentityRecord',
@@ -75,6 +78,7 @@ __all__ = [
     'MemoryDraftRecord',
     'MemoryEntryRecord',
     'MemoryVersionRecord',
+    'MemoryTombstoneRecord',
     'ContextSummaryRecord',
     'InputRequestRecord',
     'ActionApprovalRecord',

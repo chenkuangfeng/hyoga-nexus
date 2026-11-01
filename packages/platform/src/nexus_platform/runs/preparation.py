@@ -160,9 +160,9 @@ class ExecutionPreparer:
                         tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), row['id']))
                 checkpoint = db.get(WorkingCheckpointRecord, run.session_id)
                 system = version.instructions
-                from nexus_platform.memory.service import index as memory_index
-                published_index = memory_index(db, run.tenant_id, run.principal_id,
-                    version.budgets.get('behavior', {}).get('project_name', ''))
+                from nexus_platform.memory.snapshots import session_index
+                published_index = session_index(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                    session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', ''))
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
                 if checkpoint and checkpoint.tenant_id == run.tenant_id and checkpoint.source_run_id in allowed_runs:

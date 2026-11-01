@@ -185,13 +185,13 @@
         同事务内 upsert L3 索引
    → 停用/归档/撤销发布 → 同事务内：
         设 enabled=false 或 active=false
-        删除对应 L3 索引行
+        （L3 行保留，查询时按 enabled/active/valid_until 过滤）
 ```
 
 要点：
-- 发布与索引更新是同一事务。索引写入失败则发布整体回滚。
-- 停用与归档只改事实表并删除索引，不删版本。
-- 过期（`valid_until`）不写事务：读取时判断，并由后台任务定期清理索引行（清理失败不影响正确性，因为读取时已过滤）。
+- 发布与索引更新是同一事务。索引写入失败则发布整体回滚（测试：`tests/test_memory_search_sqlite.py` 中的回滚用例）。
+- 同一条目新版本发布时，同事务删除旧版本的索引行，索引只保留当前版本。
+- 停用、归档、过期只改事实表，不删索引行；检索 SQL 在查询时过滤 `enabled`、`active`、`valid_until`。这样停用后重新启用不需要重建索引，且过期判断不依赖后台任务。
 
 ### 9.4 读取路径（统一召回规划器）
 
@@ -265,8 +265,8 @@
 **存储表（SQLite）**：
 - `memory_fts`：FTS5 虚拟表，**contentless 形式**：`content=''`、`contentless_delete=1`，分词器 `unicode61`，列为 `tokens`、`entry_id`、`version`。不存原文，正文通过 `JOIN memory_versions` 按 `rowid` 取回，避免重复存储。
 - 行的 `rowid` 等于对应 `memory_versions` 行的 `rowid`，删除按 `rowid` 进行（`contentless_delete=1` 支持删除）。
-- 发布、停用、归档都在同一个 `BEGIN IMMEDIATE` 事务内写入或删除 `memory_fts` 行。FTS5 支持事务，失败整体回滚。
-- 需要 SQLite ≥ 3.43（`contentless_delete`）。启动时探测版本与 FTS5 模块；不满足时回退 `LIKE`（见下）。
+- 发布在同一个 `BEGIN IMMEDIATE` 事务内写入 `memory_fts` 行，并删除同一条目旧版本的行。停用、归档、过期不删行，由检索 SQL 过滤。FTS5 支持事务，失败整体回滚。
+- 需要 SQLite ≥ 3.43（`contentless_delete`）。建表前探测版本与 FTS5 模块（`keyword_index_supported`）；不满足时不建 `memory_fts`，检索回退为 token 子串匹配（见下）。
 
 **查询（SQLite）**：
 - 授权条件、`active`、`enabled`、未过期、`current_version` 与 FTS 匹配写在同一条 SQL 中（见 9.4）。

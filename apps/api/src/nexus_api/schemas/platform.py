@@ -143,6 +143,13 @@ class AgentView(BaseModel):
     updated_at: datetime
 
 
+class MemorySnapshotView(BaseModel):
+    """Whether a session has a frozen memory index, and whether published memory has changed since."""
+    exists: bool
+    created_at: datetime | None = None
+    stale: bool = False
+
+
 class SessionCreate(BaseModel):
     agent_version_id: UUID
     title: str = Field(default="", max_length=255)

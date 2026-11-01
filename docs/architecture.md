@@ -242,6 +242,14 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - 记忆不是知识库：记忆保存偏好与经验，知识库保存可引用的资料。
 - 索引：维护短小的导航索引（不超过 30 行）指向条目，不直接存放事实正文（参考 GenericAgent L1）。
 
+**实现要点（阶段一，openspec 2026-11-01-memory-optimization）**：
+- 提议经 `nexus_memory.text.screen`：威胁规则（提示覆盖、角色冒充、保留标记、外传指令、不可见字符）命中则整体拒绝；密钥、身份证（校验位）、银行卡（Luhn）、手机号替换为 `【已隐藏】`，审计只记录类别。
+- 提议前做指纹去重（已发布条目与待审草稿），并检查墓碑（被拒绝的内容不得再次提出）。预算默认每所有者 6000 字符，超出时返回现有条目列表；编辑草稿携带 `base_version`，发布时仍需匹配。
+- 索引只列出启用、未归档、未过期的条目，超限时按行截断并注明省略数量。模型读取的记忆正文以 `<user_memory>` 包裹，内容中的尖括号转义，声明为资料而非指令。
+- `search_memory` 为只读关键词检索：查询与正文用二元组分词，要求全部词命中；SQLite 使用 contentless FTS5，建表前探测版本（≥3.43）与模块，不满足或其他数据库时回退为 token 子串匹配。结果只含 ID、标题、版本与片段，正文需 `read_memory`。
+- 启停（`enabled`）与有效期（`valid_until`）与归档分开：停用或过期只影响索引与检索，版本保留；HTTP `PATCH /memory/{id}`。
+- 会话内快照：每个会话的第一个 Run 冻结所有者的已发布记忆索引，之后的 Run 复用，系统前缀保持稳定。新发布的记忆在用户刷新快照（`POST .../memory-snapshot/refresh`）后才进入该会话。快照只对会话所有者可见。
+
 ### 2.9 沙箱与执行环境
 
 借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）。
@@ -331,7 +339,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | `run_input_requests`、`action_approvals` | 等待输入的问题与回答；单次审批 |
 | `tool_invocations` | 工具调用记录（幂等键、副作用标记、结果状态） |
 | `tool_outputs` | 超过 `tool_output_inline_limit` 的工具输出原文，按 Run 隔离；模型只见预览与句柄，经 `read_tool_output` 分页读取，每次读取写审计 |
-| `memory_drafts`、`memory_entries`、`memory_versions`、`context_summaries` | 记忆草稿、已发布条目与版本；上下文摘要为追加式（每行 `supersedes_id` 指向被替代的行，只有切点前移才写入，原行不改写） |
+| `memory_drafts`、`memory_entries`、`memory_versions`、`memory_tombstones`、`memory_fts`（仅 SQLite）、`context_summaries` | 记忆草稿、已发布条目与版本、被拒绝内容的墓碑、SQLite 关键词索引（派生，可由当前版本重建）；上下文摘要为追加式（每行 `supersedes_id` 指向被替代的行，只有切点前移才写入，原行不改写） |
 | `model_profiles`、`model_profile_versions`、`model_providers`、`provider_models`、`model_defaults`、`native_preferences` | 模型配置版本、供应商、默认与偏好 |
 | `provider_credentials`、`credential_references` | 加密凭据与凭据引用 |
 | `audit_records` | 审计记录 |

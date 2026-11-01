@@ -7,12 +7,13 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole
 from nexus_platform.agents import service as agents
+from nexus_platform.memory import snapshots
 from nexus_platform.agents.access import require_agent_permission, set_agent_grants, visible_agent_ids
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models import service as models
@@ -56,6 +57,7 @@ from nexus_api.schemas.platform import (
     RunView,
     SessionCreate,
     AdminAgentView,
+    MemorySnapshotView,
     SessionView,
     TenantCreate,
     TenantView,
@@ -411,6 +413,21 @@ def list_all_sessions(
     rows = sessions.list_sessions_for_platform_admin(
         db, principal, tenant_id=tenant_id, agent_id=agent_id, org_unit_id=org_unit_id)
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
+
+
+@router.get("/tenants/{tenant_id}/sessions/{session_id}/memory-snapshot", response_model=MemorySnapshotView)
+def get_memory_snapshot(tenant_id: UUID, session_id: UUID, principal: Principal = Depends(get_principal),
+                        db: Session = Depends(get_database_session)):
+    """The session's memory index snapshot status. Only the session's owner may read it."""
+    return MemorySnapshotView(**snapshots.snapshot_status(db, principal, tenant_id, session_id))
+
+
+@router.post("/tenants/{tenant_id}/sessions/{session_id}/memory-snapshot/refresh", status_code=204)
+def refresh_memory_snapshot(tenant_id: UUID, session_id: UUID, principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)):
+    """Rebuild the session's memory index from current memory on the next Run."""
+    snapshots.refresh_snapshot(db, principal, tenant_id, session_id)
+    return Response(status_code=204)
 
 
 @router.post("/tenants/{tenant_id}/sessions/{session_id}/runs", response_model=RunView, status_code=202)

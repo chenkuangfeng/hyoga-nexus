@@ -6,6 +6,25 @@ from sqlalchemy import create_engine, text
 from nexus_platform.persistence.models import Base
 
 
+def _is_keyword_index(item):
+    """FTS5 virtual tables and their shadow tables (memory_fts*) are created by the migration and by
+    the metadata DDL event on SQLite; they are not ORM mappings, so schema comparison ignores them."""
+    parts = item if isinstance(item, (list, tuple)) else [item]
+    return any(str(getattr(part, 'name', part)).startswith('memory_fts') for part in parts)
+
+
+def _unmapped_differences(connection):
+    differences = []
+    for op in compare_metadata(MigrationContext.configure(connection), Base.metadata):
+        if isinstance(op, list):
+            kept = [inner for inner in op if not _is_keyword_index(inner)]
+            if kept:
+                differences.append(kept)
+        elif not _is_keyword_index(op):
+            differences.append(op)
+    return differences
+
+
 def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
     url = "sqlite:///" + str(tmp_path / "platform.db")
     monkeypatch.setenv("NEXUS_DATABASE_URL", url)
@@ -22,7 +41,7 @@ def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
             )
         }
         assert {"users", "tenant_memberships", "agent_versions", "runs", "run_events", "outbox_records"} <= tables
-        assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
+        assert _unmapped_differences(connection) == []
     engine.dispose()
 
     command.downgrade(config, "base")

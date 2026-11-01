@@ -1,4 +1,5 @@
 """Native user preferences, owned memory publication and durable runtime corrections."""
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, Header
@@ -36,6 +37,12 @@ class MemoryRestore(BaseModel):
     """Restore a historical version without overwriting newer history."""
     version: int = Field(ge=1)
     expected_version: int = Field(ge=1)
+
+
+class MemoryAvailability(BaseModel):
+    """Enable or disable an entry, and set or clear its validity end. Omitted fields are left unchanged."""
+    enabled: bool | None = None
+    valid_until: datetime | None = None
 
 
 @router.get('/settings')
@@ -83,6 +90,17 @@ def restore_memory(tenant_id: UUID, entry_id: UUID, body: MemoryRestore,
                    principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Append a restored version only when the expected current version still matches."""
     return memory.restore(db, principal, tenant_id, entry_id, body.version, body.expected_version)
+
+
+@router.patch('/memory/{entry_id}')
+def update_memory_availability(tenant_id: UUID, entry_id: UUID, body: MemoryAvailability,
+                               principal: Principal = Depends(get_principal),
+                               db: Session = Depends(get_database_session)):
+    """Enable/disable an owned entry or set its validity end; archiving stays a separate action."""
+    from nexus_memory.ports import UNSET
+    valid_until: Any = body.valid_until if 'valid_until' in body.model_fields_set else UNSET
+    enabled = body.enabled if 'enabled' in body.model_fields_set else None
+    return memory.set_availability(db, principal, tenant_id, entry_id, enabled=enabled, valid_until=valid_until)
 
 
 @router.delete('/memory/{entry_id}')

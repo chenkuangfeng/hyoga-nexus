@@ -5,4 +5,5 @@ from typing import Literal, Protocol
 
 class MemoryDraftPort(Protocol):
     """Propose a memory change for review; this operation does not publish long-term memory."""
-    async def propose(self, kind: Literal['memory', 'sop'], scope: str, diff: str) -> str: ...
+    async def propose(self, kind: Literal['memory', 'sop'], scope: str, diff: str, *,
+                      entry_id: str | None = None, base_version: int | None = None) -> str: ...
