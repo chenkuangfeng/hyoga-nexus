@@ -339,7 +339,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 - 启动恢复：`owner_epoch` 小于当前值的 `started` 与执行记录转为 `unknown`，会话阻塞，不自动重放。显式解除需要用户确认或运维命令，并记录审计。
 - 忙时排队：会话已有执行中的 Run 时，新提交的 Run 以 `queued` 入队，接口返回 202，`run.queued` 事件与响应带 `queue_position`（1 表示下一个执行）。每会话排队上限 32，超限返回 409 `session_queue_full`，不写入任何记录。
 - 派发：worker 在 Run 开始前检查 FIFO 队首。不是队首、会话被 unknown 阻塞、或领取冲突时，释放 Outbox 租约并延后 2 秒再次投递，Run 保持 `queued`，不写失败事件。
-- 默认不打断。打断与转向不是提交的默认行为；用户显式取消通过取消接口完成。取消排队中的 Run 时，其 FIFO 位置由终态写入释放，后续条目前移。全局活跃会话上限 `max_concurrent_sessions` 另行提案。
+- 默认不打断。打断与转向不是提交的默认行为；用户显式取消通过取消接口完成。取消排队中的 Run 时，其 FIFO 位置由终态写入释放，后续条目前移。全局活跃会话上限 `max_concurrent_sessions`（`configs/nexus.toml [platform]`，缺省 8）：提交一个新会话时，若已有该数量的会话持有 queued、started 或 unknown 记录，返回 503 `session_capacity_exceeded`，不写入任何记录。同一会话的后续 Run 不占新名额。多进程 PostgreSQL 下计数与插入不在同一锁内，上限可能被短暂超出，需以数据库锁或计数器补齐（随 2.9）。
 
 **多租户队列**：PostgreSQL Outbox 表作为派发载体。Run 与 Outbox 记录在同一事务提交；worker 使用 `SELECT ... FOR UPDATE SKIP LOCKED` 领取，写入带过期时间的租约。队列语义为至少一次，由账本的 CAS 领取与幂等约束阻止重复执行。租约丢失或进程崩溃后，未完成的执行转为 `unknown`，不自动重放副作用。
 

@@ -1,3 +1,7 @@
 # Copy to configs/nexus.toml and fill in your local database credentials.
 [database]
 url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
+
+[platform]
+# Sessions allowed to hold queued, started or unknown work at once; new sessions beyond this get 503.
+max_concurrent_sessions = 8

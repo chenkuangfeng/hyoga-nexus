@@ -17,6 +17,33 @@ class DatabaseConfigurationError(RuntimeError):
     """A missing or invalid database setting, safe to display to an operator."""
 
 
+#: Default for ``[platform].max_concurrent_sessions``: sessions holding queued, started or unknown work.
+DEFAULT_MAX_CONCURRENT_SESSIONS = 8
+
+
+def max_concurrent_sessions(path: Path | None = None) -> int:
+    """Return the global active-session cap from ``configs/nexus.toml [platform]``.
+
+    Absent file or key yields the default. A malformed file or a non-positive integer raises
+    DatabaseConfigurationError so that a typo cannot silently lift the cap.
+    """
+    target = path or Path.cwd() / "configs" / "nexus.toml"
+    if not target.exists():
+        return DEFAULT_MAX_CONCURRENT_SESSIONS
+    try:
+        with target.open("rb") as stream:
+            data = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError):
+        raise DatabaseConfigurationError("Cannot read configs/nexus.toml: check file access and TOML syntax") from None
+    section = data.get("platform", {})
+    if not isinstance(section, dict):
+        raise DatabaseConfigurationError("configs/nexus.toml [platform] must be a table")
+    value = section.get("max_concurrent_sessions", DEFAULT_MAX_CONCURRENT_SESSIONS)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise DatabaseConfigurationError("configs/nexus.toml [platform].max_concurrent_sessions must be a positive integer")
+    return value
+
+
 def resolve_database_url(explicit_url: str | None = None) -> str:
     """Return explicit URL, configs/nexus.toml database.url, or legacy environment.
 

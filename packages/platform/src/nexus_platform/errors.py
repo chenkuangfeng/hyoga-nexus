@@ -36,6 +36,11 @@ class ServiceUnavailable(PlatformError):
     status_code = 503
 
 
+class SessionCapacityExceeded(ServiceUnavailable):
+    """The deployment already has its maximum number of active sessions; no record is written."""
+    code = "session_capacity_exceeded"
+
+
 class Unauthenticated(PlatformError):
     """No valid login session or the session expired; the client must sign in again."""
 

@@ -31,6 +31,8 @@ from nexus_platform.persistence.models.run import RunRecord
 
 #: Maximum queued (not yet claimed) admissions per session. Matches Hermes' ADMISSION_QUEUE_MAX.
 ADMISSION_QUEUE_MAX = 32
+#: Statuses that hold a deployment-wide session slot: work waiting, executing, or blocked.
+_SLOT_STATUSES = ("queued", "started", "unknown")
 
 
 class LedgerError(RuntimeError):
@@ -55,6 +57,12 @@ class QueueFull(LedgerError):
     """The session already holds ``ADMISSION_QUEUE_MAX`` queued admissions."""
 
     code = "queue_full"
+
+
+class CapacityFull(LedgerError):
+    """The deployment already has ``max_sessions`` sessions holding work; a new session is refused."""
+
+    code = "session_capacity_exceeded"
 
 
 class NotUnknown(LedgerError):
@@ -123,6 +131,7 @@ def require_epoch(db: Session, epoch: int) -> None:
 
 def enqueue(
     db: Session, *, session_id: UUID, run_id: UUID, admission_id: UUID, now: datetime,
+    max_sessions: int | None = None,
 ) -> AdmissionView:
     """Append an admission to the session FIFO as ``queued``.
 
@@ -130,6 +139,10 @@ def enqueue(
     finishes and recovery belong to a process generation. Raises ``QueueFull`` when the
     session already has ``ADMISSION_QUEUE_MAX`` queued rows. The count and insert run in
     the caller's write transaction, so the cap holds under concurrent submissions.
+
+    When ``max_sessions`` is given and this session holds no slot yet, the submission opens a
+    new slot. It raises ``CapacityFull`` if ``max_sessions`` distinct sessions already hold one.
+    Only submissions check the cap, so a session's later Runs never take a second slot.
     """
     queued = db.scalar(select(func.count()).select_from(SessionAdmissionRecord).where(
         SessionAdmissionRecord.session_id == session_id,
@@ -137,6 +150,17 @@ def enqueue(
     )) or 0
     if queued >= ADMISSION_QUEUE_MAX:
         raise QueueFull(f"session {session_id} has {queued} queued admissions")
+    if max_sessions is not None:
+        holding = db.scalar(select(func.count()).select_from(SessionAdmissionRecord).where(
+            SessionAdmissionRecord.session_id == session_id,
+            SessionAdmissionRecord.status.in_(_SLOT_STATUSES),
+        )) or 0
+        if holding == 0:
+            active = db.scalar(select(func.count(func.distinct(SessionAdmissionRecord.session_id))).where(
+                SessionAdmissionRecord.status.in_(_SLOT_STATUSES),
+            )) or 0
+            if active >= max_sessions:
+                raise CapacityFull(f"{active} sessions already hold work (limit {max_sessions})")
     row = SessionAdmissionRecord(
         admission_id=admission_id, session_id=session_id, run_id=run_id,
         status="queued", owner_epoch=None, created_at=now, updated_at=now,
