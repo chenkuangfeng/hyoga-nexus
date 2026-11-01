@@ -52,3 +52,25 @@
 ## 收尾
 
 - [ ] 归档本变更（仅在全部已确认项完成且验证通过后）。
+
+## 第二轮补充（对应 proposal.md 补充一节、design.md 第八节）
+
+确认项新增：
+- [ ] 确认是否现在增加 `episodic` 类型（默认否）。
+- [ ] 确认 `capacity_policy` 默认值为 `reject`。
+
+阶段一追加：
+- [ ] 1.12 迁移：`memory_drafts.origin`、`source_message_ids`，`memory_versions.source_message_ids`，`memory_entries.valid_until`、`enabled`（均可空）。迁移升降级测试。
+- [ ] 1.13 过期条目不进索引与召回；读取接口标记已过期；测试覆盖边界时刻。
+- [ ] 1.14 停用与归档分开：停用不进检索但保留版本；界面分别提供入口；测试两者互不影响。
+- [ ] 1.15 草稿与版本记录来源消息 ID；审核界面展示 origin 与来源。
+
+阶段三替换与追加：
+- [ ] 3.2' 任务表 `memory_capture_jobs` 与状态机（pending→extracted→stored→completed/failed），每步落库，幂等草稿。测试：每一步之后模拟崩溃，恢复后不产生重复草稿。
+- [ ] 3.2'' 退避与最大次数；`last_error` 与失败可见。测试：退避序列、超过次数标记失败。
+- [ ] 3.2''' 同一所有者同时只允许一个未完成任务。测试：并发领取只成功一次。
+- [ ] 3.9 `capacity_policy`：`reject` 与 `evict_auto`；`evict_auto` 只淘汰自动捕获条目并归档；测试：不淘汰手写条目，没有可淘汰时拒绝。
+- [ ] 3.10 抽取调用不带工具定义；测试：请求中无 tools 字段。
+
+另立提案（不在本变更中实施）：
+- [ ] 会话检索提案（Hermes session_search、WeKnora search_conversations 的做法）。

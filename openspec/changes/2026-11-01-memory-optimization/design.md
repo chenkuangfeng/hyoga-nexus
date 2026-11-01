@@ -110,3 +110,38 @@
 - 不做向量召回。
 - 不让记忆读取跨越所有者边界（包括空间管理员与平台管理员）。
 - 不把对话原文作为记忆存储，只存经审核的条目；草稿中的原文只保留来源 Run 与消息 ID。
+
+## 八、第二轮补充（对应 proposal.md 补充一节）
+
+### 8.1 阶段一的数据字段（追加式迁移，均可空）
+
+- `memory_drafts.origin`：`foreground`、`background`、`capture` 之一。审核界面展示。
+- `memory_drafts.source_message_ids`、`memory_versions.source_message_ids`：JSON 数组，记录抽取依据的消息 ID。原始消息仍是来源，抽取结果可以重跑，不覆盖原始消息。
+- `memory_entries.valid_until`：过期时间。到期后条目不进索引、不召回，但读取接口仍可取到（标记为已过期）。过期判断在读取时进行，不依赖后台任务。
+- `memory_entries.enabled`：默认 true。停用后不进索引与召回，保留版本。归档（`active=false`）仍表示退出使用并保留版本。两者语义分开，界面分别提供入口。
+
+### 8.2 阶段三的任务状态机
+
+替换 3.2 的简单租约，改为表 `memory_capture_jobs`：
+
+- 状态：`pending` → `extracted` → `stored` → `completed`；任一步可转 `failed`。
+- 每一步落库后才进入下一步，崩溃后从最后一步恢复，不重复写入草稿（草稿按 `(job_id, index)` 幂等）。
+- 租约：领取时写 `lease_owner`、`lease_expires_at`；执行中续租；租约过期可被接管。
+- 失败：`attempt_count` 递增，退避 `next_retry_at = now + min(2^n × 基数, 上限)`；超过最大次数标记 `failed`，错误写入 `last_error`，界面可见。
+- 同一所有者同时只允许一个未完成的抽取任务。
+
+### 8.3 容量策略
+
+- `capacity_policy`：`reject`（默认）或 `evict_auto`。
+- `evict_auto` 只淘汰 `origin=capture` 且最早创建的条目，且不淘汰用户手写或已审核的内容；淘汰即归档，不删除版本。
+- 若没有可淘汰的自动条目，仍返回 `memory_budget_exceeded`。
+
+### 8.4 抽取调用的隔离
+
+- 抽取模型调用不提供工具定义，也不接收其他会话的内容。
+- 输入只包括：本次新消息、与之相关的已有条目（最多 15 条）、抽取提示。
+- 输出只能是结构化动作，经阶段一的全部检查后生成草稿。
+
+### 8.5 会话检索（另立提案）
+
+本变更不实现。前提约束：检索范围限定为本人会话；压缩摘要不作为检索结果；结果进入模型上下文时使用与 `<user_memory>` 相同的数据包裹。
