@@ -8,7 +8,8 @@ import signal
 import socket
 import threading
 
-from nexus_platform.configuration import DatabaseConfigurationError, resolve_database_url
+from nexus_platform.configuration import DatabaseConfigurationError, model_connection_pool, resolve_database_url
+from nexus_runtimes.native.models.network import configure_connection_pool
 from nexus_platform.persistence.database import create_database_engine, session_factory
 from nexus_core.platform import utc_now
 from nexus_platform.runs import session_ledger as ledger
@@ -57,6 +58,10 @@ def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> b
 
 
 def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = False) -> None:
+    pool = model_connection_pool()
+    configure_connection_pool(max_connections=pool.max_connections,
+                              max_keepalive_connections=pool.max_keepalive_connections,
+                              keepalive_expiry=pool.keepalive_expiry_seconds)
     engine = create_database_engine(database_url)
     factory = session_factory(engine)
     worker_id = f"{socket.gethostname()}:{os.getpid()}"

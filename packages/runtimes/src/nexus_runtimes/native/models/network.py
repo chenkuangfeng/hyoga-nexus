@@ -87,6 +87,19 @@ class PinnedTransport(httpx.AsyncBaseTransport):
 #: transport instead.
 _POOLS: dict[tuple[str, str, int], tuple[httpx.AsyncHTTPTransport, asyncio.AbstractEventLoop]] = {}
 _POOLS_LOCK = threading.Lock()
+#: Limits applied when a pool for an origin is first created. httpx's own defaults until configured.
+_POOL_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=5.0)
+
+
+def configure_connection_pool(*, max_connections: int, max_keepalive_connections: int, keepalive_expiry: float) -> None:
+    """Set the limits for pools created from now on. Call once at worker start, before any Run.
+
+    Pools that already exist keep their limits until the process restarts.
+    """
+    global _POOL_LIMITS
+    _POOL_LIMITS = httpx.Limits(max_connections=max_connections,
+                                max_keepalive_connections=max_keepalive_connections,
+                                keepalive_expiry=keepalive_expiry)
 
 
 def shared_connection_pool(base_url: str) -> httpx.AsyncHTTPTransport | None:
@@ -103,7 +116,7 @@ def shared_connection_pool(base_url: str) -> httpx.AsyncHTTPTransport | None:
     with _POOLS_LOCK:
         entry = _POOLS.get(key)
         if entry is None:
-            entry = (httpx.AsyncHTTPTransport(trust_env=False, retries=0), loop)
+            entry = (httpx.AsyncHTTPTransport(trust_env=False, retries=0, limits=_POOL_LIMITS), loop)
             _POOLS[key] = entry
         pool, owner = entry
     return pool if owner is loop else None

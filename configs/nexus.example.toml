@@ -5,3 +5,9 @@ url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
 [platform]
 # Sessions allowed to hold queued, started or unknown work at once; new sessions beyond this get 503.
 max_concurrent_sessions = 8
+
+[model_connection_pool]
+# Per provider origin, shared by worker Native Runs. Applied when the worker starts.
+max_connections = 100
+max_keepalive_connections = 20
+keepalive_expiry_seconds = 5.0

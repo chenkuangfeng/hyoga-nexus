@@ -156,7 +156,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **压缩**：优先完整保留最近的消息与工具交换；较早内容压缩为标注过的局部摘录；仍装不下则显式失败 `model_context_exceeded`。
 - **工具顺序**：同一回合内按模型声明顺序执行，每个调用独立记录 invocation；有副作用的工具之间不并发。
 - **取消与等待**：取消信号在模型流、工具和沙箱调用的每个等待点检查；`ask_user` 类工具产生 `wait_input`，释放 worker，回答后在同一 Run 中幂等继续。
-- **执行模型**：每个 Run 新建执行对象（引擎、工具网关、运行上下文），Run 结束即释放；不按会话缓存执行对象。工具注册表是进程级共享对象（定义不含 Run 状态，存储经 `ToolContext.services` 按调用传入）。模型客户端每 Run 构建，凭据每 Run 解析并只用于该次调用；进程内按来源共享 HTTP 连接池（不含凭据），地址校验仍逐请求执行。worker 使用单一事件循环，连接池只在创建它的循环中使用。参考 deer-flow 与 dify-agent。
+- **执行模型**：每个 Run 新建执行对象（引擎、工具网关、运行上下文），Run 结束即释放；不按会话缓存执行对象。工具注册表是进程级共享对象（定义不含 Run 状态，存储经 `ToolContext.services` 按调用传入）。模型客户端每 Run 构建，凭据每 Run 解析并只用于该次调用；进程内按来源共享 HTTP 连接池（不含凭据），地址校验仍逐请求执行；池的上限由 `configs/nexus.toml [model_connection_pool]` 配置（`max_connections`、`max_keepalive_connections`、`keepalive_expiry_seconds`，缺省与 httpx 默认值相同），worker 启动时生效。worker 使用单一事件循环，连接池只在创建它的循环中使用。参考 deer-flow 与 dify-agent。
 - **会话状态**：会话状态是版本化的 JSON 快照（v2，只含数据，不含配置、客户端、租约句柄、令牌或模型对象）。Run 结束时（成功、失败、取消均要）在 `finally` 中保存终态快照；未执行的工具调用标记为 `interrupted`，使下一轮历史合法。快照读取失败、版本未知或状态损坏时拒绝该 Run，不静默丢弃历史。
 - **恢复**：恢复前校验快照版本、会话/空间/主体、Agent/模型版本、资源授权、审批消费状态与已完成的 invocation，再从挂起点继续。不依赖进程内锁、回调、SDK 句柄或临时资源。进程崩溃后，上一代际未完成的执行转为 `unknown`，会话阻塞，需显式解除（见 2.12）。
 - **钩子**：agent/turn/model/tool 的 before/after 类型化钩子，只接收稳定元数据 DTO，不暴露 locals、SDK 对象或凭据；异常隔离，超时忽略。

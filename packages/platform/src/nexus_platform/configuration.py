@@ -6,6 +6,7 @@ and configuration errors intentionally omit parser details and secret values.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 import tomllib
 
@@ -42,6 +43,55 @@ def max_concurrent_sessions(path: Path | None = None) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise DatabaseConfigurationError("configs/nexus.toml [platform].max_concurrent_sessions must be a positive integer")
     return value
+
+
+#: Defaults match httpx's transport defaults, so an absent section changes nothing.
+DEFAULT_POOL_MAX_CONNECTIONS = 100
+DEFAULT_POOL_MAX_KEEPALIVE = 20
+DEFAULT_POOL_KEEPALIVE_EXPIRY = 5.0
+MAX_POOL_KEEPALIVE_EXPIRY = 300.0
+
+
+@dataclass(frozen=True)
+class ConnectionPoolSettings:
+    """Limits for the per-origin provider connection pool used by worker Native Runs."""
+    max_connections: int = DEFAULT_POOL_MAX_CONNECTIONS
+    max_keepalive_connections: int = DEFAULT_POOL_MAX_KEEPALIVE
+    keepalive_expiry_seconds: float = DEFAULT_POOL_KEEPALIVE_EXPIRY
+
+
+def model_connection_pool(path: Path | None = None) -> ConnectionPoolSettings:
+    """Read ``configs/nexus.toml [model_connection_pool]``; absent file or keys mean defaults.
+
+    Invalid values raise DatabaseConfigurationError so that a typo cannot silently change pooling.
+    Keep-alive connections may not exceed the total connection limit.
+    """
+    target = path or Path.cwd() / "configs" / "nexus.toml"
+    if not target.exists():
+        return ConnectionPoolSettings()
+    try:
+        with target.open("rb") as stream:
+            data = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError):
+        raise DatabaseConfigurationError("Cannot read configs/nexus.toml: check file access and TOML syntax") from None
+    section = data.get("model_connection_pool", {})
+    if not isinstance(section, dict):
+        raise DatabaseConfigurationError("configs/nexus.toml [model_connection_pool] must be a table")
+
+    def integer(key: str, default: int, minimum: int) -> int:
+        value = section.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise DatabaseConfigurationError(f"configs/nexus.toml [model_connection_pool].{key} must be an integer >= {minimum}")
+        return value
+
+    max_connections = integer("max_connections", DEFAULT_POOL_MAX_CONNECTIONS, 1)
+    max_keepalive = integer("max_keepalive_connections", DEFAULT_POOL_MAX_KEEPALIVE, 0)
+    if max_keepalive > max_connections:
+        raise DatabaseConfigurationError("configs/nexus.toml [model_connection_pool].max_keepalive_connections cannot exceed max_connections")
+    expiry = section.get("keepalive_expiry_seconds", DEFAULT_POOL_KEEPALIVE_EXPIRY)
+    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not 0 < expiry <= MAX_POOL_KEEPALIVE_EXPIRY:
+        raise DatabaseConfigurationError(f"configs/nexus.toml [model_connection_pool].keepalive_expiry_seconds must be > 0 and <= {MAX_POOL_KEEPALIVE_EXPIRY:g}")
+    return ConnectionPoolSettings(max_connections, max_keepalive, float(expiry))
 
 
 def resolve_database_url(explicit_url: str | None = None) -> str:
