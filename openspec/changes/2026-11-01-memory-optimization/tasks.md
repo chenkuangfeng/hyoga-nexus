@@ -89,3 +89,9 @@
 - [ ] 9.j 发布、停用、归档在同一 `BEGIN IMMEDIATE` 事务内更新 `memory_fts`；测试：FTS 写入失败时发布回滚。
 - [ ] 9.k 所有检索测试（9.8、9.i）在 SQLite 上运行；PostgreSQL 上运行同一套用例，有条件时执行。
 - [ ] 9.l 时间比较通过 SQLAlchemy 绑定参数（UTC）；测试：不同时区写入的 `valid_until` 过期判断正确。
+
+## 第九节补充二：检索细节（design.md 9.4、9.11，参考 WeKnora）
+
+- [ ] 9.m `memory_fts` 使用 contentless 形式（`content=''`、`contentless_delete=1`）；启动探测 SQLite 版本 ≥ 3.43 与 FTS5 模块。测试：删除按 `rowid` 生效；版本不足时回退 `LIKE` 并记录降级。
+- [ ] 9.n 过采样与关键词阈值：候选数 `max(items×5, 25)`（上限 100）；低于阈值的 BM25 候选丢弃。阈值在个人记忆样例上标定后记录依据。测试：阈值以下的候选不返回。
+- [ ] 9.o 加权 RRF 与 [0,1] 归一化；单通道时使用同列表相对 BM25。测试：合并后分数在 [0,1]，单通道不走 RRF。

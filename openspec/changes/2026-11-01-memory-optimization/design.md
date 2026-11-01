@@ -199,10 +199,12 @@
 
 1. **授权与范围**：`owner = 当前主体`，过滤 `enabled`、`active`、未过期。空范围直接返回空结果，不进入后续步骤。授权条件与 L3 查询写在同一条 SQL 中，不做全局召回后再过滤。
 2. **通道**：本阶段只有词法通道，在范围内查询 L3 索引。查询词经应用侧分词后各自加引号，以 AND 连接；单字查询回退为授权范围内的 `LIKE`。
-3. **合并**：多通道时使用 RRF（倒数排名融合）合并，不做分数归一化。每个结果保留通道、名次、版本号，供诊断与审计。
-4. **预算裁剪**：默认最多 5 条、600 字符。超出时按排名截断，并返回被省略的数量。
-5. **返回形式**：每条包含 `[ID:n]` 句柄、标题、版本、一段摘要片段。正文仍需 `read_memory(id)` 获取。不返回草稿。
-6. **注入**：召回块放在消息列表末尾，使用 `<user_memory>` 包裹，不放入冻结的系统前缀，以保持前缀缓存。索引（目录）仍是会话级快照，与召回块分开。
+3. **过采样**：通道内先取 `max(budget.items × 5, 25)` 条候选（上限 100），再进入合并与裁剪，为去重与后续重排留出空间。
+4. **阈值**：关键词通道设最低 BM25 阈值（`memory_keyword_threshold`，初值待按个人记忆语料标定）；低于阈值的候选丢弃，不进入合并。阈值与语料相关，不直接沿用其他项目的默认值。
+5. **合并**：多通道时使用加权 RRF（`score = Σ w / (k + rank)`，`k = 60`，各通道权重可配置）。合并后分数除以理论最大值，使分数落在 [0, 1]，便于阈值与展示。每个结果保留通道、名次、版本号，供诊断与审计。本阶段只有词法通道时，直接使用 BM25 相对分数（同一列表内除以最高分），不走 RRF。
+6. **预算裁剪**：默认最多 5 条、600 字符。超出时按排名截断，并返回被省略的数量。
+7. **返回形式**：每条包含 `[ID:n]` 句柄、标题、版本、一段摘要片段。正文仍需 `read_memory(id)` 获取。不返回草稿。
+8. **注入**：召回块放在消息列表末尾，使用 `<user_memory>` 包裹，不放入冻结的系统前缀，以保持前缀缓存。索引（目录）仍是会话级快照，与召回块分开。
 
 ### 9.5 索引与召回的分工
 
@@ -261,15 +263,17 @@
 - 同一份 `tokens` 在两种数据库中使用：SQLite 用 `unicode61` 分词器的 FTS5 表；PostgreSQL 用 `to_tsvector('simple', tokens)` 的 GIN 索引。两边命中行为一致。
 
 **存储表（SQLite）**：
-- `memory_fts`：FTS5 虚拟表，列为 `entry_id UNINDEXED`、`version UNINDEXED`、`tokens`，分词器 `unicode61`。
+- `memory_fts`：FTS5 虚拟表，**contentless 形式**：`content=''`、`contentless_delete=1`，分词器 `unicode61`，列为 `tokens`、`entry_id`、`version`。不存原文，正文通过 `JOIN memory_versions` 按 `rowid` 取回，避免重复存储。
+- 行的 `rowid` 等于对应 `memory_versions` 行的 `rowid`，删除按 `rowid` 进行（`contentless_delete=1` 支持删除）。
 - 发布、停用、归档都在同一个 `BEGIN IMMEDIATE` 事务内写入或删除 `memory_fts` 行。FTS5 支持事务，失败整体回滚。
-- 删除按 `entry_id` 进行，数据量为个人记忆规模，全表扫描可接受；若条目数超过数千，改为保存 `rowid` 映射后按 `rowid` 删除。
+- 需要 SQLite ≥ 3.43（`contentless_delete`）。启动时探测版本与 FTS5 模块；不满足时回退 `LIKE`（见下）。
 
 **查询（SQLite）**：
 - 授权条件、`active`、`enabled`、未过期、`current_version` 与 FTS 匹配写在同一条 SQL 中（见 9.4）。
 - 查询词由应用侧生成，每个词加双引号，防止 FTS5 语法注入（如 `OR`、`NEAR`、列过滤符）。
-- 排序用 `bm25(memory_fts)`。
-- 启动时检查 FTS5 可用性（`PRAGMA compile_options` 或建表探测）。不可用时整体回退为授权范围内的 `LIKE`，并记录降级事件，不影响正确性。
+- 排序用 `bm25(memory_fts)`，阈值与过采样见 9.4。BM25 在 FTS5 中为负数，取相反数后使用。
+- 启动时检查 FTS5 模块与 SQLite 版本（建表探测与版本查询）。不可用时整体回退为授权范围内的 `LIKE`，并记录降级事件，不影响正确性。
+- 检索 SQL 通过 `JOIN` 取回正文：`memory_fts` 与 `memory_versions` 按 `rowid` 连接，授权条件与 `current_version` 同样写在该 SQL 中。
 
 **时间与布尔（SQLite 特有陷阱）**：
 - `valid_until` 与 `now` 的比较必须通过 SQLAlchemy 的 DateTime 类型绑定参数，统一为 UTC；禁止在 SQL 字符串中拼接时间文本。SQLite 不做时区换算，字符串比较会在时区不一致时出错。
