@@ -8,6 +8,7 @@ from nexus_core.runtime import RuntimeOutcome
 from nexus_platform.persistence.models import InputRequestRecord, RunRecord, ToolInvocationRecord
 from nexus_platform.runs.service import append_event, transition_run
 from nexus_platform.authz.audit import audit
+from nexus_platform.memory import capture
 from nexus_platform.sessions import snapshot
 
 #: Outcomes that end a Run for good. Waiting states are resumed later and keep no terminal snapshot.
@@ -32,6 +33,9 @@ def _finish(db: Session, run: RunRecord, outcome: RuntimeOutcome) -> None:
     if outcome.status in TERMINAL_OUTCOMES:
         _classify_unfinished_calls(db, run)
         snapshot.record_terminal(db, run.session_id, run_id=run.id, status=outcome.status, error_code=outcome.error_code)
+    if outcome.status == 'completed':
+        # Automatic capture queues a job only for owners who opted in; off by default (stage 3).
+        capture.enqueue_for_run(db, run)
 
 
 def _classify_unfinished_calls(db: Session, run: RunRecord) -> None:

@@ -129,6 +129,10 @@ class SqlMemoryRepository:
         singles = [t for t in tokens if memtext.is_single_cjk(t)]
         if multi and self._fts_available():
             return self._search_fts(tenant_id, owner_id, multi, singles, now, limit)
+        if multi and self.db.get_bind().dialect.name == 'sqlite':
+            # SQLite without the FTS5 table: results are still correct but substring-based. Record the
+            # degradation so operators can see that the keyword index is not in use.
+            self.audit(tenant_id, owner_id, 'memory.search_degraded', 'memory', '', {'reason': 'fts5_unavailable'})
         return self._search_like(tenant_id, owner_id, tokens, now, limit)
 
     # --- writes ------------------------------------------------------------

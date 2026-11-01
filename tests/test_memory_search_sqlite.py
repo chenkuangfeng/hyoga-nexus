@@ -208,3 +208,18 @@ def test_failed_index_write_rolls_back_the_whole_publication(database, monkeypat
         assert db.query(MemoryVersionRecord).count() == 0
         assert db.execute(sql('SELECT count(*) FROM memory_fts')).scalar() == 0
         assert hits(db, tenant.id, run.principal_id, 'durian') == []
+
+
+def test_search_without_the_fts_table_is_audited_as_degraded(database, monkeypatch):  # noqa: F811
+    """9.h: when the FTS5 index is not available, keyword search falls back to LIKE and records why."""
+    from nexus_platform.persistence.models import AuditRecord
+
+    _, tenant, _, run, _ = stack(database)
+    monkeypatch.setattr(SqlMemoryRepository, '_fts_available', lambda self: False)
+    with database() as db:
+        with db.begin():
+            SqlMemoryRepository(db).search(tenant.id, run.principal_id, ['deploy'], NOW, 5)
+    with database() as db:
+        rows = db.query(AuditRecord).filter(AuditRecord.action == 'memory.search_degraded').all()
+    assert len(rows) == 1
+    assert rows[0].metadata_json == {'reason': 'fts5_unavailable'}

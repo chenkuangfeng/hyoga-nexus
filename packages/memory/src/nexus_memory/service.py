@@ -91,13 +91,20 @@ def list_memory(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID) -> dict
 
 
 def read(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, entry_id: UUID,
-         version: int | None = None) -> dict[str, Any]:
-    """Return an owned published version with source Run/Draft metadata; version 0/None means current."""
+         version: int | None = None, now: datetime | None = None) -> dict[str, Any]:
+    """Return an owned published version with source Run/Draft metadata; version 0/None means current.
+
+    Expired or disabled entries are still readable by id (so a user can see what was excluded), but the
+    result says so: `expired` and `enabled` are reported and never hidden.
+    """
+    now = utc(now or datetime.now(timezone.utc))
     entry = _owned(repo, tenant_id, owner_id, entry_id)
     selected = _version(repo, entry.id, version or entry.current_version)
     repo.audit(tenant_id, owner_id, 'memory.read', 'memory', str(entry.id), {'version': selected.version})
+    expired = entry.valid_until is not None and utc(entry.valid_until) <= now
     return {'id': str(entry.id), 'title': entry.title, 'kind': entry.kind, 'content': selected.content,
-            'version': selected.version, 'source_run_id': str(selected.source_run_id)}
+            'version': selected.version, 'source_run_id': str(selected.source_run_id),
+            'enabled': entry.enabled, 'expired': expired}
 
 
 def read_for_run(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, entry_id: UUID,

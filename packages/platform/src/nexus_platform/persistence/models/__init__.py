@@ -23,6 +23,9 @@ from .ledger import RuntimeEpochRecord, SessionAdmissionRecord
 from .audit import AuditRecord
 from .memory import (
     SessionMemorySnapshotRecord,
+    MemoryCaptureSettingsRecord,
+    MemoryCaptureCursorRecord,
+    MemoryCaptureJobRecord,
     WorkingCheckpointRecord,
     MemoryDraftRecord,
     MemoryEntryRecord,
@@ -36,6 +39,9 @@ from .org import OrgUnitRecord, UserOrgUnitRecord, TenantOrgBindingRecord, OrgAu
 
 __all__ = [
     'SessionMemorySnapshotRecord',
+    'MemoryCaptureSettingsRecord',
+    'MemoryCaptureCursorRecord',
+    'MemoryCaptureJobRecord',
     'Base',
     'UserRecord',
     'UserIdentityRecord',

@@ -203,3 +203,17 @@ def test_unset_leaves_validity_untouched(world):
     service.set_availability(repo, owner, ws, UUID(entry['id']), enabled=False, valid_until=UNSET)
     stored = repo.entries[UUID(entry['id'])]
     assert stored.valid_until == future and stored.enabled is False
+
+
+def test_read_reports_expiry_and_disablement_without_hiding_the_content(world):
+    repo, ws, owner = world
+    gone = publish(repo, ws, owner, 'off', title='Off')
+    expired = publish(repo, ws, owner, 'old', title='Old')
+    service.set_availability(repo, owner, ws, UUID(gone['id']), enabled=False)
+    service.set_availability(repo, owner, ws, UUID(expired['id']), valid_until=NOW - timedelta(days=1))
+    off = service.read(repo, owner, ws, UUID(gone['id']), now=NOW)
+    assert off['enabled'] is False and off['expired'] is False and off['content'] == 'off'
+    old = service.read(repo, owner, ws, UUID(expired['id']), now=NOW)
+    assert old['expired'] is True and old['enabled'] is True and old['content'] == 'old'
+    fresh = publish(repo, ws, owner, 'new', title='New')
+    assert service.read(repo, owner, ws, UUID(fresh['id']), now=NOW)['expired'] is False

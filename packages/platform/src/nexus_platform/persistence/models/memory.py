@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, DDL, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, event
+from sqlalchemy import JSON, Boolean, CheckConstraint, DDL, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, event, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -151,3 +151,58 @@ class SessionMemorySnapshotRecord(Base):
     index_text: Mapped[str] = mapped_column(Text, nullable=False)
     version_key: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryCaptureSettingsRecord(Base):
+    """Owner's automatic-capture switch and capture model (openspec 2026-11-01-memory-optimization, stage 3).
+
+    Off by default. Enabling requires a memory model profile; the model is authorized on every extraction.
+    """
+    __tablename__ = 'memory_capture_settings'
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text('0'))
+    model_profile_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryCaptureCursorRecord(Base):
+    """Highest message sequence already turned into capture jobs for one session (the cursor of 4.1)."""
+    __tablename__ = 'memory_capture_cursors'
+    session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id', ondelete='CASCADE'), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    last_processed_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryCaptureJobRecord(Base):
+    """One extraction task. States: pending -> extracted -> stored -> completed; any step may fail.
+
+    Each step commits with its effects (actions, drafts, cursor), so a crash resumes at the last committed
+    step. `stored_count` makes draft creation idempotent: a restart continues after the drafts already made.
+    """
+    __tablename__ = 'memory_capture_jobs'
+    __table_args__ = (
+        Index('ix_memory_capture_jobs_owner_state', 'tenant_id', 'owner_user_id', 'state'),
+        CheckConstraint("state IN ('pending','extracted','stored','completed','failed')",
+                        name='ck_memory_capture_jobs_state'),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id', ondelete='CASCADE'), nullable=False)
+    source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), nullable=False)
+    from_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    through_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    actions: Mapped[list[Any] | None] = mapped_column(JSON)
+    stored_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
