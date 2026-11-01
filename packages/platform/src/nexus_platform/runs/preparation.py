@@ -32,6 +32,7 @@ from nexus_platform.sessions.projection_cache import ProjectionCache
 from nexus_platform.authz.audit import audit
 from nexus_platform.agents.access import require_agent_permission
 from .context import ExecutionContext
+from .summaries import effective_summary
 from .messages import _history_allowed
 from .completion import _finish
 
@@ -129,7 +130,7 @@ class ExecutionPreparer:
                 rows = HISTORY_CACHE.get_or_build(run.session_id, watermark, lambda: _message_rows(db, run.session_id))
                 # A usable summary replaces every row up to its cut point. Those rows are neither
                 # authorized nor materialized (P8 windowing); the cut is used only if all of them are visible.
-                summary = db.get(ContextSummaryRecord, run.session_id)
+                summary = effective_summary(db, run.session_id)
                 cut = 0
                 if summary and summary.tenant_id == run.tenant_id and summary.source_run_id in allowed_runs:
                     covered = [row for row in rows if row['sequence'] <= summary.through_sequence]
@@ -142,6 +143,12 @@ class ExecutionPreparer:
                     if row['run_id'] is not None and UUID(row['run_id']) not in allowed_runs:
                         continue
                     metadata = row['runtime_metadata']
+                    # Run-scoped replay (P10): tool exchanges of earlier Runs stay in storage for display
+                    # but are not replayed to the model. This Run's exchanges are kept whole, since waits,
+                    # approvals and crash recovery depend on call/result pairing.
+                    is_tool_exchange = row['role'] == 'tool' or bool(metadata.get('tool_calls'))
+                    if is_tool_exchange and row['run_id'] != str(run.id):
+                        continue
                     if metadata.get('source_run_id'):
                         source_id = UUID(metadata['source_run_id'])
                         if source_id not in source_checks:

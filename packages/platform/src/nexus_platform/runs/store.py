@@ -24,6 +24,7 @@ from nexus_platform.persistence.models import (
 from nexus_platform.runs.service import append_event, authorize_run_resource
 from nexus_platform.authz.audit import audit
 from .context import ExecutionContext
+from .summaries import append_summary
 from .messages import add_message
 from .messages import _history_allowed
 from .completion import _finish
@@ -184,13 +185,9 @@ class DurableRuntimeStore:
             source = db.get(MessageRecord, UUID(source_id))
             if not source or source.session_id != run.session_id:
                 raise RuntimeFault('context_source_invalid')
-            record = db.get(ContextSummaryRecord, run.session_id)
-            if not record:
-                record = ContextSummaryRecord(session_id=run.session_id, tenant_id=run.tenant_id,
-                    source_run_id=run.id, through_sequence=source.sequence, content=summary[:8000])
-                db.add(record)
-            elif source.sequence >= record.through_sequence:
-                record.source_run_id, record.through_sequence, record.content = run.id, source.sequence, summary[:8000]
+            # Append-only (P11): a new row supersedes the effective one; existing rows are never rewritten.
+            append_summary(db, session_id=run.session_id, tenant_id=run.tenant_id, source_run_id=run.id,
+                           through_sequence=source.sequence, content=summary)
             audit(db, run.tenant_id, run.principal_id, 'context.summary_saved', 'session', str(run.session_id))
 
     async def drain_steer(self) -> list[ModelMessage]:

@@ -48,12 +48,12 @@
 
 ## 四之二、消息存储与回放（P10、P11，已确认）
 
-- [ ] P10：准备阶段区分当前 Run 与历史 Run；历史 Run 只取 user 与最终 assistant 行。测试：同一 Run 内多步工具调用的上下文与改造前逐条一致；历史 tool 行不出现在模型输入中。
-- [ ] P10：等待审批、等待输入、崩溃恢复后，当前 Run 的 call/result 配对完整。
-- [ ] P10：系统提示要求最终回答保留关键事实；跨 Run 的持久状态写入 `session_checkpoints`。
-- [ ] P11：迁移 `context_summaries` 为追加式摘要表（`supersedes_id`、`through_sequence`、`created_run_id`）。测试：追加后有效摘要取值正确；旧摘要可查。
-- [ ] 评测：构造"追问依赖上一轮工具结果"的样例，比较改造前后正确率；下降则先补充回答要求，再决定上线。
-- [ ] 界面展示从 `messages` 与 `tool_invocations` 派生，不另存 JSON 副本。
+- [x] P10：准备阶段对历史 Run 跳过 tool 行与带 `tool_calls` 的 assistant 行；当前 Run 的全部行保留。测试：`tests/test_run_scoped_replay.py`（当前 Run 内完整可见，后续 Run 不回放工具结果、保留最终回答）；`test_multitool_bad_arguments_hooks_and_session_history` 的断言已按新规则更新。
+- [x] P10 等待与恢复：当前 Run 的 call/result 配对保持完整（同一 Run 内回放不变，既有等待与恢复用例通过）。
+- [ ] P10：系统提示要求最终回答保留关键事实；跨 Run 的持久状态写入 `session_checkpoints`。（提示词与写入规则未改动，待定。）
+- [x] P11：迁移 `context_summaries` 为追加式（迁移 `b2f6a1d8c3e5`，`supersedes_id`、`id` 主键、`created_at`）。旧数据迁入为第一版本，降级只保留有效摘要。测试：`tests/test_summary_chain.py`（链式追加、旧行保留、不前移的摘要不写入、迁移升降级）。
+- [ ] 评测：构造"追问依赖上一轮工具结果"的样例，比较改造前后正确率；下降则先补充回答要求，再决定上线。（需要真实模型，未执行。）
+- [x] 界面展示从 `messages` 与 `tool_invocations` 派生，不另存 JSON 副本（未新增存储，符合规格）。
 
 ## 五、并行只读工具
 

@@ -1,6 +1,7 @@
 """A usable summary replaces the rows it covers in the next Run's model input (P8 windowing)."""
 from nexus_core.runtime import ModelChunk
-from nexus_platform.persistence.models import ContextSummaryRecord, MessageRecord
+from nexus_platform.persistence.models import MessageRecord
+from nexus_platform.runs.summaries import append_summary, effective_summary
 from nexus_platform.runs.service import create_run
 from nexus_platform.sessions.service import create_session
 from nexus_worker.__main__ import run_once
@@ -12,8 +13,8 @@ from test_native_runtime import FakeModel, stack
 def _summarize(database, session, tenant, source_run_id, through_sequence, content):
     with database() as db:
         with db.begin():
-            db.add(ContextSummaryRecord(session_id=session.id, tenant_id=tenant.id, source_run_id=source_run_id,
-                                        through_sequence=through_sequence, content=content))
+            append_summary(db, session_id=session.id, tenant_id=tenant.id, source_run_id=source_run_id,
+                           through_sequence=through_sequence, content=content)
 
 
 def test_summary_replaces_covered_rows_and_keeps_later_rows(database):
@@ -52,7 +53,7 @@ def test_summary_is_ignored_when_a_covered_run_is_no_longer_visible(database):
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[ModelChunk('text', text='Elsewhere answer')]]))
     with database() as db:
         with db.begin():
-            summary = db.get(ContextSummaryRecord, session.id)
+            summary = effective_summary(db, session.id)
             summary.source_run_id = other_session_run
     with database() as db:
         create_run(db, principal, tenant.id, session.id, message='Second question', idempotency_key='second')

@@ -130,7 +130,8 @@ def test_multitool_bad_arguments_hooks_and_session_history(database):
     next_model = FakeModel([[ModelChunk('text', text='Again')]])
     run_once(database, 'worker', model_factory=lambda _: next_model, registry_factory=lambda _: registry(echo))
     assert any(message.content == 'Finished' for message in next_model.requests[0].messages)
-    assert any(message.role == 'tool' and message.tool_call_id for message in next_model.requests[0].messages)
+    # Run-scoped replay (P10): earlier Runs' tool exchanges are stored but not replayed to the model.
+    assert not any(message.role == 'tool' for message in next_model.requests[0].messages)
     assert run_row(database, second_id).status == 'completed'
 
 

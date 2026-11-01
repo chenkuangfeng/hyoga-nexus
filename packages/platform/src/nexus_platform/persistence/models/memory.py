@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 from ..base import Base
 
@@ -55,10 +55,19 @@ class MemoryVersionRecord(Base):
 
 
 class ContextSummaryRecord(Base):
-    """Cross-Run summary cutpoint tied to original stored messages and source authorization."""
+    """Append-only summary cutpoint tied to original stored messages and source authorization.
+
+    Each compaction inserts a row whose `supersedes_id` names the summary it replaces; rows are never
+    updated. The effective summary is the one with the largest `through_sequence` that nothing supersedes.
+    `source_run_id` is the Run that produced the summary.
+    """
     __tablename__ = 'context_summaries'
-    session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id'), primary_key=True)
+    __table_args__ = (Index('ix_context_summaries_session_through', 'session_id', 'through_sequence'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    session_id: Mapped[UUID] = mapped_column(ForeignKey('sessions.id'), nullable=False)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), nullable=False)
     source_run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id'), nullable=False)
     through_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    supersedes_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
