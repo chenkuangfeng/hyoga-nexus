@@ -19,7 +19,7 @@ class NativePolicy:
     retry_delay_seconds: float = 1
     max_retry_delay_seconds: float = 60
     parallel_reads: bool = False
-    summarize_context: bool = False
+    summarize_context: bool = True
     reminder_interval: int = 17
     memory_interval: int = 15
     durable_checkpoint_interval: int = 41

@@ -217,7 +217,7 @@
 | `tool_preview_chars` | behavior | 500 | 0–`tool_output_inline_limit` | 外置后模型可见的预览长度。 |
 | `tool_output_page_chars` | behavior | 4000 | 500–20000 | 分页读取工具单页返回的最大字符数。 |
 | `tool_result_window_rounds` | behavior | 6 | 1–100 | 当前 Run 内，超过该模型调用次数的工具结果滚动裁剪为单行索引。 |
-| `summarize_context` | behavior | `False`（目标 `True`） | 布尔 | 是否启用模型摘要压缩（P3）。默认值切换须经评测。 |
+| `summarize_context` | behavior | `True`（已切换；评测结论待补） | 布尔 | 是否启用模型摘要压缩（P3）。 |
 | `compact_high_ratio` | behavior | 1.0 | 0.5–1.0 | 历史字符数达到 `max_context_chars × 该比例` 时触发压缩。 |
 | `compact_low_ratio` | behavior | 0.6 | 0.1–`compact_high_ratio` | 压缩后目标字符数占 `max_context_chars` 的比例。 |
 | `summary_max_chars` | behavior | 8000 | 500–32000 | 单条摘要的最大字符数。 |
