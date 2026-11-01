@@ -77,7 +77,7 @@ def create_tenant(
 def list_tenants(
     principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)
 ):
-    return [tenant_view(row, role) for row, role in tenants.list_tenants(db, principal)]
+    return [tenant_view(row, role, via_org) for row, role, via_org in tenants.list_tenants(db, principal)]
 
 
 @router.post(
@@ -510,8 +510,9 @@ def list_audit_records(
     } for row in rows]
 
 
-def tenant_view(row, role: str) -> TenantView:
-    return TenantView(id=row.id, name=row.name, role=role, status=row.status, created_at=row.created_at)
+def tenant_view(row, role: str, via_organization: bool = False) -> TenantView:
+    return TenantView(id=row.id, name=row.name, role=role, status=row.status, created_at=row.created_at,
+                      via_organization=via_organization)
 
 
 def model_profile_view(profile, version) -> ModelProfileView:

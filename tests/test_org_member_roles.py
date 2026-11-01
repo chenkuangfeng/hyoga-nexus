@@ -65,7 +65,7 @@ def test_role_from_organization_grants_access_only_while_bound(database):
         membership = db.get(MembershipRecord, (tid, person))
         assert membership.source == "organization" and membership.role == TenantRole.MEMBER.value
     with database() as db:
-        assert [name for _t, name in list_tenants(db, PERSON)] == [TenantRole.MEMBER.value]
+        assert [(role, via) for _t, role, via in list_tenants(db, PERSON)] == [(TenantRole.MEMBER.value, True)]
     with database() as db:
         assert "run" in agent_access.agent_permissions(db, tid, person, db.get(AgentRecord, agent.id))
     with database() as db:
@@ -90,7 +90,7 @@ def test_role_from_organization_grants_access_only_while_bound(database):
     with database() as db:
         orgs.bind_space(db, ADMIN, tid, _sub)
     with database() as db:
-        assert [name for _t, name in list_tenants(db, PERSON)] == [TenantRole.MEMBER.value]
+        assert [(role, via) for _t, role, via in list_tenants(db, PERSON)] == [(TenantRole.MEMBER.value, True)]
 
 
 def test_revoking_last_role_removes_organization_membership_but_not_manual_ones(database):

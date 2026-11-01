@@ -31,7 +31,7 @@ export function parseEvent(value: unknown): RunEvent {
 }
 function parseSession(value: unknown): Conversation {
   const row = record(value)
-  return { id: string(row.id), title: string(row.title), agent_version_id: string(row.agent_version_id) }
+  return { id: string(row.id), title: string(row.title), agent_version_id: string(row.agent_version_id), org_unit_id: row.org_unit_id == null ? null : string(row.org_unit_id) }
 }
 /** Dispatched when a request is rejected as unauthenticated; the app then shows the sign-in page. */
 export const AUTH_REQUIRED_EVENT = 'nexus-auth-required'
@@ -64,7 +64,7 @@ export const tenantPath = (id: string) => `/tenants/${encodeURIComponent(id)}`
 export const runPath = (tenant: string, id: string) => `${tenantPath(tenant)}/runs/${encodeURIComponent(id)}`
 export const api = {
   tenants: (signal?: AbortSignal) => request('/tenants', value => array<Tenant>(value, item => {
-    const row = record(item); return { id: string(row.id), name: string(row.name) }
+    const row = record(item); return { id: string(row.id), name: string(row.name), via_organization: row.via_organization === true }
   }), { signal }),
   agents: (tenant: string, signal?: AbortSignal) => request(`${tenantPath(tenant)}/agents`, value => array<Agent>(value, item => {
     const row = record(item); return { id: string(row.id), name: string(row.name), runtime_type: string(row.runtime_type), published_version_id: nullable(row.published_version_id) }

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, TenantRole, new_id, utc_now
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.authz.audit import audit
-from nexus_platform.orgs.access import membership_is_active
+from nexus_platform.orgs.access import SOURCE_ORGANIZATION, membership_is_active
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.persistence.models import MembershipRecord, TenantRecord
@@ -42,7 +42,11 @@ def create_tenant(session: Session, principal: Principal, name: str) -> TenantRe
     return tenant
 
 
-def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRecord, str]]:
+def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRecord, str, bool]]:
+    """Active spaces the user can enter, as (space, role, via_organization).
+
+    `via_organization` is True when the user's access comes from an organization-sourced membership.
+    """
     with session.begin():
         user = resolve_user(session, principal)
         rows = session.execute(
@@ -56,7 +60,8 @@ def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRec
             .order_by(TenantRecord.created_at)
         ).all()
         # Organization-sourced rows only list the space while the user is still in a bound subtree.
-        return [(tenant, membership.role) for tenant, membership in rows if membership_is_active(session, membership)]
+        return [(tenant, membership.role, membership.source == SOURCE_ORGANIZATION)
+                for tenant, membership in rows if membership_is_active(session, membership)]
 
 
 def add_member(

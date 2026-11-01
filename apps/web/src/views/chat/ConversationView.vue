@@ -26,7 +26,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
       <aside class="conversation-sidebar" aria-label="空间和会话">
         <label for="tenant-select">工作空间</label>
         <el-select id="tenant-select" :model-value="tenant" :disabled="loading || submitting" placeholder="选择空间" @change="chat.selectTenant">
-          <el-option v-for="item in tenants" :key="item.id" :label="item.name" :value="item.id" />
+          <el-option v-for="item in tenants" :key="item.id" :label="item.via_organization ? `${item.name}（组织）` : item.name" :value="item.id" />
         </el-select>
         <label for="agent-select">新会话使用的智能体</label>
         <el-select id="agent-select" v-model="versionId" :disabled="loading || submitting" placeholder="选择已发布的 Native 智能体">
@@ -40,6 +40,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
           <button v-for="item in sessions" :key="item.id" type="button" :aria-current="item.id === sessionId ? 'page' : undefined"
             :class="{ selected: item.id === sessionId }" :disabled="submitting" @click="chat.openSession(item.id)">
             {{ item.title || `会话 ${item.id.slice(-8)}` }}
+            <span v-if="item.org_unit_id" class="org-tag">组织访问</span>
           </button>
         </nav>
         <p v-if="!sessions.length && !loading" class="muted">暂无会话</p>
@@ -92,6 +93,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
 label { font-size: 14px; font-weight: 600; }
 .session-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
 .session-list button { font: inherit; min-height: 44px; text-align: left; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 10px 12px; cursor: pointer; overflow-wrap: anywhere; }
+.org-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 12px; background: var(--el-fill-color); color: var(--muted-text); }
 .session-list button:hover, .session-list button.selected { background: var(--selected); border-color: var(--el-color-primary); }
 .run-status { display: flex; flex-wrap: wrap; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
 .message-list { min-height: 240px; padding: 8px 0 24px; }

@@ -17,6 +17,8 @@ class TenantView(BaseModel):
     role: str
     status: str
     created_at: datetime
+    # True when access comes from an organization; the space list marks these as "组织".
+    via_organization: bool = False
 
 
 class MemberCreate(BaseModel):
