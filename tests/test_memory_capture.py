@@ -14,9 +14,14 @@ from nexus_memory import capture as rules
 from nexus_memory import service as memory_rules
 from nexus_memory.ports import MemoryConflict
 from nexus_platform.memory import capture
+from nexus_platform.memory.repository import SqlMemoryRepository
+from nexus_platform.models.service import create_model_profile
 from nexus_platform.persistence.models import (
     MemoryCaptureJobRecord,
+    MemoryCaptureSettingsRecord,
     MemoryDraftRecord,
+    MemoryEntryRecord,
+    MemoryVersionRecord,
     MessageRecord,
     RunRecord,
 )
@@ -109,10 +114,19 @@ def _messages(factory, session_id, count, *, created=None):
                                      runtime_metadata={}, created_at=created + timedelta(seconds=n)))
 
 
-def _enable(factory, principal, tenant_id, enabled=True):
+def _model(factory, principal, tenant_id):
+    """A real capture model version the caller may use (the same helper agents use)."""
+    with factory() as db:
+        _, version = create_model_profile(db, principal, tenant_id, name='capture', provider='test',
+                                          model_name='fake', options={})
+        return version.id
+
+
+def _enable(factory, principal, tenant_id, enabled=True, capacity_policy='reject'):
+    model_id = _model(factory, principal, tenant_id) if enabled else None
     with factory() as db:
         return capture.set_capture(db, principal, tenant_id, enabled=enabled,
-                                   model_profile_version_id=uuid4() if enabled else None)
+                                   model_profile_version_id=model_id, capacity_policy=capacity_policy)
 
 
 def _enqueue(factory, run_id, now):
@@ -140,7 +154,7 @@ def _scripted(outputs):
     """Extractor that returns the scripted outputs in order and records each call."""
     calls = []
 
-    def extractor(*, messages, related):
+    def extractor(*, messages, related, model_version_id):
         calls.append(len(messages))
         item = outputs[len(calls) - 1] if len(calls) <= len(outputs) else outputs[-1]
         if isinstance(item, Exception):
@@ -164,7 +178,8 @@ def test_enabling_requires_a_capture_model(database):  # noqa: F811
         with pytest.raises(ValueError):
             capture.set_capture(db, principal, tenant.id, enabled=True, model_profile_version_id=None)
         assert capture.capture_settings(db, principal, tenant.id) == {'enabled': False,
-                                                                     'model_profile_version_id': None}
+                                                                     'model_profile_version_id': None,
+                                                                     'capacity_policy': 'reject'}
 
 
 def test_enabled_owner_gets_one_unfinished_job_at_a_time(database):  # noqa: F811
@@ -208,7 +223,7 @@ def test_capture_model_is_called_without_tools_and_gets_the_window(database):  #
         seen['keys'] = sorted(kwargs)
         return []
     capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1))
-    assert seen['keys'] == ['messages', 'related']
+    assert seen['keys'] == ['messages', 'model_version_id', 'related']
 
 
 def test_crash_after_extraction_does_not_call_the_model_again(database, monkeypatch):  # noqa: F811
@@ -291,3 +306,86 @@ def test_lease_blocks_a_second_worker_until_it_expires(database):  # noqa: F811
     with database() as db:
         with db.begin():
             assert capture.claim_next(db, worker_id='b', now=now + capture.LEASE + timedelta(seconds=1)) == job_id
+
+
+def _publish_capture_entry(factory, run, title, text, origin='capture'):
+    """Publish an entry whose current version came from a draft with the given origin."""
+    with factory() as db:
+        with db.begin():
+            repo = SqlMemoryRepository(db)
+            draft = repo.create_draft(tenant_id=run.tenant_id, source_run_id=run.id, kind='memory', diff=text,
+                                      fingerprint=uuid4().hex + uuid4().hex, base_version=None, origin=origin,
+                                      source_message_ids=())
+            entry = repo.create_entry(tenant_id=run.tenant_id, owner_id=run.principal_id, kind='memory',
+                                      title=title, project='')
+            repo.append_version(entry_id=entry.id, version=1, content=text, source_run_id=run.id,
+                                source_draft_id=draft, reviewer_id=run.principal_id,
+                                fingerprint=uuid4().hex + uuid4().hex, source_message_ids=())
+            return entry.id
+
+
+def test_model_that_is_no_longer_authorized_skips_the_job_without_drafts(database):  # noqa: F811
+    principal, tenant, session, run, _ = stack(database)
+    _messages(database, session.id, 4)
+    _enable(database, principal, tenant.id)
+    job_id = UUID(_enqueue(database, run.id, utc_now()))
+    # The capture model stops being usable after the job was queued.
+    with database() as db:
+        with db.begin():
+            db.get(MemoryCaptureSettingsRecord, (tenant.id, run.principal_id)).model_profile_version_id = uuid4()
+    extractor = _scripted([[{'op': 'add', 'kind': 'memory', 'diff': 'should not be stored'}]])
+    assert capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1)) == 'completed'
+    assert extractor.calls == []
+    assert _job(database, job_id)['error'] == 'model_unavailable'
+    assert _drafts(database, run) == []
+
+
+def test_turning_capture_off_after_queueing_skips_the_job(database):  # noqa: F811
+    principal, tenant, session, run, _ = stack(database)
+    _messages(database, session.id, 4)
+    _enable(database, principal, tenant.id)
+    job_id = UUID(_enqueue(database, run.id, utc_now()))
+    _enable(database, principal, tenant.id, enabled=False)
+    extractor = _scripted([[]])
+    capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1))
+    assert extractor.calls == [] and _job(database, job_id)['error'] == 'capture_disabled'
+
+
+def test_full_budget_with_reject_policy_creates_no_capture_draft(database):  # noqa: F811
+    principal, tenant, session, run, _ = stack(database)
+    _publish_capture_entry(database, run, 'Old capture', 'x' * 5500)
+    _messages(database, session.id, 4)
+    _enable(database, principal, tenant.id, capacity_policy='reject')
+    _enqueue(database, run.id, utc_now())
+    extractor = _scripted([[{'op': 'add', 'kind': 'memory', 'diff': 'y' * 2000}]])
+    capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1))
+    assert [d for _, d, _ in _drafts(database, run) if d == 'y' * 2000] == []
+    with database() as db:
+        assert capture.capture_settings(db, principal, tenant.id)['capacity_policy'] == 'reject'
+
+
+def test_evict_auto_archives_only_capture_entries_and_keeps_hand_written_ones(database):  # noqa: F811
+    principal, tenant, session, run, _ = stack(database)
+    hand = _publish_capture_entry(database, run, 'Hand written', 'h' * 400, origin='foreground')
+    old = _publish_capture_entry(database, run, 'Old capture', 'x' * 5500)
+    _messages(database, session.id, 4)
+    _enable(database, principal, tenant.id, capacity_policy='evict_auto')
+    _enqueue(database, run.id, utc_now())
+    extractor = _scripted([[{'op': 'add', 'kind': 'memory', 'diff': 'y' * 2000}]])
+    assert capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1)) == 'completed'
+    assert [d for _, d, _ in _drafts(database, run) if d == 'y' * 2000] == ['y' * 2000]
+    with database() as db:
+        assert db.get(MemoryEntryRecord, old).active is False
+        assert db.get(MemoryEntryRecord, hand).active is True
+        assert db.get(MemoryVersionRecord, (old, 1)).content == 'x' * 5500  # history is kept
+
+
+def test_evict_auto_refuses_when_nothing_can_be_evicted(database):  # noqa: F811
+    principal, tenant, session, run, _ = stack(database)
+    _publish_capture_entry(database, run, 'Hand written', 'h' * 5500, origin='foreground')
+    _messages(database, session.id, 4)
+    _enable(database, principal, tenant.id, capacity_policy='evict_auto')
+    _enqueue(database, run.id, utc_now())
+    extractor = _scripted([[{'op': 'add', 'kind': 'memory', 'diff': 'y' * 2000}]])
+    capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1))
+    assert [d for _, d, _ in _drafts(database, run) if d == 'y' * 2000] == []

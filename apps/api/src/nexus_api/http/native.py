@@ -2,12 +2,15 @@
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from nexus_core.platform import Principal
 from nexus_api.dependencies.platform import get_principal, get_database_session
 from nexus_platform.runs import settings, directives
+from nexus_platform.memory import capture as memory_capture
 from nexus_platform.memory import service as memory
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/native', tags=['Native settings'])
@@ -63,6 +66,31 @@ def steer(tenant_id: UUID, run_id: UUID, body: SteerInput,
     """Queue an idempotent correction to be persisted and injected at the next round boundary."""
     row = directives.submit(db, principal, tenant_id, run_id, body.content, key)
     return {'id': str(row.id), 'status': 'queued'}
+
+
+class MemoryCaptureUpdate(BaseModel):
+    """Enabling requires a capture model; the model is authorized again on every extraction."""
+    enabled: bool
+    model_profile_version_id: UUID | None = None
+    capacity_policy: Literal['reject', 'evict_auto'] = 'reject'
+
+
+@router.get('/memory-capture')
+def get_memory_capture(tenant_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """The caller's automatic memory capture settings; off unless the caller enabled it."""
+    return memory_capture.capture_settings(db, principal, tenant_id)
+
+
+@router.put('/memory-capture')
+def update_memory_capture(tenant_id: UUID, body: MemoryCaptureUpdate, principal: Principal = Depends(get_principal),
+                          db: Session = Depends(get_database_session)):
+    """Turn automatic capture on or off for the caller in this space."""
+    try:
+        return memory_capture.set_capture(db, principal, tenant_id, enabled=body.enabled,
+                                          model_profile_version_id=body.model_profile_version_id,
+                                          capacity_policy=body.capacity_policy)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get('/memory')

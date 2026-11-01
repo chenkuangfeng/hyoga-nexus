@@ -159,10 +159,12 @@ class MemoryCaptureSettingsRecord(Base):
     Off by default. Enabling requires a memory model profile; the model is authorized on every extraction.
     """
     __tablename__ = 'memory_capture_settings'
+    __table_args__ = (CheckConstraint("capacity_policy IN ('reject','evict_auto')", name='ck_memory_capture_settings_capacity'),)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text('0'))
     model_profile_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    capacity_policy: Mapped[str] = mapped_column(String(16), nullable=False, default='reject', server_default='reject')
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

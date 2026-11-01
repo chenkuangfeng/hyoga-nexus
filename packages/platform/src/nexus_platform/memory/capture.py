@@ -26,11 +26,15 @@ from nexus_memory import capture as rules
 from nexus_memory import service as memory_rules
 from nexus_memory.ports import MemoryConflict
 from nexus_platform.authz.audit import audit
-from nexus_platform.models.provider_settings import context
+from nexus_platform.errors import PlatformError
+from nexus_platform.models.provider_settings import authorize_model, context
 from nexus_platform.persistence.models import (
     MemoryCaptureCursorRecord,
     MemoryCaptureJobRecord,
     MemoryCaptureSettingsRecord,
+    MemoryDraftRecord,
+    MemoryEntryRecord,
+    MemoryVersionRecord,
     MessageRecord,
     RunRecord,
 )
@@ -45,23 +49,34 @@ UNFINISHED = ('pending', 'extracted', 'stored')
 PLAN_MESSAGE_LIMIT = 200
 
 
+CAPACITY_POLICIES = ('reject', 'evict_auto')
+
+
 class Extractor(Protocol):
-    """Model-backed extraction: receives the window and related entries, returns raw action items.
+    """Model-backed extraction: receives the window, related entries and the authorized capture model
+    version, and returns raw action items.
 
     Implementations must not attach tools to the model call. A raised exception is a failed attempt
     with a stable code; the raw output is not stored when it fails.
     """
 
-    def __call__(self, *, messages: list[rules.Message], related: list[dict[str, Any]]) -> Any: ...
+    def __call__(self, *, messages: list[rules.Message], related: list[dict[str, Any]],
+                 model_version_id: UUID) -> Any: ...
 
 
 # ---------------------------------------------------------------- settings
 
 def set_capture(db: Session, principal: Principal, tenant_id: UUID, *, enabled: bool,
-                model_profile_version_id: UUID | None) -> dict[str, Any]:
-    """Turn capture on or off for the caller in this space. Enabling requires a capture model."""
+                model_profile_version_id: UUID | None, capacity_policy: str = 'reject') -> dict[str, Any]:
+    """Turn capture on or off for the caller in this space. Enabling requires a capture model.
+
+    `capacity_policy` decides what happens when the memory budget is full: `reject` (default) refuses
+    the draft; `evict_auto` archives the caller's oldest capture-origin entries to make room.
+    """
     if enabled and model_profile_version_id is None:
         raise ValueError('A capture model is required to enable automatic capture')
+    if capacity_policy not in CAPACITY_POLICIES:
+        raise ValueError('Capacity policy is invalid')
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         row = db.get(MemoryCaptureSettingsRecord, (tenant_id, user.id))
@@ -70,11 +85,11 @@ def set_capture(db: Session, principal: Principal, tenant_id: UUID, *, enabled: 
             db.add(row)
         row.enabled = enabled
         row.model_profile_version_id = model_profile_version_id
+        row.capacity_policy = capacity_policy
         row.updated_at = utc_now()
         audit(db, tenant_id, user.id, 'memory.capture_settings', 'memory_capture', str(user.id),
-              {'enabled': enabled})
-        return {'enabled': row.enabled,
-                'model_profile_version_id': str(row.model_profile_version_id) if row.model_profile_version_id else None}
+              {'enabled': enabled, 'capacity_policy': capacity_policy})
+        return _view(row)
 
 
 def capture_settings(db: Session, principal: Principal, tenant_id: UUID) -> dict[str, Any]:
@@ -83,9 +98,14 @@ def capture_settings(db: Session, principal: Principal, tenant_id: UUID) -> dict
         user, _ = context(db, principal, tenant_id)
         row = db.get(MemoryCaptureSettingsRecord, (tenant_id, user.id))
         if row is None:
-            return {'enabled': False, 'model_profile_version_id': None}
-        return {'enabled': row.enabled,
-                'model_profile_version_id': str(row.model_profile_version_id) if row.model_profile_version_id else None}
+            return {'enabled': False, 'model_profile_version_id': None, 'capacity_policy': 'reject'}
+        return _view(row)
+
+
+def _view(row: MemoryCaptureSettingsRecord) -> dict[str, Any]:
+    return {'enabled': row.enabled,
+            'model_profile_version_id': str(row.model_profile_version_id) if row.model_profile_version_id else None,
+            'capacity_policy': row.capacity_policy}
 
 
 # ---------------------------------------------------------------- enqueue
@@ -218,6 +238,18 @@ def _job_waiting(factory: Callable[[], Session], job_id: UUID, now: datetime) ->
 
 
 def _extract(db: Session, job: MemoryCaptureJobRecord, extractor: Extractor, now: datetime) -> None:
+    """Authorize the capture model for this call, then extract. Skips (completes without drafts) when
+    the owner turned capture off since the job was queued or the model is no longer usable."""
+    settings = db.get(MemoryCaptureSettingsRecord, (job.tenant_id, job.owner_user_id))
+    if settings is None or not settings.enabled or settings.model_profile_version_id is None:
+        _skip(db, job, 'capture_disabled', now)
+        return
+    version_id = settings.model_profile_version_id
+    try:
+        authorize_model(db, job.tenant_id, job.owner_user_id, version_id)
+    except PlatformError:
+        _skip(db, job, 'model_unavailable', now)
+        return
     rows = db.scalars(select(MessageRecord).where(
         MessageRecord.session_id == job.session_id,
         MessageRecord.sequence >= job.from_sequence, MessageRecord.sequence <= job.through_sequence)
@@ -227,7 +259,7 @@ def _extract(db: Session, job: MemoryCaptureJobRecord, extractor: Extractor, now
     repo = SqlMemoryRepository(db)
     related = [{'id': str(e.id), 'title': e.title, 'kind': e.kind}
                 for e in repo.published_entries(job.tenant_id, job.owner_user_id, '')[:rules.RELATED_LIMIT]]
-    raw = extractor(messages=messages, related=related)
+    raw = extractor(messages=messages, related=related, model_version_id=version_id)
     verdict = rules.validate_actions(raw, unattended=True)
     job.actions = [_serialize(action) for action in verdict.actions]
     job.state = 'extracted'
@@ -237,19 +269,35 @@ def _extract(db: Session, job: MemoryCaptureJobRecord, extractor: Extractor, now
            'reasons': verdict.reasons[:5]})
 
 
+def _skip(db: Session, job: MemoryCaptureJobRecord, reason: str, now: datetime) -> None:
+    job.actions = []
+    job.state = 'completed'
+    job.completed_at = now
+    job.last_error = reason
+    job.lease_owner = None
+    job.lease_expires_at = None
+    audit(db, job.tenant_id, job.owner_user_id, 'memory.capture', 'memory_capture_job', str(job.id),
+          {'step': 'skip', 'reason': reason})
+
+
 def _store(db: Session, job: MemoryCaptureJobRecord, now: datetime) -> None:
     """Create drafts for actions not yet stored. `stored_count` is the index of the next action."""
     repo = SqlMemoryRepository(db)
     actions = list(job.actions or [])
     source_ids = _source_message_ids(db, job)
+    settings = db.get(MemoryCaptureSettingsRecord, (job.tenant_id, job.owner_user_id))
+    policy = settings.capacity_policy if settings else 'reject'
     results: list[str] = []
+    evicted = 0
     for index in range(job.stored_count, len(actions)):
         action = actions[index]
         try:
-            outcome = memory_rules.propose(
-                repo, job.tenant_id, job.owner_user_id, job.source_run_id, action.get('kind', 'memory'),
-                action['diff'], entry_id=_uuid_or_none(action.get('entry_id')),
-                base_version=action.get('base_version'), origin='capture', source_message_ids=source_ids)
+            outcome = _propose(repo, job, action, source_ids)
+            if outcome['status'] == 'budget_exceeded' and policy == 'evict_auto':
+                freed = _evict_capture_entries(db, job, needed=_shortfall(outcome))
+                evicted += freed
+                if freed:
+                    outcome = _propose(repo, job, action, source_ids)
         except MemoryConflict:
             outcome = {'status': 'conflict'}
         results.append(outcome['status'])
@@ -258,7 +306,50 @@ def _store(db: Session, job: MemoryCaptureJobRecord, now: datetime) -> None:
     job.last_error = None
     audit(db, job.tenant_id, job.owner_user_id, 'memory.capture', 'memory_capture_job', str(job.id),
           {'step': 'store', 'drafts': results.count('pending'), 'duplicates': results.count('duplicate'),
-           'other': len(results) - results.count('pending') - results.count('duplicate')})
+           'other': len(results) - results.count('pending') - results.count('duplicate'),
+           'evicted': evicted, 'policy': policy, 'statuses': results[:10]})
+
+
+def _propose(repo: SqlMemoryRepository, job: MemoryCaptureJobRecord, action: dict[str, Any],
+             source_ids: tuple[str, ...]) -> dict[str, Any]:
+    return memory_rules.propose(
+        repo, job.tenant_id, job.owner_user_id, job.source_run_id, action.get('kind', 'memory'),
+        action['diff'], entry_id=_uuid_or_none(action.get('entry_id')),
+        base_version=action.get('base_version'), origin='capture', source_message_ids=source_ids)
+
+
+def _shortfall(outcome: dict[str, Any]) -> int:
+    """Characters that must be freed before the refused content fits: `used + needed - budget`."""
+    return int(outcome['used']) + int(outcome['needed']) - int(outcome['budget'])
+
+
+def _evict_capture_entries(db: Session, job: MemoryCaptureJobRecord, *, needed: int) -> int:
+    """Archive the owner's oldest capture-origin entries until `needed` characters are freed.
+
+    Only entries whose current version came from a capture draft are candidates; hand-written
+    entries are never evicted. Archiving keeps the immutable history. Returns characters freed.
+    """
+    if needed <= 0:
+        return 0
+    repo = SqlMemoryRepository(db)
+    sizes = {entry.id: entry.chars for entry in repo.sized_entries(job.tenant_id, job.owner_user_id)}
+    candidates = db.execute(
+        select(MemoryEntryRecord.id)
+        .join(MemoryVersionRecord, (MemoryVersionRecord.entry_id == MemoryEntryRecord.id)
+              & (MemoryVersionRecord.version == MemoryEntryRecord.current_version))
+        .join(MemoryDraftRecord, MemoryDraftRecord.id == MemoryVersionRecord.source_draft_id)
+        .where(MemoryEntryRecord.tenant_id == job.tenant_id, MemoryEntryRecord.owner_user_id == job.owner_user_id,
+               MemoryEntryRecord.active.is_(True), MemoryDraftRecord.origin == 'capture')
+        .order_by(MemoryVersionRecord.created_at)).scalars().all()
+    freed = 0
+    for entry_id in candidates:
+        if freed >= needed:
+            break
+        memory_rules.archive(repo, job.owner_user_id, job.tenant_id, entry_id)
+        # Flush so the budget recount below (a fresh query) no longer counts the archived entry.
+        db.flush()
+        freed += sizes.get(entry_id, 0)
+    return freed
 
 
 def _finish(db: Session, job: MemoryCaptureJobRecord, now: datetime) -> None:

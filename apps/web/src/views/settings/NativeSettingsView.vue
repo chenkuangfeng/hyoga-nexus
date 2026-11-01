@@ -3,10 +3,11 @@ import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { api } from '../../api/chat'
 import { modelSettingsApi } from '../../api/modelSettings'
-import { nativeApi, type NativePreferences, type MemoryData, type MemoryEntry, type MemoryDraft } from '../../api/native'
+import { nativeApi, type NativePreferences, type MemoryData, type MemoryEntry, type MemoryDraft, type MemoryCapture } from '../../api/native'
 import type { Tenant } from '../../types/chat'
 const tenants = ref<Tenant[]>([]), tenant = ref(''), data = ref<NativePreferences | null>(null)
 const memories = ref<MemoryData>({ entries: [], drafts: [] }), models = ref<{ id: string; label: string }[]>([])
+const capture = ref<MemoryCapture>({ enabled: false, model_profile_version_id: null, capacity_policy: 'reject' })
 const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
 const title = ref(''), project = ref(''), selectedEntry = ref(''), selectedDraft = ref<MemoryDraft | null>(null)
 const detail = ref(''), detailEntry = ref<MemoryEntry | null>(null), detailVersion = ref(1)
@@ -16,8 +17,8 @@ async function load() {
   if (!tenant.value) return
   loading.value = true; error.value = ''; data.value = null; memories.value = { entries: [], drafts: [] }; selectedDraft.value = null; detailEntry.value = null
   try {
-    const [preferences, memory, providers] = await Promise.all([nativeApi.settings(tenant.value, signal), nativeApi.memory(tenant.value, signal), modelSettingsApi.list(tenant.value, signal)])
-    if (!signal.aborted && !disposed) { data.value = preferences; memories.value = memory; models.value = providers.providers.flatMap(p => p.models.map(m => ({ id: m.version_id, label: `${p.name} / ${m.name}` }))) }
+    const [preferences, memory, providers, captureRow] = await Promise.all([nativeApi.settings(tenant.value, signal), nativeApi.memory(tenant.value, signal), modelSettingsApi.list(tenant.value, signal), nativeApi.captureSettings(tenant.value, signal)])
+    if (!signal.aborted && !disposed) { data.value = preferences; memories.value = memory; capture.value = captureRow; models.value = providers.providers.flatMap(p => p.models.map(m => ({ id: m.version_id, label: `${p.name} / ${m.name}` }))) }
   } catch (e) { if (!signal.aborted && !disposed) error.value = e instanceof Error ? e.message : '加载失败' }
   finally { if (!signal.aborted && !disposed) loading.value = false }
 }
@@ -50,6 +51,10 @@ async function archive(entry: MemoryEntry) {
 }
 async function enableTool(name: string) { await act(async () => { await nativeApi.enableTool(tenant.value, name); await load() }, '工具已登记，可选择绑定') }
 async function savePreferences() { if (data.value) await act(async () => { data.value = await nativeApi.saveSettings(tenant.value, data.value!) }, '默认设置已保存') }
+async function saveCapture() {
+  if (capture.value.enabled && !capture.value.model_profile_version_id) { error.value = '开启自动捕获前请先选择捕获模型'; return }
+  await act(async () => { capture.value = await nativeApi.saveCapture(tenant.value, capture.value) }, capture.value.enabled ? '自动捕获已开启' : '自动捕获已关闭')
+}
 async function restoreVersion() { if (detailEntry.value) await act(async () => { await nativeApi.restore(tenant.value, detailEntry.value!.id, detailVersion.value, detailEntry.value!.version); await load() }, '已创建恢复版本') }
 onMounted(initialize)
 onBeforeUnmount(() => { disposed = true; controller?.abort() })
@@ -76,6 +81,15 @@ onBeforeUnmount(() => { disposed = true; controller?.abort() })
       <div v-if="data.can_enable_tools" class="panel"><h2>空间工具登记</h2><p>登记后仍需选择绑定；登记本身不授予模型调用权限。</p><el-button v-for="tool in data.available_tools.filter(t => !t.enabled)" :key="tool.id" :disabled="busy" @click="enableTool(tool.id)">启用 {{ tool.label }}</el-button></div>
       <el-button type="primary" :loading="busy" :disabled="loading" @click="savePreferences">保存 Native 默认设置</el-button>
     </template>
+    <section class="panel" aria-labelledby="capture-title"><h2 id="capture-title">自动捕获（默认关闭）</h2>
+      <p class="intro">开启后，已完成的对话会由下方所选模型整理为待审核草稿；草稿必须人工确认才会进入模型提示。</p>
+      <el-form label-position="top" class="fields">
+        <el-form-item label="开启自动捕获" for="capture-enabled"><el-switch id="capture-enabled" v-model="capture.enabled" :disabled="busy || loading" /></el-form-item>
+        <el-form-item label="捕获模型（每次捕获都会调用它）" for="capture-model"><el-select id="capture-model" v-model="capture.model_profile_version_id" clearable placeholder="请选择模型" :disabled="busy || loading"><el-option v-for="model in models" :key="model.id" :label="model.label" :value="model.id" /></el-select></el-form-item>
+        <el-form-item label="记忆预算已满时" for="capture-policy"><el-select id="capture-policy" v-model="capture.capacity_policy" :disabled="busy || loading"><el-option label="拒绝新草稿（默认）" value="reject" /><el-option label="自动归档最旧的自动捕获条目（手写条目不会被归档）" value="evict_auto" /></el-select></el-form-item>
+      </el-form>
+      <el-button type="primary" :loading="busy" :disabled="loading" @click="saveCapture">保存自动捕获设置</el-button>
+    </section>
     <section class="panel"><h2>已发布的个人记忆与 SOP</h2><p class="intro">只列出已人工确认的版本；草稿不会自动进入模型提示。</p>
       <el-empty v-if="!memories.entries.length" description="暂无已发布记忆" />
       <article v-for="entry in memories.entries" :key="entry.id"><strong>{{ entry.title }}</strong> · {{ entry.kind }} · 版本 {{ entry.version }}

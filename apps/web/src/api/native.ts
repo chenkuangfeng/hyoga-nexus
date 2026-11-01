@@ -5,11 +5,17 @@ export interface NativePreferences { version: number; available_tools: { id: str
 export interface MemoryEntry { id: string; title: string; kind: string; project: string; version: number }
 export interface MemoryDraft { id: string; kind: string; diff: string; source_run_id: string }
 export interface MemoryData { entries: MemoryEntry[]; drafts: MemoryDraft[] }
+export interface MemoryCapture { enabled: boolean; model_profile_version_id: string | null; capacity_policy: 'reject' | 'evict_auto' }
 export interface Approval { id: string; tool_name: string; arguments: Record<string, unknown> }
 const record = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Native 数据格式无效'); return v as Record<string, unknown> }
 const str = (v: unknown): string => { if (typeof v !== 'string') throw new Error('Native 数据格式无效'); return v }
 const num = (v: unknown): number => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('Native 数值无效'); return v }
 const arr = <T>(v: unknown, parse: (value: unknown) => T): T[] => { if (!Array.isArray(v)) throw new Error('Native 列表无效'); return v.map(parse) }
+const capture = (value: unknown): MemoryCapture => {
+  const row = record(value)
+  if (typeof row.enabled !== 'boolean' || (row.capacity_policy !== 'reject' && row.capacity_policy !== 'evict_auto')) throw new Error('自动捕获设置无效')
+  return { enabled: row.enabled, model_profile_version_id: row.model_profile_version_id == null ? null : str(row.model_profile_version_id), capacity_policy: row.capacity_policy }
+}
 const json = (method: string, value?: unknown, key?: string): RequestInit => ({ method, headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) })
 const root = (tenant: string) => `${tenantPath(tenant)}/native`
 function preferences(value: unknown): NativePreferences {
@@ -26,6 +32,8 @@ function preferences(value: unknown): NativePreferences {
   return { version: num(row.version), settings, fields: schema, available_tools: arr(row.available_tools || [], value => { const x = record(value); if (typeof x.enabled !== 'boolean') throw new Error('工具状态无效'); return { id: str(x.id), label: str(x.label), enabled: x.enabled } }), can_enable_tools: row.can_enable_tools === true }
 }
 export const nativeApi = {
+  captureSettings: (w: string, signal?: AbortSignal) => request(`${root(w)}/memory-capture`, capture, { signal }),
+  saveCapture: (w: string, value: MemoryCapture) => request(`${root(w)}/memory-capture`, capture, json('PUT', { enabled: value.enabled, model_profile_version_id: value.model_profile_version_id, capacity_policy: value.capacity_policy })),
   enableTool: (w: string, name: string) => request(`${tenantPath(w)}/tools/${encodeURIComponent(name)}/enable`, record, json('POST')),
   branch: (w: string, session: string, version: string) => request(`${root(w)}/sessions/${encodeURIComponent(session)}/model-branch`, value => { const row = record(value); return { id: str(row.id), title: str(row.title), agent_version_id: str(row.agent_version_id) } }, json('POST', { model_profile_version_id: version })),
   settings: (w: string, signal?: AbortSignal) => request(`${root(w)}/settings`, preferences, { signal }),
