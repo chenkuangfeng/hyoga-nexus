@@ -102,7 +102,7 @@ def admit_or_defer(factory, epoch: int, task_id, worker_id: str) -> bool:
 
 
 async def execute_native(factory, task_id, worker_id, *, model_factory=None, registry_factory=None,
-                         resolver=None, hooks=(), stopped=None, ledger_epoch=None):
+                         resolver=None, hooks=(), stopped=None, ledger_epoch=None, compaction_model_factory=None):
     if ledger_epoch is not None and not admit_or_defer(factory, ledger_epoch, task_id, worker_id):
         return
     context = prepare_execution(factory, task_id, worker_id)
@@ -154,7 +154,14 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             budget = ExecutionBudget(**options)
         except ValueError:
             raise RuntimeFault('runtime_budget_invalid') from None
-        outcome = await NativeEngine(model, gateway, store, hooks=hooks, policy=policy).run(
+        if compaction_model_factory is None and policy.compaction_model_profile_version_id:
+            # The summarizer is authorized per summary call; a revoked grant degrades compaction only.
+            from .models import compaction_model
+            version_id = policy.compaction_model_profile_version_id
+            compaction_resolver = resolver or StoredCredentialResolver(factory, EnvironmentCredentialResolver())
+            compaction_model_factory = lambda: compaction_model(context, factory, compaction_resolver, version_id)
+        outcome = await NativeEngine(model, gateway, store, hooks=hooks, policy=policy,
+                                     compaction_model_factory=compaction_model_factory).run(
             str(context.run_id), context.messages, token, budget, context.progress)
     except RuntimeFault as exc:
         outcome = RuntimeOutcome('interrupted' if exc.code == 'interrupted' else 'failed', exc.code)

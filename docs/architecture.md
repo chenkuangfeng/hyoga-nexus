@@ -153,8 +153,9 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **最后一轮**：达到最大步数时禁用工具，仍请求工具则以明确错误结束（参考 Dify）。
 - **预算**：逻辑回合、模型尝试、活跃耗时（不含等待用户时间）、token 四个维度分别计数，持久累计，恢复后继续累计。
 - **上下文**：系统提示与工具 schema 在 Run 开始时计算一次，Run 内不变，保护供应商提示缓存（参考 Hermes 冻结快照）。历史是事件流，模型可见消息由事件派生（参考 DeepSeek Harness）。压缩结果作为新事件写入，源事件保留。处理方式参考 LobeHub `context-engine` 的可组合处理器与 WeKnora `compaction/`；证据句柄登记参考 RAGFlow `evidence_registry`。
-- **压缩**：优先完整保留最近的消息与工具交换；较早内容压缩为标注过的局部摘录；仍装不下则显式失败 `model_context_exceeded`。
-- **工具顺序**：同一回合内按模型声明顺序执行，每个调用独立记录 invocation；有副作用的工具之间不并发。
+- **压缩**：优先完整保留最近的消息与工具交换；较早内容压缩为标注过的局部摘录；仍装不下则显式失败 `model_context_exceeded`。压缩带滞后：只在历史超过 `compact_high_ratio × max_context_chars` 时触发，目标为 `compact_low_ratio × max_context_chars`，两者之间不重复压缩。摘要长度不超过 `summary_max_chars`。摘要可由 `compaction_model_profile_version_id` 指定的模型生成，每次摘要调用都重新授权；该模型不可用时降级为确定性摘录并记录 `context.summary_degraded`，Run 继续。
+- **工具结果视图**：超过 `tool_result_window_rounds` 次模型调用之前的工具结果，在发给模型的视图中替换为单行索引（工具名与首行）；源消息不变。超过 `tool_output_inline_limit` 的输出外置，见 2.5。
+- **工具顺序**：同一回合内按模型声明顺序执行，每个调用独立记录 invocation；有副作用的工具之间不并发。工具声明为只读且幂等（`read_only`、`idempotent`，且无副作用、无需审批）时，可在 `parallel_reads` 开启下与相邻只读调用并行；结果仍按模型声明顺序返回。只读声明与副作用冲突时注册即拒绝。
 - **取消与等待**：取消信号在模型流、工具和沙箱调用的每个等待点检查；`ask_user` 类工具产生 `wait_input`，释放 worker，回答后在同一 Run 中幂等继续。
 - **执行模型**：每个 Run 新建执行对象（引擎、工具网关、运行上下文），Run 结束即释放；不按会话缓存执行对象。工具注册表是进程级共享对象（定义不含 Run 状态，存储经 `ToolContext.services` 按调用传入）。模型客户端每 Run 构建，凭据每 Run 解析并只用于该次调用；进程内按来源共享 HTTP 连接池（不含凭据），地址校验仍逐请求执行；池的上限由 `configs/nexus.toml [model_connection_pool]` 配置（`max_connections`、`max_keepalive_connections`、`keepalive_expiry_seconds`，缺省与 httpx 默认值相同），worker 启动时生效。worker 使用单一事件循环，连接池只在创建它的循环中使用。参考 deer-flow 与 dify-agent。
 - **会话状态**：会话状态是版本化的 JSON 快照（v2，只含数据，不含配置、客户端、租约句柄、令牌或模型对象）。Run 结束时（成功、失败、取消均要）在 `finally` 中保存终态快照；未执行的工具调用标记为 `interrupted`，使下一轮历史合法。快照读取失败、版本未知或状态损坏时拒绝该 Run，不静默丢弃历史。
@@ -319,7 +320,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | `users`、`tenants`、`tenant_memberships` | 身份、空间与成员角色 |
 | `agents`、`agent_draft_bindings`、`agent_versions`、`agent_resource_bindings` | 智能体、草稿绑定、不可变版本、资源绑定 |
 | `platform_resources`、`resource_grants` | 资源登记与空间间显式共享 |
-| `sessions`、`messages`、`session_checkpoints` | 会话、消息（assistant/tool 消息带内部 Runtime 元数据）、工作检查点 |
+| `sessions`、`messages`、`session_checkpoints` | 会话、消息（assistant/tool 消息带内部 Runtime 元数据）、工作检查点。历史 Run 只回放 user 与最终 assistant 行，tool 行仅属于其所在 Run |
 | `runtime_session_bindings` | 平台会话与外部 Runtime 会话 ID 的映射 |
 | `runs`、`run_events`、`outbox_records` | 运行、事件（sequence 游标）、Outbox 队列（多租户派发载体） |
 | `runtime_epoch`、`session_admissions` | 派发账本：进程代际、会话入队记录（queued、started、unknown、terminal） |
@@ -327,7 +328,8 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | `native_run_states`、`run_directives` | Native 预算累计与运行指令 |
 | `run_input_requests`、`action_approvals` | 等待输入的问题与回答；单次审批 |
 | `tool_invocations` | 工具调用记录（幂等键、副作用标记、结果状态） |
-| `memory_drafts`、`memory_entries`、`memory_versions`、`context_summaries` | 记忆草稿、已发布条目与版本、上下文摘要 |
+| `tool_outputs` | 超过 `tool_output_inline_limit` 的工具输出原文，按 Run 隔离；模型只见预览与句柄，经 `read_tool_output` 分页读取，每次读取写审计 |
+| `memory_drafts`、`memory_entries`、`memory_versions`、`context_summaries` | 记忆草稿、已发布条目与版本；上下文摘要为追加式（每行 `supersedes_id` 指向被替代的行，只有切点前移才写入，原行不改写） |
 | `model_profiles`、`model_profile_versions`、`model_providers`、`provider_models`、`model_defaults`、`native_preferences` | 模型配置版本、供应商、默认与偏好 |
 | `provider_credentials`、`credential_references` | 加密凭据与凭据引用 |
 | `audit_records` | 审计记录 |

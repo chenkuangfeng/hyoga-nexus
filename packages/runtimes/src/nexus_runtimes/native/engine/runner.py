@@ -13,7 +13,7 @@ from nexus_core.runtime import (
     ExecutionBudget, LifecycleEvent, ModelMessage, ModelRequest, RuntimeFault,
     RuntimeOutcome, RuntimeProgress, ToolDisposition,
 )
-from nexus_runtimes.native.context import compact_history, resolve_incomplete_exchanges
+from nexus_runtimes.native.context import resolve_incomplete_exchanges
 from nexus_runtimes.native.context.assembly import append_context, trim_tool_results
 from nexus_runtimes.native.context.working import WorkingMemory
 from nexus_runtimes.native.hooks import HookRegistry
@@ -40,10 +40,12 @@ class NativeEngine:
     Progress state survives waiting_input resumes, including working memory and guards.
     """
     def __init__(self, model, tools, store, *, hooks=(), policy: NativePolicy | None = None,
-                 transforms: HookRegistry | None = None):
+                 transforms: HookRegistry | None = None, compaction_model_factory=None):
         self.model, self.tools, self.store = model, tools, store
         self.hooks, self.policy = list(hooks), policy or NativePolicy()
         self.transforms = transforms or HookRegistry()
+        # Builds the configured compaction model per summary call (P3); None means the Run's own model.
+        self.compaction_model_factory = compaction_model_factory
 
     async def _hook(self, run_id, phase, turn=0, tool_name=None):
         for hook in tuple(self.hooks):
@@ -126,11 +128,17 @@ class NativeEngine:
                     if hasattr(self.store, 'drain_steer'):
                         for message in await self.store.drain_steer():
                             history.append(message)
+                    limit = budget.max_context_chars
+                    high = int(limit * self.policy.compact_high_ratio)
+                    low = int(limit * self.policy.compact_low_ratio)
                     if self.policy.summarize_context:
                         from nexus_runtimes.native.context.compaction import compact
-                        compacted, removed = await compact(self.model, tuple(history), budget.max_context_chars, token, budget, progress, self.store)
+                        compacted, removed = await compact(self.model, tuple(history), limit, token, budget, progress, self.store,
+                            high=high, low=low, summary_max=self.policy.summary_max_chars,
+                            summarizer_factory=self.compaction_model_factory)
                     else:
-                        compacted, removed = compact_history(tuple(history), budget.max_context_chars)
+                        from nexus_runtimes.native.context.compaction import compact_within
+                        compacted, removed = compact_within(tuple(history), high, low, limit)
                     if removed:
                         history = list(compacted)
                         await self.store.emit('context.compacted', {'omitted_messages': removed, 'strategy': 'summary_or_archive' if self.policy.summarize_context else 'bounded_excerpts'})

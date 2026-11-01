@@ -32,22 +32,23 @@ from .messages import _history_allowed
 from .completion import _finish
 
 
-def _page_chars(context: ExecutionContext) -> int:
-    """Page size for paged tool-output reads: the Run's configured value, or the default if it is invalid.
+def _behavior(context: ExecutionContext) -> NativePolicy:
+    """The Run's Native behavior settings, or the defaults if they are invalid.
 
-    Invalid behavior settings are rejected by the worker before execution; this fallback only keeps
-    the store constructible for read paths that never run a model.
+    Invalid settings are rejected by the worker before execution; this fallback only keeps the store
+    constructible for read paths that never run a model.
     """
     try:
-        return NativePolicy(**(context.budgets.get('behavior') or {})).tool_output_page_chars
+        return NativePolicy(**(context.budgets.get('behavior') or {}))
     except (ValueError, TypeError):
-        return NativePolicy().tool_output_page_chars
+        return NativePolicy()
 
 
 class DurableRuntimeStore:
     def __init__(self, factory: sessionmaker[Session], context: ExecutionContext, worker_id: str, task_id: UUID):
         self.factory, self.context, self.worker_id, self.task_id = factory, context, worker_id, task_id
-        self.page_chars = _page_chars(context)
+        behavior = _behavior(context)
+        self.page_chars, self.summary_chars = behavior.tool_output_page_chars, behavior.summary_max_chars
 
     def _run(self, db: Session) -> RunRecord:
         task = db.get(OutboxRecord, self.task_id)
@@ -245,7 +246,7 @@ class DurableRuntimeStore:
                 raise RuntimeFault('context_source_invalid')
             # Append-only (P11): a new row supersedes the effective one; existing rows are never rewritten.
             append_summary(db, session_id=run.session_id, tenant_id=run.tenant_id, source_run_id=run.id,
-                           through_sequence=source.sequence, content=summary)
+                           through_sequence=source.sequence, content=summary, max_chars=self.summary_chars)
             audit(db, run.tenant_id, run.principal_id, 'context.summary_saved', 'session', str(run.session_id))
 
     async def drain_steer(self) -> list[ModelMessage]:

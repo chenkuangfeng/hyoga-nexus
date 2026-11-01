@@ -20,7 +20,7 @@
 
 ## 二、低风险内部优化（不改变模型输入）
 
-- [x] P4：每 Run 缓存工具定义（`runner.py`，恢复路径复用同一份）。执行时授权仍每次复核。测试：现有撤权用例（`test_revoked_grant_stops_new_submissions_even_with_cached_history`）通过；Run 中途撤权的专门用例待补。
+- [x] P4：每 Run 缓存工具定义（`runner.py`，恢复路径复用同一份）。执行时授权仍每次复核。测试：现有撤权用例（`test_revoked_grant_stops_new_submissions_even_with_cached_history`）通过；Run 中途撤权的专门用例见 `tests/test_native_hardening.py`（跨回合撤权：第二回合的调用不执行，Run 以 `run_authorization_denied` 结束）。
 - [x] P5：`progress.tokens` 在供应商返回 usage 时直接使用（既有行为）；输入估算改为逐消息累加（`_message_bytes`），工具定义字符数每 Run 计算一次。
 - [x] P8：历史授权结果在一次准备内按 Run 缓存（`_memo_allowed`）；摘要覆盖的行不再授权、不再物化，取消额外的覆盖行查询；`sequence` 加入投影行。测试：`tests/test_context_summary_cut.py`（覆盖行被替换、其余行保留；源 Run 不可见时摘要被忽略）。
 - [ ] P8 未完成项：会话 Run 列表的全量授权查询仍为 O(Run 数)，需要批量授权接口，待单独处理。
@@ -28,12 +28,12 @@
 ## 三、写入合并（改变 SSE 粒度）
 
 - [x] P6：`message.delta` 按 150ms / 256 字符合并（`DeltaBuffer`，`NativePolicy.delta_flush_ms` / `delta_flush_chars`）。定时器在模型静默时也会刷出文本。测试：`tests/test_delta_batching.py`（合并后文本逐字相同、字符阈值、静默时定时刷出、窗口内取消仍生效）。
-- [x] P7：仅合并两组相邻写入：`model.completed` 与 assistant 消息；`turn.completed` 与 `save_progress`（`DurableRuntimeStore.commit`，同一事务与一次租约校验）。工具执行之间的写入不合并。测试：worker 端到端用例确认一条 assistant 消息与事件顺序。事务失败整组回滚的专门用例待补。
+- [x] P7：仅合并两组相邻写入：`model.completed` 与 assistant 消息；`turn.completed` 与 `save_progress`（`DurableRuntimeStore.commit`，同一事务与一次租约校验）。工具执行之间的写入不合并。测试：worker 端到端用例确认一条 assistant 消息与事件顺序。事务失败整组回滚的用例见 `tests/test_native_hardening.py`（组内消息写入失败时，同组事件与消息整体回滚）。
 
 ## 四、上下文稳定化（改变模型输入，需要评测）
 
 - [ ] P1：`working_memory_tail` 开关，默认关闭。在 `evals/` 中建立对比样例。
-- [ ] P3：摘要落库、滞后阈值（`T_high` / `T_low`）、降级不落库。测试：边界在阈值之间保持不变；摘要失败降级正确。
+- [x] P3：摘要落库、滞后阈值（`compact_high_ratio` / `compact_low_ratio`）、降级不落库；摘要长度受 `summary_max_chars` 限制；`compaction_model_profile_version_id` 指定的压缩模型每次调用授权，不可用时降级。测试：`tests/test_compaction_policy.py`（阈值之间不压缩、超过高阈值压缩到低目标以下、摘要截断、降级事件、压缩模型使用与释放）。评测（P3 的质量对比）待补。
 - [x] P2：工具输出外置与滚动裁剪；`read_tool_output` 分页读取工具。测试：外置内容的授权与审计；视图确定性。（阈值待基线确定后再调整默认值。）
 
 ## 四之一、配置接入（design.md 第十四节）
@@ -43,7 +43,7 @@
 - [x] `view()` 与旧记录合并 `defaults()`（`_with_defaults`），保证旧设置缺键时表单完整。
 - [x] 发布时（`agents/service.py` 的 `publish_agent`）重新校验 Native 行为参数，并检查压缩模型授权。
 - [x] 测试：`tests/test_context_policy_config.py`（默认值、非法取值、旧记录补齐、标签完整）。发布路径的拒绝用例待补（见下）。
-- [ ] 测试：发布时非法行为参数与无权限压缩模型的拒绝路径（需要带数据库的集成测试）。
+- [x] 测试：发布时非法行为参数与无权限压缩模型的拒绝路径，`tests/test_publish_native_validation.py`（带数据库）。
 - [ ] 基线完成后，依据测量结果调整 `tool_output_inline_limit` 默认值，并记录依据。
 
 ## 四之二、消息存储与回放（P10、P11，已确认）
@@ -57,8 +57,8 @@
 
 ## 五、并行只读工具
 
-- [ ] P9：工具定义显式声明；注册时校验只读工具无副作用；白名单内并行，结果顺序不变。
-- [ ] 测试：并行执行时结果顺序与模型声明顺序一致；非白名单工具保持串行。
+- [x] P9：工具定义显式声明；注册时校验只读工具无副作用；白名单内并行，结果顺序不变。
+- [x] 测试：并行执行时结果顺序与模型声明顺序一致；非白名单工具保持串行（`tests/test_native_hardening.py`）。
 
 ## 六、默认值切换与验证
 
@@ -68,6 +68,6 @@
 
 ## 七、文档与归档
 
-- [ ] 同步更新 `docs/architecture.md` 2.2（上下文、压缩）与 2.12（事件与持久化）。
-- [ ] 路线图第 3 步新增性能验收项。
+- [x] 同步更新 `docs/architecture.md` 2.2（上下文、压缩）与 2.12（事件与持久化）。
+- [x] 路线图第 3 步新增性能验收项（3.21，未完成）。
 - [ ] 归档本变更（仅在全部已确认项完成且验证通过后）。

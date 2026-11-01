@@ -34,14 +34,14 @@ def effective_summary(db: Session, session_id: UUID) -> ContextSummaryRecord | N
 
 
 def append_summary(db: Session, *, session_id: UUID, tenant_id: UUID, source_run_id: UUID,
-                   through_sequence: int, content: str) -> ContextSummaryRecord | None:
+                   through_sequence: int, content: str, max_chars: int = MAX_SUMMARY_CHARS) -> ContextSummaryRecord | None:
     """Insert a summary that extends the effective cut point; return None when it does not move forward."""
     current = effective_summary(db, session_id)
     if current is not None and through_sequence <= current.through_sequence:
         return None
     record = ContextSummaryRecord(
         id=new_id(), session_id=session_id, tenant_id=tenant_id, source_run_id=source_run_id,
-        through_sequence=through_sequence, content=content[:MAX_SUMMARY_CHARS],
+        through_sequence=through_sequence, content=content[:max_chars],
         supersedes_id=current.id if current is not None else None, created_at=utc_now())
     db.add(record)
     return record
