@@ -22,7 +22,7 @@
 
 - [x] 每 Run 新建执行对象：`worker/native.py::execute_native` 每次新建引擎、工具网关、工具注册表和模型客户端。
 - [x] 进程级共享工具注册表：`builtins()` 进程内只构建一次；存储通过 `ToolContext.services` 按调用传入，处理器不再闭包捕获 store，缺失时以 `tool_unavailable` 失败关闭（测试 `tests/test_shared_builtins.py`）。
-- [ ] 进程级共享模型客户端：**未实施**。模型客户端每次构建前都重新检查凭据（`configured_routing`），这是有意设计，缓存客户端会在凭据被撤销后继续使用旧凭据。工具注册表绑定 store，共享需改变工具绑定契约；实测每 Run 构建注册表约 6.7 ms（timeit，`builtins(None)`，2000 次平均），相对模型调用可忽略，因此暂不共享。
+- [x] 进程级共享模型客户端的连接池（选项 1）：按来源共享 HTTP 连接池，不共享客户端对象，凭据每 Run 解析；worker 使用单一事件循环（测试 `tests/test_shared_connections.py`）。本地实测每次请求约 21 ms → 3 ms（不含 TLS，仅作下限参考）。模型客户端每次构建前都重新检查凭据（`configured_routing`），这是有意设计，缓存客户端会在凭据被撤销后继续使用旧凭据。工具注册表绑定 store，共享需改变工具绑定契约；实测每 Run 构建注册表约 6.7 ms（timeit，`builtins(None)`，2000 次平均），相对模型调用可忽略，因此暂不共享。
 - [x] 终态快照：成功、失败、取消、中断均在 Run 终态写入路径（`runs/completion.py::_finish`，同一事务）中保存 v2 快照，只记录 `last_run` 的稳定码并保留其他键；仍为 `running` 的工具调用标记 `interrupted`。等待态不保存。（未放在运行器 `finally` 中，因为运行器的 `finally` 不负责持久化终态。）
 - [x] 投影缓存模块：key `(session_id, watermark)`，LRU、空闲 TTL、单条目字节上限，不缓存权限（`nexus_platform/sessions/projection_cache.py`，测试 `tests/test_projection_cache.py`）。
 - [x] 接入运行时：`runs/preparation.py::HISTORY_CACHE` 缓存未经授权过滤的原始消息行；每次运行都重新检查来源 Run 的授权。消息写入（`add_message`、`MessageRepository.initial`）递增水位，旧 key 自然失效。
@@ -41,6 +41,7 @@
 ## 文档与归档
 
 - [x] 同步架构文档 2.2、2.12 与路线图 2.12、3.17–3.19。
-- [ ] 模型客户端进程级共享：**待定**。需先确定凭据变更时缓存客户端如何失效，之后才能共享。在此决定前不归档本变更。
+- [x] 模型客户端进程级共享：已按选项 1 实施（共享连接池，不共享客户端）。
+- [ ] 真实供应商（TLS）下的连接复用收益：待在目标环境测量。
 - [ ] PostgreSQL 目标环境验证（随 2.9）。
 - [ ] 归档本变更（待上述两项完成或明确放弃）。

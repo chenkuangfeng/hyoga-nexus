@@ -34,13 +34,25 @@ def start_process_epoch(factory, instance_id: str) -> int:
     return epoch
 
 
+#: One event loop for the worker process. Shared HTTP connection pools are bound to the loop that
+#: created them, so Runs must not each create and close their own loop.
+_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _worker_loop() -> asyncio.AbstractEventLoop:
+    global _LOOP
+    if _LOOP is None or _LOOP.is_closed():
+        _LOOP = asyncio.new_event_loop()
+    return _LOOP
+
+
 def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> bool:
     with factory() as session:
         task_id = claim_next(session, worker_id)
     if task_id is None:
         return False
     from nexus_worker.native import execute_native
-    asyncio.run(execute_native(factory, task_id, worker_id, stopped=stopped, **execution_options))
+    _worker_loop().run_until_complete(execute_native(factory, task_id, worker_id, stopped=stopped, **execution_options))
     return True
 
 

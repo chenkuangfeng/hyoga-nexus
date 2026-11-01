@@ -52,7 +52,9 @@ def configured_model(context, resolver):
         raise RuntimeFault('model_credential_unavailable') from None
     if lease.expires_at <= utc_now():
         raise RuntimeFault('model_credential_unavailable')
-    return create_model(model=context.model_name, api_key=lease.reveal_for_call(), options=context.options)
+    # Connections are shared per origin; the credential is resolved and sent per Run, never pooled.
+    return create_model(model=context.model_name, api_key=lease.reveal_for_call(), options=context.options,
+                        share_connections=True)
 
 
 

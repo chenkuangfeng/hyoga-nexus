@@ -5,6 +5,7 @@ import asyncio
 import ipaddress
 import os
 import socket
+import threading
 from urllib.parse import urlsplit
 
 import httpx
@@ -44,10 +45,15 @@ class PinnedTransport(httpx.AsyncBaseTransport):
     DNS resolution is bounded to five seconds. Host and TLS SNI retain the original hostname,
     while the connection uses a literal approved IP. No ambient proxy or redirect can redirect
     credential transmission. The owner must close this transport with its HTTP client.
+
+    ``inner`` may be a connection pool shared across Runs (see ``shared_connection_pool``). The
+    address check above still runs on every request, and closing this transport never closes a
+    pool it did not create.
     """
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, inner: httpx.AsyncBaseTransport | None = None):
         self.url = httpx.URL(validate_url(base_url))
-        self.inner = httpx.AsyncHTTPTransport(trust_env=False, retries=0)
+        self.inner = inner if inner is not None else httpx.AsyncHTTPTransport(trust_env=False, retries=0)
+        self._owns_inner = inner is None
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         if (request.url.scheme, request.url.host, request.url.port) != (self.url.scheme, self.url.host, self.url.port):
@@ -71,10 +77,45 @@ class PinnedTransport(httpx.AsyncBaseTransport):
         return await self.inner.handle_async_request(request)
 
     async def aclose(self) -> None:
-        await self.inner.aclose()
+        if self._owns_inner:
+            await self.inner.aclose()
 
 
-def provider_client(base_url: str, *, timeout: float = 60) -> httpx.AsyncClient:
-    """Build the controlled async client for both connection tests and actual Native calls."""
-    return httpx.AsyncClient(transport=PinnedTransport(base_url), follow_redirects=False,
+#: One connection pool per provider origin, shared by every Run in the worker process.
+#: An httpx pool is bound to the event loop that created it, so each pool records its loop and is
+#: used only from that loop. Pools for other loops are never returned, and callers get a private
+#: transport instead.
+_POOLS: dict[tuple[str, str, int], tuple[httpx.AsyncHTTPTransport, asyncio.AbstractEventLoop]] = {}
+_POOLS_LOCK = threading.Lock()
+
+
+def shared_connection_pool(base_url: str) -> httpx.AsyncHTTPTransport | None:
+    """Return the process-wide pool for this origin, or None when the caller must not share.
+
+    Returns None when there is no running loop, or when the origin's pool belongs to another loop.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    url = httpx.URL(validate_url(base_url))
+    key = (url.scheme, url.host, url.port or (443 if url.scheme == 'https' else 80))
+    with _POOLS_LOCK:
+        entry = _POOLS.get(key)
+        if entry is None:
+            entry = (httpx.AsyncHTTPTransport(trust_env=False, retries=0), loop)
+            _POOLS[key] = entry
+        pool, owner = entry
+    return pool if owner is loop else None
+
+
+def provider_client(base_url: str, *, timeout: float = 60, share_connections: bool = False) -> httpx.AsyncClient:
+    """Build the controlled async client for connection tests and Native calls.
+
+    With ``share_connections`` the TCP/TLS connections come from the process-wide pool for this
+    origin. The per-request address check and redirect rules are unchanged, and credentials are
+    never stored in the pool.
+    """
+    inner = shared_connection_pool(base_url) if share_connections else None
+    return httpx.AsyncClient(transport=PinnedTransport(base_url, inner=inner), follow_redirects=False,
                              trust_env=False, timeout=timeout)
