@@ -2,7 +2,7 @@
 
 ## 状态
 
-草稿，待确认。父提案：`openspec/changes/2026-11-02-weknora-parity/`（已确认）。在本提案确认前不编码。
+已确认（2026-11-02）：三项决定按推荐方案执行（i18n 全量迁移；会话按 `updated_at` 分组；对话页去掉标题与介绍）。实施情况见 tasks.md 末尾的实施记录。父提案：`openspec/changes/2026-11-02-weknora-parity/`。
 
 ## 背景
 
