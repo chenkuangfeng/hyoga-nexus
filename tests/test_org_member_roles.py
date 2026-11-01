@@ -176,3 +176,14 @@ def test_platform_admin_lists_all_spaces_others_are_refused(database):
     with database() as db:
         with pytest.raises(Forbidden):
             list_all_tenants(db, OWNER)
+
+
+def test_platform_admin_lists_agents_across_spaces(database):
+    from nexus_platform.agents.service import list_all_agents_for_platform_admin
+    _platform_admin(database)
+    tenant, _, _, agent, _version, _session = create_agent_stack(database, OWNER)
+    with database() as db:
+        assert agent.id in {row.id for row in list_all_agents_for_platform_admin(db, ADMIN)}
+    with database() as db:
+        with pytest.raises(Forbidden):
+            list_all_agents_for_platform_admin(db, OWNER)

@@ -210,6 +210,16 @@ def get_agent(session: Session, tenant_id: UUID, agent_id: UUID):
     return agent, draft_bindings
 
 
+def list_all_agents_for_platform_admin(session: Session, principal: Principal) -> list[AgentRecord]:
+    """Every agent across spaces, for the platform administrator's session filter. Others get Forbidden."""
+    from nexus_platform.errors import Forbidden
+    from nexus_platform.identity.service import resolve_user
+    with session.begin():
+        if not resolve_user(session, principal).is_platform_admin:
+            raise Forbidden("Platform administrator required")
+        return list(session.scalars(select(AgentRecord).order_by(AgentRecord.tenant_id, AgentRecord.name)))
+
+
 def list_agents(session: Session, tenant_id: UUID) -> list[AgentRecord]:
     return list(
         session.scalars(

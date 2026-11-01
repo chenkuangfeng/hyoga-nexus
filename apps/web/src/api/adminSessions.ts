@@ -22,14 +22,22 @@ function rows<T>(value: unknown, parse: (row: Row) => T): T[] {
   return value.map(item => parse(record(item)))
 }
 
+/** An agent across spaces, for the session filter. */
+export interface AdminAgent { id: string; tenant_id: string; name: string; published_version_id: string | null }
+
 /** Platform-administrator endpoints. Other users receive 403 from the server. */
 export const adminSessionApi = {
+  agents: (signal?: AbortSignal) => request<AdminAgent[]>('/admin/agents', value => rows(value, row => ({
+    id: text(row.id), tenant_id: text(row.tenant_id), name: text(row.name),
+    published_version_id: row.published_version_id === null || row.published_version_id === undefined ? null : text(row.published_version_id),
+  })), { signal }),
   tenants: (signal?: AbortSignal) => request<Tenant[]>('/admin/tenants', value => rows(value, row => ({
     id: text(row.id), name: text(row.name), via_organization: false,
   })), { signal }),
-  sessions: (filter: { tenantId?: string; orgUnitId?: string }, signal?: AbortSignal) => {
+  sessions: (filter: { tenantId?: string; agentId?: string; orgUnitId?: string }, signal?: AbortSignal) => {
     const query = new URLSearchParams()
     if (filter.tenantId) query.set('tenant_id', filter.tenantId)
+    if (filter.agentId) query.set('agent_id', filter.agentId)
     if (filter.orgUnitId) query.set('org_unit_id', filter.orgUnitId)
     const suffix = query.toString() ? `?${query.toString()}` : ''
     return request<AdminSession[]>(`/admin/sessions${suffix}`, value => rows(value, row => ({

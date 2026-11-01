@@ -117,6 +117,14 @@ class AgentVersionView(BaseModel):
     published_at: datetime
 
 
+class AdminAgentView(BaseModel):
+    """An agent as listed for the platform administrator's session filter."""
+    id: UUID
+    tenant_id: UUID
+    name: str
+    published_version_id: UUID | None
+
+
 class AgentView(BaseModel):
     id: UUID
     tenant_id: UUID

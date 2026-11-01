@@ -9,6 +9,7 @@ const errors = []
 page.on('pageerror', error => errors.push(error.message))
 const json = value => ({ contentType: 'application/json', body: JSON.stringify(value) })
 let isAdmin = true
+const sessionQueries = []
 let joinBody = null
 const tree = [
   { id: 'group', parent_id: null, name: '集团', status: 'active', member_count: 0 },
@@ -27,9 +28,11 @@ await page.route('**/api/v1/**', async route => {
   if (path.endsWith('/people') && path.includes('/org-units/')) return route.fulfill(json(path.endsWith('/org-units/dept/people') ? people : []))
   if (path.endsWith('/bindings') && path.includes('/org-units/')) return route.fulfill(json([]))
   if (path.endsWith('/users')) return route.fulfill(json([{ user_id: 'u-bob', display_name: '李四', username: 'lisi' }]))
+  if (path.endsWith('/admin/agents')) return route.fulfill(json([{ id: 'agent-1', tenant_id: 'tenant', name: '研究智能体', published_version_id: 'v1' }]))
   if (path.endsWith('/admin/tenants')) return route.fulfill(json([{ id: 'tenant', name: '集团空间' }]))
   if (path.endsWith('/admin/sessions')) {
     const unit = url.searchParams.get('org_unit_id')
+    sessionQueries.push(url.searchParams.get('agent_id') || '')
     const all = [
       { id: 's-org', tenant_id: 'tenant', owner_user_id: 'u-alice', title: '组织会话', org_unit_id: 'dept', updated_at: '2026-11-01T08:00:00Z' },
       { id: 's-own', tenant_id: 'tenant', owner_user_id: 'admin-1', title: '个人会话', org_unit_id: null, updated_at: '2026-11-01T09:00:00Z' },
@@ -77,10 +80,13 @@ try {
   await page.getByRole('table', { name: '会话列表' }).waitFor()
   assert.equal(await page.getByRole('cell', { name: '个人会话' }).count(), 1)
   await page.getByText('组织访问', { exact: true }).waitFor()
-  await page.locator('.filters .el-select__wrapper').nth(1).click()
+  await page.locator('.filters .el-select__wrapper').nth(2).click()
   await page.getByRole('option', { name: '研发部' }).click()
   await page.getByRole('cell', { name: '个人会话' }).waitFor({ state: 'detached' })
   assert.equal(await page.getByRole('cell', { name: '组织会话' }).count(), 1)
+  await page.locator('.filters .el-select__wrapper').nth(1).click()
+  await page.getByRole('option', { name: /研究智能体/ }).click()
+  assert.ok(sessionQueries.includes('agent-1'), 'agent filter should be sent to the server')
 
   // A user who is not a platform admin gets no organization-management or session-query entry.
   // Leave the admin-only page first; reloading on it would render the overview fallback for a non-admin.

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { orgApi } from '../../api/orgs'
-import { adminSessionApi, type AdminSession } from '../../api/adminSessions'
+import { adminSessionApi, type AdminAgent, type AdminSession } from '../../api/adminSessions'
 import type { Tenant } from '../../types/chat'
 import type { OrgNode } from '../../types/orgs'
 
@@ -9,8 +9,9 @@ import type { OrgNode } from '../../types/orgs'
  * Memory is deliberately not shown here; it stays visible only to its owner.
  */
 const tenants = ref<Tenant[]>([])
+const agents = ref<AdminAgent[]>([])
 const units = ref<OrgNode[]>([])
-const tenantId = ref(''), unitId = ref('')
+const tenantId = ref(''), agentId = ref(''), unitId = ref('')
 const sessions = ref<AdminSession[]>([])
 const loading = ref(false), error = ref('')
 
@@ -21,15 +22,16 @@ const unitName = computed(() => new Map(units.value.map(item => [item.id, item.n
 async function loadSessions() {
   loading.value = true; error.value = ''
   try {
-    sessions.value = await adminSessionApi.sessions({ tenantId: tenantId.value, orgUnitId: unitId.value })
+    sessions.value = await adminSessionApi.sessions({ tenantId: tenantId.value, agentId: agentId.value, orgUnitId: unitId.value })
   } catch (err) { error.value = message(err); sessions.value = [] }
   finally { loading.value = false }
 }
-watch([tenantId, unitId], () => void loadSessions())
+watch([tenantId, agentId, unitId], () => void loadSessions())
 onMounted(async () => {
   try {
-    const [spaces, orgs] = await Promise.all([adminSessionApi.tenants(), orgApi.orgs()])
+    const [spaces, orgs, allAgents] = await Promise.all([adminSessionApi.tenants(), orgApi.orgs(), adminSessionApi.agents()])
     tenants.value = spaces
+    agents.value = allAgents
     const trees = await Promise.all(orgs.map(org => orgApi.tree(org.id)))
     units.value = trees.flat()
   } catch (err) { error.value = message(err) }
@@ -47,6 +49,10 @@ onMounted(async () => {
       <label for="admin-tenant">空间</label>
       <el-select id="admin-tenant" v-model="tenantId" clearable placeholder="全部空间">
         <el-option v-for="item in tenants" :key="item.id" :label="item.name" :value="item.id" />
+      </el-select>
+      <label for="admin-agent">智能体</label>
+      <el-select id="admin-agent" v-model="agentId" clearable placeholder="全部智能体">
+        <el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${tenantName.get(item.tenant_id) || '空间'}）`" :value="item.id" />
       </el-select>
       <label for="admin-unit">组织节点</label>
       <el-select id="admin-unit" v-model="unitId" clearable placeholder="全部组织">
@@ -81,7 +87,7 @@ onMounted(async () => {
 header h1 { margin: 0; }
 .intro, .muted { color: var(--muted-text); line-height: 1.6; font-size: 14px; }
 .notice { margin-top: 12px; }
-.filters { display: grid; grid-template-columns: 80px 260px 80px 260px; gap: 12px; align-items: center; margin: 16px 0; }
+.filters { display: grid; grid-template-columns: 80px 240px 80px 240px; gap: 12px; align-items: center; margin: 16px 0; }
 .filters label { font-size: 14px; font-weight: 600; }
 .sessions { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .sessions th, .sessions td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--el-border-color-lighter); font-size: 14px; overflow-wrap: anywhere; }
