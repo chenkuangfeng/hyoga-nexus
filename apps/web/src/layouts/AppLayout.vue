@@ -6,13 +6,19 @@
  * <768px the sidebar is a drawer opened from the top bar. The collapsed choice is remembered.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
+import SettingsDialog from './SettingsDialog.vue'
 import { workspace } from '../stores/workspace'
 
 const emit = defineEmits<{ signOut: [] }>()
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
+const settingsOpen = ref(false)
+// Route titles are i18n keys (`meta.titleKey`); the page title follows the interface language.
+const pageTitle = computed(() => (route.meta.titleKey ? t(String(route.meta.titleKey)) : t('shell.pages.chat')))
 const STORAGE_KEY = 'nexus_sidebar_collapsed'
 const narrow = window.matchMedia('(max-width: 767px)')
 const medium = window.matchMedia('(max-width: 1023px)')
@@ -54,16 +60,17 @@ watch(() => [route.fullPath, workspace.user?.is_platform_admin], () => {
 <template>
   <div class="app-frame" :class="{ 'app-frame--narrow': isNarrow, 'app-frame--motion-reduced': reduceMotion.matches }">
     <header v-if="isNarrow" class="top-bar">
-      <button type="button" class="icon-button" aria-label="打开导航" :aria-expanded="drawerOpen" aria-controls="app-sidebar" @click="toggle">☰</button>
-      <strong>{{ route.meta.title || '工作台' }}</strong>
+      <button type="button" class="icon-button" :aria-label="t('shell.openNav')" :aria-expanded="drawerOpen" aria-controls="app-sidebar" @click="toggle">☰</button>
+      <strong>{{ pageTitle }}</strong>
     </header>
     <div v-if="isNarrow && drawerOpen" class="drawer-backdrop" aria-hidden="true" @click="drawerOpen = false" />
     <div id="app-sidebar" class="sidebar-slot" :class="{ 'sidebar-slot--drawer': isNarrow, 'sidebar-slot--open': drawerOpen }" :hidden="sidebarHidden || undefined">
-      <AppSidebar :collapsed="collapsed" @toggle="toggle" @navigate="onNavigate" @sign-out="emit('signOut')" />
+      <AppSidebar :collapsed="collapsed" @toggle="toggle" @navigate="onNavigate" @sign-out="emit('signOut')" @open-settings="settingsOpen = true" />
     </div>
-    <main class="page-slot" :aria-label="String(route.meta.title || '工作台')">
+    <main class="page-slot" :aria-label="pageTitle">
       <router-view v-if="allowed" />
     </main>
+    <SettingsDialog v-model="settingsOpen" />
   </div>
 </template>
 

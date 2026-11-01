@@ -1,8 +1,26 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { api, parseEvent, runPath } from '../api/chat'
+import { i18n } from '../i18n'
 import { loadTenants, workspace } from '../stores/workspace'
 import type { Agent, Conversation, InputRequest, Message, Run, RunEvent, Tenant } from '../types/chat'
 import { terminal } from '../types/chat'
+
+const t = i18n.global.t
+
+/**
+ * One row of the run timeline. Built from `messages` (history) and `events` (live run). Labels are not
+ * stored here; the view translates `state` so the language can change without rebuilding the list.
+ */
+export type TimelineItem =
+  { kind: 'message'; id: string; role: string; content: string } |
+  { kind: 'thinking'; id: string; content: string } |
+  { kind: 'tool'; id: string; name: string; state: ToolState; summary: string; progress: string[] } |
+  { kind: 'approval'; id: string; name: string; state: 'pending' | 'approved' | 'rejected' } |
+  { kind: 'input'; id: string; question: string; state: 'pending' | 'answered' }
+export type ToolState = 'running' | 'completed' | 'failed' | 'unknown' | 'cancelled' | 'denied'
+
+/** Totals shown above the timeline: thinking turns, tool calls, and seconds from first to last event received. */
+export interface RunStats { turns: number; tools: number; seconds: number }
 
 export function useConversation() {
   // Spaces come from the shell's shared store, so the sidebar selector and this page agree.
@@ -22,12 +40,10 @@ export function useConversation() {
   const queueLabel = computed(() => {
     const current = run.value, position = queued.value
     if (!current || current.status !== 'queued' || !position || position.run !== current.id) return ''
-    return position.position === 1 ? '排队中，即将开始' : `排队中，前方还有 ${position.position - 1} 个请求`
+    return position.position === 1 ? t('chat.queueFirst') : t('chat.queueAhead', { count: position.position - 1 })
   })
   const availableAgents = computed(() => agents.value.filter(agent => agent.runtime_type === 'native' && agent.published_version_id))
-  type TimelineItem = { kind: 'message'; id: string; role: string; content: string } |
-    { kind: 'tool'; id: string; name: string; status: string; summary: string }
-  const timeline = computed(() => {
+  const timeline = computed<TimelineItem[]>(() => {
     const result: TimelineItem[] = messages.value.filter(message => message.run_id !== run.value?.id && ['user', 'assistant'].includes(message.role))
       .map(message => ({ kind: 'message', id: message.id, role: message.role, content: message.content }))
     const users = messages.value.filter(message => message.run_id === run.value?.id && message.role === 'user')
@@ -35,25 +51,68 @@ export function useConversation() {
     const appendUser = () => { const user = users[userIndex++]; if (user) result.push({ kind: 'message', id: user.id, role: user.role, content: user.content }) }
     appendUser()
     const turns = new Map<number, Extract<TimelineItem, { kind: 'message' }>>()
-    const toolItems = new Map<string, Extract<TimelineItem, { kind: 'tool' }>>()
+    const thinking = new Map<number, Extract<TimelineItem, { kind: 'thinking' }>>()
+    const tools = new Map<string, Extract<TimelineItem, { kind: 'tool' }>>()
+    const approvals = new Map<string, Extract<TimelineItem, { kind: 'approval' }>>()
+    let input: Extract<TimelineItem, { kind: 'input' }> | undefined
     for (const event of events.value) {
-      if (event.event_type === 'message.delta' && typeof event.payload.text === 'string' && typeof event.payload.turn === 'number') {
-        let item = turns.get(event.payload.turn)
-        if (!item) { item = { kind: 'message', id: `turn-${event.payload.turn}`, role: 'assistant', content: '' }; turns.set(event.payload.turn, item); result.push(item) }
-        item.content += event.payload.text
+      const payload = event.payload
+      if (event.event_type === 'message.delta' && typeof payload.text === 'string' && typeof payload.turn === 'number') {
+        // Reasoning deltas are kept apart from the answer so the view can fold them. The runtime does not
+        // emit them yet; the branch is ready for when it does.
+        if (payload.kind === 'reasoning') {
+          let item = thinking.get(payload.turn)
+          if (!item) { item = { kind: 'thinking', id: `thinking-${payload.turn}`, content: '' }; thinking.set(payload.turn, item); result.push(item) }
+          item.content += payload.text
+        } else {
+          let item = turns.get(payload.turn)
+          if (!item) { item = { kind: 'message', id: `turn-${payload.turn}`, role: 'assistant', content: '' }; turns.set(payload.turn, item); result.push(item) }
+          item.content += payload.text
+        }
       }
-      if (event.event_type === 'input.received') appendUser()
-      const id = event.payload.invocation_id
+      if (event.event_type === 'input.received') { appendUser(); if (input) input.state = 'answered' }
+      if (event.event_type === 'input.requested' && typeof payload.input_request_id === 'string') {
+        input = { kind: 'input', id: `input-${payload.input_request_id}`, question: String(payload.question || ''), state: 'pending' }
+        result.push(input)
+      }
+      if (event.event_type === 'approval.requested' && typeof payload.approval_id === 'string') {
+        const item = { kind: 'approval' as const, id: `approval-${payload.approval_id}`, name: String(payload.tool_name || t('chat.toolDefault')), state: 'pending' as const }
+        approvals.set(payload.approval_id, item); result.push(item)
+      }
+      if (event.event_type === 'approval.resolved' && typeof payload.approval_id === 'string') {
+        const item = approvals.get(payload.approval_id)
+        if (item) item.state = payload.approved === true ? 'approved' : 'rejected'
+      }
+      const id = payload.invocation_id
       if (typeof id !== 'string') continue
       if (event.event_type === 'tool.started') {
-        const item = { kind: 'tool' as const, id, name: String(event.payload.name || '工具'), status: '运行中', summary: '' }
-        toolItems.set(id, item); result.push(item)
-      } else if (['tool.completed', 'tool.failed'].includes(event.event_type)) {
-        const item = toolItems.get(id)
-        if (item) { item.status = event.event_type === 'tool.completed' ? '已完成' : event.payload.status === 'interrupted' ? '结果未知' : event.payload.status === 'cancelled' ? '已取消' : '执行失败'; item.summary = String(event.payload.summary || '') }
+        const item = { kind: 'tool' as const, id, name: String(payload.name || t('chat.toolDefault')), state: 'running' as ToolState, summary: '', progress: [] as string[] }
+        tools.set(id, item); result.push(item)
+      } else if (event.event_type === 'tool.progress') {
+        const item = tools.get(id)
+        if (item && typeof payload.text === 'string') item.progress.push(payload.text)
+      } else if (['tool.completed', 'tool.failed', 'tool.denied'].includes(event.event_type)) {
+        const item = tools.get(id)
+        if (item) {
+          item.state = event.event_type === 'tool.completed' ? 'completed'
+            : event.event_type === 'tool.denied' ? 'denied'
+              : payload.status === 'interrupted' ? 'unknown' : payload.status === 'cancelled' ? 'cancelled' : 'failed'
+          item.summary = String(payload.summary || '')
+        }
       }
     }
     return result
+  })
+  /** Totals for the timeline header. Seconds come from when this page received the first and last event. */
+  const stats = computed<RunStats>(() => {
+    const turns = new Set<number>(), tools = new Set<string>()
+    for (const event of events.value) {
+      if (event.event_type === 'message.delta' && typeof event.payload.turn === 'number') turns.add(event.payload.turn)
+      if (event.event_type === 'tool.started' && typeof event.payload.invocation_id === 'string') tools.add(event.payload.invocation_id)
+    }
+    const first = events.value[0]?.received_at, last = events.value.at(-1)?.received_at
+    const seconds = first !== undefined && last !== undefined ? Math.max(0, Math.round((last - first) / 1000)) : 0
+    return { turns: turns.size, tools: tools.size, seconds }
   })
   function resetConnection() { source?.close(); source = undefined; connection.value = 'idle' }
   function attach(cursor = 0) {
@@ -65,7 +124,7 @@ export function useConversation() {
     source = stream
     let last = cursor
     stream.onopen = () => { if (source === stream && epoch === generation) connection.value = 'connected' }
-    stream.addEventListener('stream.closed', () => { if (source !== stream) return; stream.close(); connection.value = 'closed'; error.value = '事件连接已关闭，请刷新检查访问权限。' })
+    stream.addEventListener('stream.closed', () => { if (source !== stream) return; stream.close(); connection.value = 'closed'; error.value = t('chat.eventsClosed') })
     stream.addEventListener('run.event', event => {
       if (source !== stream || epoch !== generation || run.value?.id !== id) return
       try {
@@ -73,7 +132,7 @@ export function useConversation() {
         if (item.run_id !== id || item.sequence <= last) return
         if (item.sequence !== last + 1) { stream.close(); attach(last); return }
         last = item.sequence
-        events.value.push(item)
+        events.value.push({ ...item, received_at: Date.now() })
         if (item.event_type === 'input.requested' && typeof item.payload.input_request_id === 'string' && typeof item.payload.question === 'string') {
           pendingInput.value = { input_request_id: item.payload.input_request_id, question: item.payload.question, candidates: Array.isArray(item.payload.candidates) ? item.payload.candidates.filter((value): value is string => typeof value === 'string') : [] }
         }
@@ -88,7 +147,7 @@ export function useConversation() {
           // Replaying a historical wait must not close a stream whose Run has already resumed.
           if (terminal(status)) { pendingInput.value = null; stream.close(); connection.value = 'idle' }
         }
-      } catch { stream.close(); connection.value = 'closed'; error.value = '无法读取运行事件，请重连。' }
+      } catch { stream.close(); connection.value = 'closed'; error.value = t('chat.errorGeneric') }
     })
     stream.onerror = () => {
       if (source !== stream || epoch !== generation) return
@@ -125,7 +184,7 @@ export function useConversation() {
       versionId.value = availableAgents.value[0]?.published_version_id || ''
       const target = sessionRows.find(row => row.id === preferred) || sessionRows[0]
       if (target) await openSession(target.id)
-    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '无法加载空间' }
+    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : t('chat.loadSpaceFailed') }
     finally { if (epoch === generation || tenant.value === id) loading.value = false }
   }
   async function openSession(id: string) {
@@ -142,7 +201,7 @@ export function useConversation() {
         cursor = history.messages[history.messages.length - 1]!.sequence
       }
       attach()
-    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '无法加载会话' }
+    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : t('chat.loadSessionFailed') }
     finally { if (epoch === generation) loading.value = false }
   }
   async function createSession() {
@@ -153,11 +212,22 @@ export function useConversation() {
       const created = await api.createSession(tenant.value, versionId.value)
       if (epoch !== generation) return
       sessions.value.unshift(created); await openSession(created.id)
-    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '创建失败' }
+    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : t('chat.createFailed') }
     finally { submitting.value = false }
   }
+  /** Leave the open session for a blank draft. The session is created on the first send, not here. */
+  function startDraft() {
+    generation++; controller?.abort(); resetConnection()
+    sessionId.value = ''; run.value = null; messages.value = []; events.value = []; pendingInput.value = null; cancelling.value = false; error.value = ''
+  }
   async function send(text: string): Promise<boolean> {
-    if (!sessionId.value || active.value || submitting.value || !text.trim()) return false
+    if (active.value || submitting.value || !text.trim()) return false
+    if (!sessionId.value) {
+      // A draft: create the session first, then send into it. Creation failures are shown by createSession.
+      if (!tenant.value || !versionId.value) return false
+      await createSession()
+      if (!sessionId.value) return false
+    }
     submitting.value = true; error.value = ''
     const epoch = generation
     if (sendAttempt?.text !== text || sendAttempt.session !== sessionId.value) sendAttempt = { text, key: crypto.randomUUID(), session: sessionId.value }
@@ -167,7 +237,7 @@ export function useConversation() {
       queued.value = accepted.queue_position === null ? null : { run: accepted.id, position: accepted.queue_position }
       if (epoch !== generation) return false
       await openSession(sessionId.value); return true
-    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '发送失败'; return false }
+    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : t('chat.sendFailedDetail'); return false }
     finally { submitting.value = false }
   }
   async function cancel() {
@@ -175,7 +245,7 @@ export function useConversation() {
     const epoch = generation
     cancelling.value = true; error.value = ''
     try { const result = await api.cancel(tenant.value, run.value.id); if (epoch === generation) { run.value = result; if (terminal(result.status)) { pendingInput.value = null; cancelling.value = false; resetConnection() } } }
-    catch (cause) { if (epoch === generation) { cancelling.value = false; error.value = cause instanceof Error ? cause.message : '停止失败' } }
+    catch (cause) { if (epoch === generation) { cancelling.value = false; error.value = cause instanceof Error ? cause.message : t('chat.stopFailed') } }
   }
   async function respond(text: string): Promise<boolean> {
     if (!pendingInput.value || !run.value || submitting.value || !text.trim()) return false
@@ -187,11 +257,11 @@ export function useConversation() {
       responseAttempt = undefined
       if (epoch !== generation) return false
       pendingInput.value = null; await openSession(sessionId.value); return true
-    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '回答提交失败'; return false }
+    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : t('chat.responseFailed'); return false }
     finally { submitting.value = false }
   }
   onBeforeUnmount(() => { generation++; controller?.abort(); resetConnection() })
-  return { tenants, agents: availableAgents, sessions, tenant, sessionId, versionId, timeline, queueLabel,
+  return { tenants, agents: availableAgents, sessions, tenant, sessionId, versionId, timeline, stats, queueLabel,
     run, pendingInput, error, loading, submitting, connection, cancelling, active,
-    initialize, selectTenant, openSession, createSession, send, cancel, respond, reconnect: () => attach(events.value.at(-1)?.sequence || 0) }
+    initialize, selectTenant, openSession, createSession, startDraft, send, cancel, respond, reconnect: () => attach(events.value.at(-1)?.sequence || 0) }
 }

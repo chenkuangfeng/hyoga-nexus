@@ -1,88 +1,89 @@
 <script setup lang="ts">
 import { useModelSettings } from '../../composables/useModelSettings'
+import { i18n } from '../../i18n'
 const settings = useModelSettings()
 const { tenants, tenant, loading, busy, error, feedback, data, models, providerDialog, modelDialog, form,
   editingProvider, modelName, modelProtocol, modelStream, modelTextTools, reasoningEffort, temperature, agentName, instructions, agentModel } = settings
 </script>
 <template>
   <main class="model-settings" v-loading="loading" :aria-busy="loading || busy">
-    <header><div><p class="eyebrow">HYOGA NEXUS / 用户设置</p><h1>模型供应商</h1></div>
-      <el-button :disabled="busy || loading || !tenant" @click="settings.editProvider()">添加供应商</el-button></header>
-    <p class="intro">管理个人和空间共享模型。默认模型用于新建智能体，已有会话保持原来的模型版本。</p>
-    <el-button :disabled="busy || loading" @click="settings.initialize">刷新设置</el-button>
-    <p v-if="!tenants.length && !loading">暂无可用空间，请先创建空间或联系管理员加入。</p>
+    <header><div><p class="eyebrow">{{ $t('modelPage.eyebrow') }}</p><h1>{{ $t('modelPage.heading') }}</h1></div>
+      <el-button :disabled="busy || loading || !tenant" @click="settings.editProvider()">{{ $t('modelPage.addProvider') }}</el-button></header>
+    <p class="intro">{{ $t('modelPage.intro') }}</p>
+    <el-button :disabled="busy || loading" @click="settings.initialize">{{ $t('modelPage.refresh') }}</el-button>
+    <p v-if="!tenants.length && !loading">{{ $t('modelPage.noSpaces') }}</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="error" />
     <p class="feedback" role="status" aria-live="polite">{{ feedback }}</p>
     <section v-if="tenant" class="settings-section" aria-labelledby="defaults-title">
-      <h2 id="defaults-title">默认模型</h2>
+      <h2 id="defaults-title">{{ $t('modelPage.defaults') }}</h2>
       <div class="defaults-grid">
-        <div><label for="personal-default">个人默认</label>
-          <el-select id="personal-default" :model-value="data.defaults.personal || ''" clearable :disabled="busy || loading" placeholder="使用空间默认" @change="(value: string) => settings.setDefault('personal', value || null)">
+        <div><label for="personal-default">{{ $t('modelPage.personalDefault') }}</label>
+          <el-select id="personal-default" :model-value="data.defaults.personal || ''" clearable :disabled="busy || loading" :placeholder="$t('modelPage.useSpaceDefault')" @change="(value: string) => settings.setDefault('personal', value || null)">
             <el-option v-for="model in models" :key="model.version_id" :label="model.label" :value="model.version_id" />
           </el-select></div>
-        <div><label for="tenant-default">空间默认</label>
-          <el-select id="tenant-default" :model-value="data.defaults.tenant || ''" clearable :disabled="busy || loading || !data.can_manage_tenant" placeholder="尚未设置" @change="(value: string) => settings.setDefault('tenant', value || null)">
+        <div><label for="tenant-default">{{ $t('modelPage.spaceDefault') }}</label>
+          <el-select id="tenant-default" :model-value="data.defaults.tenant || ''" clearable :disabled="busy || loading || !data.can_manage_tenant" :placeholder="$t('modelPage.notSet')" @change="(value: string) => settings.setDefault('tenant', value || null)">
             <el-option v-for="model in models.filter(item => item.scope === 'tenant')" :key="model.version_id" :label="model.label" :value="model.version_id" />
           </el-select></div>
       </div>
-      <p class="intro">优先使用明确选择的模型，其次为个人默认、空间默认。空间默认由管理员维护。</p>
+      <p class="intro">{{ $t('modelPage.priorityIntro') }}</p>
     </section>
     <section class="settings-section" aria-labelledby="providers-title">
-      <h2 id="providers-title">已配置供应商</h2>
-      <el-empty v-if="!data.providers.length && !loading" description="还没有供应商，添加后可配置模型" />
+      <h2 id="providers-title">{{ $t('modelPage.providers') }}</h2>
+      <el-empty v-if="!data.providers.length && !loading" :description="$t('modelPage.noProviders')" />
       <article v-for="provider in data.providers" :key="provider.id" class="provider-card">
-        <header><h3>{{ provider.name }} <el-tag>{{ provider.scope === 'personal' ? '仅本人' : '空间共享' }}</el-tag></h3>
+        <header><h3>{{ provider.name }} <el-tag>{{ provider.scope === 'personal' ? $t('modelPage.scopePersonal') : $t('modelPage.scopeShared') }}</el-tag></h3>
           <div v-if="provider.scope === 'personal' || data.can_manage_tenant" class="actions">
-            <el-button :disabled="busy" @click="settings.editProvider(provider)">编辑供应商</el-button>
-            <el-button :disabled="busy" type="danger" plain @click="settings.confirmRemove(provider)">停用供应商</el-button></div></header>
-        <p class="provider-address">{{ provider.base_url }}</p><p>API Key：{{ provider.key_configured ? '已配置 ••••••••' : '未配置' }} · OpenAI 兼容协议</p>
-        <p v-if="!provider.models.length">尚未添加模型，请填写账号可用的模型名称。</p>
+            <el-button :disabled="busy" @click="settings.editProvider(provider)">{{ $t('modelPage.editProvider') }}</el-button>
+            <el-button :disabled="busy" type="danger" plain @click="settings.confirmRemove(provider)">{{ $t('modelPage.disableProvider') }}</el-button></div></header>
+        <p class="provider-address">{{ provider.base_url }}</p><p>API Key：{{ provider.key_configured ? $t('modelPage.keyConfigured') : $t('modelPage.keyMissing') }} · {{ $t('modelPage.protocolCompat') }}</p>
+        <p v-if="!provider.models.length">{{ $t('modelPage.noModels') }}</p>
         <ul class="model-list"><li v-for="model in provider.models" :key="model.id">
-          <div><strong>{{ model.name }}</strong><span class="model-version">版本 {{ model.version }}</span>
-            <el-tag v-if="data.defaults.personal === model.version_id">个人默认</el-tag>
-            <el-tag v-if="data.defaults.tenant === model.version_id">空间默认</el-tag></div>
+          <div><strong>{{ model.name }}</strong><span class="model-version">{{ $t('modelPage.version', { n: model.version }) }}</span>
+            <el-tag v-if="data.defaults.personal === model.version_id">{{ $t('modelPage.personalDefault') }}</el-tag>
+            <el-tag v-if="data.defaults.tenant === model.version_id">{{ $t('modelPage.spaceDefault') }}</el-tag></div>
           <div v-if="provider.scope === 'personal' || data.can_manage_tenant" class="actions">
-            <el-button :disabled="busy" @click="settings.test(provider.id, model.id)">测试 {{ model.name }}</el-button>
-            <el-button :disabled="busy" @click="settings.editModel(provider.id, model.id, model.name)">编辑 {{ model.name }}</el-button>
-            <el-button :disabled="busy" type="danger" plain @click="settings.confirmRemove(provider, model)">停用 {{ model.name }}</el-button>
+            <el-button :disabled="busy" @click="settings.test(provider.id, model.id)">{{ $t('modelPage.test', { name: model.name }) }}</el-button>
+            <el-button :disabled="busy" @click="settings.editModel(provider.id, model.id, model.name)">{{ $t('modelPage.editModel', { name: model.name }) }}</el-button>
+            <el-button :disabled="busy" type="danger" plain @click="settings.confirmRemove(provider, model)">{{ $t('modelPage.disableModel', { name: model.name }) }}</el-button>
           </div>
         </li></ul>
-        <el-button v-if="provider.scope === 'personal' || data.can_manage_tenant" :disabled="busy" @click="settings.editModel(provider.id)">添加模型</el-button>
+        <el-button v-if="provider.scope === 'personal' || data.can_manage_tenant" :disabled="busy" @click="settings.editModel(provider.id)">{{ $t('modelPage.addModel') }}</el-button>
       </article>
-      <p class="intro">测试会发送少量模型请求，可能产生费用；测试通过不代表完整模型与工具能力已验收。</p>
+      <p class="intro">{{ $t('modelPage.testIntro') }}</p>
     </section>
     <section v-if="tenant" class="settings-section" aria-labelledby="agent-title">
-      <h2 id="agent-title">创建对话智能体</h2><p class="intro">选择模型并发布后，即可在对话工作台新建会话。</p>
+      <h2 id="agent-title">{{ $t('modelPage.agentTitle') }}</h2><p class="intro">{{ $t('modelPage.agentIntro') }}</p>
       <el-form label-position="top" @submit.prevent="settings.createAgent">
-        <el-form-item label="智能体名称" label-for="settings-agent-name"><el-input id="settings-agent-name" v-model="agentName" maxlength="160" :disabled="busy" /></el-form-item>
-        <el-form-item label="模型" label-for="settings-agent-model"><el-select id="settings-agent-model" v-model="agentModel" :disabled="busy" placeholder="选择模型">
+        <el-form-item :label="$t('modelPage.agentName')" label-for="settings-agent-name"><el-input id="settings-agent-name" v-model="agentName" maxlength="160" :disabled="busy" /></el-form-item>
+        <el-form-item :label="$t('modelPage.model')" label-for="settings-agent-model"><el-select id="settings-agent-model" v-model="agentModel" :disabled="busy" :placeholder="$t('modelPage.pickModel')">
           <el-option v-for="model in models" :key="model.version_id" :label="model.label" :value="model.version_id" /></el-select></el-form-item>
-        <el-form-item label="指令" label-for="settings-agent-instructions"><el-input id="settings-agent-instructions" v-model="instructions" type="textarea" :rows="3" maxlength="20000" :disabled="busy" /></el-form-item>
-        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!agentName.trim() || !agentModel || loading">创建并发布</el-button>
+        <el-form-item :label="$t('modelPage.instructions')" label-for="settings-agent-instructions"><el-input id="settings-agent-instructions" v-model="instructions" type="textarea" :rows="3" maxlength="20000" :disabled="busy" /></el-form-item>
+        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!agentName.trim() || !agentModel || loading">{{ $t('modelPage.createAgent') }}</el-button>
       </el-form>
     </section>
-    <el-dialog v-model="providerDialog" :title="editingProvider ? '编辑供应商' : '添加供应商'" width="min(560px, 94vw)" :close-on-click-modal="!busy" :close-on-press-escape="!busy" :show-close="!busy" @closed="form.api_key = ''">
+    <el-dialog v-model="providerDialog" :title="editingProvider ? $t('modelPage.editProvider') : $t('modelPage.addProvider')" width="min(560px, 94vw)" :close-on-click-modal="!busy" :close-on-press-escape="!busy" :show-close="!busy" @closed="form.api_key = ''">
       <el-form label-position="top" @submit.prevent="settings.saveProvider">
-        <el-form-item label="名称" label-for="provider-name"><el-input id="provider-name" v-model="form.name" maxlength="160" :disabled="busy" /></el-form-item>
-        <el-form-item label="可见范围" label-for="provider-scope"><el-select id="provider-scope" v-model="form.scope" :disabled="busy || !!editingProvider">
-          <el-option label="仅本人" value="personal" /><el-option v-if="data.can_manage_tenant" label="空间共享" value="tenant" /></el-select></el-form-item>
-        <el-form-item label="API 地址" label-for="provider-url"><el-input id="provider-url" v-model="form.base_url" maxlength="512" placeholder="https://api.example.com/v1" :disabled="busy" /></el-form-item>
-        <el-form-item :label="editingProvider ? '替换 API Key（留空保留原值）' : 'API Key'" label-for="provider-key"><el-input id="provider-key" v-model="form.api_key" type="password" autocomplete="new-password" :disabled="busy" maxlength="8192" /></el-form-item>
-        <p>Key 保存后不回显。修改 API 地址时需要同时填写新的 Key。同一地址的 Key 替换会应用于引用它的已有模型版本。</p>
-        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!form.name.trim() || !form.base_url.trim() || (!editingProvider && !form.api_key)">保存供应商</el-button>
-        <el-button :disabled="busy" @click="providerDialog = false; form.api_key = ''">取消</el-button>
+        <el-form-item :label="$t('modelPage.name')" label-for="provider-name"><el-input id="provider-name" v-model="form.name" maxlength="160" :disabled="busy" /></el-form-item>
+        <el-form-item :label="$t('modelPage.scope')" label-for="provider-scope"><el-select id="provider-scope" v-model="form.scope" :disabled="busy || !!editingProvider">
+          :label="$t('modelPage.scopePersonal')" value="personal" /><el-option v-if="data.can_manage_tenant" :label="$t('modelPage.scopeShared')" value="tenant" /></el-select></el-form-item>
+        <el-form-item :label="$t('modelPage.baseUrl')" label-for="provider-url"><el-input id="provider-url" v-model="form.base_url" maxlength="512" placeholder="https://api.example.com/v1" :disabled="busy" /></el-form-item>
+        <el-form-item :label="editingProvider ? $t('modelPage.replaceKey') : 'API Key'" label-for="provider-key"><el-input id="provider-key" v-model="form.api_key" type="password" autocomplete="new-password" :disabled="busy" maxlength="8192" /></el-form-item>
+        <p>{{ $t('modelPage.keyNote') }}</p>
+        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!form.name.trim() || !form.base_url.trim() || (!editingProvider && !form.api_key)">{{ $t('modelPage.saveProvider') }}</el-button>
+        <el-button :disabled="busy" @click="providerDialog = false; form.api_key = ''">{{ $t('common.cancel') }}</el-button>
       </el-form>
       <p v-if="error" role="alert">{{ error }}</p>
     </el-dialog>
-    <el-dialog v-model="modelDialog" title="配置模型" width="min(480px, 94vw)" :close-on-click-modal="!busy" :show-close="!busy" :close-on-press-escape="!busy">
+    <el-dialog v-model="modelDialog" :title="$t('modelPage.configModel')" width="min(480px, 94vw)" :close-on-click-modal="!busy" :show-close="!busy" :close-on-press-escape="!busy">
       <el-form label-position="top" @submit.prevent="settings.saveModel">
-        <el-form-item label="模型名称" label-for="provider-model-name"><el-input id="provider-model-name" v-model="modelName" maxlength="160" :disabled="busy" placeholder="填写供应商实际支持的模型名" /></el-form-item>
-        <el-form-item label="模型协议"><el-select v-model="modelProtocol" :disabled="busy"><el-option label="OpenAI Chat Completions" value="openai_chat_completions" /><el-option label="OpenAI Responses" value="openai_responses" /><el-option label="Anthropic Messages" value="anthropic_messages" /></el-select></el-form-item>
-        <el-form-item label="流式响应"><el-switch v-model="modelStream" :disabled="busy" /></el-form-item>
-        <el-form-item label="文本工具协议（仅用于没有原生工具调用的模型）"><el-switch v-model="modelTextTools" :disabled="busy" /></el-form-item>
-        <el-form-item label="温度（可选）"><el-input-number v-model="temperature" :min="0" :max="2" :step="0.1" :disabled="busy" /></el-form-item>
-        <el-form-item label="推理强度（可选）"><el-select v-model="reasoningEffort" clearable :disabled="busy"><el-option v-for="value in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']" :key="value" :label="value" :value="value" /></el-select></el-form-item>
-        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!modelName.trim()">保存模型</el-button>
+        <el-form-item :label="$t('modelPage.modelName')" label-for="provider-model-name"><el-input id="provider-model-name" v-model="modelName" maxlength="160" :disabled="busy" :placeholder="$t('modelPage.modelNameHint')" /></el-form-item>
+        <el-form-item :label="$t('modelPage.protocol')"><el-select v-model="modelProtocol" :disabled="busy"><el-option label="OpenAI Chat Completions" value="openai_chat_completions" /><el-option label="OpenAI Responses" value="openai_responses" /><el-option label="Anthropic Messages" value="anthropic_messages" /></el-select></el-form-item>
+        <el-form-item :label="$t('modelPage.stream')"><el-switch v-model="modelStream" :disabled="busy" /></el-form-item>
+        <el-form-item :label="$t('modelPage.textTools')"><el-switch v-model="modelTextTools" :disabled="busy" /></el-form-item>
+        <el-form-item :label="$t('modelPage.temperature')"><el-input-number v-model="temperature" :min="0" :max="2" :step="0.1" :disabled="busy" /></el-form-item>
+        <el-form-item :label="$t('modelPage.reasoning')"><el-select v-model="reasoningEffort" clearable :disabled="busy"><el-option v-for="value in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']" :key="value" :label="value" :value="value" /></el-select></el-form-item>
+        <el-button native-type="submit" type="primary" :loading="busy" :disabled="!modelName.trim()">{{ $t('modelPage.saveModel') }}</el-button>
       </el-form><p v-if="error" role="alert">{{ error }}</p>
     </el-dialog>
   </main>

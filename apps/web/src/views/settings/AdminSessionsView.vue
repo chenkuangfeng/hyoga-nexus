@@ -4,6 +4,7 @@ import { orgApi } from '../../api/orgs'
 import { adminSessionApi, type AdminAgent, type AdminSession } from '../../api/adminSessions'
 import type { Tenant } from '../../types/chat'
 import type { OrgNode } from '../../types/orgs'
+import { i18n } from '../../i18n'
 
 /** Platform administrator view: chat sessions across all spaces, filtered by space or organization node.
  * Memory is deliberately not shown here; it stays visible only to its owner.
@@ -15,7 +16,7 @@ const tenantId = ref(''), agentId = ref(''), unitId = ref('')
 const sessions = ref<AdminSession[]>([])
 const loading = ref(false), error = ref('')
 
-const message = (err: unknown) => (err instanceof Error ? err.message : '请求未完成')
+const message = (err: unknown) => (err instanceof Error ? err.message : i18n.global.t('errors.httpFailed'))
 const tenantName = computed(() => new Map(tenants.value.map(item => [item.id, item.name])))
 const unitName = computed(() => new Map(units.value.map(item => [item.id, item.name])))
 
@@ -42,39 +43,39 @@ onMounted(async () => {
 <template>
   <main class="admin-sessions" v-loading="loading" :aria-busy="loading">
     <header>
-      <div><p class="eyebrow">HYOGA NEXUS / 平台管理</p><h1>会话查询</h1></div>
+      <div><p class="eyebrow">{{ $t('adminSessions.eyebrow') }}</p><h1>{{ $t('shell.titles.adminSessions') }}</h1></div>
     </header>
-    <p class="intro">查看所有空间中的会话，可按空间或组织节点筛选（节点包含其子树）。记忆不在此列出，只对本人可见。</p>
+    <p class="intro">{{ $t('adminSessions.intro') }}</p>
     <div class="filters">
-      <label for="admin-tenant">空间</label>
-      <el-select id="admin-tenant" v-model="tenantId" clearable placeholder="全部空间">
+      <label for="admin-tenant">{{ $t('adminSessions.space') }}</label>
+      <el-select id="admin-tenant" v-model="tenantId" clearable :placeholder="$t('adminSessions.allSpaces')">
         <el-option v-for="item in tenants" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
-      <label for="admin-agent">智能体</label>
-      <el-select id="admin-agent" v-model="agentId" clearable placeholder="全部智能体">
-        <el-option v-for="item in agents" :key="item.id" :label="`${item.name}（${tenantName.get(item.tenant_id) || '空间'}）`" :value="item.id" />
+      <label for="admin-agent">{{ $t('adminSessions.agent') }}</label>
+      <el-select id="admin-agent" v-model="agentId" clearable :placeholder="$t('adminSessions.allAgents')">
+        <el-option v-for="item in agents" :key="item.id" :label="$t('adminSessions.agentOption', { name: item.name, space: tenantName.get(item.tenant_id) || $t('adminSessions.defaultSpace') })" :value="item.id" />
       </el-select>
-      <label for="admin-unit">组织节点</label>
-      <el-select id="admin-unit" v-model="unitId" clearable placeholder="全部组织">
+      <label for="admin-unit">{{ $t('adminSessions.orgNode') }}</label>
+      <el-select id="admin-unit" v-model="unitId" clearable :placeholder="$t('adminSessions.allOrgs')">
         <el-option v-for="item in units" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="notice" role="alert" />
-    <el-empty v-if="!loading && !sessions.length" description="没有符合条件的会话" />
-    <table v-else-if="sessions.length" class="sessions" aria-label="会话列表">
+    <el-empty v-if="!loading && !sessions.length" :description="$t('adminSessions.noResults')" />
+    <table v-else-if="sessions.length" class="sessions" :aria-label="$t('adminSessions.tableLabel')">
       <thead>
-        <tr><th scope="col">标题</th><th scope="col">空间</th><th scope="col">组织</th><th scope="col">所有人</th><th scope="col">更新时间</th></tr>
+        <tr><th scope="col">{{ $t('adminSessions.colTitle') }}</th><th scope="col">{{ $t('adminSessions.colSpace') }}</th><th scope="col">{{ $t('adminSessions.colOrg') }}</th><th scope="col">{{ $t('adminSessions.colOwner') }}</th><th scope="col">{{ $t('adminSessions.colUpdated') }}</th></tr>
       </thead>
       <tbody>
         <tr v-for="item in sessions" :key="item.id">
-          <td>{{ item.title || `会话 ${item.id.slice(-8)}` }}</td>
+          <td>{{ item.title || $t('adminSessions.untitled', { id: item.id.slice(-8) }) }}</td>
           <td>{{ tenantName.get(item.tenant_id) || item.tenant_id.slice(-8) }}</td>
           <td>
-            <span v-if="item.org_unit_id">{{ unitName.get(item.org_unit_id) || '组织节点' }}</span>
-            <span v-if="item.org_unit_id" class="org-tag">组织访问</span>
+            <span v-if="item.org_unit_id">{{ unitName.get(item.org_unit_id) || $t('adminSessions.unitFallback') }}</span>
+            <span v-if="item.org_unit_id" class="org-tag">{{ $t('adminSessions.orgAccess') }}</span>
             <span v-else class="muted">—</span>
           </td>
-          <td>用户 {{ item.owner_user_id.slice(-8) }}</td>
+          <td>{{ $t('adminSessions.owner', { id: item.owner_user_id.slice(-8) }) }}</td>
           <td>{{ new Date(item.updated_at).toLocaleString() }}</td>
         </tr>
       </tbody>

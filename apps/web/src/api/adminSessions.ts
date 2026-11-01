@@ -1,5 +1,6 @@
 import { request } from './chat'
 import type { Tenant } from '../types/chat'
+import { i18n } from '../i18n'
 
 /** A session as seen by a platform administrator across spaces. Memory is never part of this list. */
 export interface AdminSession {
@@ -13,12 +14,12 @@ export interface AdminSession {
 
 type Row = Record<string, unknown>
 function record(value: unknown): Row {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('会话数据格式无效')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as Row
 }
-function text(value: unknown): string { if (typeof value !== 'string') throw new Error('会话数据格式无效'); return value }
+function text(value: unknown): string { if (typeof value !== 'string') throw new Error(i18n.global.t('errors.dataInvalid')); return value }
 function rows<T>(value: unknown, parse: (row: Row) => T): T[] {
-  if (!Array.isArray(value)) throw new Error('会话数据格式无效')
+  if (!Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value.map(item => parse(record(item)))
 }
 

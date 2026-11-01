@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { i18n } from '../i18n'
 type Capability = { name: string; status: string }
 const groups = ref<Record<string, Capability[]>>({})
 const loading = ref(true)
@@ -11,24 +12,24 @@ async function load() {
     const response = await fetch('/api/v1/capabilities')
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     groups.value = await response.json()
-  } catch { error.value = '无法连接平台 API，请确认后端已启动。' }
+  } catch { error.value = i18n.global.t('overview.fetchFailed') }
   finally { loading.value = false }
 }
-const titles: Record<string, string> = { runtimes: '智能体运行框架', channels: '消息渠道', applications: '业务应用' }
+const titles: Record<string, () => string> = { runtimes: () => i18n.global.t('overview.groups.runtimes'), channels: () => i18n.global.t('overview.groups.channels'), applications: () => i18n.global.t('overview.groups.applications') }
 onMounted(load)
 </script>
 
 <template>
   <main>
-    <header><div><p class="eyebrow">HYOGA NEXUS / 织枢</p><h1>智能体工作台</h1></div><el-button :loading="loading" @click="load">刷新状态</el-button></header>
-    <p class="intro">连接模型、技能与业务。观澜是平台的首个股票研究应用。</p>
-    <el-alert title="Native 对话已实现，需配置模型与凭据；其他规划能力以状态为准。" type="info" :closable="false" show-icon />
+    <header><div><p class="eyebrow">HYOGA NEXUS / 织枢</p><h1>{{ $t('overview.heading') }}</h1></div><el-button :loading="loading" @click="load">{{ $t('overview.refresh') }}</el-button></header>
+    <p class="intro">{{ $t('overview.intro') }}</p>
+    <el-alert :title="$t('overview.alert')" type="info" :closable="false" show-icon />
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="error" />
     <el-skeleton v-if="loading" :rows="6" animated />
-    <section v-else class="grid" aria-label="平台能力">
+    <section v-else class="grid" :aria-label="$t('overview.capabilities')">
       <el-card v-for="(items, key) in groups" :key="key" shadow="never">
-        <template #header><h2>{{ titles[key] || key }}</h2></template>
-        <div v-for="item in items" :key="item.name" class="capability"><span>{{ item.name }}</span><el-tag :type="item.status === 'available' ? 'success' : 'info'">{{ item.status === 'available' ? '已接入' : item.status === 'requires_configuration' ? '待配置' : '待接入' }}</el-tag></div>
+        <template #header><h2>{{ titles[key] ? titles[key]() : key }}</h2></template>
+        <div v-for="item in items" :key="item.name" class="capability"><span>{{ item.name }}</span><el-tag :type="item.status === 'available' ? 'success' : 'info'">{{ item.status === 'available' ? $t('overview.available') : item.status === 'requires_configuration' ? $t('overview.needsConfig') : $t('overview.notConnected') }}</el-tag></div>
       </el-card>
     </section>
   </main>

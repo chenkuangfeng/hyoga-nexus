@@ -1,17 +1,18 @@
 import { request, tenantPath } from './chat'
 import type { ModelProvider, ModelSettings, ProviderInput, SettingsScope } from '../types/modelSettings'
+import { i18n } from '../i18n'
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('设置数据格式无效')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as Record<string, unknown>
 }
-function string(value: unknown): string { if (typeof value !== 'string') throw new Error('设置数据格式无效'); return value }
-function boolean(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error('设置数据格式无效'); return value }
+function string(value: unknown): string { if (typeof value !== 'string') throw new Error(i18n.global.t('errors.dataInvalid')); return value }
+function boolean(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error(i18n.global.t('errors.dataInvalid')); return value }
 function provider(value: unknown): ModelProvider {
   const row = record(value)
-  if (!Array.isArray(row.models) || !['personal', 'tenant'].includes(string(row.scope))) throw new Error('设置数据格式无效')
+  if (!Array.isArray(row.models) || !['personal', 'tenant'].includes(string(row.scope))) throw new Error(i18n.global.t('errors.dataInvalid'))
   return { id: string(row.id), name: string(row.name), base_url: string(row.base_url), scope: row.scope as SettingsScope,
     key_configured: boolean(row.key_configured), models: row.models.map(value => { const model = record(value)
-      if (typeof model.version !== 'number' || !Number.isSafeInteger(model.version)) throw new Error('模型版本无效')
+      if (typeof model.version !== 'number' || !Number.isSafeInteger(model.version)) throw new Error(i18n.global.t('errors.modelVersionInvalid'))
       return { id: string(model.id), name: string(model.name), version_id: string(model.version_id), version: model.version, options: model.options === undefined ? {} : record(model.options) }
     }) }
 }
@@ -25,7 +26,7 @@ const saved = (value: unknown) => { string(record(value).status) }
 export const modelSettingsApi = {
   list: (tenant: string, signal?: AbortSignal) => request<ModelSettings>(path(tenant), value => {
     const row = record(value), defaults = record(row.defaults)
-    if (!Array.isArray(row.providers)) throw new Error('设置数据格式无效')
+    if (!Array.isArray(row.providers)) throw new Error(i18n.global.t('errors.dataInvalid'))
     return { providers: row.providers.map(provider), defaults: {
       ...(defaults.personal ? { personal: string(defaults.personal) } : {}),
       ...(defaults.tenant ? { tenant: string(defaults.tenant) } : {}),

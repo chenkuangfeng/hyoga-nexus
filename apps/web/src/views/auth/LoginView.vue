@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { authApi } from '../../api/auth'
 import { errorMessageFor } from './loginErrors'
+import { i18n } from '../../i18n'
 
 const props = defineProps<{ error: string }>()
 const emit = defineEmits<{ signedIn: [] }>()
@@ -10,7 +11,7 @@ async function submit() {
   if (busy.value || !username.value.trim() || !password.value) return
   busy.value = true; error.value = ''
   try { await authApi.login(username.value.trim(), password.value); password.value = ''; emit('signedIn') }
-  catch (e) { error.value = e instanceof Error ? e.message : '登录未完成' }
+  catch (e) { error.value = e instanceof Error ? e.message : i18n.global.t('auth.loginIncomplete') }
   finally { password.value = ''; busy.value = false }
 }
 </script>
@@ -18,19 +19,19 @@ async function submit() {
   <main class="login-page">
     <section class="login-card" aria-labelledby="login-title">
       <p class="eyebrow">HYOGA NEXUS</p>
-      <h1 id="login-title">登录</h1>
+      <h1 id="login-title">{{ $t('login.title') }}</h1>
       <el-alert v-if="props.error" :title="errorMessageFor(props.error)" type="warning" :closable="false" class="login-error" />
       <el-alert v-if="error" :title="error" type="error" :closable="false" class="login-error" />
       <form @submit.prevent="submit">
-        <label for="login-username">账号</label>
+        <label for="login-username">{{ $t('auth.username') }}</label>
         <el-input id="login-username" v-model="username" autocomplete="username" maxlength="128" :disabled="busy" />
-        <label for="login-password">密码</label>
+        <label for="login-password">{{ $t('auth.password') }}</label>
         <el-input id="login-password" v-model="password" type="password" autocomplete="current-password" maxlength="256" show-password :disabled="busy" />
-        <el-button type="primary" native-type="submit" :loading="busy" :disabled="!username.trim() || !password">登录</el-button>
+        <el-button type="primary" native-type="submit" :loading="busy" :disabled="!username.trim() || !password">{{ $t('auth.submit') }}</el-button>
       </form>
-      <div class="divider"><span>或</span></div>
-      <a class="wecom-link" :href="authApi.wecomLoginUrl">使用企业微信扫码登录</a>
-      <p class="intro">账号由空间管理员创建。忘记密码请联系管理员。</p>
+      <div class="divider"><span>{{ $t('auth.or') }}</span></div>
+      <a class="wecom-link" :href="authApi.wecomLoginUrl">{{ $t('auth.wecomLogin') }}</a>
+      <p class="intro">{{ $t('auth.intro') }}</p>
     </section>
   </main>
 </template>

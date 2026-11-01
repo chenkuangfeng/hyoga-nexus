@@ -8,6 +8,7 @@ import { reactive } from 'vue'
 import { api } from '../api/chat'
 import type { CurrentUser } from '../api/auth'
 import type { Conversation, Tenant } from '../types/chat'
+import { i18n } from '../i18n'
 
 const STORAGE_KEY = 'nexus_space'
 
@@ -17,6 +18,8 @@ export const workspace = reactive({
   tenantId: (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)) || '',
   sessions: [] as Conversation[],
   sessionsError: '',
+  /** Bumped by the sidebar's 新对话 button; the conversation page starts a blank draft when it changes. */
+  newChatTick: 0,
 })
 
 let sessionsRequest = 0
@@ -45,6 +48,6 @@ export async function loadSessions(): Promise<void> {
     const rows = await api.sessions(tenant)
     if (request === sessionsRequest) workspace.sessions = rows
   } catch (cause) {
-    if (request === sessionsRequest) { workspace.sessions = []; workspace.sessionsError = cause instanceof Error ? cause.message : '会话加载失败' }
+    if (request === sessionsRequest) { workspace.sessions = []; workspace.sessionsError = cause instanceof Error ? cause.message : i18n.global.t('shell.sessionsError') }
   }
 }

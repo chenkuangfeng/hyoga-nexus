@@ -1,15 +1,16 @@
 import { request, tenantPath } from './chat'
 import type { BoundSpace, JoinResult, Org, OrgNode, OrgPerson, SpaceOrganization, UnitMembership, UserOption } from '../types/orgs'
+import { i18n } from '../i18n'
 
 type Row = Record<string, unknown>
 function record(value: unknown): Row {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('组织数据格式无效')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as Row
 }
-function text(value: unknown): string { if (typeof value !== 'string') throw new Error('组织数据格式无效'); return value }
+function text(value: unknown): string { if (typeof value !== 'string') throw new Error(i18n.global.t('errors.dataInvalid')); return value }
 function maybeText(value: unknown): string | null { return value === null || value === undefined ? null : text(value) }
 function rows<T>(value: unknown, parse: (row: Row) => T): T[] {
-  if (!Array.isArray(value)) throw new Error('组织数据格式无效')
+  if (!Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value.map(item => parse(record(item)))
 }
 const json = (method: string, value?: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) })
@@ -18,7 +19,7 @@ const membership = (row: Row): UnitMembership => ({ unit_id: text(row.unit_id), 
 const person = (row: Row): OrgPerson => ({ user_id: text(row.user_id), display_name: maybeText(row.display_name), units: rows(row.units, membership) })
 const empty = (_value: unknown): void => undefined
 function strings(value: unknown): string[] {
-  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error('组织数据格式无效')
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as string[]
 }
 

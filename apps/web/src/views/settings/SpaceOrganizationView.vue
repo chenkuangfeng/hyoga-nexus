@@ -5,6 +5,7 @@ import { orgApi } from '../../api/orgs'
 import { roleApi } from '../../api/roles'
 import type { TenantRole } from '../../types/roles'
 import type { SpaceBinding, SpaceBindingNode, SpaceOrganization } from '../../types/orgs'
+import { i18n } from '../../i18n'
 
 /** Space page: the organizations bound to this space, their subtrees, and the people in them.
  * Seeing a person does not make them a member; joining is an explicit action that needs members:manage.
@@ -14,7 +15,7 @@ const data = ref<SpaceOrganization>({ bindings: [], people: [] })
 const canJoin = ref(false), roles = ref<TenantRole[]>([]), roleIds = ref<string[]>([]), picked = ref<string[]>([])
 const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
 
-const message = (err: unknown) => (err instanceof Error ? err.message : '请求未完成')
+const message = (err: unknown) => (err instanceof Error ? err.message : i18n.global.t('errors.httpFailed'))
 
 /** Indentation for a binding's subtree: depth is the number of ancestors inside the same subtree. */
 function flatNodes(binding: SpaceBinding): { node: SpaceBindingNode; depth: number }[] {
@@ -50,7 +51,7 @@ async function join() {
     roleIds.value = []
     await load()
     // load() clears the feedback line, so the result message is set after the reload.
-    feedback.value = `已加入 ${result.added.length} 人${result.skipped.length ? `，${result.skipped.length} 人已是成员` : ''}`
+    feedback.value = i18n.global.t('spaceOrg.joined', { count: result.added.length }) + (result.skipped.length ? i18n.global.t('spaceOrg.alreadyMembers', { count: result.skipped.length }) : '')
   } catch (err) { error.value = message(err) }
   finally { busy.value = false }
 }
@@ -62,41 +63,41 @@ onMounted(() => void load())
 <template>
   <main class="space-org" v-loading="loading" :aria-busy="loading || busy">
     <header>
-      <div><p class="eyebrow">HYOGA NEXUS / 空间管理</p><h1>空间组织</h1></div>
+      <div><p class="eyebrow">{{ $t('common.spaceEyebrow') }}</p><h1>{{ $t('shell.titles.spaceOrganization') }}</h1></div>
     </header>
-    <p class="intro">这里显示绑定到当前空间的组织节点、子树结构和其中的人员。人员只能看到、不会自动成为成员；需要加入时，请在下方勾选并选择角色。</p>
+    <p class="intro">{{ $t('spaceOrg.intro') }}</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="notice" role="alert" />
     <p class="feedback" role="status" aria-live="polite">{{ feedback }}</p>
 
-    <el-empty v-if="tenant && !loading && !data.bindings.length" description="该空间尚未绑定任何组织" />
+    <el-empty v-if="tenant && !loading && !data.bindings.length" :description="$t('spaceOrg.noBindings')" />
 
     <section v-for="binding in data.bindings" :key="binding.unit_id" class="panel" :aria-labelledby="`bind-${binding.unit_id}`">
       <h2 :id="`bind-${binding.unit_id}`">{{ binding.organization_name }} › {{ binding.unit_name }}</h2>
-      <p v-if="binding.status === 'disabled'" class="muted">该节点已停用，子树仅供查看。</p>
-      <ul class="tree" :aria-label="`${binding.unit_name} 的子树`">
+      <p v-if="binding.status === 'disabled'" class="muted">{{ $t('spaceOrg.disabledNode') }}</p>
+      <ul class="tree" :aria-label="$t('spaceOrg.subtreeOf', { name: binding.unit_name })">
         <li v-for="item in flatNodes(binding)" :key="item.node.id" :style="{ paddingLeft: `${item.depth * 20 + 8}px` }">
           {{ item.node.name }}
-          <span v-if="item.node.status === 'disabled'" class="tag disabled">已停用</span>
+          <span v-if="item.node.status === 'disabled'" class="tag disabled">{{ $t('spaceOrg.disabledTag') }}</span>
         </li>
       </ul>
     </section>
 
     <section v-if="data.people.length" class="panel" aria-labelledby="people-title">
-      <h2 id="people-title">组织人员（{{ data.people.length }}）</h2>
-      <p v-if="!canJoin" class="muted">你没有成员管理权限，只能查看。</p>
-      <el-checkbox-group v-model="picked" :disabled="!canJoin || busy" aria-label="选择要加入空间的人员" class="people">
+      <h2 id="people-title">{{ $t('spaceOrg.people', { count: data.people.length }) }}</h2>
+      <p v-if="!canJoin" class="muted">{{ $t('spaceOrg.readOnly') }}</p>
+      <el-checkbox-group v-model="picked" :disabled="!canJoin || busy" :aria-label="$t('spaceOrg.pickPeople')" class="people">
         <el-checkbox v-for="person in data.people" :key="person.user_id" :value="person.user_id" class="person">
-          <span class="person-name">{{ person.display_name || '未命名用户' }}</span>
-          <span class="person-units">{{ person.units.map(u => u.unit_name + (u.is_primary ? '（主）' : '')).join('、') }}</span>
+          <span class="person-name">{{ person.display_name || $t('spaceOrg.unnamedUser') }}</span>
+          <span class="person-units">{{ person.units.map(u => u.unit_name + (u.is_primary ? $t('spaceOrg.primary') : '')).join($t('spaceOrg.separator')) }}</span>
         </el-checkbox>
       </el-checkbox-group>
       <form v-if="canJoin" class="join-form" @submit.prevent="join">
-        <label for="join-roles">分配的角色</label>
-        <el-select id="join-roles" v-model="roleIds" multiple collapse-tags :disabled="busy || !roles.length" placeholder="选择本空间的角色" class="role-select">
+        <label for="join-roles">{{ $t('spaceOrg.assignRoles') }}</label>
+        <el-select id="join-roles" v-model="roleIds" multiple collapse-tags :disabled="busy || !roles.length" :placeholder="$t('spaceOrg.pickRoles')" class="role-select">
           <el-option v-for="item in roles" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
-        <p v-if="!roles.length" class="muted">本空间还没有角色，请先在角色管理中创建。</p>
-        <el-button type="primary" native-type="submit" :disabled="busy || !picked.length || !roleIds.length || !joinable">分配角色（{{ picked.length }}）</el-button>
+        <p v-if="!roles.length" class="muted">{{ $t('spaceOrg.noRoles') }}</p>
+        <el-button type="primary" native-type="submit" :disabled="busy || !picked.length || !roleIds.length || !joinable">{{ $t('spaceOrg.assignButton', { count: picked.length }) }}</el-button>
       </form>
     </section>
   </main>

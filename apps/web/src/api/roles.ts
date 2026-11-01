@@ -1,23 +1,24 @@
 import { request, tenantPath } from './chat'
+import { i18n } from '../i18n'
 import { AGENT_PERMISSIONS, type AgentGrantRow, type AgentPermission, type PermissionCatalog, type Permissions,
   type RoleAssignment, type TenantMember, type TenantRole } from '../types/roles'
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('权限数据格式无效')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as Record<string, unknown>
 }
-function text(value: unknown): string { if (typeof value !== 'string') throw new Error('权限数据格式无效'); return value }
+function text(value: unknown): string { if (typeof value !== 'string') throw new Error(i18n.global.t('errors.dataInvalid')); return value }
 function strings(value: unknown): string[] {
-  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error('权限数据格式无效')
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as string[]
 }
 function rows<T>(value: unknown, parse: (row: Record<string, unknown>) => T): T[] {
-  if (!Array.isArray(value)) throw new Error('权限数据格式无效')
+  if (!Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value.map(item => parse(record(item)))
 }
 function agentPermission(value: unknown): AgentPermission {
   const permission = text(value)
-  if (!(AGENT_PERMISSIONS as readonly string[]).includes(permission)) throw new Error('权限数据格式无效')
+  if (!(AGENT_PERMISSIONS as readonly string[]).includes(permission)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return permission as AgentPermission
 }
 const role = (row: Record<string, unknown>): TenantRole => ({ id: text(row.id), tenant_id: text(row.tenant_id), name: text(row.name), menus: strings(row.menus), apis: strings(row.apis) })

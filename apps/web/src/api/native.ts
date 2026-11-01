@@ -1,5 +1,6 @@
 /** Validated Native configuration and owned-memory management API; no vendor keys are returned. */
 import { request, tenantPath } from './chat'
+import { i18n } from '../i18n'
 export type Scalar = string | number | boolean | string[]
 export interface NativePreferences { version: number; available_tools: { id: string; label: string; enabled: boolean }[]; can_enable_tools: boolean; settings: Record<string, Record<string, Scalar>>; fields: Record<string, { name: string; label: string; type: string }[]> }
 export interface MemoryEntry { id: string; title: string; kind: string; project: string; version: number }
@@ -7,13 +8,13 @@ export interface MemoryDraft { id: string; kind: string; diff: string; source_ru
 export interface MemoryData { entries: MemoryEntry[]; drafts: MemoryDraft[] }
 export interface MemoryCapture { enabled: boolean; model_profile_version_id: string | null; capacity_policy: 'reject' | 'evict_auto' }
 export interface Approval { id: string; tool_name: string; arguments: Record<string, unknown> }
-const record = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Native 数据格式无效'); return v as Record<string, unknown> }
-const str = (v: unknown): string => { if (typeof v !== 'string') throw new Error('Native 数据格式无效'); return v }
-const num = (v: unknown): number => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error('Native 数值无效'); return v }
-const arr = <T>(v: unknown, parse: (value: unknown) => T): T[] => { if (!Array.isArray(v)) throw new Error('Native 列表无效'); return v.map(parse) }
+const record = (v: unknown): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error(i18n.global.t('errors.dataInvalid')); return v as Record<string, unknown> }
+const str = (v: unknown): string => { if (typeof v !== 'string') throw new Error(i18n.global.t('errors.dataInvalid')); return v }
+const num = (v: unknown): number => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(i18n.global.t('errors.numberInvalid')); return v }
+const arr = <T>(v: unknown, parse: (value: unknown) => T): T[] => { if (!Array.isArray(v)) throw new Error(i18n.global.t('errors.listInvalid')); return v.map(parse) }
 const capture = (value: unknown): MemoryCapture => {
   const row = record(value)
-  if (typeof row.enabled !== 'boolean' || (row.capacity_policy !== 'reject' && row.capacity_policy !== 'evict_auto')) throw new Error('自动捕获设置无效')
+  if (typeof row.enabled !== 'boolean' || (row.capacity_policy !== 'reject' && row.capacity_policy !== 'evict_auto')) throw new Error(i18n.global.t('errors.autoCaptureInvalid'))
   return { enabled: row.enabled, model_profile_version_id: row.model_profile_version_id == null ? null : str(row.model_profile_version_id), capacity_policy: row.capacity_policy }
 }
 const json = (method: string, value?: unknown, key?: string): RequestInit => ({ method, headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) })
@@ -29,7 +30,7 @@ function preferences(value: unknown): NativePreferences {
     }
   }
   for (const [group, values] of Object.entries(fields)) schema[group] = arr(values, value => { const item = record(value); return { name: str(item.name), label: str(item.label), type: str(item.type) } })
-  return { version: num(row.version), settings, fields: schema, available_tools: arr(row.available_tools || [], value => { const x = record(value); if (typeof x.enabled !== 'boolean') throw new Error('工具状态无效'); return { id: str(x.id), label: str(x.label), enabled: x.enabled } }), can_enable_tools: row.can_enable_tools === true }
+  return { version: num(row.version), settings, fields: schema, available_tools: arr(row.available_tools || [], value => { const x = record(value); if (typeof x.enabled !== 'boolean') throw new Error(i18n.global.t('errors.toolStateInvalid')); return { id: str(x.id), label: str(x.label), enabled: x.enabled } }), can_enable_tools: row.can_enable_tools === true }
 }
 export const nativeApi = {
   captureSettings: (w: string, signal?: AbortSignal) => request(`${root(w)}/memory-capture`, capture, { signal }),

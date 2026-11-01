@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { nativeApi, type Approval } from '../api/native'
 import type { Run } from '../types/chat'
+import { i18n } from '../i18n'
 const props = defineProps<{ tenant: string; run: Run }>()
 const emit = defineEmits<{ resume: [] }>()
 const correction = ref(''), approvals = ref<Approval[]>([]), busy = ref(false), feedback = ref(''), error = ref('')
@@ -11,33 +12,33 @@ watch(() => [props.tenant, props.run.id, props.run.status], async () => {
   approvals.value = []; feedback.value = ''; error.value = ''; correction.value = ''; pendingKey = ''
   if (props.run.status === 'waiting_approval') {
     try { const rows = await nativeApi.approvals(props.tenant, props.run.id); if (!disposed && current === generation) approvals.value = rows }
-    catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : '审批加载失败' }
+    catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : i18n.global.t('chat.controls.approvalsFailed') }
   }
 }, { immediate: true })
 async function steer() {
   if (busy.value || !correction.value.trim()) return
   busy.value = true; error.value = ''; pendingKey ||= crypto.randomUUID(); const current = generation
-  try { await nativeApi.steer(props.tenant, props.run.id, correction.value, pendingKey); if (!disposed && current === generation) { correction.value = ''; pendingKey = ''; feedback.value = '指令已排队，将在下一回合生效' } }
-  catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : '追加指令失败' }
+  try { await nativeApi.steer(props.tenant, props.run.id, correction.value, pendingKey); if (!disposed && current === generation) { correction.value = ''; pendingKey = ''; feedback.value = i18n.global.t('chat.controls.steerQueued') } }
+  catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : i18n.global.t('chat.controls.steerFailed') }
   finally { busy.value = false }
 }
 async function approve(id: string, value: boolean) {
   if (busy.value) return
   busy.value = true; error.value = ''; const current = generation
-  try { await nativeApi.approve(props.tenant, props.run.id, id, value); if (!disposed && current === generation) { feedback.value = value ? '已批准，等待继续执行' : '已拒绝该操作'; emit('resume') } }
-  catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : '审批未完成' }
+  try { await nativeApi.approve(props.tenant, props.run.id, id, value); if (!disposed && current === generation) { feedback.value = value ? i18n.global.t('chat.controls.approvedMsg') : i18n.global.t('chat.controls.rejectedMsg'); emit('resume') } }
+  catch (e) { if (!disposed && current === generation) error.value = e instanceof Error ? e.message : i18n.global.t('chat.controls.approvalFailed') }
   finally { busy.value = false }
 }
 onBeforeUnmount(() => { disposed = true; generation++ })
 </script>
 <template>
-  <section v-if="run.status === 'running' || run.status === 'waiting_approval'" class="runtime-controls" aria-label="运行控制">
+  <section v-if="run.status === 'running' || run.status === 'waiting_approval'" class="runtime-controls" :aria-label="$t('chat.controls.runControls')">
     <form v-if="run.status === 'running'" @submit.prevent="steer">
-      <label for="run-correction">追加执行指令</label><el-input id="run-correction" v-model="correction" type="textarea" :rows="2" :disabled="busy" maxlength="8000" @input="pendingKey = ''" />
-      <el-button native-type="submit" :disabled="busy || !correction.trim()">追加指令</el-button>
+      <label for="run-correction">{{ $t('chat.controls.steerLabel') }}</label><el-input id="run-correction" v-model="correction" type="textarea" :rows="2" :disabled="busy" maxlength="8000" @input="pendingKey = ''" />
+      <el-button native-type="submit" :disabled="busy || !correction.trim()">{{ $t('chat.controls.steer') }}</el-button>
     </form>
-    <article v-for="approval in approvals" :key="approval.id"><h3>操作需要批准：{{ approval.tool_name }}</h3><pre>{{ JSON.stringify(approval.arguments, null, 2) }}</pre>
-      <el-button :disabled="busy" type="primary" @click="approve(approval.id, true)">批准此操作</el-button><el-button :disabled="busy" @click="approve(approval.id, false)">拒绝此操作</el-button>
+    <article v-for="approval in approvals" :key="approval.id"><h3>{{ $t('chat.controls.approvalTitle', { name: approval.tool_name }) }}</h3><pre>{{ JSON.stringify(approval.arguments, null, 2) }}</pre>
+      <el-button :disabled="busy" type="primary" @click="approve(approval.id, true)">{{ $t('chat.controls.approve') }}</el-button><el-button :disabled="busy" @click="approve(approval.id, false)">{{ $t('chat.controls.reject') }}</el-button>
     </article>
     <p v-if="error" role="alert">{{ error }}</p><p role="status" aria-live="polite">{{ feedback }}</p>
   </section>

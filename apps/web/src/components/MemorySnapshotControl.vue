@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { memorySnapshotApi, type MemorySnapshot } from '../api/memorySnapshot'
+import { i18n } from '../i18n'
 
 /** Shows whether this session's memory index is frozen and offers an explicit refresh.
  * Only the session's owner can read or refresh it; for anyone else the control stays hidden.
@@ -20,7 +21,7 @@ async function refresh() {
   if (busy.value) return
   busy.value = true; error.value = ''
   try { await memorySnapshotApi.refresh(props.tenant, props.session); await load() }
-  catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '刷新失败' }
+  catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : i18n.global.t('memory.refreshFailed') }
   finally { if (!disposed) busy.value = false }
 }
 watch(() => [props.tenant, props.session], () => void load(), { immediate: true })
@@ -30,11 +31,11 @@ onBeforeUnmount(() => { disposed = true; controller?.abort() })
 <template>
   <div v-if="snapshot" class="memory-snapshot" aria-live="polite">
     <p class="muted">
-      <template v-if="!snapshot.exists">下一次运行时固定本会话的记忆索引。</template>
-      <template v-else-if="snapshot.stale">记忆索引已固定，之后有记忆更新，刷新后下一次运行生效。</template>
-      <template v-else>记忆索引已固定，与当前记忆一致。</template>
+      <template v-if="!snapshot.exists">{{ $t('memory.notExists') }}</template>
+      <template v-else-if="snapshot.stale">{{ $t('memory.stale') }}</template>
+      <template v-else>{{ $t('memory.current') }}</template>
     </p>
-    <el-button v-if="snapshot.exists" size="small" :disabled="disabled || busy" @click="refresh">刷新记忆快照</el-button>
+    <el-button v-if="snapshot.exists" size="small" :disabled="disabled || busy" @click="refresh">{{ $t('memory.refresh') }}</el-button>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
   </div>
 </template>

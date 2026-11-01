@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 const require = createRequire(new URL('../../apps/web/package.json', import.meta.url))
 const { chromium } = require('playwright')
 const browser = await chromium.launch({ headless: true })
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 1000 } })
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
 const json = (value, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(value) })

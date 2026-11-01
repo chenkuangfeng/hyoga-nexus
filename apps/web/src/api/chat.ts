@@ -1,27 +1,28 @@
 import type { Agent, Conversation, History, InputRequest, Message, Run, RunEvent, RunStatus, Tenant } from '../types/chat'
+import { i18n } from '../i18n'
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('服务返回的数据格式无效')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as Record<string, unknown>
 }
 function string(value: unknown): string {
-  if (typeof value !== 'string') throw new Error('服务返回的数据格式无效')
+  if (typeof value !== 'string') throw new Error(i18n.global.t('errors.dataInvalid'))
   return value
 }
 function integer(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('事件序号无效')
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error(i18n.global.t('errors.eventSeqInvalid'))
   return value
 }
 function nullable(value: unknown) { return value === null ? null : string(value) }
 function array<T>(value: unknown, parse: (value: unknown) => T): T[] {
-  if (!Array.isArray(value)) throw new Error('服务返回的数据格式无效')
+  if (!Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value.map(parse)
 }
 export function parseRun(value: unknown): Run {
   const row = record(value), status = string(row.status)
-  if (!['queued', 'running', 'waiting_input', 'waiting_approval', 'completed', 'failed', 'cancelled', 'interrupted'].includes(status)) throw new Error('未知运行状态')
+  if (!['queued', 'running', 'waiting_input', 'waiting_approval', 'completed', 'failed', 'cancelled', 'interrupted'].includes(status)) throw new Error(i18n.global.t('errors.runStatusUnknown'))
   const position = row.queue_position
-  if (position !== undefined && position !== null && (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1)) throw new Error('排队位置无效')
+  if (position !== undefined && position !== null && (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 1)) throw new Error(i18n.global.t('errors.queuePositionInvalid'))
   return { id: string(row.id), status: status as RunStatus, error_code: nullable(row.error_code), queue_position: typeof position === 'number' ? position : null }
 }
 export function parseEvent(value: unknown): RunEvent {
@@ -31,7 +32,7 @@ export function parseEvent(value: unknown): RunEvent {
 }
 function parseSession(value: unknown): Conversation {
   const row = record(value)
-  return { id: string(row.id), title: string(row.title), agent_version_id: string(row.agent_version_id), org_unit_id: row.org_unit_id == null ? null : string(row.org_unit_id) }
+  return { id: string(row.id), title: string(row.title), agent_version_id: string(row.agent_version_id), updated_at: string(row.updated_at), org_unit_id: row.org_unit_id == null ? null : string(row.org_unit_id) }
 }
 /** Dispatched when a request is rejected as unauthenticated; the app then shows the sign-in page. */
 export const AUTH_REQUIRED_EVENT = 'nexus-auth-required'
@@ -49,9 +50,9 @@ export async function request<T>(path: string, parse: (value: unknown) => T, ini
   const data: unknown = response.status === 204 ? null : await response.json()
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/auth/login')) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
-    const code = response.status === 403 || response.status === 404 ? '无权访问或内容已不可用' :
-      response.status === 401 ? '请先登录' :
-      response.status === 503 ? '服务尚未就绪，请检查连接与登录配置' : '请求未完成'
+    const code = response.status === 403 || response.status === 404 ? i18n.global.t('errors.httpForbidden') :
+      response.status === 401 ? i18n.global.t('errors.httpUnauthenticated') :
+      response.status === 503 ? i18n.global.t('errors.httpUnavailable') : i18n.global.t('errors.httpFailed')
     let detail = ''
     try { detail = string(record(record(data).error).message) } catch { /* keep safe fallback */ }
     throw new ApiError(detail ? `${code}：${detail}` : code, response.status)

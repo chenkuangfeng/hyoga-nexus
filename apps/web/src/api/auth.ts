@@ -1,12 +1,13 @@
 import { ApiError, request } from './chat'
+import { i18n } from '../i18n'
 
 export interface CurrentUser { user_id: string; display_name: string | null; providers: string[]; is_platform_admin: boolean }
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('登录数据格式无效')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(i18n.global.t('errors.dataInvalid'))
   return value as Record<string, unknown>
 }
-function text(value: unknown): string { if (typeof value !== 'string') throw new Error('登录数据格式无效'); return value }
+function text(value: unknown): string { if (typeof value !== 'string') throw new Error(i18n.global.t('errors.dataInvalid')); return value }
 const json = (method: string, value?: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, ...(value === undefined ? {} : { body: JSON.stringify(value) }) })
 
 /** Sign-in requests. Passwords are sent once and never stored by the client. */
@@ -16,7 +17,7 @@ export const authApi = {
     try {
       return await request<CurrentUser>('/auth/me', value => {
         const row = record(value)
-        if (!Array.isArray(row.providers)) throw new Error('登录数据格式无效')
+        if (!Array.isArray(row.providers)) throw new Error(i18n.global.t('errors.dataInvalid'))
         return { user_id: text(row.user_id), display_name: row.display_name === null ? null : text(row.display_name), providers: row.providers.map(text), is_platform_admin: row.is_platform_admin === true }
       }, { signal })
     } catch (error) {

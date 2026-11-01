@@ -3,6 +3,7 @@ import { api } from '../api/chat'
 import { workspace } from '../stores/workspace'
 import { roleApi } from '../api/roles'
 import type { Agent } from '../types/chat'
+import { i18n } from '../i18n'
 import { AGENT_PERMISSIONS, type AgentPermission, type AgentGrantRow, type PermissionCatalog, type Permissions,
   type RoleAssignment, type TenantMember, type TenantRole } from '../types/roles'
 
@@ -46,7 +47,7 @@ export function useRoles() {
       ])
       if (signal.aborted || disposed) return
       roles.value = roleRows; members.value = memberRows; assignments.value = assignRows; grants.value = grantRows; agents.value = agentRows
-    } catch (e) { if (!signal.aborted && !disposed) error.value = e instanceof Error ? e.message : '加载失败' }
+    } catch (e) { if (!signal.aborted && !disposed) error.value = e instanceof Error ? e.message : i18n.global.t('common.loadFailed') }
     finally { if (!signal.aborted && !disposed) loading.value = false }
   }
 
@@ -54,7 +55,7 @@ export function useRoles() {
     if (busy.value || disposed) return
     busy.value = true; error.value = ''; feedback.value = ''
     try { await action(); if (!disposed) feedback.value = message }
-    catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '操作未完成' }
+    catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : i18n.global.t('common.opFailed') }
     finally { if (!disposed) busy.value = false }
   }
 
@@ -68,7 +69,7 @@ export function useRoles() {
     if (editingRoleId.value) await roleApi.updateRole(tenant.value, editingRoleId.value, menus, apis)
     else await roleApi.createRole(tenant.value, roleForm.name.trim(), menus, apis)
     roleDialog.value = false; await load()
-  }, '角色已保存')
+  }, i18n.global.t('roleSettings.roleSaved'))
 
   /** Replace one member's role set by diffing against the current assignments. */
   const setMemberRoles = (userId: string, selected: string[]) => perform(async () => {
@@ -76,26 +77,26 @@ export function useRoles() {
     for (const roleId of selected.filter(id => !current.includes(id))) await roleApi.assign(tenant.value, userId, roleId)
     for (const roleId of current.filter(id => !selected.includes(id))) await roleApi.unassign(tenant.value, userId, roleId)
     await load()
-  }, '成员角色已更新')
+  }, i18n.global.t('roleSettings.memberUpdated'))
 
   const currentGrant = computed(() => grants.value.filter(row => row.role_id === grantRoleId.value && row.agent_id === grantAgentId.value).map(row => row.permission))
   watch([grantRoleId, grantAgentId, grants], () => { grantPermissions.value = [...currentGrant.value] })
   const saveGrant = () => perform(async () => {
     await roleApi.setAgentGrants(tenant.value, grantRoleId.value, grantAgentId.value, [...grantPermissions.value])
     await load()
-  }, '智能体权限已保存')
+  }, i18n.global.t('roleSettings.agentPermSaved'))
 
   /** Create a password account in the selected tenant. The caller clears its password input after this settles. */
   const createAccount = (username: string, displayName: string, password: string, role: 'admin' | 'member') => perform(async () => {
     await roleApi.createAccount(tenant.value, username.trim(), displayName.trim(), password, role)
     await load()
-  }, '账号已创建，请把账号与初始密码交给成员并提醒其修改')
+  }, i18n.global.t('roleSettings.accountCreated'))
 
   // The space comes from the shell's selector; a change reloads this page's data.
   async function initialize() {
     loading.value = true
     try { if (!disposed) await load() }
-    catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '空间加载失败' }
+    catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : i18n.global.t('common.spaceLoadFailed') }
     finally { if (!disposed) loading.value = false }
   }
   onMounted(initialize)

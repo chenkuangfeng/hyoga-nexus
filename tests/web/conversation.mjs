@@ -5,7 +5,7 @@ const require = createRequire(new URL('../../apps/web/package.json', import.meta
 const { chromium } = require('playwright')
 const browser = await chromium.launch({ headless: true })
 const baseURL = process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173'
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1440, height: 1000 } })
 const consoleErrors = []
 page.on('pageerror', error => consoleErrors.push(error.message))
 let snapshotRefreshes = 0, sessions = [], messages = [], run = null, events = [], sends = 0, responses = 0, reconnects = 0, corrections = 0
@@ -17,7 +17,7 @@ await page.route('**/api/v1/**', async route => {
   if (path.endsWith('/tenants')) return route.fulfill(json([{ id: 'tenant', name: '开发空间' }]))
   if (path.endsWith('/agents')) return route.fulfill(json([{ id: 'agent', name: '研究助手', runtime_type: 'native', published_version_id: 'version' }]))
   if (path.endsWith('/sessions') && method === 'POST') {
-    const created = { id: 'session', title: '验收会话', agent_version_id: 'version' }; sessions = [created]
+    const created = { id: 'session', title: '验收会话', agent_version_id: 'version', updated_at: '2026-11-01T08:00:00Z' }; sessions = [created]
     return route.fulfill(json(created))
   }
   if (path.endsWith('/memory-snapshot') && method === 'GET') return route.fulfill(json({ exists: true, created_at: '2026-11-01T08:00:00Z', stale: false }))
@@ -68,26 +68,29 @@ await page.route('**/api/v1/**', async route => {
 })
 try {
   await page.goto(baseURL)
-  await page.getByRole('button', { name: '新建会话', exact: true }).click()
-  // The memory snapshot control is shown for the open session and refreshes it on request.
-  await page.getByText('记忆索引已固定，与当前记忆一致。', { exact: true }).waitFor()
-  const refreshed = page.waitForResponse(response => response.url().endsWith('/memory-snapshot/refresh'))
-  await page.getByRole('button', { name: '刷新记忆快照', exact: true }).click()
-  await refreshed
-  assert.equal(snapshotRefreshes, 1)
+  // 新对话 starts a draft; the session is created by the first message.
+  await page.getByRole('button', { name: '新对话', exact: true }).click()
   await page.getByLabel('你的消息', { exact: true }).fill('研究市场')
   await page.getByRole('button', { name: '发送消息', exact: true }).click()
   await page.getByLabel('智能体需要你的回答', { exact: true }).waitFor()
   assert.equal(await page.locator('.message-text').filter({ hasText: '安全内容' }).count(), 1)
   assert.equal(await page.locator('.message-text img').count(), 0)
   assert.equal(await page.evaluate(() => window.injected), undefined)
-  assert.match(await page.locator('summary').innerText(), /ask_user.*已完成/)
+  assert.match(await page.locator('.step').filter({ hasText: 'ask_user' }).first().innerText(), /已完成/)
   await page.getByRole('button', { name: 'A股', exact: true }).click()
   assert.equal(await page.getByLabel('智能体需要你的回答', { exact: true }).inputValue(), 'A股')
   await page.getByRole('button', { name: '提交回答', exact: true }).click()
   await page.getByText('收到回答，已完成。', { exact: true }).waitFor()
+  // The snapshot control lives in the collapsed 会话工具 panel and is disabled while a run is active,
+  // so it is refreshed after the answered run has finished.
+  await page.getByText('会话工具（模型分支与快照）', { exact: true }).click()
+  await page.getByText('记忆索引已固定，与当前记忆一致。', { exact: true }).waitFor()
+  const refreshed = page.waitForResponse(response => response.url().endsWith('/memory-snapshot/refresh'))
+  await page.getByRole('button', { name: '刷新记忆快照', exact: true }).click()
+  await refreshed
+  assert.equal(snapshotRefreshes, 1)
   assert.equal(responses, 1)
-  const content = await page.locator('.message-list').innerText()
+  const content = await page.locator('.thread').innerText()
   assert.ok(content.indexOf('选择市场') < content.indexOf('A股'))
   assert.ok(content.indexOf('A股') < content.indexOf('收到回答'))
   await page.getByLabel('你的消息', { exact: true }).fill('第二次请求')
@@ -108,14 +111,17 @@ try {
   assert.equal(sends, 2)
   await page.screenshot({ path: '/tmp/hyoga-p2-desktop.png', fullPage: true })
   await page.setViewportSize({ width: 375, height: 812 })
+  // The shell switches to the drawer layout on a media-query event; give it a frame before measuring.
+  await page.waitForTimeout(200)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
   await page.getByLabel('你的消息', { exact: true }).focus()
   assert.equal(await page.getByLabel('你的消息', { exact: true }).evaluate(element => element === document.activeElement), true)
   await page.screenshot({ path: '/tmp/hyoga-p2-mobile.png', fullPage: true })
   await page.route('**/api/v1/tenants', route => route.fulfill({ status: 403, ...json({ error: { message: 'Access denied' } }) }))
-  await page.getByRole('button', { name: '刷新会话', exact: true }).click()
+  // The title bar's 刷新 re-runs initialization, which reloads the spaces and surfaces the 403.
+  await page.getByRole('button', { name: '刷新', exact: true }).click()
   await page.getByText('无权访问或内容已不可用：Access denied', { exact: true }).waitFor()
-  assert.equal(await page.locator('.chat-message').count(), 0)
+  assert.equal(await page.locator('.timeline .row').count(), 0)
   assert.deepEqual(consoleErrors, [])
   console.log('PASS: send, safe rendering, tool status, input continuation, event deduplication, reconnect, cancellation, keyboard focus, 375px layout')
 } finally { await browser.close() }

@@ -2,24 +2,25 @@
  * Sidebar navigation: groups and their pages. Admin-only groups are hidden for other users, and the
  * router redirects them away from admin paths (see `requiresAdmin`).
  */
-export interface NavItem { path: string; label: string }
-export interface NavGroup { title: string; items: NavItem[]; requiresAdmin?: boolean }
+/** `labelKey` is a key under `shell.pages` in the i18n messages; labels are translated where shown. */
+export interface NavItem { path: string; labelKey: string }
+export interface NavGroup { titleKey: string; items: NavItem[]; requiresAdmin?: boolean }
 
 export const navigation: NavGroup[] = [
-  { title: '工作台', items: [{ path: '/chat', label: '对话' }] },
-  { title: '空间', items: [
-    { path: '/space/organization', label: '空间组织' },
-    { path: '/space/roles', label: '角色与权限' },
-    { path: '/space/models', label: '模型设置' },
+  { titleKey: 'shell.groups.workbench', items: [{ path: '/chat', labelKey: 'shell.pages.chat' }] },
+  { titleKey: 'shell.groups.space', items: [
+    { path: '/space/organization', labelKey: 'shell.pages.spaceOrganization' },
+    { path: '/space/roles', labelKey: 'shell.pages.spaceRoles' },
+    { path: '/space/models', labelKey: 'shell.pages.spaceModels' },
   ] },
-  { title: '个人', items: [
-    { path: '/personal/native', label: 'Native 与记忆' },
-    { path: '/personal/account', label: '我的账号' },
+  { titleKey: 'shell.groups.personal', items: [
+    { path: '/personal/native', labelKey: 'shell.pages.personalNative' },
+    { path: '/personal/account', labelKey: 'shell.pages.personalAccount' },
   ] },
-  { title: '平台管理', requiresAdmin: true, items: [
-    { path: '/admin/organizations', label: '组织与人员' },
-    { path: '/admin/sessions', label: '会话查询' },
-    { path: '/admin/overview', label: '平台能力' },
+  { titleKey: 'shell.groups.platform', requiresAdmin: true, items: [
+    { path: '/admin/organizations', labelKey: 'shell.pages.adminOrganizations' },
+    { path: '/admin/sessions', labelKey: 'shell.pages.adminSessions' },
+    { path: '/admin/overview', labelKey: 'shell.pages.adminOverview' },
   ] },
 ]
 

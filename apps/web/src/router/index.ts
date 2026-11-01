@@ -20,20 +20,20 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: '/chat' },
     // Rendered by App.vue while signed out (its query carries login errors); nothing to render here.
-    { path: '/login', name: 'login', component: { render: () => null }, meta: { title: '登录', public: true } },
-    { path: '/chat/:sessionId?', name: 'chat', component: ConversationView, meta: { title: '对话' } },
-    { path: '/space/organization', name: 'space-organization', component: SpaceOrganizationView, meta: { title: '空间组织' } },
-    { path: '/space/roles', name: 'space-roles', component: RoleManagementView, meta: { title: '角色与权限' } },
-    { path: '/space/models', name: 'space-models', component: ModelSettingsView, meta: { title: '模型设置' } },
-    { path: '/personal/native', name: 'personal-native', component: NativeSettingsView, meta: { title: 'Native 与记忆' } },
+    { path: '/login', name: 'login', component: { render: () => null }, meta: { titleKey: 'shell.titles.login', public: true } },
+    { path: '/chat/:sessionId?', name: 'chat', component: ConversationView, meta: { titleKey: 'shell.titles.chat' } },
+    { path: '/space/organization', name: 'space-organization', component: SpaceOrganizationView, meta: { titleKey: 'shell.titles.spaceOrganization' } },
+    { path: '/space/roles', name: 'space-roles', component: RoleManagementView, meta: { titleKey: 'shell.titles.spaceRoles' } },
+    { path: '/space/models', name: 'space-models', component: ModelSettingsView, meta: { titleKey: 'shell.titles.spaceModels' } },
+    { path: '/personal/native', name: 'personal-native', component: NativeSettingsView, meta: { titleKey: 'shell.titles.personalNative' } },
     {
-      path: '/personal/account', name: 'personal-account', component: AccountView, meta: { title: '我的账号' },
+      path: '/personal/account', name: 'personal-account', component: AccountView, meta: { titleKey: 'shell.titles.personalAccount' },
       // The account page receives the signed-in user and the WeCom binding result from the redirect query (`?wecom=...`).
       props: route => ({ user: workspace.user, wecomResult: String(route.query.wecom || '') }),
     },
-    { path: '/admin/organizations', name: 'admin-organizations', component: OrganizationManagementView, meta: { title: '组织与人员', requiresAdmin: true } },
-    { path: '/admin/sessions', name: 'admin-sessions', component: AdminSessionsView, meta: { title: '会话查询', requiresAdmin: true } },
-    { path: '/admin/overview', name: 'admin-overview', component: OverviewView, meta: { title: '平台能力', requiresAdmin: true } },
+    { path: '/admin/organizations', name: 'admin-organizations', component: OrganizationManagementView, meta: { titleKey: 'shell.titles.adminOrganizations', requiresAdmin: true } },
+    { path: '/admin/sessions', name: 'admin-sessions', component: AdminSessionsView, meta: { titleKey: 'shell.titles.adminSessions', requiresAdmin: true } },
+    { path: '/admin/overview', name: 'admin-overview', component: OverviewView, meta: { titleKey: 'shell.titles.adminOverview', requiresAdmin: true } },
     { path: '/:pathMatch(.*)*', redirect: '/chat' },
   ],
 })

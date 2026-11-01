@@ -2,19 +2,20 @@
 export const AGENT_PERMISSIONS = ['view', 'run', 'edit', 'publish', 'manage'] as const
 export type AgentPermission = typeof AGENT_PERMISSIONS[number]
 
+/** Labels are i18n keys under `roleSettings`; views translate them with `$t`/`t`. */
 export const agentPermissionLabels: Record<AgentPermission, string> = {
-  view: '查看', run: '运行', edit: '编辑草稿', publish: '发布', manage: '管理',
+  view: 'roleSettings.perm.view', run: 'roleSettings.perm.run', edit: 'roleSettings.perm.edit', publish: 'roleSettings.perm.publish', manage: 'roleSettings.perm.manage',
 }
 
 export const menuLabels: Record<string, string> = {
-  chat: '对话工作台', agents: '智能体', models: '模型设置', audit: '审计', members: '成员管理', roles: '角色与权限',
+  chat: 'roleSettings.menu.chat', agents: 'roleSettings.menu.agents', models: 'roleSettings.menu.models', audit: 'roleSettings.menu.audit', members: 'roleSettings.menu.members', roles: 'roleSettings.menu.roles',
 }
 
 export const apiLabels: Record<string, string> = {
-  'agents:read': '查看智能体', 'agents:write': '创建智能体', 'agents:publish': '发布智能体',
-  'sessions:write': '新建会话', 'runs:write': '发起运行', 'models:read': '查看模型',
-  'models:manage': '管理模型与凭据', 'audit:read': '查看审计', 'members:manage': '管理成员',
-  'roles:manage': '管理角色', 'tools:manage': '管理工具',
+  'agents:read': 'roleSettings.api.agentsRead', 'agents:write': 'roleSettings.api.agentsWrite', 'agents:publish': 'roleSettings.api.agentsPublish',
+  'sessions:write': 'roleSettings.api.sessionsWrite', 'runs:write': 'roleSettings.api.runsWrite', 'models:read': 'roleSettings.api.modelsRead',
+  'models:manage': 'roleSettings.api.modelsManage', 'audit:read': 'roleSettings.api.auditRead', 'members:manage': 'roleSettings.api.membersManage',
+  'roles:manage': 'roleSettings.api.rolesManage', 'tools:manage': 'roleSettings.api.toolsManage',
 }
 
 export interface PermissionCatalog { menus: string[]; apis: string[] }
