@@ -31,10 +31,11 @@ await page.route('**/api/v1/**', async route => {
     assigned = [{ user_id: 'member-1', role_id: 'role-1' }]
     return route.fulfill({ status: 204, body: '' })
   }
+  if (path.endsWith('/sessions')) return route.fulfill(json([]))
   throw new Error(`Unexpected request: ${method} ${path}`)
 })
 try {
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#roles')
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/space/roles')
   await page.getByRole('heading', { name: '角色与权限', exact: true }).waitFor()
   await page.getByText('菜单：智能体').waitFor()
   await page.locator('.assign-list .el-select').first().click()

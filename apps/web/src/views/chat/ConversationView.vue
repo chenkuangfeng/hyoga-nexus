@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ModelBranchControls from '../../components/ModelBranchControls.vue'
 import MemorySnapshotControl from '../../components/MemorySnapshotControl.vue'
 import RuntimeControls from '../../components/RuntimeControls.vue'
 import { useConversation } from '../../composables/useConversation'
 import { errorLabels, statusLabels } from '../../types/chat'
+import { workspace } from '../../stores/workspace'
 const chat = useConversation()
-const { tenants, agents, sessions, tenant, sessionId, versionId, timeline, run, pendingInput,
+const route = useRoute(), router = useRouter()
+const { agents, sessions, tenant, sessionId, versionId, timeline, run, pendingInput,
   error, loading, submitting, connection, cancelling, active, queueLabel } = chat
 const prompt = ref(''), answer = ref('')
-onMounted(chat.initialize)
+// The URL (/chat/:sessionId) is the source of the open session. Opening a session from the sidebar
+// changes the route; the composable's state follows it, and the route follows the composable when a
+// session is opened or created here.
+onMounted(() => chat.initialize(String(route.params.sessionId || '')))
+watch(() => workspace.tenantId, id => { if (id) void chat.selectTenant(id) })
+watch(() => route.params.sessionId, id => { const value = String(id || ''); if (value && value !== sessionId.value) void chat.openSession(value) })
+watch(sessionId, id => { if (id && route.params.sessionId !== id) void router.replace(`/chat/${id}`) })
+watch(sessions, list => { workspace.sessions = list }, { deep: true })
 async function openBranch(id: string) { await chat.selectTenant(tenant.value); await chat.openSession(id) }
 async function send() { if (await chat.send(prompt.value)) prompt.value = '' }
 async function respond() { if (await chat.respond(answer.value)) answer.value = '' }
@@ -24,11 +34,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
     <p class="intro">选择已发布的智能体，持续对话并查看工具执行进度。模型随智能体版本固定。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="error" />
     <div class="conversation-layout">
-      <aside class="conversation-sidebar" aria-label="空间和会话">
-        <label for="tenant-select">工作空间</label>
-        <el-select id="tenant-select" :model-value="tenant" :disabled="loading || submitting" placeholder="选择空间" @change="chat.selectTenant">
-          <el-option v-for="item in tenants" :key="item.id" :label="item.via_organization ? `${item.name}（组织）` : item.name" :value="item.id" />
-        </el-select>
+      <aside class="conversation-sidebar" aria-label="新会话设置">
         <label for="agent-select">新会话使用的智能体</label>
         <el-select id="agent-select" v-model="versionId" :disabled="loading || submitting" placeholder="选择已发布的 Native 智能体">
           <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.published_version_id!" />
@@ -37,15 +43,7 @@ async function respond() { if (await chat.respond(answer.value)) answer.value = 
         <p v-if="tenant && !agents.length && !loading" class="muted">暂无已发布的 Native 智能体，请先完成智能体配置和发布。</p>
         <ModelBranchControls :tenant="tenant" :session="sessionId" :disabled="active || loading || submitting" @created="openBranch" />
         <MemorySnapshotControl v-if="sessionId" :tenant="tenant" :session="sessionId" :disabled="active || loading || submitting" />
-        <h2>会话记录</h2>
-        <nav class="session-list" aria-label="选择会话">
-          <button v-for="item in sessions" :key="item.id" type="button" :aria-current="item.id === sessionId ? 'page' : undefined"
-            :class="{ selected: item.id === sessionId }" :disabled="submitting" @click="chat.openSession(item.id)">
-            {{ item.title || `会话 ${item.id.slice(-8)}` }}
-            <span v-if="item.org_unit_id" class="org-tag">组织访问</span>
-          </button>
-        </nav>
-        <p v-if="!sessions.length && !loading" class="muted">暂无会话</p>
+        <p v-if="!sessions.length && !loading" class="muted">该空间暂无会话，可在左侧导航的“会话”中打开，或在此新建。</p>
       </aside>
       <section class="chat-panel" aria-label="会话内容" :aria-busy="loading">
         <div class="run-status" role="status" aria-live="polite">

@@ -160,7 +160,7 @@ def test_wecom_bind_then_login_by_qr(client):
     start = client.get("/api/v1/auth/wecom/start")
     login_state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
     signed_in = client.get(f"/api/v1/auth/wecom/callback?code=code-zhang&state={login_state}")
-    assert signed_in.status_code == 303 and signed_in.headers["location"] == "/#chat"
+    assert signed_in.status_code == 303 and signed_in.headers["location"] == "/chat"
     assert "nexus_session=" in signed_in.headers["set-cookie"]
     assert client.get("/api/v1/auth/me").json()["providers"] == ["password", "wecom"]
 

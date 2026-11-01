@@ -34,10 +34,11 @@ await page.route('**/api/v1/**', async route => {
   if (path.endsWith('/test')) { tested++; return route.fulfill(json({ ok: true, message: '连接成功，流式响应正常' })) }
   if (path.endsWith('/agents')) { created++; return route.fulfill(json({ published_version_id: 'agent-version' })) }
   if (path.endsWith('/providers/provider-1') && method === 'DELETE') { providers = []; defaults = {}; return route.fulfill(json({ status: 'disabled' })) }
+  if (path.endsWith('/sessions')) return route.fulfill(json([]))
   throw new Error(`Unexpected request: ${method} ${path}`)
 })
 try {
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#settings')
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/space/models')
   await page.getByRole('heading', { name: '模型供应商', exact: true }).waitFor()
   await page.getByRole('button', { name: '添加供应商', exact: true }).click()
   await page.locator('#provider-name').fill('个人供应商')

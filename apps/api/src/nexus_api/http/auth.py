@@ -131,18 +131,18 @@ def wecom_callback(request: Request, code: str = "", state: str = "",
     if purpose == "bind":
         principal = _cookie_principal(request, db)
         if principal is None:
-            return RedirectResponse("/#account?wecom=unauthenticated", status_code=303)
+            return RedirectResponse("/personal/account?wecom=unauthenticated", status_code=303)
         user_id = _user_id_for(db, principal)
         try:
             wecom.bind_wecom(db, directory, code=code, state=state, corp_id=corp_id, expected_user_id=user_id)
         except (Unauthenticated, Forbidden, Conflict) as exc:
-            return RedirectResponse(f"/#account?wecom={_error_key(exc)}", status_code=303)
-        return RedirectResponse("/#account?wecom=bound", status_code=303)
+            return RedirectResponse(f"/personal/account?wecom={_error_key(exc)}", status_code=303)
+        return RedirectResponse("/personal/account?wecom=bound", status_code=303)
     try:
         token, expires, _ = wecom.login_with_wecom(db, directory, code=code, state=state, corp_id=corp_id)
     except (Unauthenticated, Forbidden) as exc:
-        return RedirectResponse(f"/#login?error={_error_key(exc)}", status_code=303)
-    response = RedirectResponse("/#chat", status_code=303)
+        return RedirectResponse(f"/login?error={_error_key(exc)}", status_code=303)
+    response = RedirectResponse("/chat", status_code=303)
     _set_session(response, token, expires)
     return response
 

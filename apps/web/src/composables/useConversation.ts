@@ -1,10 +1,13 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { api, parseEvent, runPath } from '../api/chat'
+import { loadTenants, workspace } from '../stores/workspace'
 import type { Agent, Conversation, InputRequest, Message, Run, RunEvent, Tenant } from '../types/chat'
 import { terminal } from '../types/chat'
 
 export function useConversation() {
-  const tenants = ref<Tenant[]>([]), agents = ref<Agent[]>([]), sessions = ref<Conversation[]>([])
+  // Spaces come from the shell's shared store, so the sidebar selector and this page agree.
+  const tenants = computed(() => workspace.tenants)
+  const agents = ref<Agent[]>([]), sessions = ref<Conversation[]>([])
   const tenant = ref(''), sessionId = ref(''), versionId = ref('')
   const messages = ref<Message[]>([]), run = ref<Run | null>(null), events = ref<RunEvent[]>([])
   const pendingInput = ref<InputRequest | null>(null), error = ref(''), loading = ref(false), submitting = ref(false)
@@ -93,22 +96,24 @@ export function useConversation() {
       else connection.value = 'reconnecting'
     }
   }
-  async function initialize() {
+  async function initialize(preferred = '') {
     const epoch = ++generation
     controller?.abort(); controller = new AbortController(); resetConnection()
     tenant.value = ''; sessionId.value = ''; run.value = null; messages.value = []; events.value = []
-    tenants.value = []; agents.value = []; sessions.value = []; pendingInput.value = null; cancelling.value = false
+    agents.value = []; sessions.value = []; pendingInput.value = null; cancelling.value = false
     loading.value = true; error.value = ''
     try {
-      const rows = await api.tenants(controller.signal)
+      // Refresh the space list so a manual refresh also reports access errors for the spaces.
+      await loadTenants()
+      const id = workspace.tenantId || workspace.tenants[0]?.id || ''
       if (epoch !== generation) return
-      tenants.value = rows
-      if (rows[0]) await selectTenant(rows[0].id)
+      if (id) await selectTenant(id, preferred)
     }
     catch (cause) { error.value = String(cause instanceof Error ? cause.message : cause) }
     finally { loading.value = false }
   }
-  async function selectTenant(id: string) {
+  /** Load a space's agents and sessions. `preferred` (from the URL) is opened if it belongs to the space. */
+  async function selectTenant(id: string, preferred = '') {
     const epoch = ++generation
     controller?.abort(); controller = new AbortController(); resetConnection()
     tenant.value = id; sessionId.value = ''; run.value = null; messages.value = []; events.value = []; sessions.value = []; agents.value = []; pendingInput.value = null; cancelling.value = false
@@ -118,7 +123,8 @@ export function useConversation() {
       if (epoch !== generation) return
       agents.value = agentRows; sessions.value = sessionRows
       versionId.value = availableAgents.value[0]?.published_version_id || ''
-      if (sessionRows[0]) await openSession(sessionRows[0].id)
+      const target = sessionRows.find(row => row.id === preferred) || sessionRows[0]
+      if (target) await openSession(target.id)
     } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : '无法加载空间' }
     finally { if (epoch === generation || tenant.value === id) loading.value = false }
   }

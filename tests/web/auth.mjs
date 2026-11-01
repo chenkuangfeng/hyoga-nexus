@@ -28,7 +28,7 @@ await page.route('**/api/v1/**', async route => {
   throw new Error(`Unexpected request: ${method} ${path}`)
 })
 try {
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#chat')
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/chat')
   await page.getByRole('heading', { name: '登录', exact: true }).waitFor()
   assert.equal(await page.getByRole('navigation', { name: '主导航' }).count(), 0)
   assert.equal(await page.getByRole('link', { name: '使用企业微信扫码登录' }).getAttribute('href'), '/api/v1/auth/wecom/start')

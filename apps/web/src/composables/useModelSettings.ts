@@ -1,8 +1,7 @@
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { api } from '../api/chat'
+import { workspace } from '../stores/workspace'
 import { modelSettingsApi as settingsApi } from '../api/modelSettings'
-import type { Tenant } from '../types/chat'
 import type { ModelProvider, ModelSettings, SettingsScope } from '../types/modelSettings'
 
 /** Own settings state, dialogs and mutually exclusive writes for one mounted page.
@@ -11,7 +10,8 @@ import type { ModelProvider, ModelSettings, SettingsScope } from '../types/model
  * are never persisted to browser storage. Scope checks remain authoritative on the server.
  */
 export function useModelSettings() {
-  const tenants = ref<Tenant[]>([]), tenant = ref(''), loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
+  const tenants = computed(() => workspace.tenants), tenant = computed(() => workspace.tenantId)
+  const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
   const data = ref<ModelSettings>({ providers: [], defaults: {}, can_manage_tenant: false })
   const providerDialog = ref(false), modelDialog = ref(false), editingProvider = ref(''), editingModel = ref(''), modelProvider = ref('')
   const form = reactive({ name: '', base_url: '', scope: 'personal' as SettingsScope, api_key: '' })
@@ -56,13 +56,15 @@ export function useModelSettings() {
   }
   const test = (provider: string, model: string) => perform(async () => { const result = await settingsApi.test(tenant.value, provider, model); if (!result.ok) throw new Error(result.message); feedback.value = result.message })
   const createAgent = () => perform(async () => { await settingsApi.createAgent(tenant.value, agentName.value.trim(), instructions.value, agentModel.value); agentName.value = '' }, '智能体已发布，可以返回对话工作台新建会话')
+  // The space comes from the shell's selector; a change reloads this page's data.
   async function initialize() {
     loading.value = true
-    try { const rows = await api.tenants(); if (!disposed) { tenants.value = rows; tenant.value = rows[0]?.id || ''; await load() } }
+    try { if (!disposed) await load() }
     catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '空间加载失败' }
     finally { if (!disposed) loading.value = false }
   }
   onMounted(initialize)
+  watch(() => workspace.tenantId, () => { if (!disposed) void initialize() })
   onBeforeUnmount(() => { disposed = true; controller?.abort(); form.api_key = '' })
   return { tenants, tenant, loading, busy, error, feedback, data, models, providerDialog, modelDialog, form,
     editingProvider, modelName, modelProtocol, modelStream, modelTextTools, reasoningEffort, temperature, agentName, instructions, agentModel, load, initialize, editProvider, editModel, saveProvider, saveModel, setDefault, confirmRemove, test, createAgent }

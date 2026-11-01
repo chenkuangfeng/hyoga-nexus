@@ -9,10 +9,6 @@ const { tenants, tenant, loading, busy, error, feedback, data, models, providerD
     <header><div><p class="eyebrow">HYOGA NEXUS / 用户设置</p><h1>模型供应商</h1></div>
       <el-button :disabled="busy || loading || !tenant" @click="settings.editProvider()">添加供应商</el-button></header>
     <p class="intro">管理个人和空间共享模型。默认模型用于新建智能体，已有会话保持原来的模型版本。</p>
-    <label for="settings-tenant">工作空间</label>
-    <el-select id="settings-tenant" v-model="tenant" :disabled="busy || loading" @change="settings.load">
-      <el-option v-for="item in tenants" :key="item.id" :value="item.id" :label="item.name" />
-    </el-select>
     <el-button :disabled="busy || loading" @click="settings.initialize">刷新设置</el-button>
     <p v-if="!tenants.length && !loading">暂无可用空间，请先创建空间或联系管理员加入。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="error" />

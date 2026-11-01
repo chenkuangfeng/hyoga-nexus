@@ -1,7 +1,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { api } from '../api/chat'
+import { workspace } from '../stores/workspace'
 import { roleApi } from '../api/roles'
-import type { Agent, Tenant } from '../types/chat'
+import type { Agent } from '../types/chat'
 import { AGENT_PERMISSIONS, type AgentPermission, type AgentGrantRow, type PermissionCatalog, type Permissions,
   type RoleAssignment, type TenantMember, type TenantRole } from '../types/roles'
 
@@ -10,7 +11,8 @@ import { AGENT_PERMISSIONS, type AgentPermission, type AgentGrantRow, type Permi
  * Management actions are only offered when the caller holds roles:manage; the server still decides.
  */
 export function useRoles() {
-  const tenants = ref<Tenant[]>([]), tenant = ref(''), loading = ref(false), busy = ref(false)
+  const tenants = computed(() => workspace.tenants), tenant = computed(() => workspace.tenantId)
+  const loading = ref(false), busy = ref(false)
   const error = ref(''), feedback = ref('')
   const catalog = ref<PermissionCatalog>({ menus: [], apis: [] })
   const mine = ref<Permissions>({ menus: [], apis: [] })
@@ -89,13 +91,15 @@ export function useRoles() {
     await load()
   }, '账号已创建，请把账号与初始密码交给成员并提醒其修改')
 
+  // The space comes from the shell's selector; a change reloads this page's data.
   async function initialize() {
     loading.value = true
-    try { const rows = await api.tenants(); if (!disposed) { tenants.value = rows; tenant.value = rows[0]?.id || ''; await load() } }
+    try { if (!disposed) await load() }
     catch (e) { if (!disposed) error.value = e instanceof Error ? e.message : '空间加载失败' }
     finally { if (!disposed) loading.value = false }
   }
   onMounted(initialize)
+  watch(() => workspace.tenantId, () => { if (!disposed) void initialize() })
   onBeforeUnmount(() => { disposed = true; controller?.abort() })
   return { tenants, tenant, loading, busy, error, feedback, catalog, mine, canManage, roles, members, assignments, agents,
     grants, roleDialog, editingRoleId, roleForm, grantRoleId, grantAgentId, grantPermissions, agentPermissions,

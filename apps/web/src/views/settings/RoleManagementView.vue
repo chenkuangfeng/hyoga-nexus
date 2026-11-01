@@ -20,10 +20,6 @@ const apiName = (key: string) => apiLabels[key] || key
     <header><div><p class="eyebrow">HYOGA NEXUS / 空间管理</p><h1>角色与权限</h1></div>
       <el-button :disabled="busy || loading || !tenant || !canManage" @click="roles.openRole()">新建角色</el-button></header>
     <p class="intro">角色决定成员可以访问的菜单、后台接口和可用的智能体。成员可同时拥有多个角色，权限取并集。空间的 owner 与 admin 始终拥有全部权限。</p>
-    <label for="roles-tenant">空间</label>
-    <el-select id="roles-tenant" v-model="tenant" :disabled="busy || loading" @change="roles.load">
-      <el-option v-for="item in tenants" :key="item.id" :value="item.id" :label="item.name" />
-    </el-select>
     <el-alert v-if="error" :title="error" type="error" :closable="false" class="error" />
     <p class="feedback" role="status" aria-live="polite">{{ feedback }}</p>
     <el-empty v-if="!loading && tenant && !canManage" description="你没有管理角色的权限，请联系空间管理员。" />

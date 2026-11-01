@@ -49,16 +49,17 @@ await page.route('**/api/v1/**', async route => {
     joinBody = JSON.parse(request.postData() || '{}')
     return route.fulfill(json({ added: ['u-alice'], skipped: [] }))
   }
+  if (path.endsWith('/sessions')) return route.fulfill(json([]))
   throw new Error(`Unexpected request: ${method} ${path}`)
 })
 try {
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#orgs')
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/admin/organizations')
   await page.getByRole('heading', { name: '组织与人员', exact: true }).waitFor()
   await page.getByRole('button', { name: /^研发部/ }).click()
   await page.getByText('（主节点）').waitFor()
   assert.equal(await page.getByRole('button', { name: /^研发部/ }).getAttribute('aria-pressed'), 'true')
 
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#space-org')
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/space/organization')
   await page.getByRole('heading', { name: '空间组织', exact: true }).waitFor()
   await page.getByRole('heading', { name: '集团 › 子公司甲' }).waitFor()
   await page.getByText('组织人员（1）').waitFor()
@@ -75,7 +76,7 @@ try {
   assert.deepEqual(joinBody, { user_ids: ['u-alice'], role_ids: ['r-user'] })
 
   // Platform admin session query: the organization filter narrows results and marks organization access.
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#admin-sessions')
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/admin/sessions')
   await page.getByRole('heading', { name: '会话查询', exact: true }).waitFor()
   await page.getByRole('table', { name: '会话列表' }).waitFor()
   assert.equal(await page.getByRole('cell', { name: '个人会话' }).count(), 1)
@@ -89,8 +90,8 @@ try {
   assert.ok(sessionQueries.includes('agent-1'), 'agent filter should be sent to the server')
 
   // A user who is not a platform admin gets no organization-management or session-query entry.
-  // Leave the admin-only page first; reloading on it would render the overview fallback for a non-admin.
-  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#space-org')
+  // Leave the admin-only page first; a reload on it would redirect a non-admin to the conversation page.
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/space/organization')
   isAdmin = false
   await page.reload()
   await page.getByRole('button', { name: '空间组织', exact: true }).waitFor()

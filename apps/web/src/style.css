@@ -15,6 +15,3 @@ h2 { font-size: 18px; margin: 0; }
 @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } main { padding: 24px 16px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 :root { --surface: #fff; --border: #d7e1e4; --selected: #edf6f4; --muted-text: #475569; }
-.app-navigation { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
-.app-navigation button { font: inherit; min-height: 44px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px; color: inherit; background: var(--surface); cursor: pointer; }
-.app-navigation button[aria-current="page"] { background: var(--selected); border-color: var(--el-color-primary); }

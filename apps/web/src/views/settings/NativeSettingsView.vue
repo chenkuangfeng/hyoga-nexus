@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { api } from '../../api/chat'
+import { workspace } from '../../stores/workspace'
 import { modelSettingsApi } from '../../api/modelSettings'
 import { nativeApi, type NativePreferences, type MemoryData, type MemoryEntry, type MemoryDraft, type MemoryCapture } from '../../api/native'
-import type { Tenant } from '../../types/chat'
-const tenants = ref<Tenant[]>([]), tenant = ref(''), data = ref<NativePreferences | null>(null)
+const tenant = computed(() => workspace.tenantId), data = ref<NativePreferences | null>(null)
 const memories = ref<MemoryData>({ entries: [], drafts: [] }), models = ref<{ id: string; label: string }[]>([])
 const capture = ref<MemoryCapture>({ enabled: false, model_profile_version_id: null, capacity_policy: 'reject' })
 const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
@@ -30,9 +29,11 @@ async function act(action: () => Promise<void>, message: string) {
   finally { if (!disposed) busy.value = false }
 }
 async function initialize() {
-  try { const rows = await api.tenants(); if (!disposed) { tenants.value = rows; tenant.value ||= rows[0]?.id || ''; await load() } }
+  try { if (!disposed) await load() }
   catch (e) { error.value = e instanceof Error ? e.message : '空间加载失败' }
 }
+// The space is chosen in the shell sidebar; a change reloads this page.
+watch(tenant, () => { if (!disposed) void initialize() })
 function review(draft: MemoryDraft) { selectedDraft.value = draft; selectedEntry.value = ''; title.value = ''; project.value = '' }
 async function publish(approve: boolean) {
   const draft = selectedDraft.value
@@ -63,7 +64,6 @@ onBeforeUnmount(() => { disposed = true; controller?.abort() })
   <main class="native-settings" v-loading="loading" :aria-busy="busy || loading">
     <header><div><p class="eyebrow">HYOGA NEXUS / 用户设置</p><h1>Native 执行与记忆</h1></div><el-button :disabled="loading || busy" @click="initialize">刷新</el-button></header>
     <p class="intro">个人默认设置只应用于之后创建的智能体，已有版本和会话保持原配置。工具仍需单独授权。</p>
-    <label for="native-tenant">工作空间</label><el-select id="native-tenant" v-model="tenant" :disabled="busy || loading" @change="load"><el-option v-for="w in tenants" :key="w.id" :value="w.id" :label="w.name" /></el-select>
     <el-alert v-if="error" type="error" :title="error" :closable="false" /><p role="status" aria-live="polite">{{ feedback }}</p>
     <template v-if="data">
       <section v-for="(fields, group) in data.fields" :key="group" class="panel">

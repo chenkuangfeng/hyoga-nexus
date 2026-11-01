@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { api } from '../../api/chat'
+import { workspace } from '../../stores/workspace'
 import { orgApi } from '../../api/orgs'
 import { roleApi } from '../../api/roles'
-import type { Tenant } from '../../types/chat'
 import type { TenantRole } from '../../types/roles'
 import type { SpaceBinding, SpaceBindingNode, SpaceOrganization } from '../../types/orgs'
 
 /** Space page: the organizations bound to this space, their subtrees, and the people in them.
  * Seeing a person does not make them a member; joining is an explicit action that needs members:manage.
  */
-const tenants = ref<Tenant[]>([]), tenant = ref('')
+const tenant = computed(() => workspace.tenantId)
 const data = ref<SpaceOrganization>({ bindings: [], people: [] })
 const canJoin = ref(false), roles = ref<TenantRole[]>([]), roleIds = ref<string[]>([]), picked = ref<string[]>([])
 const loading = ref(false), busy = ref(false), error = ref(''), feedback = ref('')
@@ -55,13 +54,9 @@ async function join() {
   } catch (err) { error.value = message(err) }
   finally { busy.value = false }
 }
+// The space is chosen in the shell sidebar; a change reloads this page.
 watch(tenant, () => void load())
-onMounted(async () => {
-  try {
-    tenants.value = await api.tenants()
-    tenant.value = tenants.value[0]?.id || ''
-  } catch (err) { error.value = message(err) }
-})
+onMounted(() => void load())
 </script>
 
 <template>
@@ -70,10 +65,6 @@ onMounted(async () => {
       <div><p class="eyebrow">HYOGA NEXUS / 空间管理</p><h1>空间组织</h1></div>
     </header>
     <p class="intro">这里显示绑定到当前空间的组织节点、子树结构和其中的人员。人员只能看到、不会自动成为成员；需要加入时，请在下方勾选并选择角色。</p>
-    <label for="org-tenant">空间</label>
-    <el-select id="org-tenant" v-model="tenant" :disabled="loading || busy" placeholder="选择空间">
-      <el-option v-for="item in tenants" :key="item.id" :label="item.name" :value="item.id" />
-    </el-select>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="notice" role="alert" />
     <p class="feedback" role="status" aria-live="polite">{{ feedback }}</p>
 
