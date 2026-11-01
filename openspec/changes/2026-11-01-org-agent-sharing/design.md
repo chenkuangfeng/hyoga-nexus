@@ -76,7 +76,8 @@
 
 范围与边界：
 
-- 本次只改聊天记录（`sessions`、`messages`、`runs` 的读取）。记忆（`memory_entries`、`memory_drafts`）仍按 owner。
+- 本次改聊天记录（`sessions`、`messages`、`runs` 的读取）和记忆（`memory_entries`、`memory_drafts` 的读取），规则相同。
+- 会话检查点（`session_checkpoints`）随会话走，与其会话采用相同的读取规则。（实施时确认。）
 - 空间管理员的读取范围只限其管理的空间，不包含其他空间。
 - 组织成员在空间内的会话同样对空间管理员可见，与"组织访问标识"（提案待确认第 1 项）一起展示。
 
