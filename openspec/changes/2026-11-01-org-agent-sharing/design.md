@@ -59,6 +59,29 @@
 - 实施时需要解决：会话相关的空间路由目前要求空间成员身份（`require_membership`）。组织成员切换到该空间时，这些路由要允许"对该智能体有组织分配且在子树内"的调用者进入，但只能访问自己的会话，并且只能运行被分配的智能体。
 - 组织成员在该空间内的会话带有组织来源标记（例如 `source: organization`，记录分配的节点），便于空间管理员识别与审计。（待确认，见提案。）
 
+## 聊天记录的读取规则（已确认，待实施确认）
+
+现状：`sessions` 只有 `owner_user_id`，没有组织字段；`sessions.agent_version_id` 指向智能体版本，按智能体筛选需要经 `agent_versions.agent_id` 关联。`runs` 的可见性同样依赖 `owner_user_id`（`runs/repository.py`）。
+
+规则：
+
+- 普通用户：`owner_user_id = 当前用户`，可按智能体筛选。
+- 空间管理员（`tenant_memberships` 的 role 为 owner 或 admin）：`tenant_id` 为其管理的空间，不限 owner。
+- 平台管理员：不限空间与 owner，可按空间、智能体、组织筛选。
+
+组织筛选的实现（待确认第 3 项，默认方案）：
+
+- 在 `sessions` 上新增 `org_unit_id`（可空），会话创建时记录 owner 当时的主节点。筛选"组织"时，按节点子树匹配 `org_unit_id`。
+- 备选：查询时用 `user_org_units` 实时计算。实现更简单，但人员调动后历史会话会改变归属，不利于审计。
+
+范围与边界：
+
+- 本次只改聊天记录（`sessions`、`messages`、`runs` 的读取）。记忆（`memory_entries`、`memory_drafts`）仍按 owner。
+- 空间管理员的读取范围只限其管理的空间，不包含其他空间。
+- 组织成员在空间内的会话同样对空间管理员可见，与"组织访问标识"（提案待确认第 1 项）一起展示。
+
+权限影响：空间 owner 与 admin 的会话读取范围扩大。这是现有权限规则的变化，需要更新 `authz` 中的会话读取判断与对应测试。
+
 ## 审计
 
 - 组织侧（`org_audit_records`）：`org.agent_assigned`、`org.agent_unassigned`。
