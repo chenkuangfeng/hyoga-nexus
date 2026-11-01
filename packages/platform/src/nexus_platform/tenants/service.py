@@ -42,6 +42,16 @@ def create_tenant(session: Session, principal: Principal, name: str) -> TenantRe
     return tenant
 
 
+def list_all_tenants(session: Session, principal: Principal) -> list[TenantRecord]:
+    """Every active space, for platform administrators choosing a space filter. Others get Forbidden."""
+    with session.begin():
+        user = resolve_user(session, principal)
+        if not user.is_platform_admin:
+            raise Forbidden("Platform administrator required")
+        return list(session.scalars(
+            select(TenantRecord).where(TenantRecord.status == "active").order_by(TenantRecord.created_at)))
+
+
 def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRecord, str, bool]]:
     """Active spaces the user can enter, as (space, role, via_organization).
 

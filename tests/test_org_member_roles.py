@@ -165,3 +165,14 @@ def test_platform_admin_lists_sessions_across_spaces_with_filters(database):
     with database() as db:
         with pytest.raises(Forbidden):  # a space owner is not a platform administrator
             list_sessions_for_platform_admin(db, OWNER)
+
+
+def test_platform_admin_lists_all_spaces_others_are_refused(database):
+    from nexus_platform.tenants.service import list_all_tenants
+    _platform_admin(database)
+    tenant, *_ = create_agent_stack(database, OWNER)
+    with database() as db:
+        assert tenant.id in {row.id for row in list_all_tenants(db, ADMIN)}
+    with database() as db:
+        with pytest.raises(Forbidden):
+            list_all_tenants(db, OWNER)

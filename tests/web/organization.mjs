@@ -27,6 +27,15 @@ await page.route('**/api/v1/**', async route => {
   if (path.endsWith('/people') && path.includes('/org-units/')) return route.fulfill(json(path.endsWith('/org-units/dept/people') ? people : []))
   if (path.endsWith('/bindings') && path.includes('/org-units/')) return route.fulfill(json([]))
   if (path.endsWith('/users')) return route.fulfill(json([{ user_id: 'u-bob', display_name: '李四', username: 'lisi' }]))
+  if (path.endsWith('/admin/tenants')) return route.fulfill(json([{ id: 'tenant', name: '集团空间' }]))
+  if (path.endsWith('/admin/sessions')) {
+    const unit = url.searchParams.get('org_unit_id')
+    const all = [
+      { id: 's-org', tenant_id: 'tenant', owner_user_id: 'u-alice', title: '组织会话', org_unit_id: 'dept', updated_at: '2026-11-01T08:00:00Z' },
+      { id: 's-own', tenant_id: 'tenant', owner_user_id: 'admin-1', title: '个人会话', org_unit_id: null, updated_at: '2026-11-01T09:00:00Z' },
+    ]
+    return route.fulfill(json(unit ? all.filter(item => item.org_unit_id === unit) : all))
+  }
   if (path.endsWith('/tenants/tenant/roles')) return route.fulfill(json([{ id: 'r-user', tenant_id: 'tenant', name: '使用者', menus: ['chat'], apis: [] }]))
   if (path.endsWith('/tenants/tenant/organization')) return route.fulfill(json({
     bindings: [{ unit_id: 'sub', unit_name: '子公司甲', organization_name: '集团', status: 'active',
@@ -62,11 +71,25 @@ try {
   await page.getByText('已加入 1 人', { exact: true }).waitFor()
   assert.deepEqual(joinBody, { user_ids: ['u-alice'], role_ids: ['r-user'] })
 
-  // A user who is not a platform admin gets no organization-management entry.
+  // Platform admin session query: the organization filter narrows results and marks organization access.
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#admin-sessions')
+  await page.getByRole('heading', { name: '会话查询', exact: true }).waitFor()
+  await page.getByRole('table', { name: '会话列表' }).waitFor()
+  assert.equal(await page.getByRole('cell', { name: '个人会话' }).count(), 1)
+  await page.getByText('组织访问', { exact: true }).waitFor()
+  await page.locator('.filters .el-select__wrapper').nth(1).click()
+  await page.getByRole('option', { name: '研发部' }).click()
+  await page.getByRole('cell', { name: '个人会话' }).waitFor({ state: 'detached' })
+  assert.equal(await page.getByRole('cell', { name: '组织会话' }).count(), 1)
+
+  // A user who is not a platform admin gets no organization-management or session-query entry.
+  // Leave the admin-only page first; reloading on it would render the overview fallback for a non-admin.
+  await page.goto((process.env.NEXUS_WEB_TEST_URL || 'http://127.0.0.1:5173') + '/#space-org')
   isAdmin = false
   await page.reload()
   await page.getByRole('button', { name: '空间组织', exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: '组织与人员', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: '会话查询', exact: true }).count(), 0)
   assert.deepEqual(errors, [])
   console.log('Organization browser acceptance passed (admin tree, space view, join, hidden admin entry).')
 } catch (error) {

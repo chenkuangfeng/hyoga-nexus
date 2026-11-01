@@ -384,6 +384,12 @@ def list_sessions(
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
 
 
+@router.get("/admin/tenants", response_model=list[TenantView])
+def list_all_tenants(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Platform administrators only: every active space, for choosing a filter."""
+    return [tenant_view(row, "") for row in tenants.list_all_tenants(db, principal)]
+
+
 @router.get("/admin/sessions", response_model=list[SessionView])
 def list_all_sessions(
     tenant_id: UUID | None = None,
