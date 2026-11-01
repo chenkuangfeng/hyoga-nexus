@@ -14,63 +14,75 @@ def _session_id(database):
     return session.id
 
 
-def test_new_session_starts_at_watermark_zero_without_snapshot(database):
+def _base(database, session_id):
+    """Watermark after stack(): its initial message write already advanced the session."""
+    with database() as db:
+        return snapshot.read(db, session_id)[0]
+
+
+def test_new_session_has_no_snapshot_and_watermark_follows_messages(database):
     session_id = _session_id(database)
     with database() as db:
-        assert snapshot.read(db, session_id) == (0, None)
+        assert snapshot.read(db, session_id) == (_base(database, session_id), None)
+    assert _base(database, session_id) == 1  # one initial message from stack()
 
 
 def test_save_advances_watermark_and_round_trips(database):
     session_id = _session_id(database)
+    base = _base(database, session_id)
     with database() as db:
         with db.begin():
-            new = snapshot.save(db, session_id, expected_watermark=0, payload={'budget': {'rounds': 3}, 'notes': ['a']})
-    assert new == 1
+            new = snapshot.save(db, session_id, expected_watermark=base, payload={'budget': {'rounds': 3}, 'notes': ['a']})
+    assert new == base + 1
     with database() as db:
-        assert snapshot.read(db, session_id) == (1, {'budget': {'rounds': 3}, 'notes': ['a']})
+        assert snapshot.read(db, session_id) == (base + 1, {'budget': {'rounds': 3}, 'notes': ['a']})
         row = db.get(SessionRecord, session_id)
         assert row.snapshot_version == snapshot.SNAPSHOT_VERSION
 
 
 def test_stale_watermark_is_rejected_and_leaves_state_unchanged(database):
     session_id = _session_id(database)
+    base = _base(database, session_id)
     with database() as db:
         with db.begin():
-            snapshot.save(db, session_id, expected_watermark=0, payload={'writer': 'first'})
+            snapshot.save(db, session_id, expected_watermark=base, payload={'writer': 'first'})
     with database() as db:
         with pytest.raises(WatermarkConflict):
             with db.begin():
-                snapshot.save(db, session_id, expected_watermark=0, payload={'writer': 'second'})
+                snapshot.save(db, session_id, expected_watermark=base, payload={'writer': 'second'})
     with database() as db:
-        assert snapshot.read(db, session_id) == (1, {'writer': 'first'})
+        assert snapshot.read(db, session_id) == (base + 1, {'writer': 'first'})
 
 
 def test_two_writers_from_the_same_watermark_cannot_both_succeed(database):
     session_id = _session_id(database)
+    base = _base(database, session_id)
     with database() as a, database() as b:
         with a.begin():
-            snapshot.save(a, session_id, expected_watermark=0, payload={'writer': 'a'})
+            snapshot.save(a, session_id, expected_watermark=base, payload={'writer': 'a'})
         with pytest.raises(WatermarkConflict):
             with b.begin():
-                snapshot.save(b, session_id, expected_watermark=0, payload={'writer': 'b'})
+                snapshot.save(b, session_id, expected_watermark=base, payload={'writer': 'b'})
 
 
 @pytest.mark.parametrize('bad', [[1, 2], 'text', None, {'handle': object()}, {'n': float('nan')}])
 def test_non_data_payloads_are_refused(database, bad):
     session_id = _session_id(database)
+    base = _base(database, session_id)
     with database() as db:
         with pytest.raises(InvalidSnapshot):
             with db.begin():
-                snapshot.save(db, session_id, expected_watermark=0, payload=bad)
-        assert snapshot.read(db, session_id) == (0, None)
+                snapshot.save(db, session_id, expected_watermark=base, payload=bad)
+        assert snapshot.read(db, session_id) == (base, None)
 
 
 def test_oversized_payload_is_refused(database):
     session_id = _session_id(database)
+    base = _base(database, session_id)
     with database() as db:
         with pytest.raises(InvalidSnapshot):
             with db.begin():
-                snapshot.save(db, session_id, expected_watermark=0, payload={'blob': 'x' * (snapshot.MAX_SNAPSHOT_BYTES + 1)})
+                snapshot.save(db, session_id, expected_watermark=base, payload={'blob': 'x' * (snapshot.MAX_SNAPSHOT_BYTES + 1)})
 
 
 def test_unknown_stored_version_is_refused_not_guessed(database):

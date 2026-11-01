@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import new_id
 from nexus_core.runtime import ModelMessage
 from nexus_platform.persistence.models import MessageRecord
+from nexus_platform.sessions.snapshot import advance
 from .domain import Run
 from .messages import add_message
 
@@ -23,6 +24,7 @@ class SqlAlchemyRunMessageRepository:
             id=new_id(), session_id=run.session_id, run_id=run.id, sequence=sequence,
             role='user', content=content, created_at=at,
         ))
+        advance(self.session, run.session_id)
 
     def user_input(self, run: Run, content: str) -> None:
         """Use existing message allocation, Session locking and user_input metadata."""

@@ -32,7 +32,7 @@ def test_terminal_outcome_saves_v2_snapshot(database, status, error_code):
     session_id, run_id = _finish_run(database, status, error_code)
     with database() as db:
         watermark, data = snapshot.read(db, session_id)
-    assert watermark == 1
+    assert watermark == 2  # initial message from stack() + terminal save
     assert data == {'last_run': {'id': str(run_id), 'status': status, 'error_code': error_code}}
 
 
@@ -44,14 +44,15 @@ def test_waiting_state_saves_no_snapshot(database):
             row.status = 'running'
             _finish(db, row, RuntimeOutcome('waiting_input', None, question='Which market?', candidates=['A']))
     with database() as db:
-        assert snapshot.read(db, session.id) == (0, None)
+        watermark, data = snapshot.read(db, session.id)
+    assert data is None and watermark == 1  # only the initial message advanced the session
 
 
 def test_terminal_save_keeps_other_snapshot_keys(database):
     _, _, session, run, _ = stack(database)
     with database() as db:
         with db.begin():
-            snapshot.save(db, session.id, expected_watermark=0, payload={'memo': 'kept'})
+            snapshot.save(db, session.id, expected_watermark=1, payload={'memo': 'kept'})
     with database() as db:
         with db.begin():
             row = db.get(RunRecord, run.id)
@@ -59,7 +60,7 @@ def test_terminal_save_keeps_other_snapshot_keys(database):
             _finish(db, row, RuntimeOutcome('completed', None))
     with database() as db:
         watermark, data = snapshot.read(db, session.id)
-    assert watermark == 2
+    assert watermark == 3
     assert data['memo'] == 'kept' and data['last_run']['status'] == 'completed'
 
 

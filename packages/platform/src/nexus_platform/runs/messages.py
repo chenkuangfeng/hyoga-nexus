@@ -12,9 +12,13 @@ from nexus_platform.authz.resources import authorize_resource
 from .domain import Run
 
 
+from nexus_platform.sessions.snapshot import advance
+
+
 def add_message(db: Session, run: RunRecord | Run, message: ModelMessage, *, origin: str = "runtime") -> MessageRecord:
     session_row = db.scalar(select(SessionRecord).where(SessionRecord.id == run.session_id).with_for_update())
     session_row.updated_at = utc_now()
+    advance(db, run.session_id)
     sequence = db.scalar(select(func.coalesce(func.max(MessageRecord.sequence), 0)).where(
         MessageRecord.session_id == run.session_id)) + 1
     row = MessageRecord(id=new_id(), session_id=run.session_id, run_id=run.id, sequence=sequence,

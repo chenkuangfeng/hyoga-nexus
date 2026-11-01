@@ -11,6 +11,7 @@ from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.identity.service import principal_for_user, require_membership, require_tenant
 from nexus_platform.persistence.models import (
     AgentRecord,
+    SessionRecord,
     AgentVersionRecord,
     CredentialReferenceRecord,
     InputRequestRecord,
@@ -27,11 +28,25 @@ from nexus_platform.persistence.models import (
     ContextSummaryRecord,
 )
 from nexus_platform.runs.service import append_event, transition_run
+from nexus_platform.sessions.projection_cache import ProjectionCache
 from nexus_platform.authz.audit import audit
 from nexus_platform.agents.access import require_agent_permission
 from .context import ExecutionContext
 from .messages import _history_allowed
 from .completion import _finish
+
+#: Raw, unfiltered message rows per session. Keyed by (session_id, watermark), so a message write
+#: makes the old entry unreachable without invalidation. Authorization is applied per run after the
+#: lookup, never stored here.
+HISTORY_CACHE = ProjectionCache(max_entries=256, idle_ttl=900.0, max_entry_bytes=256 * 1024)
+
+
+def _message_rows(db: Session, session_id: UUID) -> list[dict]:
+    """Plain-data copies of a session's messages in sequence order, safe to cache."""
+    return [{'id': str(message.id), 'run_id': str(message.run_id) if message.run_id else None,
+             'role': message.role, 'content': message.content, 'runtime_metadata': dict(message.runtime_metadata or {})}
+            for message in db.scalars(select(MessageRecord).where(MessageRecord.session_id == session_id)
+                                      .order_by(MessageRecord.sequence))]
 
 def prepare_execution(factory: sessionmaker[Session], task_id: UUID, worker_id: str) -> ExecutionContext | None:
     return ExecutionPreparer(factory).prepare(task_id, worker_id)
@@ -97,17 +112,19 @@ class ExecutionPreparer:
                 for source in db.scalars(select(RunRecord).where(RunRecord.session_id == run.session_id)):
                     if _history_allowed(db, source):
                         allowed_runs.append(source.id)
-                for message in db.scalars(select(MessageRecord).where(MessageRecord.session_id == run.session_id)
-                                           .order_by(MessageRecord.sequence)):
-                    if message.run_id is not None and message.run_id not in allowed_runs:
+                # Watermark and rows are read in this transaction; grants are rechecked below on every run.
+                watermark = db.scalar(select(SessionRecord.watermark).where(SessionRecord.id == run.session_id))
+                rows = HISTORY_CACHE.get_or_build(run.session_id, watermark, lambda: _message_rows(db, run.session_id))
+                for row in rows:
+                    if row['run_id'] is not None and UUID(row['run_id']) not in allowed_runs:
                         continue
-                    metadata = message.runtime_metadata or {}
+                    metadata = row['runtime_metadata']
                     if metadata.get('source_run_id'):
                         source_run = db.get(RunRecord, UUID(metadata['source_run_id']))
                         if not source_run or source_run.principal_id != run.principal_id or not _history_allowed(db, source_run):
                             continue
-                    history.append(ModelMessage(message.role, message.content,
-                        tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), str(message.id)))
+                    history.append(ModelMessage(row['role'], row['content'],
+                        tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), row['id']))
                 summary = db.get(ContextSummaryRecord, run.session_id)
                 if summary and summary.tenant_id == run.tenant_id and summary.source_run_id in allowed_runs:
                     covered = list(db.scalars(select(MessageRecord).where(MessageRecord.session_id == run.session_id, MessageRecord.sequence <= summary.through_sequence)))

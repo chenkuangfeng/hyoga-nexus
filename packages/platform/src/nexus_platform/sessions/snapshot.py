@@ -2,9 +2,10 @@
 
 Rules (see docs/architecture.md 2.12):
 - The snapshot holds plain JSON data only: no handles, clients, model objects or secrets.
-- ``watermark`` starts at 0 and increases by one on every successful save. A save names the
-  watermark it read; the conditional UPDATE matches only that value, so a concurrent writer
-  makes the save fail with ``WatermarkConflict`` instead of silently overwriting.
+- ``watermark`` starts at 0 and increases by one on every change to the session: each
+  successful snapshot save and each message write (``advance``). A save names the watermark it
+  read; the conditional UPDATE matches only that value, so a concurrent writer makes the save
+  fail with ``WatermarkConflict`` instead of silently overwriting.
 - ``snapshot_version`` selects the decoder. Only versions in ``MIGRATIONS`` plus
   ``SNAPSHOT_VERSION`` are accepted; anything else is refused rather than guessed.
 """
@@ -15,7 +16,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from nexus_platform.errors import Conflict, NotFound, PlatformError
@@ -96,6 +97,21 @@ def save(db: Session, session_id: UUID, *, expected_watermark: int, payload: dic
         raise WatermarkConflict(f"session {session_id} is not at watermark {expected_watermark}")
     db.flush()
     return expected_watermark + 1
+
+
+def advance(db: Session, session_id: UUID) -> int:
+    """Move the watermark forward for a change to the session's messages; return the new value.
+
+    Message writes call this in their own transaction, so any cached projection keyed by the old
+    watermark is simply no longer looked up. Snapshot saves compare against the same counter.
+    """
+    db.execute(
+        update(SessionRecord).where(SessionRecord.id == session_id)
+        .values(watermark=SessionRecord.watermark + 1)
+        .execution_options(synchronize_session=False)
+    )
+    db.flush()
+    return db.scalar(select(SessionRecord.watermark).where(SessionRecord.id == session_id))
 
 
 #: Retries when a concurrent writer moves the watermark between read and save.
