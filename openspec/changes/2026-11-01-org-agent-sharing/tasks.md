@@ -27,9 +27,9 @@
 - [x] 会话创建时记录 `org_unit_id` 快照。
 - [x] 会话列表与详情：owner 与 admin 看全部，其他人只看自己。
 - [x] 运行详情：owner 与 admin 可见本空间全部运行。
-- [ ] 记忆（`memory_entries`、`memory_drafts`、`session_checkpoints`）的空间管理员可见性。
-- [ ] 平台管理员跨空间查看聊天记录，以及按智能体、组织、空间的筛选。
-- [ ] 会话接口返回 `org_unit_id`。
+- [x] 记忆保持仅本人可见（不做管理员开放，2026-11-01 确认）。
+- [x] 平台管理员跨空间查看聊天记录，按空间、智能体、组织筛选（`GET /api/v1/admin/sessions`）。
+- [x] 会话接口返回 `org_unit_id`。
 
 ## 前端
 
