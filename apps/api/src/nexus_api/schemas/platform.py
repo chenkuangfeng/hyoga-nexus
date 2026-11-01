@@ -148,6 +148,8 @@ class SessionView(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    # Organization node the owner came through when the session was created; null for manual members.
+    org_unit_id: UUID | None = None
 
 
 class RunCreate(BaseModel):

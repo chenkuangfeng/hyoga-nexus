@@ -6,11 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
-from nexus_platform.errors import NotFound
+from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.agents.access import require_agent_permission
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
-from nexus_platform.orgs.access import SOURCE_ORGANIZATION, is_space_manager, organization_unit_for
+from nexus_platform.orgs.access import SOURCE_ORGANIZATION, is_space_manager, organization_unit_for, subtree_ids
 from nexus_platform.persistence.models import AgentRecord, AgentVersionRecord, MembershipRecord, SessionRecord
 
 
@@ -58,6 +58,30 @@ def list_sessions(session: Session, principal: Principal, tenant_id: UUID) -> li
         if not is_space_manager(session, tenant_id, user.id):
             query = query.where(SessionRecord.owner_user_id == user.id)
         return list(session.scalars(query.order_by(SessionRecord.updated_at.desc())))
+
+
+def list_sessions_for_platform_admin(
+    session: Session, principal: Principal, *, tenant_id: UUID | None = None,
+    agent_id: UUID | None = None, org_unit_id: UUID | None = None, limit: int = 200,
+) -> list[SessionRecord]:
+    """Sessions across all spaces for a platform administrator, optionally filtered.
+
+    `agent_id` matches the agent behind the session's version; `org_unit_id` matches the session's
+    organization snapshot and everything under that node. Non-administrators get Forbidden.
+    """
+    with session.begin():
+        user = resolve_user(session, principal)
+        if not user.is_platform_admin:
+            raise Forbidden("Platform administrator required")
+        query = select(SessionRecord)
+        if tenant_id is not None:
+            query = query.where(SessionRecord.tenant_id == tenant_id)
+        if agent_id is not None:
+            query = query.join(AgentVersionRecord, AgentVersionRecord.id == SessionRecord.agent_version_id).where(
+                AgentVersionRecord.agent_id == agent_id)
+        if org_unit_id is not None:
+            query = query.where(SessionRecord.org_unit_id.in_(subtree_ids(session, org_unit_id)))
+        return list(session.scalars(query.order_by(SessionRecord.updated_at.desc()).limit(limit)))
 
 
 def get_session_for_user(session: Session, principal: Principal, tenant_id: UUID, session_id: UUID):

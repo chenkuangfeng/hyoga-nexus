@@ -384,6 +384,20 @@ def list_sessions(
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
 
 
+@router.get("/admin/sessions", response_model=list[SessionView])
+def list_all_sessions(
+    tenant_id: UUID | None = None,
+    agent_id: UUID | None = None,
+    org_unit_id: UUID | None = None,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Platform administrators only: sessions across spaces, filtered by space, agent or organization node."""
+    rows = sessions.list_sessions_for_platform_admin(
+        db, principal, tenant_id=tenant_id, agent_id=agent_id, org_unit_id=org_unit_id)
+    return [SessionView.model_validate(row, from_attributes=True) for row in rows]
+
+
 @router.post("/tenants/{tenant_id}/sessions/{session_id}/runs", response_model=RunView, status_code=202)
 def create_run(
     tenant_id: UUID,

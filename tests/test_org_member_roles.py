@@ -1,7 +1,7 @@
 """Roles given to bound-subtree people: organization-sourced memberships, their activity, and session visibility."""
 import pytest
 from nexus_core.platform import Principal, TenantRole
-from nexus_platform.errors import NotFound
+from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.identity.service import resolve_user
 from nexus_platform.orgs import service as orgs
 from nexus_platform.persistence.models import AgentRecord, MembershipRecord, SessionRecord, UserRecord
@@ -139,3 +139,29 @@ def test_owner_and_admin_see_every_session_while_members_see_their_own(database)
             get_session_for_user(db, MANUAL, tid, org_id)
     with database() as db:
         assert get_session_for_user(db, OWNER, tid, org_id).owner_user_id == person
+
+
+def test_platform_admin_lists_sessions_across_spaces_with_filters(database):
+    from nexus_platform.sessions.service import list_sessions_for_platform_admin
+    _platform_admin(database)
+    tenant, _, _, agent, version, owner_session = create_agent_stack(database, OWNER)
+    tid = tenant.id
+    sub, person = _bound_space_with_person(database, tid)
+    role_id = _role_with_agent(database, tid, agent.id)
+    with database() as db:
+        orgs.add_members_from_organization(db, OWNER, tid, [person], [role_id])
+    with database() as db:
+        org_session = create_session(db, PERSON, tid, agent_version_id=version.id, title="org")
+        org_id = org_session.id
+    with database() as db:
+        everything = {row.id for row in list_sessions_for_platform_admin(db, ADMIN)}
+    assert {owner_session.id, org_id} <= everything
+    with database() as db:
+        by_org = {row.id for row in list_sessions_for_platform_admin(db, ADMIN, org_unit_id=sub)}
+    assert by_org == {org_id}
+    with database() as db:
+        by_agent = {row.id for row in list_sessions_for_platform_admin(db, ADMIN, agent_id=agent.id)}
+    assert {owner_session.id, org_id} <= by_agent
+    with database() as db:
+        with pytest.raises(Forbidden):  # a space owner is not a platform administrator
+            list_sessions_for_platform_admin(db, OWNER)
