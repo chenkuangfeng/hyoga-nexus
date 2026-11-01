@@ -136,6 +136,17 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
             session, tenant_id, agent.draft_model_profile_version_id
         )
         authorize_model(session, tenant_id, user.id, model_version.id)
+        # Native behavior is snapshotted at publish: validate it here, and recheck the
+        # compaction model's grant, so an invalid or unauthorized setting cannot be published.
+        behavior = (agent.draft_budgets or {}).get("behavior")
+        if isinstance(behavior, dict):
+            from nexus_core.native import NativePolicy
+            try:
+                policy = NativePolicy(**behavior)
+            except (TypeError, ValueError) as exc:
+                raise InvalidConfiguration(f"Native behavior settings are invalid: {exc}") from None
+            if policy.compaction_model_profile_version_id:
+                authorize_model(session, tenant_id, user.id, UUID(policy.compaction_model_profile_version_id))
         if model_version.credential_reference_id:
             credential = session.get(CredentialReferenceRecord, model_version.credential_reference_id)
             if credential is None or credential.tenant_id != tenant_id or credential.status != "active":

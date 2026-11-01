@@ -21,12 +21,26 @@ LABELS = {
     'summarize_context': '使用模型生成历史摘要', 'reminder_interval': '工作检查点提醒间隔',
     'memory_interval': '长期记忆提醒间隔', 'durable_checkpoint_interval': '持久检查点提醒间隔',
     'user_direction_interval': '询问用户方向间隔', 'project_name': '项目名称', 'project_context': '项目规则与记忆指针',
+    'working_memory_tail': '工作记忆放在历史尾部（实验）', 'tool_output_inline_limit': '工具输出外置阈值（字符）',
+    'tool_preview_chars': '外置后的预览长度（字符）', 'tool_output_page_chars': '分页读取每页上限（字符）',
+    'tool_result_window_rounds': '工具结果保留的模型调用轮数', 'compact_high_ratio': '触发压缩的上下文比例',
+    'compact_low_ratio': '压缩后的目标上下文比例', 'summary_max_chars': '单条摘要字符上限',
+    'compaction_model_profile_version_id': '压缩摘要使用的模型（空为智能体模型）',
 }
 
 
 def defaults() -> dict:
     """Return fresh serializable baseline settings; callers can edit only versioned personal defaults."""
     return {'budgets': asdict(ExecutionBudget()), 'behavior': asdict(NativePolicy())}
+
+
+def _with_defaults(stored: dict) -> dict:
+    """Fill keys added after a row was saved, so older records still render a complete form.
+
+    Stored rows are never rewritten here; the next save persists the full set.
+    """
+    baseline = defaults()
+    return {group: baseline[group] | dict(stored.get(group, {})) for group in baseline}
 
 
 def validate(settings: dict) -> dict:
@@ -51,7 +65,7 @@ def validate(settings: dict) -> dict:
 def view(db, user_id, tenant_id) -> dict:
     """Read current preference in the caller's transaction, including typed form metadata."""
     row = db.get(NativePreferenceRecord, (tenant_id, user_id))
-    settings = row.settings if row else defaults()
+    settings = _with_defaults(row.settings) if row else defaults()
     schema = {group: [{'name': key, 'label': LABELS[key], 'type': 'boolean' if type(value) is bool else 'number' if type(value) in (int, float) else 'tools' if key == 'enabled_tools' else 'models' if isinstance(value, list) else 'string'}
                       for key, value in values.items()] for group, values in defaults().items()}
     from nexus_core.native import BUILTIN_TOOL_NAMES
@@ -90,6 +104,9 @@ def save(db, principal, tenant_id, settings: dict, expected_version: int) -> dic
             authorize_resource(db, tenant_id, 'tool', name, resource_version_id='v1')
         for model_id in settings['behavior']['fallback_models']:
             authorize_model(db, tenant_id, user.id, UUID(model_id))
+        compaction_model = settings['behavior']['compaction_model_profile_version_id']
+        if compaction_model:
+            authorize_model(db, tenant_id, user.id, UUID(compaction_model))
         if row:
             row.settings = settings; row.version += 1
         else:

@@ -37,10 +37,12 @@
 
 ## 四之一、配置接入（design.md 第十四节）
 
-- [ ] 在 `NativePolicy` 增加 `tool_output_inline_limit`、`tool_preview_chars`、`tool_output_page_chars`、`tool_result_window_rounds`、`compact_high_ratio`、`compact_low_ratio`、`summary_max_chars`、`compaction_model_profile_version_id`，默认值见规格。
-- [ ] `runs/settings.py`：`LABELS` 登记中文名；`validate()` 增加范围与跨字段校验；`compaction_model_profile_version_id` 发布时做 `authorize_model` 检查。
-- [ ] `view()` 与旧记录合并 `defaults()`，保证旧设置缺键时表单完整。
-- [ ] 测试：旧版本缺键读取为默认值；非法取值（越界、预览大于阈值、低比例不小于高比例）发布被拒绝；无权限的压缩模型被拒绝。
+- [x] 在 `NativePolicy` 增加 `tool_output_inline_limit`、`tool_preview_chars`、`tool_output_page_chars`、`tool_result_window_rounds`、`compact_high_ratio`、`compact_low_ratio`、`summary_max_chars`、`compaction_model_profile_version_id`、`working_memory_tail`，默认值见规格。
+- [x] `runs/settings.py`：`LABELS` 登记中文名；`validate()` 经 `NativePolicy` 做范围与跨字段校验；保存时 `authorize_model` 检查压缩模型。
+- [x] `view()` 与旧记录合并 `defaults()`（`_with_defaults`），保证旧设置缺键时表单完整。
+- [x] 发布时（`agents/service.py` 的 `publish_agent`）重新校验 Native 行为参数，并检查压缩模型授权。
+- [x] 测试：`tests/test_context_policy_config.py`（默认值、非法取值、旧记录补齐、标签完整）。发布路径的拒绝用例待补（见下）。
+- [ ] 测试：发布时非法行为参数与无权限压缩模型的拒绝路径（需要带数据库的集成测试）。
 - [ ] 基线完成后，依据测量结果调整 `tool_output_inline_limit` 默认值，并记录依据。
 
 ## 四之二、消息存储与回放（P10、P11，已确认）
