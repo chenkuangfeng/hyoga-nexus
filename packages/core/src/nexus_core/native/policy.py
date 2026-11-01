@@ -47,6 +47,9 @@ class NativePolicy:
     summary_max_chars: int = 8000
     # Empty string means the agent's own model profile performs summarization.
     compaction_model_profile_version_id: str = ''
+    # Streaming text is persisted as deltas in batches (P6). 0 ms restores one event per chunk.
+    delta_flush_ms: int = 150
+    delta_flush_chars: int = 256
 
     def __post_init__(self):
         if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
@@ -77,6 +80,8 @@ class NativePolicy:
         _check_int(self.tool_output_page_chars, 500, 20000, 'tool_output_page_chars')
         _check_int(self.tool_result_window_rounds, 1, 100, 'tool_result_window_rounds')
         _check_int(self.summary_max_chars, 500, 32000, 'summary_max_chars')
+        _check_int(self.delta_flush_ms, 0, 5000, 'delta_flush_ms')
+        _check_int(self.delta_flush_chars, 1, 10000, 'delta_flush_chars')
         for name in ('compact_high_ratio', 'compact_low_ratio'):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.1 <= value <= 1.0:

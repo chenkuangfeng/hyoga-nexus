@@ -27,8 +27,8 @@
 
 ## 三、写入合并（改变 SSE 粒度）
 
-- [ ] P6：`message.delta` 按 150ms / 256 字符合并。测试：合并后文本与原文逐字相同；取消在窗口内及时生效。
-- [ ] P7：一轮内写入共用事务。测试：事务失败时消息与进度回到上一轮结束状态。
+- [x] P6：`message.delta` 按 150ms / 256 字符合并（`DeltaBuffer`，`NativePolicy.delta_flush_ms` / `delta_flush_chars`）。定时器在模型静默时也会刷出文本。测试：`tests/test_delta_batching.py`（合并后文本逐字相同、字符阈值、静默时定时刷出、窗口内取消仍生效）。
+- [x] P7：仅合并两组相邻写入：`model.completed` 与 assistant 消息；`turn.completed` 与 `save_progress`（`DurableRuntimeStore.commit`，同一事务与一次租约校验）。工具执行之间的写入不合并。测试：worker 端到端用例确认一条 assistant 消息与事件顺序。事务失败整组回滚的专门用例待补。
 
 ## 四、上下文稳定化（改变模型输入，需要评测）
 

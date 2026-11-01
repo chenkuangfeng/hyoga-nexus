@@ -26,6 +26,7 @@ LABELS = {
     'tool_result_window_rounds': '工具结果保留的模型调用轮数', 'compact_high_ratio': '触发压缩的上下文比例',
     'compact_low_ratio': '压缩后的目标上下文比例', 'summary_max_chars': '单条摘要字符上限',
     'compaction_model_profile_version_id': '压缩摘要使用的模型（空为智能体模型）',
+    'delta_flush_ms': '流式文本合并时间窗口（毫秒，0 为逐块写入）', 'delta_flush_chars': '流式文本合并字符数',
 }
 
 

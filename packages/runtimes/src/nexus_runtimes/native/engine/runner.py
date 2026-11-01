@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from dataclasses import replace
 from nexus_core.native import HookContext, NativePolicy
 from nexus_core.runtime import (
     ExecutionBudget, LifecycleEvent, ModelMessage, ModelRequest, RuntimeFault,
@@ -80,9 +81,25 @@ class NativeEngine:
         async def append(message):
             identifier = await self.store.message(message)
             if identifier:
-                from dataclasses import replace
                 message = replace(message, source_id=str(identifier))
             history.append(message)
+        async def commit_group(events=(), message=None, progress=None):
+            """Write adjacent observations in one store transaction when the store supports it (P7).
+
+            Stores without `commit` fall back to the separate calls, so behavior is identical. Tool
+            execution is never placed inside a group: its writes stay separate and short.
+            """
+            if hasattr(self.store, 'commit'):
+                identifier = await self.store.commit(events=tuple(events), message=message, progress=progress)
+            else:
+                for kind, payload in events:
+                    await self.store.emit(kind, payload)
+                identifier = await self.store.message(message) if message is not None else None
+                if progress is not None:
+                    await self.store.save_progress(progress)
+            if message is not None:
+                history.append(replace(message, source_id=str(identifier)) if identifier else message)
+            return identifier
         try:
             async with asyncio.timeout(max(0.001, budget.max_seconds - previous_seconds)):
                 # Tool definitions are fixed for the Run (P4). Execution-time authorization still
@@ -133,15 +150,18 @@ class NativeEngine:
                     await self.store.emit('model.started', {'turn': turn})
                     try:
                         response = await collect_response(self.model, ModelRequest(tuple(model_history), definitions,
-                            min(budget.max_output_tokens, remaining)), token, self.store, turn, budget.model_timeout_seconds)
+                            min(budget.max_output_tokens, remaining)), token, self.store, turn, budget.model_timeout_seconds,
+                            flush_ms=self.policy.delta_flush_ms, flush_chars=self.policy.delta_flush_chars)
                     finally:
                         await self._hook(run_id, 'model.after', turn)
                     progress.tokens += response.tokens or input_estimate + len(response.text.encode()) + sum(len(c.arguments.encode()) for c in response.calls)
-                    await self.store.emit('model.completed', {'turn': turn, 'tokens': progress.tokens, 'usage': response.usage})
+                    completed = ('model.completed', {'turn': turn, 'tokens': progress.tokens, 'usage': response.usage})
                     if progress.tokens > budget.max_tokens:
+                        await self.store.emit(*completed)
                         raise RuntimeFault('budget_exhausted')
                     working.record(response.text)
-                    await append(ModelMessage('assistant', response.text, tuple(response.calls)))
+                    # The completion event and the assistant message are adjacent writes (P7).
+                    await commit_group(events=[completed], message=ModelMessage('assistant', response.text, tuple(response.calls)))
                     terminal = False
                     if response.calls and response.finish_reason in ('length', 'max_tokens'):
                         for call in response.calls:
@@ -199,8 +219,7 @@ class NativeEngine:
                             await append(ModelMessage('user', '\n'.join(continuations)))
                     await self._transform(run_id, 'turn.after', turn, history, done)
                     state['done_prompts'] = done
-                    await self.store.save_progress(progress)
-                    await self.store.emit('turn.completed', {'turn': turn})
+                    await commit_group(events=[('turn.completed', {'turn': turn})], progress=progress)
                     await self._hook(run_id, 'turn.after', turn)
                     active_turn = 0
                     # Late user corrections have priority over a natural final answer.

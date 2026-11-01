@@ -67,6 +67,26 @@ class DurableRuntimeStore:
             row = add_message(db, self._run(db), message)
             return str(row.id)
 
+    async def commit(self, events=(), message: ModelMessage | None = None,
+                     progress: RuntimeProgress | None = None) -> str | None:
+        """Write adjacent observations in one transaction under one lease check (P7).
+
+        Equivalent to the separate `emit`, `message` and `save_progress` calls in order, but the
+        lease and Run lock are checked once and a failure rolls the whole group back. Returns the
+        stored message identifier, or None when no message was written.
+        """
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            for kind, payload in events:
+                append_event(db, run.id, kind, payload)
+            identifier = None
+            if message is not None:
+                identifier = str(add_message(db, run, message).id)
+            if progress is not None:
+                db.get(NativeRunStateRecord, run.id).progress = asdict(progress)
+            return identifier
+
     async def save_progress(self, progress: RuntimeProgress) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
