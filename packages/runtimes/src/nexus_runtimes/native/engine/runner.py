@@ -21,6 +21,16 @@ from .turn import collect_response
 from .tools import execute_batch
 
 
+def _message_bytes(messages) -> int:
+    """Estimate encoded input size from content and tool-call arguments, one message at a time."""
+    total = 0
+    for message in messages:
+        total += len(message.content.encode())
+        for call in message.tool_calls:
+            total += len(call.arguments.encode()) + len(call.name.encode())
+    return total
+
+
 class NativeEngine:
     """Compose one cancellable Run from independently tested services.
 
@@ -75,6 +85,10 @@ class NativeEngine:
             history.append(message)
         try:
             async with asyncio.timeout(max(0.001, budget.max_seconds - previous_seconds)):
+                # Tool definitions are fixed for the Run (P4). Execution-time authorization still
+                # runs per call, so a revoked tool is refused even if it is still listed here.
+                definitions = await self.tools.definitions()
+                definitions_chars = len(str(definitions).encode())
                 await self._hook(run_id, 'agent.before')
                 await self._transform(run_id, 'agent.before', progress.turns, history, done)
                 if self.policy.project_name and not state.get('project_injected'):
@@ -82,7 +96,7 @@ class NativeEngine:
                     state['project_injected'] = True
                 if state.get('pending_calls'):
                     from .recovery import resume_tools
-                    resumed = await resume_tools(state, self.tools, token, await self.tools.definitions(), hook, progress.turns, append,
+                    resumed = await resume_tools(state, self.tools, token, definitions, hook, progress.turns, append,
                                                  progress=progress, budget=budget, working=working)
                     await self.store.save_progress(progress)
                     if resumed:
@@ -108,9 +122,9 @@ class NativeEngine:
                     await self._hook(run_id, 'turn.before', turn)
                     await self._transform(run_id, 'turn.before', turn, history, done)
                     await self.store.emit('turn.started', {'turn': turn})
-                    definitions = await self.tools.definitions()
                     model_history = append_context(history, working.anchor(turn))
-                    input_estimate = len(str(model_history).encode()) + len(str(definitions).encode())
+                    # Per-message accounting (P5): avoids repr() of the whole history on every turn.
+                    input_estimate = _message_bytes(model_history) + definitions_chars
                     remaining = budget.max_tokens - progress.tokens - input_estimate
                     if remaining <= 0:
                         raise RuntimeFault('budget_exhausted')

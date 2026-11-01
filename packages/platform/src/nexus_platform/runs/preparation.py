@@ -41,9 +41,17 @@ from .completion import _finish
 HISTORY_CACHE = ProjectionCache(max_entries=256, idle_ttl=900.0, max_entry_bytes=256 * 1024)
 
 
+def _memo_allowed(db: Session, cache: dict[UUID, bool], source: RunRecord) -> bool:
+    """Return the history-authorization result for one source Run, computing it at most once per call."""
+    if source.id not in cache:
+        cache[source.id] = _history_allowed(db, source)
+    return cache[source.id]
+
+
 def _message_rows(db: Session, session_id: UUID) -> list[dict]:
     """Plain-data copies of a session's messages in sequence order, safe to cache."""
-    return [{'id': str(message.id), 'run_id': str(message.run_id) if message.run_id else None,
+    return [{'id': str(message.id), 'sequence': message.sequence,
+             'run_id': str(message.run_id) if message.run_id else None,
              'role': message.role, 'content': message.content, 'runtime_metadata': dict(message.runtime_metadata or {})}
             for message in db.scalars(select(MessageRecord).where(MessageRecord.session_id == session_id)
                                       .order_by(MessageRecord.sequence))]
@@ -109,28 +117,41 @@ class ExecutionPreparer:
                     raise RuntimeFault('run_authorization_denied')
                 history = []
                 allowed_runs = []
+                # Each source Run is authorized at most once per preparation (P8); grants are still
+                # rechecked on every preparation, so revocation takes effect on the next Run.
+                allowed_cache: dict[UUID, bool] = {}
+                source_checks: dict[UUID, bool] = {}
                 for source in db.scalars(select(RunRecord).where(RunRecord.session_id == run.session_id)):
-                    if _history_allowed(db, source):
+                    if _memo_allowed(db, allowed_cache, source):
                         allowed_runs.append(source.id)
                 # Watermark and rows are read in this transaction; grants are rechecked below on every run.
                 watermark = db.scalar(select(SessionRecord.watermark).where(SessionRecord.id == run.session_id))
                 rows = HISTORY_CACHE.get_or_build(run.session_id, watermark, lambda: _message_rows(db, run.session_id))
+                # A usable summary replaces every row up to its cut point. Those rows are neither
+                # authorized nor materialized (P8 windowing); the cut is used only if all of them are visible.
+                summary = db.get(ContextSummaryRecord, run.session_id)
+                cut = 0
+                if summary and summary.tenant_id == run.tenant_id and summary.source_run_id in allowed_runs:
+                    covered = [row for row in rows if row['sequence'] <= summary.through_sequence]
+                    if all(row['run_id'] is None or UUID(row['run_id']) in allowed_runs for row in covered):
+                        cut = summary.through_sequence
+                        history.append(ModelMessage('user', summary.content))
                 for row in rows:
+                    if row['sequence'] <= cut:
+                        continue
                     if row['run_id'] is not None and UUID(row['run_id']) not in allowed_runs:
                         continue
                     metadata = row['runtime_metadata']
                     if metadata.get('source_run_id'):
-                        source_run = db.get(RunRecord, UUID(metadata['source_run_id']))
-                        if not source_run or source_run.principal_id != run.principal_id or not _history_allowed(db, source_run):
+                        source_id = UUID(metadata['source_run_id'])
+                        if source_id not in source_checks:
+                            source_run = db.get(RunRecord, source_id)
+                            source_checks[source_id] = bool(source_run and source_run.principal_id == run.principal_id
+                                                            and _memo_allowed(db, allowed_cache, source_run))
+                        if not source_checks[source_id]:
                             continue
                     history.append(ModelMessage(row['role'], row['content'],
                         tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), row['id']))
-                summary = db.get(ContextSummaryRecord, run.session_id)
-                if summary and summary.tenant_id == run.tenant_id and summary.source_run_id in allowed_runs:
-                    covered = list(db.scalars(select(MessageRecord).where(MessageRecord.session_id == run.session_id, MessageRecord.sequence <= summary.through_sequence)))
-                    if all(message.run_id is None or message.run_id in allowed_runs for message in covered):
-                        covered_ids = {str(message.id) for message in covered}
-                        history = [ModelMessage('user', summary.content), *[m for m in history if m.source_id not in covered_ids]]
                 checkpoint = db.get(WorkingCheckpointRecord, run.session_id)
                 system = version.instructions
                 from nexus_platform.memory.service import index as memory_index

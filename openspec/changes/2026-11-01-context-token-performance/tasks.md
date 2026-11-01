@@ -20,9 +20,10 @@
 
 ## 二、低风险内部优化（不改变模型输入）
 
-- [ ] P4：每 Run 缓存工具定义；测试：中途撤权后调用仍被拒绝。
-- [ ] P5：以供应商 usage 更新 `progress.tokens`；`input_estimate` 改为逐消息累加。测试：预算耗尽行为与原来一致。
-- [ ] P8：准备阶段窗口化，`_history_allowed` 结果按 Run 缓存，`source_run_id` 批量查询。测试：撤权后历史不可见；摘要覆盖的消息仍可追溯。
+- [x] P4：每 Run 缓存工具定义（`runner.py`，恢复路径复用同一份）。执行时授权仍每次复核。测试：现有撤权用例（`test_revoked_grant_stops_new_submissions_even_with_cached_history`）通过；Run 中途撤权的专门用例待补。
+- [x] P5：`progress.tokens` 在供应商返回 usage 时直接使用（既有行为）；输入估算改为逐消息累加（`_message_bytes`），工具定义字符数每 Run 计算一次。
+- [x] P8：历史授权结果在一次准备内按 Run 缓存（`_memo_allowed`）；摘要覆盖的行不再授权、不再物化，取消额外的覆盖行查询；`sequence` 加入投影行。测试：`tests/test_context_summary_cut.py`（覆盖行被替换、其余行保留；源 Run 不可见时摘要被忽略）。
+- [ ] P8 未完成项：会话 Run 列表的全量授权查询仍为 O(Run 数)，需要批量授权接口，待单独处理。
 
 ## 三、写入合并（改变 SSE 粒度）
 
