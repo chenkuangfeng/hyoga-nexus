@@ -20,13 +20,15 @@
 
 ## 执行与缓存（路线图第 3 步）
 
-- [ ] 每 Run 新建执行对象；进程级共享模型客户端与工具注册表（按配置版本）。
+- [x] 每 Run 新建执行对象：`worker/native.py::execute_native` 每次新建引擎、工具网关、工具注册表和模型客户端。
+- [ ] 进程级共享模型客户端与工具注册表：**未实施**。模型客户端每次构建前都重新检查凭据（`configured_routing`），这是有意设计，缓存客户端会在凭据被撤销后继续使用旧凭据。工具注册表绑定 store，共享需改变工具绑定契约；实测每 Run 构建注册表约 6.7 ms（timeit，`builtins(None)`，2000 次平均），相对模型调用可忽略，因此暂不共享。
 - [x] 终态快照：成功、失败、取消、中断均在 Run 终态写入路径（`runs/completion.py::_finish`，同一事务）中保存 v2 快照，只记录 `last_run` 的稳定码并保留其他键；仍为 `running` 的工具调用标记 `interrupted`。等待态不保存。（未放在运行器 `finally` 中，因为运行器的 `finally` 不负责持久化终态。）
 - [x] 投影缓存模块：key `(session_id, watermark)`，LRU、空闲 TTL、单条目字节上限，不缓存权限（`nexus_platform/sessions/projection_cache.py`，测试 `tests/test_projection_cache.py`）。接入运行时待做。
-- [ ] 忙时策略（interrupt 默认，queue、steer 可选）与队列上限 32；`max_concurrent_sessions` 拒绝路径。
-- [ ] 权限不缓存；每次工具调用查库。
+- [x] 忙时策略：默认排队（不打断），队列上限 32（已由 busy-session-queue 变更实现）。注意：本文件原文写的是“interrupt 默认”，与已确认的 busy-session-queue 冲突，以后者为准。steer 仅在 running 时接受。
+- [ ] `max_concurrent_sessions` 拒绝路径：**未实施**，提案见 `openspec/changes/2026-11-01-session-concurrency-limit/proposal.md`，待确认。
+- [x] 权限不缓存；每次工具调用查库（`ToolAccess.authorize` → `authorize_run_resource`，代码已核对；撤销即时生效的专门用例尚未补充）。
 - [ ] 测试：执行对象每 Run 新建；投影缓存命中与淘汰；快照三种结束方式；忙时策略；权限撤销即时生效。
-- [ ] 测量装配耗时，确定 `max_entries`、`idle_ttl`、字节上限默认值。
+- [x] 测量装配耗时：工具注册表约 6.7 ms/Run。`max_entries`、`idle_ttl`、字节上限的默认值（256 / 900 s / 256 KiB）是估计值，尚未用真实负载校准。
 
 ## 文档与归档
 
