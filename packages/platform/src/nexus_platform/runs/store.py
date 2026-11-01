@@ -28,7 +28,7 @@ from nexus_platform.authz.audit import audit
 from .context import ExecutionContext
 from .summaries import append_summary
 from .messages import add_message
-from .messages import _history_allowed
+from .messages import histories_allowed
 from .completion import _finish
 
 
@@ -70,10 +70,10 @@ class DurableRuntimeStore:
                                     UUID(run.config_snapshot['model_profile_version_id']))
                     require_tenant(db, run.tenant_id)
                     require_membership(db, run.tenant_id, run.principal_id)
-                    for source_id in self.context.history_run_ids:
-                        source = db.get(RunRecord, source_id)
-                        if not _history_allowed(db, source):
-                            raise RuntimeFault('run_authorization_denied')
+                    # One batched decision for all history sources (P8), not one check per source Run.
+                    sources = [db.get(RunRecord, source_id) for source_id in self.context.history_run_ids]
+                    if any(source is None for source in sources) or not all(histories_allowed(db, sources).values()):
+                        raise RuntimeFault('run_authorization_denied')
                 except PlatformError:
                     raise RuntimeFault('run_authorization_denied') from None
             append_event(db, run.id, kind, payload)

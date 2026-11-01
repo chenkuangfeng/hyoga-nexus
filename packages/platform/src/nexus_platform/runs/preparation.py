@@ -33,7 +33,7 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.agents.access import require_agent_permission
 from .context import ExecutionContext
 from .summaries import effective_summary
-from .messages import _history_allowed
+from .messages import histories_allowed
 from .completion import _finish
 
 #: Raw, unfiltered message rows per session. Keyed by (session_id, watermark), so a message write
@@ -45,7 +45,7 @@ HISTORY_CACHE = ProjectionCache(max_entries=256, idle_ttl=900.0, max_entry_bytes
 def _memo_allowed(db: Session, cache: dict[UUID, bool], source: RunRecord) -> bool:
     """Return the history-authorization result for one source Run, computing it at most once per call."""
     if source.id not in cache:
-        cache[source.id] = _history_allowed(db, source)
+        cache[source.id] = histories_allowed(db, [source])[source.id]
     return cache[source.id]
 
 
@@ -114,17 +114,16 @@ class ExecutionPreparer:
                     if not ref or ref.status != 'active' or ref.tenant_id != run.tenant_id:
                         raise RuntimeFault('model_credential_unavailable')
                     credential = CredentialRef(ref.id, ref.backend, ref.handle, str(run.tenant_id))
-                if not _history_allowed(db, run):
+                # One batched decision for the current Run and every Run of the session (P8): each distinct
+                # grant is checked once. Grants are still read on every preparation, so revocation takes effect
+                # on the next Run.
+                session_runs = list(db.scalars(select(RunRecord).where(RunRecord.session_id == run.session_id)))
+                allowed_cache: dict[UUID, bool] = histories_allowed(db, session_runs)
+                if not allowed_cache.get(run.id, False):
                     raise RuntimeFault('run_authorization_denied')
                 history = []
-                allowed_runs = []
-                # Each source Run is authorized at most once per preparation (P8); grants are still
-                # rechecked on every preparation, so revocation takes effect on the next Run.
-                allowed_cache: dict[UUID, bool] = {}
+                allowed_runs = [source.id for source in session_runs if allowed_cache[source.id]]
                 source_checks: dict[UUID, bool] = {}
-                for source in db.scalars(select(RunRecord).where(RunRecord.session_id == run.session_id)):
-                    if _memo_allowed(db, allowed_cache, source):
-                        allowed_runs.append(source.id)
                 # Watermark and rows are read in this transaction; grants are rechecked below on every run.
                 watermark = db.scalar(select(SessionRecord.watermark).where(SessionRecord.id == run.session_id))
                 rows = HISTORY_CACHE.get_or_build(run.session_id, watermark, lambda: _message_rows(db, run.session_id))

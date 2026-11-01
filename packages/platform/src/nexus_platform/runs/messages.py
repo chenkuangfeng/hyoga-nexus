@@ -29,12 +29,39 @@ def add_message(db: Session, run: RunRecord | Run, message: ModelMessage, *, ori
     return row
 
 
-def _history_allowed(db: Session, run: RunRecord) -> bool:
+def _grant_allowed(db: Session, key: tuple) -> bool:
+    """One resource grant check; a failed check is a denial, not an error."""
+    tenant_id, kind, resource_id, source_tenant_id, version_id = key
     try:
-        for resource in run.config_snapshot.get('resources', []):
-            authorize_resource(db, run.tenant_id, resource['kind'], resource['resource_id'],
-                source_tenant_id=UUID(resource['source_tenant_id']),
-                resource_version_id=resource.get('resource_version_id'), permission='use')
+        authorize_resource(db, tenant_id, kind, resource_id, source_tenant_id=UUID(source_tenant_id),
+                           resource_version_id=version_id, permission='use')
         return True
     except PlatformError:
         return False
+
+
+def histories_allowed(db: Session, runs) -> dict[UUID, bool]:
+    """Decide history visibility for many Runs with one check per distinct resource grant (P8).
+
+    A Run's history is visible only if every resource in its snapshot is still granted. Grants are
+    read from the database on every call, so revocation takes effect on the next preparation; only
+    the repeated checks for the same grant within one call are merged.
+    """
+    decisions: dict[tuple, bool] = {}
+    results: dict[UUID, bool] = {}
+    for run in runs:
+        allowed = True
+        for resource in run.config_snapshot.get('resources', []):
+            key = (run.tenant_id, resource['kind'], resource['resource_id'], resource['source_tenant_id'],
+                   resource.get('resource_version_id'))
+            if key not in decisions:
+                decisions[key] = _grant_allowed(db, key)
+            if not decisions[key]:
+                allowed = False
+                break
+        results[run.id] = allowed
+    return results
+
+
+def _history_allowed(db: Session, run: RunRecord) -> bool:
+    return histories_allowed(db, [run])[run.id]

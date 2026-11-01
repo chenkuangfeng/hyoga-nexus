@@ -23,7 +23,7 @@
 - [x] P4：每 Run 缓存工具定义（`runner.py`，恢复路径复用同一份）。执行时授权仍每次复核。测试：现有撤权用例（`test_revoked_grant_stops_new_submissions_even_with_cached_history`）通过；Run 中途撤权的专门用例见 `tests/test_native_hardening.py`（跨回合撤权：第二回合的调用不执行，Run 以 `run_authorization_denied` 结束）。
 - [x] P5：`progress.tokens` 在供应商返回 usage 时直接使用（既有行为）；输入估算改为逐消息累加（`_message_bytes`），工具定义字符数每 Run 计算一次。
 - [x] P8：历史授权结果在一次准备内按 Run 缓存（`_memo_allowed`）；摘要覆盖的行不再授权、不再物化，取消额外的覆盖行查询；`sequence` 加入投影行。测试：`tests/test_context_summary_cut.py`（覆盖行被替换、其余行保留；源 Run 不可见时摘要被忽略）。
-- [ ] P8 未完成项：会话 Run 列表的全量授权查询仍为 O(Run 数)，需要批量授权接口，待单独处理。
+- [x] P8 批量授权：准备阶段与 `model.started` 检查对会话内全部 Run 做一次批量判定（`histories_allowed`），同一资源授权在一次调用中只检查一次；每次准备仍实时读取授权，撤权即时生效。测试：`tests/test_history_batch_authorization.py`。Run 数仍决定读取的行数，行级读取优化不在本项内。
 
 ## 三、写入合并（改变 SSE 粒度）
 
@@ -50,7 +50,8 @@
 
 - [x] P10：准备阶段对历史 Run 跳过 tool 行与带 `tool_calls` 的 assistant 行；当前 Run 的全部行保留。测试：`tests/test_run_scoped_replay.py`（当前 Run 内完整可见，后续 Run 不回放工具结果、保留最终回答）；`test_multitool_bad_arguments_hooks_and_session_history` 的断言已按新规则更新。
 - [x] P10 等待与恢复：当前 Run 的 call/result 配对保持完整（同一 Run 内回放不变，既有等待与恢复用例通过）。
-- [ ] P10：系统提示要求最终回答保留关键事实；跨 Run 的持久状态写入 `session_checkpoints`。（提示词与写入规则未改动，待定。）
+- [x] P10 跨 Run 持久状态：工作检查点写入 `session_checkpoints`（既有 `update_working_checkpoint`），准备阶段读取，不依赖工具行。
+- [ ] P10 系统提示要求保留关键事实：按设计为条件项，仅在下方评测显示正确率下降时加入；未加入，因为它会改变所有 Run 的模型输入。
 - [x] P11：迁移 `context_summaries` 为追加式（迁移 `b2f6a1d8c3e5`，`supersedes_id`、`id` 主键、`created_at`）。旧数据迁入为第一版本，降级只保留有效摘要。测试：`tests/test_summary_chain.py`（链式追加、旧行保留、不前移的摘要不写入、迁移升降级）。
 - [ ] 评测：构造"追问依赖上一轮工具结果"的样例，比较改造前后正确率；下降则先补充回答要求，再决定上线。（需要真实模型，未执行。）
 - [x] 界面展示从 `messages` 与 `tool_invocations` 派生，不另存 JSON 副本（未新增存储，符合规格）。
