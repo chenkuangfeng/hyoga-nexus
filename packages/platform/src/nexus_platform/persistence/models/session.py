@@ -39,6 +39,11 @@ class SessionRecord(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Session state snapshot (data only). `watermark` increases on every successful save and is the
+    # optimistic-concurrency token; `snapshot_version` gates how `snapshot` is decoded.
+    watermark: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    snapshot_version: Mapped[int | None] = mapped_column(Integer)
+    snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
 
 class MessageRecord(Base):

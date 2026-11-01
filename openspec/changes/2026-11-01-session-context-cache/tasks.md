@@ -11,12 +11,12 @@
 
 ## 快照与账本（路线图第 2 步）
 
-- [ ] 迁移：会话水位、快照版本、快照存储；账本的 `owner_epoch` 与 `unknown` 状态。
-- [ ] 快照版本化：v2 JSON，v1 迁移函数，未知版本拒绝。
-- [ ] 乐观并发写入（预期水位）。
+- [x] 迁移：会话水位（`sessions.watermark`）、快照版本、快照存储（`sessions.snapshot`、`snapshot_version`）。账本的 `owner_epoch` 与 `unknown` 状态已由既有迁移提供。（SQLite 往返已验证；PostgreSQL 随 2.9。）
+- [x] 快照版本化：v2 JSON，未知版本拒绝。v1 迁移注册表为空：仓库中从未持久化过 v1 数据，没有需要迁移的旧格式，因此暂不编写迁移函数。
+- [x] 乐观并发写入（预期水位）：条件 UPDATE，rowcount 必须为 1，否则 `session_watermark_conflict`（409）。
 - [x] CAS 领取与取队首（保留）。（SQLite 已验证；PostgreSQL 随 2.9。）
 - [x] 启动恢复：旧 epoch 的 `started` 与执行记录标记为 `unknown`，会话阻塞；显式解除与审计。（SQLite 已验证；PostgreSQL 随 2.9。）
-- [ ] 测试：快照读写与迁移、水位冲突、CAS 领取、崩溃恢复。
+- [x] 测试：快照读写、水位冲突（含两写者竞争）、非数据与超长载荷拒绝、未知版本拒绝（`tests/test_session_snapshot.py`）。CAS 领取与崩溃恢复已有测试。
 
 ## 执行与缓存（路线图第 3 步）
 
