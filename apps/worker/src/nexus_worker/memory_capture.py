@@ -20,6 +20,14 @@ from uuid import UUID
 
 from nexus_core.runtime import ChatModelPort, ModelChunk, ModelMessage, ModelRequest
 from nexus_memory import capture as rules
+from nexus_platform.errors import NotFound
+from nexus_platform.memory import capture as platform_capture
+from nexus_platform.models.provider_settings import capture_model_call
+from nexus_runtimes.native.models.factory import create_model
+from sqlalchemy.orm import Session, sessionmaker
+
+#: Protocols the native model factory can build; same list the Run path accepts.
+SUPPORTED_PROTOCOLS = ('openai_chat_completions', 'openai_responses', 'anthropic_messages')
 
 #: Upper bound on the extraction answer; a window of 40 messages should never need more.
 MAX_OUTPUT_TOKENS = 2000
@@ -66,8 +74,32 @@ async def _collect(model: ChatModelPort, request: ModelRequest) -> str:
 
 
 def make_extractor(model: ChatModelPort) -> Callable[..., Any]:
-    """Build the extractor around an already-authorized model client (see the platform runner)."""
-    def extractor(*, messages: list[rules.Message], related: list[dict[str, Any]], model_version_id: UUID) -> Any:
+    """Extractor around an already-authorized model client (used by tests and by callers that own the client)."""
+    def extractor(*, messages: list[rules.Message], related: list[dict[str, Any]], model_version_id: UUID,
+                  tenant_id: UUID, owner_id: UUID) -> Any:
         request = build_request(messages, related)
         return parse_output(asyncio.run(_collect(model, request)))
     return extractor
+
+
+def owner_extractor(factory: sessionmaker[Session]) -> Callable[..., Any]:
+    """Production extractor: the owner's own key, resolved for this call and never stored.
+
+    `capture_model_call` checks the owner's membership, capture setting, model and key access, and audits
+    each use. A model that cannot be used (or an unsupported protocol) raises a platform NotFound, which
+    the runner records as a skip, not a failed attempt. The model client is closed after the call.
+    """
+    def extractor(*, messages: list[rules.Message], related: list[dict[str, Any]], model_version_id: UUID,
+                  tenant_id: UUID, owner_id: UUID) -> Any:
+        call = capture_model_call(factory, tenant_id=tenant_id, owner_id=owner_id, version_id=model_version_id)
+        if call.options.get('protocol') not in SUPPORTED_PROTOCOLS:
+            raise NotFound('Model unavailable')
+        model = create_model(model=call.model_name, api_key=call.lease.reveal_for_call(), options=call.options,
+                             share_connections=True)
+        return parse_output(asyncio.run(_collect(model, build_request(messages, related))))
+    return extractor
+
+
+def capture_tick(factory: sessionmaker[Session], worker_id: str) -> bool:
+    """Run one due capture job if there is one. Called by the worker when no Run was processed."""
+    return platform_capture.run_due(factory, owner_extractor(factory), worker_id=worker_id) is not None

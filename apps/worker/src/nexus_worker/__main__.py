@@ -47,6 +47,9 @@ def _worker_loop() -> asyncio.AbstractEventLoop:
     return _LOOP
 
 
+from nexus_worker.memory_capture import capture_tick
+
+
 def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> bool:
     with factory() as session:
         task_id = claim_next(session, worker_id)
@@ -79,6 +82,9 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
         while not stopped.is_set():
             try:
                 processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch)
+                if not processed:
+                    # Memory capture runs only while no Run is waiting (stage 3); it is off unless an owner opted in.
+                    processed = capture_tick(factory, worker_id)
             except Exception:
                 logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id})
                 processed = False

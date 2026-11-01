@@ -57,7 +57,7 @@
 - [x] 3.7 脚本化模型测试：默认关闭时不登记任务；开启后每次运行的模型调用不超过 3 次。
 - [ ] 3.8 质量与成本评测：需要真实模型，暂停。
 
-阶段三实现状态（2026-11-01）：已实现 `nexus_memory.capture`（窗口、话题切分、退避、输出校验）、`nexus_platform.memory.capture`（设置、入队、租约认领、分步状态机、按次模型授权与跳过、`capacity_policy` 的 `reject`/`evict_auto`）、`nexus_worker.memory_capture`（抽取请求与解析，不带工具）、设置接口 `GET/PUT /native/memory-capture` 与原生设置页的自动捕获区块，迁移 `d4b9e2f7a3c1`、`e6d1a7b3c8f2`。完成的 Run 在默认关闭时不入队。未完成：3.5 的 `memory.capture` token 统计（抽取调用尚未返回用量）；常驻 worker 尚未调度 `run_due`，也未为捕获解析凭据（`configured_model` 需要 Run 上下文），因此目前没有生产环境中的自动执行。3.2''' 的并发测试为顺序认领，验证的是条件 UPDATE 只成功一次。
+阶段三实现状态（2026-11-01）：已实现 `nexus_memory.capture`（窗口、话题切分、退避、输出校验）、`nexus_platform.memory.capture`（设置、入队、分阶段的分步状态机：读取计划、模型调用不占用事务、落库；按次模型授权与跳过；`capacity_policy` 的 `reject`/`evict_auto`）、`nexus_platform.models.provider_settings.capture_model_call`（复用所有者本人的模型密钥：要求启用捕获、模型版本与设置一致、成员身份、模型与供应商访问，并审计 `credential.resolved` 且 purpose 为 `memory.capture`）、`nexus_worker.memory_capture`（抽取请求与解析，不带工具）与 worker 循环中的捕获调度（无 Run 等待时执行到期任务）；设置接口 `GET/PUT /native/memory-capture` 与原生设置页的自动捕获区块；迁移 `d4b9e2f7a3c1`、`e6d1a7b3c8f2`。完成的 Run 在默认关闭时不入队。未完成：3.5 的 `memory.capture` token 统计（抽取调用尚未返回用量）；仅支持加密存储的密钥，环境变量密钥不用于捕获；PostgreSQL 下的多进程认领尚未验证（9.k）。3.2''' 的并发测试为顺序认领，验证的是条件 UPDATE 只成功一次。
 
 ## 阶段四：召回与整理（默认关闭）
 

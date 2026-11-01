@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
 
@@ -20,7 +21,7 @@ from nexus_platform.persistence.models import (
     ModelProviderRecord as Provider, ProviderModelRecord as Link, ModelDefaultRecord as Default,
     CredentialReferenceRecord as Credential, ModelProfileRecord as Profile,
     ModelProfileVersionRecord as Version, RunRecord, ProviderCredentialRecord as StoredKey,
-    UserRecord, MembershipRecord,
+    UserRecord, MembershipRecord, MemoryCaptureSettingsRecord,
 )
 from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.audit import audit
@@ -104,6 +105,47 @@ def authorize_model(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUI
             raise NotFound('Model unavailable')
         provider_access(db, tenant_id, user_id, link.provider_id)
     return version
+
+
+@dataclass(frozen=True)
+class CaptureModelCall:
+    """Everything one memory-capture extraction needs. `lease` holds the owner's key in memory only."""
+    model_name: str
+    provider: str
+    options: dict
+    lease: CredentialLease
+
+
+def capture_model_call(factory: sessionmaker[Session], *, tenant_id: UUID, owner_id: UUID,
+                       version_id: UUID) -> CaptureModelCall:
+    """Authorize the capture model and resolve the owner's own key for one extraction call.
+
+    A Run checks its owner, membership and model grants while it is running. Capture has no running
+    Run, so this checks the same things directly: active membership, capture enabled with this exact
+    model version, current access to the model and its provider, and an active encrypted key reference.
+    Environment-backed keys are not resolved here because they are not tied to a user. Each call is
+    audited as `credential.resolved` with purpose `memory.capture`. Failures are sanitized NotFound.
+    """
+    with factory() as db, db.begin():
+        require_tenant(db, tenant_id)
+        require_membership(db, tenant_id, owner_id)
+        settings = db.get(MemoryCaptureSettingsRecord, (tenant_id, owner_id))
+        if settings is None or not settings.enabled or settings.model_profile_version_id != version_id:
+            raise NotFound('Model unavailable')
+        version = authorize_model(db, tenant_id, owner_id, version_id)
+        ref = db.get(Credential, version.credential_reference_id) if version.credential_reference_id else None
+        if not ref or ref.backend != 'encrypted' or ref.status != 'active' or ref.tenant_id != tenant_id:
+            raise NotFound('Model credential unavailable')
+        secret = db.get(StoredKey, ref.id)
+        if not secret:
+            raise NotFound('Model credential unavailable')
+        provider_access(db, tenant_id, owner_id, secret.provider_id)
+        profile = db.get(Profile, version.profile_id)
+        audit(db, tenant_id, owner_id, 'credential.resolved', 'credential_reference', str(ref.id),
+              {'purpose': 'memory.capture'})
+        return CaptureModelCall(model_name=version.model_name, provider=profile.provider,
+                                options=dict(version.options),
+                                lease=CredentialLease(decrypt(secret), utc_now() + timedelta(minutes=5)))
 
 
 def view(db: Session, row: Provider) -> dict[str, object]:

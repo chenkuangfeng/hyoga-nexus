@@ -37,7 +37,7 @@ def test_extractor_parses_the_answer_and_validation_still_decides_what_is_kept()
     model = ScriptedModel('[{"op":"add","kind":"memory","diff":"Use checklist"},{"op":"delete","entry_id":"x"}]')
     extractor = make_extractor(model)
     raw = extractor(messages=[rules.Message(sequence=1, role='user', content='hi', created_at=T0)],
-                    related=[], model_version_id=uuid4())
+                    related=[], model_version_id=uuid4(), tenant_id=uuid4(), owner_id=uuid4())
     verdict = rules.validate_actions(raw, unattended=True)
     assert verdict.actions == [{'op': 'add', 'kind': 'memory', 'diff': 'Use checklist'}]
     assert model.closed and model.requests[0].tools == ()

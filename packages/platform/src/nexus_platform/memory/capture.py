@@ -14,6 +14,7 @@ capture model; the caller passes the extractor when it runs jobs. Extraction cal
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Callable, Protocol
 from uuid import UUID
@@ -53,15 +54,16 @@ CAPACITY_POLICIES = ('reject', 'evict_auto')
 
 
 class Extractor(Protocol):
-    """Model-backed extraction: receives the window, related entries and the authorized capture model
-    version, and returns raw action items.
+    """Model-backed extraction: receives the window, related entries, the capture model version and the
+    owner's tenant and id (the caller resolves the owner's key from these), and returns raw action items.
+    It runs outside any database transaction.
 
     Implementations must not attach tools to the model call. A raised exception is a failed attempt
     with a stable code; the raw output is not stored when it fails.
     """
 
-    def __call__(self, *, messages: list[rules.Message], related: list[dict[str, Any]],
-                 model_version_id: UUID) -> Any: ...
+    def __call__(self, *, messages: list[rules.Message], related: list[dict[str, Any]], model_version_id: UUID,
+                 tenant_id: UUID, owner_id: UUID) -> Any: ...
 
 
 # ---------------------------------------------------------------- settings
@@ -183,20 +185,21 @@ def claim_next(db: Session, *, worker_id: str, now: datetime | None = None) -> U
 
 def run_step(factory: Callable[[], Session], job_id: UUID, extractor: Extractor, *,
              now: datetime | None = None) -> str:
-    """Perform the job's next step in its own session and transaction; return the resulting state.
+    """Perform the job's next step and return the resulting state.
 
-    `factory` opens a session per step, so each step commits on its own. A failing step is rolled
-    back and recorded as a failed attempt in a second transaction (see `_record_failure`).
+    Each step commits on its own. The extraction step runs in three phases so the model call (and the
+    credential lookup it needs) happens outside any open transaction: plan (read), call, record (write).
+    A failing step is rolled back and recorded as a failed attempt in a second transaction.
     """
     now = now or utc_now()
     try:
+        if _is_pending(factory, job_id):
+            return _extraction_step(factory, job_id, extractor, now)
         with factory() as db, db.begin():
             job = db.get(MemoryCaptureJobRecord, job_id, with_for_update=True)
             if job is None or job.state not in UNFINISHED:
                 return job.state if job else 'missing'
-            if job.state == 'pending':
-                _extract(db, job, extractor, now)
-            elif job.state == 'extracted':
+            if job.state == 'extracted':
                 _store(db, job, now)
             else:
                 _finish(db, job, now)
@@ -237,19 +240,34 @@ def _job_waiting(factory: Callable[[], Session], job_id: UUID, now: datetime) ->
         return job is not None and job.state in UNFINISHED and rules.aware(job.available_at) > rules.aware(now)
 
 
-def _extract(db: Session, job: MemoryCaptureJobRecord, extractor: Extractor, now: datetime) -> None:
-    """Authorize the capture model for this call, then extract. Skips (completes without drafts) when
-    the owner turned capture off since the job was queued or the model is no longer usable."""
+def _is_pending(factory: Callable[[], Session], job_id: UUID) -> bool:
+    with factory() as db:
+        job = db.get(MemoryCaptureJobRecord, job_id)
+        return job is not None and job.state == 'pending'
+
+
+@dataclass(frozen=True)
+class _Plan:
+    """What the extraction call needs, read before the call. `skip` names why there is no call."""
+    skip: str | None
+    messages: list[rules.Message]
+    related: list[dict[str, Any]]
+    version_id: UUID | None
+    tenant_id: UUID
+    owner_id: UUID
+
+
+def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
+    """Read-only: settings, model authorization, window messages and related entries."""
+    empty = _Plan('', [], [], None, job.tenant_id, job.owner_user_id)
     settings = db.get(MemoryCaptureSettingsRecord, (job.tenant_id, job.owner_user_id))
     if settings is None or not settings.enabled or settings.model_profile_version_id is None:
-        _skip(db, job, 'capture_disabled', now)
-        return
+        return replace(empty, skip='capture_disabled')
     version_id = settings.model_profile_version_id
     try:
         authorize_model(db, job.tenant_id, job.owner_user_id, version_id)
     except PlatformError:
-        _skip(db, job, 'model_unavailable', now)
-        return
+        return replace(empty, skip='model_unavailable')
     rows = db.scalars(select(MessageRecord).where(
         MessageRecord.session_id == job.session_id,
         MessageRecord.sequence >= job.from_sequence, MessageRecord.sequence <= job.through_sequence)
@@ -258,8 +276,44 @@ def _extract(db: Session, job: MemoryCaptureJobRecord, extractor: Extractor, now
                               created_at=m.created_at, id=str(m.id)) for m in rows]
     repo = SqlMemoryRepository(db)
     related = [{'id': str(e.id), 'title': e.title, 'kind': e.kind}
-                for e in repo.published_entries(job.tenant_id, job.owner_user_id, '')[:rules.RELATED_LIMIT]]
-    raw = extractor(messages=messages, related=related, model_version_id=version_id)
+               for e in repo.published_entries(job.tenant_id, job.owner_user_id, '')[:rules.RELATED_LIMIT]]
+    return _Plan(None, messages, related, version_id, job.tenant_id, job.owner_user_id)
+
+
+def _extraction_step(factory: Callable[[], Session], job_id: UUID, extractor: Extractor, now: datetime) -> str:
+    """Plan, call the model outside any transaction, then record the validated output."""
+    with factory() as db:
+        job = db.get(MemoryCaptureJobRecord, job_id)
+        if job is None or job.state != 'pending':
+            return job.state if job else 'missing'
+        plan = _plan(db, job)
+    if plan.skip:
+        return _complete_skipped(factory, job_id, plan.skip, now)
+    try:
+        raw = extractor(messages=plan.messages, related=plan.related, model_version_id=plan.version_id,
+                        tenant_id=plan.tenant_id, owner_id=plan.owner_id)
+    except PlatformError:
+        # The owner's key or the model stopped being usable between planning and the call.
+        return _complete_skipped(factory, job_id, 'model_unavailable', now)
+    with factory() as db, db.begin():
+        job = db.get(MemoryCaptureJobRecord, job_id, with_for_update=True)
+        if job is None or job.state != 'pending':
+            return job.state if job else 'missing'
+        _record_extraction(db, job, raw)
+        return job.state
+
+
+def _complete_skipped(factory: Callable[[], Session], job_id: UUID, reason: str, now: datetime) -> str:
+    with factory() as db, db.begin():
+        job = db.get(MemoryCaptureJobRecord, job_id, with_for_update=True)
+        if job is None or job.state != 'pending':
+            return job.state if job else 'missing'
+        _skip(db, job, reason, now)
+        return job.state
+
+
+def _record_extraction(db: Session, job: MemoryCaptureJobRecord, raw: Any) -> None:
+    """Keep only validated actions; invalid items are counted and their reasons audited, never stored."""
     verdict = rules.validate_actions(raw, unattended=True)
     job.actions = [_serialize(action) for action in verdict.actions]
     job.state = 'extracted'
