@@ -166,11 +166,12 @@
 | L1 候选 | `memory_drafts`（扩展 origin、source_message_ids、fingerprint） | 待审核内容 | 否 |
 | L1 墓碑 | `memory_tombstones` | 被拒绝内容的指纹 | 否（只用于去重） |
 | L2 已发布 | `memory_entries`（扩展 enabled、valid_until）、`memory_versions`（扩展 search_text） | 审核后的事实，版本不可变 | 是，仅 `active=true AND enabled=true AND 未过期` |
-| L3 派生索引 | `memory_index_snapshots`（会话级索引文本）、`memory_search` 索引（tsvector GIN 或 trigram） | 检索加速 | 与 L2 同步，可重建 |
+| L3 派生索引 | `memory_index_snapshots`（会话级索引文本）、`memory_fts`（FTS5 虚拟表；PostgreSQL 为同结构的 GIN 索引表） | 检索加速 | 与 L2 同步，可重建 |
 
 约定：
 - `current_version` 是唯一的可见指针。检索只读取指针指向的版本。
-- `search_text` 由标题、项目名与正文拼接，并做分词规范化（与发布时的审核内容一致）。
+- `search_text` 由标题、项目名与正文拼接，保存原文，用于展示与 `LIKE` 回退。
+- `tokens` 由应用侧分词生成（见 9.11），与 `search_text` 同时写入，两种数据库使用同一份分词结果。
 - 没有向量列。若阶段四后引入向量，作为 L3 的另一通道，不改 L2。
 
 ### 9.3 写入路径
@@ -196,8 +197,8 @@
 
 规划器 `recall(owner, query, budget)` 是唯一入口，供 `search_memory`、阶段四的每轮召回共用。
 
-1. **授权与范围**：`owner = 当前主体`，过滤 `enabled`、`active`、未过期。空范围直接返回空结果，不进入后续步骤。
-2. **通道**：本阶段只有词法通道，在范围内查询 L3 索引。
+1. **授权与范围**：`owner = 当前主体`，过滤 `enabled`、`active`、未过期。空范围直接返回空结果，不进入后续步骤。授权条件与 L3 查询写在同一条 SQL 中，不做全局召回后再过滤。
+2. **通道**：本阶段只有词法通道，在范围内查询 L3 索引。查询词经应用侧分词后各自加引号，以 AND 连接；单字查询回退为授权范围内的 `LIKE`。
 3. **合并**：多通道时使用 RRF（倒数排名融合）合并，不做分数归一化。每个结果保留通道、名次、版本号，供诊断与审计。
 4. **预算裁剪**：默认最多 5 条、600 字符。超出时按排名截断，并返回被省略的数量。
 5. **返回形式**：每条包含 `[ID:n]` 句柄、标题、版本、一段摘要片段。正文仍需 `read_memory(id)` 获取。不返回草稿。
@@ -247,5 +248,45 @@
 
 ### 9.10 待确认
 
-- 词法通道的分词：PostgreSQL 使用 `simple` 配置加 trigram，还是引入中文分词扩展（与会话检索提案保持一致）。
 - 索引中条目的排序规则：按最近更新，还是按最近使用。建议先按最近更新，记录使用次数留待评测后决定。
+- 分词方案已在 9.11 决定（应用侧二元组），不再待定。会话检索提案须采用同一方案。
+
+### 9.11 SQLite 兼容要求
+
+全部设计必须能在 SQLite 上运行，PostgreSQL 是同一契约的另一种实现。SQLite 是单机部署的正式后端（见架构文档 2.12 与第 363 行），不只用于测试。
+
+**分词（已决定）**：
+- 应用侧分词：中文连续字符切为重叠二元组（"中文回复" → "中文 文回 回复"），单个汉字保留为单字词；英文与数字按词切分并小写。
+- 之所以不用 trigram：FTS5 的 trigram 只能匹配 3 个字符以上的子串，"偏好""喜欢"等两字词无法命中（已验证）。
+- 同一份 `tokens` 在两种数据库中使用：SQLite 用 `unicode61` 分词器的 FTS5 表；PostgreSQL 用 `to_tsvector('simple', tokens)` 的 GIN 索引。两边命中行为一致。
+
+**存储表（SQLite）**：
+- `memory_fts`：FTS5 虚拟表，列为 `entry_id UNINDEXED`、`version UNINDEXED`、`tokens`，分词器 `unicode61`。
+- 发布、停用、归档都在同一个 `BEGIN IMMEDIATE` 事务内写入或删除 `memory_fts` 行。FTS5 支持事务，失败整体回滚。
+- 删除按 `entry_id` 进行，数据量为个人记忆规模，全表扫描可接受；若条目数超过数千，改为保存 `rowid` 映射后按 `rowid` 删除。
+
+**查询（SQLite）**：
+- 授权条件、`active`、`enabled`、未过期、`current_version` 与 FTS 匹配写在同一条 SQL 中（见 9.4）。
+- 查询词由应用侧生成，每个词加双引号，防止 FTS5 语法注入（如 `OR`、`NEAR`、列过滤符）。
+- 排序用 `bm25(memory_fts)`。
+- 启动时检查 FTS5 可用性（`PRAGMA compile_options` 或建表探测）。不可用时整体回退为授权范围内的 `LIKE`，并记录降级事件，不影响正确性。
+
+**时间与布尔（SQLite 特有陷阱）**：
+- `valid_until` 与 `now` 的比较必须通过 SQLAlchemy 的 DateTime 类型绑定参数，统一为 UTC；禁止在 SQL 字符串中拼接时间文本。SQLite 不做时区换算，字符串比较会在时区不一致时出错。
+- `active`、`enabled` 用 Boolean 列（SQLite 存为整数 0/1），查询条件统一使用 SQLAlchemy 表达式，不写裸字符串。
+
+**并发**：
+- SQLite 同一时间只有一个写者。发布与索引写入都在 `BEGIN IMMEDIATE` 事务内完成，持锁时间应尽量短：只包含版本插入、指针更新和 FTS 行写入，不包含模型调用或扫描。
+- WAL 模式下读者不阻塞写者。召回读取使用只读事务，不在召回期间持有写锁。
+- API 与 worker 两个进程共用文件，所有写入都经过同一个 `BEGIN IMMEDIATE` 入口，避免死锁与 `database is locked`。
+
+**重建（SQLite）**：
+- 重建 = 清空 `memory_fts` 后，从 `memory_versions` 中当前版本的 `tokens` 重新插入。分批提交（每批数百行），在低峰执行。
+
+**不兼容的设计（已排除）**：
+- 依赖 PostgreSQL 特有的 `tsvector`、`pg_trgm`、`JSONB` 运算符或 `LISTEN/NOTIFY` 的检索路径。
+- 依赖 SQLite 不支持的 `FOR UPDATE SKIP LOCKED` 的任务领取（任务领取改用 CAS 更新，行数必须为 1，与架构文档 2.10 一致）。
+
+**测试**：
+- 第 9.8 节的确定性测试在 SQLite 上运行（内存库或临时文件），PostgreSQL 环境在有条件时运行同一套用例。
+- 增加中文用例：两字词、三字以上词、单字回退、英文与数字混排、FTS 语法字符（引号、`OR`、`*`）的查询词不被解释为操作符。
