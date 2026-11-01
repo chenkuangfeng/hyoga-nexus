@@ -14,9 +14,10 @@
 
 ## 一、基线（不改变行为）
 
-- [ ] 构造固定会话集（至少 20 段，含工具调用、长输出、多轮）。
-- [ ] 记录每轮输入 token、`cached_tokens`、模型耗时、数据库事务数、`run_events` 条数、准备阶段耗时。
-- [ ] 结果写入 `baseline.md`，用于确定 P2 阈值与各项优先级。
+- [x] 构造固定会话集（20 段，含工具调用、长输出、多轮、追问）：`evals/context-performance/cases.py`。
+- [ ] 记录每轮输入 token、`cached_tokens`、模型耗时（真实模型，待做）。
+- [x] 数据库事务数、`run_events` 条数、送入模型的字符数与整段耗时：`evals/context-performance/harness.py`（脚本化模型，仅平台侧指标）。准备阶段耗时未单独拆分，需要时在 `prepare_execution` 外加计时。
+- [ ] 结果写入 `baseline.md`，用于确定 P2 阈值与各项优先级（需要真实模型，暂停）。
 
 ## 二、低风险内部优化（不改变模型输入）
 
