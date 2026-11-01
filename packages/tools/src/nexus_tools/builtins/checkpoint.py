@@ -1,11 +1,13 @@
 """Compatible GA key_info and existing Nexus content checkpoint handler."""
 from nexus_core.runtime import ToolDefinition, ToolResult
 from nexus_tools.registry import RegisteredTool
+from .services import store_of as _store
 
 
-def checkpoint_tool(store):
+def checkpoint_tool():
     """Persist one replacement notepad; reject contradictory aliases instead of losing context."""
     async def checkpoint(arguments, context):
+        store = _store(context)
         if 'content' in arguments and 'key_info' in arguments and arguments['content'] != arguments['key_info']:
             return ToolResult('Conflicting checkpoint aliases', error_code='tool_arguments_invalid')
         content = arguments.get('key_info', arguments.get('content', ''))

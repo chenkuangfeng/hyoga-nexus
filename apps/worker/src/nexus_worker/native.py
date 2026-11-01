@@ -130,10 +130,11 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             model = configured_routing(context, factory, resolver or StoredCredentialResolver(factory, EnvironmentCredentialResolver()))
         if context.runtime_type != 'native':
             raise RuntimeFault('runtime_not_configured')
-        registry = (registry_factory or builtins)(store)
+        # Builtin definitions are shared for the process; the Run's store reaches handlers via services.
+        registry = registry_factory(store) if registry_factory else builtins()
         gateway = AuthorizedToolGateway(registry, ToolAccess(store),
             {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
-            session_id=str(context.session_id), tenant_id=str(context.tenant_id))
+            session_id=str(context.session_id), tenant_id=str(context.tenant_id), services=store)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

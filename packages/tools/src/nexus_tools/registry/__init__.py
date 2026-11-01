@@ -16,6 +16,8 @@ class ToolContext:
     session_id: str
     tenant_id: str
     cancellation: CancellationTokenPort
+    # Run-scoped services (for builtins: the Run's store). Shared tool definitions reach run state only through here.
+    services: object | None = None
 
 
 @dataclass(frozen=True)

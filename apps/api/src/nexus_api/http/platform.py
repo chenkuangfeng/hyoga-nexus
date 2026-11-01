@@ -594,7 +594,7 @@ def enable_builtin(tenant_id: UUID, name: str, principal: Principal = Depends(ge
                    db: Session = Depends(get_database_session)):
     from nexus_tools.builtins import builtins
     from nexus_platform.errors import NotFound
-    tool = builtins(None).get(name, 'v1')
+    tool = builtins().get(name, 'v1')
     if not tool:
         raise NotFound('Tool not found')
     with db.begin():

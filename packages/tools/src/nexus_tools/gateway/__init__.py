@@ -35,9 +35,11 @@ async def _controlled(operation, token):
 
 class AuthorizedToolGateway:
     def __init__(self, registry: ToolRegistry, access: ToolAccessPort,
-                 bindings: dict[str, str], *, run_id: str, session_id: str, tenant_id: str):
+                 bindings: dict[str, str], *, run_id: str, session_id: str, tenant_id: str,
+                 services: object | None = None):
         self.registry, self.access, self.bindings = registry, access, bindings
         self.run_id, self.session_id, self.tenant_id = run_id, session_id, tenant_id
+        self.services = services
 
     async def definitions(self):
         output = []
@@ -89,7 +91,7 @@ class AuthorizedToolGateway:
                 except (ValueError, ValidationError, RecursionError):
                     result = ToolResult('tool_arguments_invalid', error_code='tool_arguments_invalid')
                 else:
-                    context = ToolContext(invocation_id, self.run_id, self.session_id, self.tenant_id, cancellation)
+                    context = ToolContext(invocation_id, self.run_id, self.session_id, self.tenant_id, cancellation, self.services)
                     invoked = True
                     async with asyncio.timeout(tool.definition.timeout_seconds):
                         async def progress(text):
