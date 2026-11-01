@@ -24,14 +24,23 @@
 - [x] 进程级共享工具注册表：`builtins()` 进程内只构建一次；存储通过 `ToolContext.services` 按调用传入，处理器不再闭包捕获 store，缺失时以 `tool_unavailable` 失败关闭（测试 `tests/test_shared_builtins.py`）。
 - [ ] 进程级共享模型客户端：**未实施**。模型客户端每次构建前都重新检查凭据（`configured_routing`），这是有意设计，缓存客户端会在凭据被撤销后继续使用旧凭据。工具注册表绑定 store，共享需改变工具绑定契约；实测每 Run 构建注册表约 6.7 ms（timeit，`builtins(None)`，2000 次平均），相对模型调用可忽略，因此暂不共享。
 - [x] 终态快照：成功、失败、取消、中断均在 Run 终态写入路径（`runs/completion.py::_finish`，同一事务）中保存 v2 快照，只记录 `last_run` 的稳定码并保留其他键；仍为 `running` 的工具调用标记 `interrupted`。等待态不保存。（未放在运行器 `finally` 中，因为运行器的 `finally` 不负责持久化终态。）
-- [x] 投影缓存模块：key `(session_id, watermark)`，LRU、空闲 TTL、单条目字节上限，不缓存权限（`nexus_platform/sessions/projection_cache.py`，测试 `tests/test_projection_cache.py`）。接入运行时待做。
+- [x] 投影缓存模块：key `(session_id, watermark)`，LRU、空闲 TTL、单条目字节上限，不缓存权限（`nexus_platform/sessions/projection_cache.py`，测试 `tests/test_projection_cache.py`）。
+- [x] 接入运行时：`runs/preparation.py::HISTORY_CACHE` 缓存未经授权过滤的原始消息行；每次运行都重新检查来源 Run 的授权。消息写入（`add_message`、`MessageRepository.initial`）递增水位，旧 key 自然失效。
 - [x] 忙时策略：默认排队（不打断），队列上限 32（已由 busy-session-queue 变更实现）。注意：本文件原文写的是“interrupt 默认”，与已确认的 busy-session-queue 冲突，以后者为准。steer 仅在 running 时接受。
 - [x] `max_concurrent_sessions` 拒绝路径：提交新会话时计数，超限返回 503 `session_capacity_exceeded`（测试 `tests/test_session_capacity.py`）。PostgreSQL 下的并发精确性随 2.9 补齐。
-- [x] 权限不缓存；每次工具调用查库（`ToolAccess.authorize` → `authorize_run_resource`，代码已核对；撤销即时生效的专门用例尚未补充）。
-- [ ] 测试：执行对象每 Run 新建；投影缓存命中与淘汰；快照三种结束方式；忙时策略；权限撤销即时生效。
+- [x] 权限不缓存；每次工具调用查库（`ToolAccess.authorize` → `authorize_run_resource`）。撤销即时生效由 `tests/test_history_projection.py` 覆盖。
+- [x] 测试：执行对象每 Run 新建（`tests/test_history_projection.py`）；投影缓存命中、按水位重建、淘汰（`tests/test_projection_cache.py`）；快照四种结束方式（`tests/test_terminal_snapshot.py`）；忙时策略（`tests/test_dispatch_ledger_integration.py`、`tests/test_native_parity.py`）；撤销授权后新提交被拒绝（`tests/test_history_projection.py`）。
 - [x] 测量装配耗时：工具注册表约 6.7 ms/Run。`max_entries`、`idle_ttl`、字节上限的默认值（256 / 900 s / 256 KiB）是估计值，尚未用真实负载校准。
+
+## 会话上限（并入自 session-concurrency-limit）
+
+- [x] 配置 `[platform].max_concurrent_sessions`（缺省 8，非法值失败关闭）。
+- [x] 账本计数与提交拒绝：新会话超限返回 503 `session_capacity_exceeded`；同一会话后续 Run 不计数（`tests/test_session_capacity.py`）。
+- [x] 示例配置 `configs/nexus.example.toml` 增加 `[platform]`。
 
 ## 文档与归档
 
-- [ ] 同步更新架构文档 1.2、2.2、2.12 与路线图第 2、3 步。
-- [ ] 归档本变更。
+- [x] 同步架构文档 2.2、2.12 与路线图 2.12、3.17–3.19。
+- [ ] 模型客户端进程级共享：**待定**。需先确定凭据变更时缓存客户端如何失效，之后才能共享。在此决定前不归档本变更。
+- [ ] PostgreSQL 目标环境验证（随 2.9）。
+- [ ] 归档本变更（待上述两项完成或明确放弃）。
