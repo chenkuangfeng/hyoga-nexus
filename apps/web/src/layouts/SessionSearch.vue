@@ -4,7 +4,7 @@
  * current space by title; no backend search is involved. Up/Down move the selection, Enter opens,
  * Escape closes (the dialog handles Escape).
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Conversation } from '../types/chat'
 
@@ -18,11 +18,11 @@ const matches = computed(() => {
   return props.sessions.filter(session => !needle || (session.title || '').toLowerCase().includes(needle))
 })
 
-watch(() => props.modelValue, async open => {
-  if (!open) return
-  query.value = ''; cursor.value = 0
-  await nextTick(); input.value?.focus()
+// The dialog body is rendered after the open transition starts, so focus is moved on its `opened` event.
+watch(() => props.modelValue, open => {
+  if (open) { query.value = ''; cursor.value = 0 }
 })
+function focusInput() { input.value?.focus() }
 watch(query, () => { cursor.value = 0 })
 
 function close() { emit('update:modelValue', false) }
@@ -39,7 +39,7 @@ function onKey(event: KeyboardEvent) {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" :title="t('shell.search')" width="min(520px, 94vw)" append-to-body @update:model-value="(value: boolean) => emit('update:modelValue', value)">
+  <el-dialog :model-value="modelValue" :title="t('shell.search')" width="min(520px, 94vw)" append-to-body @update:model-value="(value: boolean) => emit('update:modelValue', value)" @opened="focusInput">
     <label class="visually-hidden" for="session-search-input">{{ t('shell.searchPlaceholder') }}</label>
     <input id="session-search-input" ref="input" v-model="query" class="search-input" type="search" role="combobox" aria-controls="session-search-list" :aria-expanded="matches.length > 0" :aria-activedescendant="matches[cursor] ? `session-search-${matches[cursor].id}` : undefined" :placeholder="t('shell.searchPlaceholder')" @keydown="onKey">
     <ul v-if="matches.length" id="session-search-list" class="search-list" role="listbox">
