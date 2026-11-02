@@ -43,10 +43,10 @@
   - [x] 2.3 授权：租户角色、菜单与 API 授权，智能体级授权，资源授权。
   - [x] 2.4 智能体与会话：智能体版本、Session、会话分叉。
   - [x] 2.5 运行：幂等 Run、事件、Outbox、租约领取、取消、审批与输入。
-  - [x] 2.6 模型设置：供应商、个人与空间范围、加密 Key、默认模型、连接测试。
+  - [x] 2.6 模型设置：供应商、个人与空间范围、加密 Key、连接测试；模型类型（对话、Embedding、ReRank、视觉、语音）与按类型的默认模型；未保存配置的连接测试（SQLite 已验证；PostgreSQL 随 2.9）。
   - [x] 2.7 记忆存储：`memory` 独立包，规则与存储端口分离。
   - [ ] 2.8 增量迁移：`action_grants`（与 `resource_grants` 分离）、`run_snapshots`（等待审批的版本化快照）。
-  - [ ] 2.9 PostgreSQL 目标环境验证：迁移往返、并发领取、租约恢复、崩溃后 unknown 转换、同 Session 单活跃 Run。
+  - [ ] 2.9 PostgreSQL 目标环境验证：迁移往返（含 `0a7c3e9d1b5f` 模型类型迁移）、并发领取、租约恢复、崩溃后 unknown 转换、同 Session 单活跃 Run。
   - [x] 2.10 派发账本（SQLite 已验证；PostgreSQL 随 2.9）：`runtime_epoch`（进程启动递增）、`session_admissions`（queued、started、unknown、terminal）；CAS 领取（rowcount 必须为 1）、按 `seq` 取队首、写入带 `owner_epoch` 的 fencing（过期 epoch 返回 `stale_epoch`）。单机用 SQLite 实现，多租户用 PostgreSQL 实现，接口相同。
   - [x] 2.11 启动恢复（SQLite 已验证；PostgreSQL 随 2.9）：旧 epoch 的 started 与执行记录标记为 unknown，会话阻塞，不自动重放；显式解除并记录审计。
   - [x] 2.12 会话快照与水位：版本化 JSON 快照（v2，只含数据）；保存快照带预期水位，不一致则拒绝；消息写入递增水位；未知版本拒绝。v1 迁移函数暂缺：仓库中没有持久化过 v1 数据（SQLite 已验证；PostgreSQL 随 2.9）。

@@ -1,6 +1,6 @@
 # 实施任务：模型管理
 
-状态：已确认（2026-11-02），已实施；PostgreSQL 迁移未验证（见第 4 节）。
+状态：已确认、已实施、已归档（2026-11-02）；PostgreSQL 迁移未验证（见第 4 节与 verification.md）。
 
 ## 0. 确认
 
@@ -43,5 +43,5 @@
 
 ## 5. 收尾
 
-- [ ] 更新 `docs/roadmap.md` 中阶段 2 的相关条目（待你确认是否由本变更更新）。
-- [ ] 按 OpenSpec 工作流同步规格并归档。
+- [x] 更新 `docs/roadmap.md` 中阶段 2 的相关条目（2.6 与 2.9）。
+- [x] 按 OpenSpec 工作流同步规格（`openspec/specs/model-management/spec.md`）并归档到 `openspec/changes/archive/`。
