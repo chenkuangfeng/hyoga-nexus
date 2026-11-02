@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -17,6 +17,8 @@ from nexus_platform.models import provider_settings as settings
 from nexus_platform.persistence.models import ModelProfileRecord, ModelProfileVersionRecord
 from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.authz.audit import audit
+from nexus_platform.authz.permissions import require_api_permission
+from nexus_platform.identity.service import require_membership
 from nexus_runtimes.native.models.network import validate_url, provider_client
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 
@@ -32,18 +34,40 @@ class ProviderInput(BaseModel):
     api_key: SecretStr | None = None
 
 
+ModelType = Literal['chat', 'embedding', 'rerank', 'vision', 'speech']
+
+
 class ModelInput(BaseModel):
-    """Supplier model identifier; edits append versions rather than rewriting history."""
+    """Supplier model identifier; edits append versions rather than rewriting history.
+
+    The capability type is set when the model is created and cannot change on later edits."""
 
     name: str = Field(min_length=1, max_length=160)
     options: dict[str, object] = Field(default_factory=dict)
+    model_type: ModelType = 'chat'
 
 
 class DefaultInput(BaseModel):
-    """Scoped default preference; a null version clears the explicit preference."""
+    """Scoped default preference for one model type; a null version clears that preference."""
 
     scope: Literal['personal', 'tenant'] = 'personal'
+    model_type: ModelType = 'chat'
     version_id: UUID | None = None
+
+
+class DraftTestInput(BaseModel):
+    """Connection test for an unsaved configuration; nothing is persisted.
+
+    `provider_id` lets an edit reuse the stored Key when `api_key` is omitted. A replacement
+    address always needs a replacement Key, as on save."""
+
+    scope: Literal['personal', 'tenant'] = 'personal'
+    base_url: str = Field(min_length=1, max_length=512)
+    model_name: str = Field(min_length=1, max_length=160)
+    model_type: ModelType = 'chat'
+    options: dict[str, object] = Field(default_factory=dict)
+    provider_id: UUID | None = None
+    api_key: SecretStr | None = None
 
 
 class AgentInput(BaseModel):
@@ -96,7 +120,7 @@ def delete_provider(tenant_id: UUID, provider_id: UUID, principal: Principal = D
 @router.post('/providers/{provider_id}/models', status_code=201)
 def add_model(tenant_id: UUID, provider_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Create an immutable configured model under a manageable provider."""
-    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), model_options=body.options)
+    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), model_options=body.options, model_type=body.model_type)
 
 
 def model_name(value: str) -> str:
@@ -109,7 +133,7 @@ def model_name(value: str) -> str:
 @router.put('/providers/{provider_id}/models/{profile_id}')
 def edit_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Append a model version; preserve already published AgentVersion references."""
-    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), profile_id, model_options=body.options)
+    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), profile_id, model_options=body.options, model_type=body.model_type)
 
 
 @router.delete('/providers/{provider_id}/models/{profile_id}')
@@ -121,8 +145,10 @@ def delete_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal
 
 @router.put('/default')
 def set_default(tenant_id: UUID, body: DefaultInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
-    """Set or clear an authorized personal/space preference for future Agent creation."""
-    settings.set_default(db, principal, tenant_id, body.scope, body.version_id)
+    """Set or clear an authorized personal/space preference for one model type.
+
+    Only chat defaults feed Agent creation in this stage."""
+    settings.set_default(db, principal, tenant_id, body.scope, body.version_id, body.model_type)
     return {'status': 'saved'}
 
 
@@ -137,7 +163,7 @@ def create_native_agent(tenant_id: UUID, body: AgentInput, principal: Principal 
         selected = body.model_profile_version_id
         if selected is None:
             for scope in (str(user.id), 'tenant'):
-                row = db.get(settings.Default, (tenant_id, scope))
+                row = db.get(settings.Default, (tenant_id, scope, 'chat'))
                 if row:
                     try:
                         settings.authorize_model(db, tenant_id, user.id, row.version_id)
@@ -159,6 +185,41 @@ def create_native_agent(tenant_id: UUID, body: AgentInput, principal: Principal 
     return {'id': str(agent.id), 'published_version_id': str(version.id), 'name': agent.name}
 
 
+UNSUPPORTED_TYPE_MESSAGE = '该模型类型的连接测试将在知识库阶段提供'
+DRAFT_TEST_COOLDOWN = timedelta(seconds=10)
+# Draft tests have no provider row to rate-limit, so they are limited per user in this process.
+# Multi-process deployments get a looser bound; the per-provider limit above still applies to saved models.
+draft_test_started: dict[tuple[UUID, UUID], datetime] = {}
+
+
+async def check_connection(*, key: str, base_url: str, model_name: str, options: dict[str, object], model_type: str) -> dict[str, object]:
+    """Run one bounded streaming request and return a sanitized result.
+
+    Only chat models are executed in this stage; other types return `unsupported_for_type` without
+    contacting the supplier. Responses carry no generated text and no raw supplier error."""
+    if model_type != 'chat':
+        return {'ok': False, 'code': 'unsupported_for_type', 'message': UNSUPPORTED_TYPE_MESSAGE}
+    model = None
+    try:
+        if options.get('protocol', 'openai_chat_completions') == 'openai_chat_completions':
+            model = OpenAICompatibleModel(model=model_name, api_key=key, base_url=base_url,
+                                         timeout=12, http_client=provider_client(base_url, timeout=12), options=options)
+        else:
+            from nexus_runtimes.native.models.factory import create_model
+            model = create_model(model=model_name, api_key=key, options=options, timeout=12)
+        async with asyncio.timeout(15):
+            async for _ in model.stream(ModelRequest((ModelMessage('user', 'Reply OK.'),), (), 32)):
+                pass
+        return {'ok': True, 'message': '连接成功，流式响应正常'}
+    except RuntimeFault as exc:
+        return {'ok': False, 'code': exc.code, 'message': '连接未通过，请检查地址、模型名称和 Key'}
+    except Exception:
+        return {'ok': False, 'code': 'model_provider_unavailable', 'message': '连接未通过，请检查配置或稍后重试'}
+    finally:
+        if model:
+            await model.close()
+
+
 @router.post('/providers/{provider_id}/models/{profile_id}/test')
 async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Test an authorized saved model with a bounded minimal streaming request.
@@ -172,30 +233,54 @@ async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, 
         link = db.get(settings.Link, profile_id)
         if not link or link.provider_id != provider.id or not link.active:
             raise NotFound('Model unavailable')
-        if provider.last_test_at and provider.last_test_at.replace(tzinfo=timezone.utc) > utc_now() - timedelta(seconds=10):
+        if provider.last_test_at and provider.last_test_at.replace(tzinfo=timezone.utc) > utc_now() - DRAFT_TEST_COOLDOWN:
             raise Conflict('Please wait 10 seconds before testing again')
         provider.last_test_at = utc_now()
         profile = db.get(ModelProfileRecord, profile_id)
         version = db.get(ModelProfileVersionRecord, profile.current_version_id)
-        key, base_url, name = settings.decrypt(db.get(settings.StoredKey, version.credential_reference_id)), version.options['base_url'], version.model_name
+        key = settings.decrypt(db.get(settings.StoredKey, version.credential_reference_id))
+        base_url, name = version.options['base_url'], version.model_name
         audit(db, tenant_id, user.id, 'provider.connection_test', 'model_provider', str(provider.id))
-    model = None
+    return await check_connection(key=key, base_url=base_url, model_name=name, options=dict(version.options), model_type=profile.model_type)
+
+
+@router.post('/test')
+async def test_draft(tenant_id: UUID, body: DraftTestInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Test the configuration currently in the form, before anything is saved.
+
+    Authorization matches saving: an edit needs management of the existing provider; a new
+    shared provider needs `models:manage`. Errors never echo the Key, the address or supplier text."""
+    options = settings.validate_model_options(dict(body.options))
+    model_type = settings.validate_model_type(body.model_type)
     try:
-        if version.options.get('protocol', 'openai_chat_completions') == 'openai_chat_completions':
-            model = OpenAICompatibleModel(model=name, api_key=key, base_url=base_url,
-                                         timeout=12, http_client=provider_client(base_url, timeout=12), options=version.options)
+        base_url = validate_url(body.base_url)
+    except RuntimeFault:
+        raise ValueError('API address is not permitted; use a public HTTPS endpoint') from None
+    with db.begin():
+        user, _ = settings.context(db, principal, tenant_id)
+        stored_key = None
+        if body.provider_id:
+            provider = settings.provider_access(db, tenant_id, user.id, body.provider_id, manage=True)
+            if provider.last_test_at and provider.last_test_at.replace(tzinfo=timezone.utc) > utc_now() - DRAFT_TEST_COOLDOWN:
+                raise Conflict('Please wait 10 seconds before testing again')
+            provider.last_test_at = utc_now()
+            if body.api_key is None:
+                if base_url != provider.base_url:
+                    raise ValueError('Changing API address requires a replacement Key')
+                stored_key = settings.decrypt(db.get(settings.StoredKey, provider.credential_id))
+            target = str(provider.id)
         else:
-            from nexus_runtimes.native.models.factory import create_model
-            model = create_model(model=name, api_key=key, options=version.options, timeout=12)
-        async with asyncio.timeout(15):
-            async for _ in model.stream(ModelRequest((ModelMessage('user', 'Reply OK.'),), (), 32)):
-                pass
-        return {'ok': True, 'message': '连接成功，流式响应正常'}
-    except RuntimeFault as exc:
-        return {'ok': False, 'code': exc.code, 'message': '连接未通过，请检查地址、模型名称和 Key'}
-    except Exception:
-        return {'ok': False, 'code': 'model_provider_unavailable', 'message': '连接未通过，请检查配置或稍后重试'}
-    finally:
-        key = None
-        if model:
-            await model.close()
+            if body.scope == 'tenant':
+                require_membership(db, tenant_id, user.id)
+                require_api_permission(db, tenant_id, user.id, 'models:manage')
+            target = 'draft'
+        key = body.api_key.get_secret_value() if body.api_key is not None else stored_key
+        if not key:
+            raise ValueError('API Key is required')
+        if not body.provider_id:
+            started = draft_test_started.get((tenant_id, user.id))
+            if started and started.replace(tzinfo=timezone.utc) > utc_now() - DRAFT_TEST_COOLDOWN:
+                raise Conflict('Please wait 10 seconds before testing again')
+            draft_test_started[(tenant_id, user.id)] = utc_now()
+        audit(db, tenant_id, user.id, 'provider.connection_test', 'model_provider', target, {'draft': not body.provider_id, 'model_type': model_type})
+    return await check_connection(key=key, base_url=base_url, model_name=body.model_name.strip(), options={**options, 'base_url': base_url}, model_type=model_type)

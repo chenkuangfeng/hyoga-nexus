@@ -29,6 +29,8 @@ class ModelProfileRecord(Base):
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Capability type (chat, embedding, rerank, vision, speech); fixed for the profile's lifetime.
+    model_type: Mapped[str] = mapped_column(String(16), nullable=False, default='chat', server_default='chat')
     current_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -85,9 +87,10 @@ class ProviderModelRecord(Base):
 
 
 class ModelDefaultRecord(Base):
-    """Per-Tenant personal UUID or tenant preference; never an execution override."""
+    """Per-Tenant personal UUID or tenant preference, one per model type; never an execution override."""
 
     __tablename__ = 'model_defaults'
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id'), primary_key=True)
     scope_key: Mapped[str] = mapped_column(String(36), primary_key=True)
+    model_type: Mapped[str] = mapped_column(String(16), primary_key=True, default='chat', server_default='chat')
     version_id: Mapped[UUID] = mapped_column(ForeignKey('model_profile_versions.id'), nullable=False)

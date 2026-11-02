@@ -236,10 +236,75 @@ def test_defaults_fallback_and_model_edit_advances_only_defaults(settings_client
     model = add_model(client, path, provider)
     assert client.put(path + '/default', json={'scope': 'tenant', 'version_id': model['version_id']}).status_code == 200
     updated = client.put(path + '/providers/' + provider['id'] + '/models/' + model['id'], json={'name': 'next-model'}).json()
-    assert client.get(path).json()['defaults']['tenant'] == updated['version_id']
+    assert client.get(path).json()['defaults']['tenant']['chat'] == updated['version_id']
     add_member_role(client, path.removesuffix('/model-settings'), identity, owner)
     identity[0] = member
     assert client.post(path + '/agents', json={'name': 'Use space default'}).status_code == 201
     assert client.put(path + '/default', json={'version_id': updated['version_id']}).status_code == 200
     assert client.put(path + '/default', json={'version_id': None}).status_code == 200
     assert 'personal' not in client.get(path).json()['defaults']
+
+
+def test_model_type_is_validated_fixed_and_limits_defaults(settings_client):
+    """Typed models: unknown types are rejected, a model keeps its type, and defaults are per type."""
+    client, path, *_ = settings_client
+    provider = add_provider(client, path, 'tenant')
+    assert client.post(path + '/providers/' + provider['id'] + '/models', json={'name': 'x', 'model_type': 'translate'}).status_code == 422
+    chat = client.post(path + '/providers/' + provider['id'] + '/models', json={'name': 'chat-model'}).json()
+    embed = client.post(path + '/providers/' + provider['id'] + '/models', json={'name': 'embed-model', 'model_type': 'embedding'})
+    assert embed.status_code == 201, embed.text
+    embed = embed.json()
+    listed = {item['id']: item['model_type'] for item in client.get(path).json()['providers'][0]['models']}
+    assert listed == {chat['id']: 'chat', embed['id']: 'embedding'}
+    # The type is fixed for the profile; an edit that names another type is a conflict, not a silent change.
+    changed = client.put(path + '/providers/' + provider['id'] + '/models/' + embed['id'], json={'name': 'embed-model', 'model_type': 'chat'})
+    assert changed.status_code == 409
+    # A default slot only accepts a model of its own type.
+    assert client.put(path + '/default', json={'scope': 'tenant', 'model_type': 'chat', 'version_id': embed['version_id']}).status_code == 409
+    assert client.put(path + '/default', json={'scope': 'tenant', 'model_type': 'embedding', 'version_id': embed['version_id']}).status_code == 200
+    assert client.put(path + '/default', json={'scope': 'tenant', 'model_type': 'chat', 'version_id': chat['version_id']}).status_code == 200
+    defaults = client.get(path).json()['defaults']
+    assert defaults == {'tenant': {'chat': chat['version_id'], 'embedding': embed['version_id']}}
+    assert client.put(path + '/default', json={'scope': 'tenant', 'model_type': 'embedding', 'version_id': None}).status_code == 200
+    assert client.get(path).json()['defaults'] == {'tenant': {'chat': chat['version_id']}}
+
+
+def test_draft_connection_test_persists_nothing_and_reports_unsupported_types(settings_client, monkeypatch):
+    """Unsaved configurations can be tested; non-chat types never reach the supplier."""
+    client, path, *_ = settings_client
+    import nexus_api.http.model_settings as endpoint
+    calls = []
+    class Fake:
+        def __init__(self, **kwargs): calls.append(kwargs)
+        async def stream(self, request):
+            yield
+        async def close(self): pass
+    monkeypatch.setattr(endpoint, 'OpenAICompatibleModel', Fake)
+    monkeypatch.setattr(endpoint, 'provider_client', lambda *a, **kw: None)
+    before = len(client.get(path).json()['providers'])
+    body = {'base_url': 'https://model.example/v1', 'model_name': 'draft-model', 'api_key': 'draft-private-key', 'scope': 'personal'}
+    ok = client.post(path + '/test', json=body)
+    assert ok.json() == {'ok': True, 'message': '连接成功，流式响应正常'}
+    assert calls and calls[-1]['api_key'] == 'draft-private-key'
+    assert 'draft-private-key' not in ok.text
+    assert len(client.get(path).json()['providers']) == before
+    # Rate limit applies to draft tests per user, like saved-model tests.
+    assert client.post(path + '/test', json=body).status_code == 409
+    skipped = client.post(path + '/test', json={**body, 'model_type': 'embedding'})
+    assert skipped.status_code == 409  # still inside the cooldown window, so the limit is checked first
+    endpoint.draft_test_started.clear()
+    before_calls = len(calls)
+    skipped = client.post(path + '/test', json={**body, 'model_type': 'embedding'})
+    assert skipped.json()['code'] == 'unsupported_for_type'
+    assert len(calls) == before_calls
+
+
+def test_draft_test_requires_a_key_for_new_providers_and_scope_permission(settings_client):
+    client, path, identity, owner, member, _ = settings_client
+    missing = client.post(path + '/test', json={'base_url': 'https://model.example/v1', 'model_name': 'm', 'scope': 'personal'})
+    assert missing.status_code == 422
+    assert 'API Key is required' in missing.text
+    identity[0] = member
+    denied = client.post(path + '/test', json={'base_url': 'https://model.example/v1', 'model_name': 'm', 'scope': 'tenant', 'api_key': 'k'})
+    assert denied.status_code == 403
+    assert 'k' not in denied.text

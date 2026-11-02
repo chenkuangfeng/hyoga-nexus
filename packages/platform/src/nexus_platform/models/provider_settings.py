@@ -154,7 +154,7 @@ def view(db: Session, row: Provider) -> dict[str, object]:
     for link in db.scalars(select(Link).where(Link.provider_id == row.id, Link.active.is_(True))):
         profile = db.get(Profile, link.profile_id)
         version = db.get(Version, profile.current_version_id)
-        models.append({'id': str(profile.id), 'name': version.model_name,
+        models.append({'id': str(profile.id), 'name': version.model_name, 'model_type': profile.model_type,
                        'version_id': str(version.id), 'version': version.version, 'options': version.options})
     return {'id': str(row.id), 'name': row.name, 'base_url': row.base_url,
             'scope': 'personal' if row.owner_user_id else 'tenant',
@@ -169,15 +169,14 @@ def list_settings(db: Session, principal: Principal, tenant_id: UUID) -> dict[st
         user, membership = context(db, principal, tenant_id)
         rows = db.scalars(select(Provider).where(Provider.tenant_id == tenant_id, Provider.active.is_(True)))
         providers = [view(db, row) for row in rows if row.owner_user_id in (None, user.id)]
-        defaults = {}
-        for scope, key in [('personal', str(user.id)), ('tenant', 'tenant')]:
-            item = db.get(Default, (tenant_id, key))
-            if item:
-                try:
-                    authorize_model(db, tenant_id, user.id, item.version_id)
-                    defaults[scope] = str(item.version_id)
-                except (NotFound, Forbidden):
-                    pass
+        defaults: dict[str, dict[str, str]] = {}
+        scopes = {str(user.id): 'personal', 'tenant': 'tenant'}
+        for item in db.scalars(select(Default).where(Default.tenant_id == tenant_id, Default.scope_key.in_(list(scopes)))):
+            try:
+                authorize_model(db, tenant_id, user.id, item.version_id)
+                defaults.setdefault(scopes[item.scope_key], {})[item.model_type] = str(item.version_id)
+            except (NotFound, Forbidden):
+                pass
         return {'providers': providers, 'defaults': defaults, 'can_manage_tenant': membership.role in ADMIN_ROLES}
 
 
@@ -261,11 +260,13 @@ def new_version(db: Session, provider: Provider, profile: Profile, model_name: s
     return version
 
 
-def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None) -> dict[str, str]:
+def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None, model_type: str = 'chat') -> dict[str, str]:
     """Create a provider-bound profile or append its next version after management authorization.
 
-    Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten."""
+    Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten.
+    The capability type is fixed when the profile is created; changing it on edit is a Conflict."""
     model_options = validate_model_options(model_options or {})
+    model_type = validate_model_type(model_type)
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         provider = provider_access(db, tenant_id, user.id, provider_id, manage=True)
@@ -274,14 +275,16 @@ def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: 
             if not link or link.provider_id != provider.id or not link.active:
                 raise NotFound('Model unavailable')
             profile = db.get(Profile, profile_id)
+            if profile.model_type != model_type:
+                raise Conflict('Model type cannot be changed; add a new model instead')
         else:
             profile = Profile(id=new_id(), tenant_id=tenant_id, name='configured-' + str(new_id()),
-                provider=provider.name, created_by=user.id, created_at=utc_now())
+                provider=provider.name, model_type=model_type, created_by=user.id, created_at=utc_now())
             db.add(profile)
             db.flush()
             db.add(Link(profile_id=profile.id, provider_id=provider.id, active=True))
         version = new_version(db, provider, profile, model_name, model_options)
-        audit(db, tenant_id, user.id, 'provider.model_saved', 'model_profile', str(profile.id))
+        audit(db, tenant_id, user.id, 'provider.model_saved', 'model_profile', str(profile.id), {'model_type': model_type})
         return {'id': str(profile.id), 'version_id': str(version.id)}
 
 
@@ -310,32 +313,37 @@ def disable(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUI
         audit(db, tenant_id, user.id, 'provider.disabled', 'model_provider', str(provider.id))
 
 
-def set_default(db: Session, principal: Principal, tenant_id: UUID, scope: str, version_id: UUID | None) -> None:
-    """Set or clear the personal/space default to an authorized current model version.
+def set_default(db: Session, principal: Principal, tenant_id: UUID, scope: str, version_id: UUID | None, model_type: str = 'chat') -> None:
+    """Set or clear the personal/space default for one model type to an authorized current version.
 
-    Space defaults require an administrator and cannot use a personal provider. No existing
-    AgentVersion, Session or Run is modified; invalid versions raise NotFound or Conflict."""
+    Space defaults require an administrator and cannot use a personal provider. A version can only
+    fill the slot of its own type. No existing AgentVersion, Session or Run is modified; invalid
+    versions raise NotFound or Conflict."""
+    model_type = validate_model_type(model_type)
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         if scope == 'tenant':
             require_membership(db, tenant_id, user.id)
             require_api_permission(db, tenant_id, user.id, "models:manage")
         key = 'tenant' if scope == 'tenant' else str(user.id)
-        row = db.get(Default, (tenant_id, key))
+        row = db.get(Default, (tenant_id, key, model_type))
         if version_id:
             version = authorize_model(db, tenant_id, user.id, version_id)
-            if db.get(Profile, version.profile_id).current_version_id != version.id:
+            profile = db.get(Profile, version.profile_id)
+            if profile.current_version_id != version.id:
                 raise Conflict('Choose the current model version')
+            if profile.model_type != model_type:
+                raise Conflict('Model type does not match this default')
             link = db.get(Link, version.profile_id)
             if scope == 'tenant' and link and db.get(Provider, link.provider_id).owner_user_id:
                 raise Forbidden('Personal models cannot be tenant defaults')
             if row:
                 row.version_id = version_id
             else:
-                db.add(Default(tenant_id=tenant_id, scope_key=key, version_id=version_id))
+                db.add(Default(tenant_id=tenant_id, scope_key=key, model_type=model_type, version_id=version_id))
         elif row:
             db.delete(row)
-        audit(db, tenant_id, user.id, 'model.default_changed', 'model_default', key)
+        audit(db, tenant_id, user.id, 'model.default_changed', 'model_default', key, {'model_type': model_type})
 
 
 class StoredCredentialResolver:
@@ -372,6 +380,18 @@ class StoredCredentialResolver:
                 raise Forbidden('Credential unavailable')
             audit(db, run.tenant_id, principal_id, 'credential.resolved', 'credential_reference', str(reference.id))
             return CredentialLease(decrypt(secret), utc_now() + timedelta(minutes=5))
+
+
+# Capability types a configured model can declare. Only 'chat' is executed in this stage; the others
+# are stored and shown so that knowledge-base features (roadmap step 6) can use them later.
+MODEL_TYPES = ('chat', 'embedding', 'rerank', 'vision', 'speech')
+
+
+def validate_model_type(value: str) -> str:
+    """Accept only the fixed capability types; anything else is a validation error, not a default."""
+    if value not in MODEL_TYPES:
+        raise ValueError('Unsupported model type')
+    return value
 
 
 def validate_model_options(options: dict) -> dict:
