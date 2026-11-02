@@ -69,9 +69,10 @@ uvicorn nexus_api.main:app --reload
 另一个终端，切换到 Node.js 22.12+ 后启动前端：
 
 ```bash
+corepack enable   # 一次性启用 pnpm，版本由 apps/web/package.json 的 packageManager 指定
 cd apps/web
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 访问 Vite 输出地址。开发代理将 `/api` 转发到 `127.0.0.1:8000`；API 文档为 `http://127.0.0.1:8000/docs`。生产环境需配置同源 API 代理。
@@ -79,7 +80,7 @@ npm run dev
 ```bash
 uv run --locked pytest
 cd apps/web
-npm run build
+pnpm build
 ```
 
 参考项目独立保留在 `/project`，不嵌入本仓库。

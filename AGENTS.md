@@ -41,15 +41,15 @@
 
 启动前按 [项目 README](README.md) 配置 PostgreSQL 连接和认证环境；Native 模型配置见 [worker 使用说明](apps/worker/README.md)。
 
-### 前端（Vue 3 / TypeScript / npm）
+### 前端（Vue 3 / TypeScript / pnpm）
 
-使用 Node.js 22.12+，以下命令在 `apps/web/` 目录执行：
+使用 Node.js 22.12+ 与 pnpm 10（`corepack enable` 后按 `package.json` 的 `packageManager` 自动使用）。以下命令在 `apps/web/` 目录执行：
 
-- **安装依赖**：`npm ci`
-- **启动开发服务**：`npm run dev`
-- **类型检查与生产构建**：`npm run build`
-- **预览生产构建**：`npm run preview`
-- **浏览器测试**：`npm run test:browser`（需先安装 Playwright Chromium 并启动 Vite，详见 [Web 使用说明](apps/web/README.md)）
+- **安装依赖**：`pnpm install --frozen-lockfile`
+- **启动开发服务**：`pnpm dev`
+- **类型检查与生产构建**：`pnpm build`
+- **预览生产构建**：`pnpm preview`
+- **浏览器测试**：`pnpm test:browser`（需先安装 Playwright Chromium 并启动 Vite，详见 [Web 使用说明](apps/web/README.md)）
 
 ## 规则入口
 

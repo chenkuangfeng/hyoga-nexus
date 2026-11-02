@@ -1,6 +1,7 @@
 {
   "name": "@hyoga-nexus/web",
   "version": "0.1.0",
+  "packageManager": "pnpm@10.34.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -24,5 +25,10 @@
   },
   "engines": {
     "node": ">=22.12.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
