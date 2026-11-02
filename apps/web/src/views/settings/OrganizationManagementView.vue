@@ -282,7 +282,7 @@ header h1 { margin: 0; }
 .node-meta { color: var(--muted-text); font-size: 13px; }
 .node-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { display: inline-block; margin: 2px 6px 2px 0; padding: 2px 8px; border-radius: 999px; background: var(--selected); font-size: 12px; }
-.tag.primary { background: var(--el-color-primary); color: #fff; }
+.tag.primary { background: var(--el-color-primary); color: var(--color-text-inverse); }
 .tag.disabled { background: var(--el-fill-color); color: var(--muted-text); }
 .people, .bindings { list-style: none; padding: 0; margin: 0; }
 .people li, .bindings li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--el-border-color-lighter); }

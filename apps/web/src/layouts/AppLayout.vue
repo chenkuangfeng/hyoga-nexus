@@ -78,9 +78,9 @@ watch(() => [route.fullPath, workspace.user?.is_platform_admin], () => {
 .app-frame { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 100vh; }
 .app-frame--narrow { display: block; }
 .sidebar-slot { position: sticky; top: 0; height: 100vh; }
-.sidebar-slot--drawer { position: fixed; inset: 0 auto 0 0; z-index: 30; box-shadow: 0 8px 24px rgb(15 23 42 / 0.18); }
+.sidebar-slot--drawer { position: fixed; inset: 0 auto 0 0; z-index: 30; box-shadow: var(--shadow-3); }
 .sidebar-slot--drawer:not(.sidebar-slot--open) { display: none; }
-.drawer-backdrop { position: fixed; inset: 0; z-index: 20; background: rgb(15 23 42 / 0.32); }
+.drawer-backdrop { position: fixed; inset: 0; z-index: 20; background: var(--color-mask); }
 .top-bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .icon-button { min-width: 44px; min-height: 44px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 18px; }
 .icon-button:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }

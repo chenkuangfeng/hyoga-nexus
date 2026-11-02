@@ -124,8 +124,8 @@ function onComposerKey(event: KeyboardEvent) {
 .title { margin: 0; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
 .status { font-size: 13px; color: var(--muted-text); }
 .thread { flex: 1; min-height: 240px; padding: 8px 0 16px; }
-.composer-wrap { position: sticky; bottom: 0; display: grid; gap: 8px; padding-bottom: 8px; background: var(--el-bg-color, #fff); }
-.composer { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 1px 2px rgb(15 23 42 / 0.04); }
+.composer-wrap { position: sticky; bottom: 0; display: grid; gap: 8px; padding-bottom: 8px; background: var(--color-bg-container); }
+.composer { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-bg-container); box-shadow: var(--shadow-1); }
 .composer :deep(.el-textarea__inner) { box-shadow: none; border: 0; padding: 4px 2px; resize: none; }
 .composer-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .agent-select { width: 220px; }

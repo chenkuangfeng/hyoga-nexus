@@ -1,0 +1,93 @@
+/*
+ * Design tokens for the workbench (light theme).
+ *
+ * Values follow the light palette of WeKnora's frontend theme (Tencent WeKnora, pinned at e1f9a6166,
+ * `frontend/src/assets/theme/theme.css`), rewritten under Nexus names. The palette is used by Element
+ * Plus through `element-theme.css`; components must use these tokens instead of raw colors.
+ * Dark theme is not implemented yet (see the i18n `themeHint`).
+ */
+:root {
+  /* Typography: Chinese system faces first, then Latin fallbacks. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Brand green scale. Text, filled buttons and focus use -7 or darker: they reach WCAG AA 4.5:1 with
+   * white or as text on white. -4 is decorative only (accents, illustrations), never a label. */
+  --color-brand-1: #e9f8ec;
+  --color-brand-2: #09f479;
+  --color-brand-3: #08dd6e;
+  --color-brand-4: #07c05f;
+  --color-brand-5: #06b04d;
+  --color-brand-6: #049b38;
+  --color-brand-7: #038626;
+  --color-brand-8: #027218;
+  --color-brand-9: #015e0d;
+  --color-brand-10: #004b05;
+  --color-brand: var(--color-brand-7);
+  --color-brand-hover: var(--color-brand-6);
+  --color-brand-active: var(--color-brand-8);
+  --color-brand-accent: var(--color-brand-4);
+
+  /* Status colours (-7 shades, AA on white). Pair them with text or an icon, never colour alone. */
+  --color-success: #067945;
+  --color-success-light: #e8f8f2;
+  --color-warning: #ba431b;
+  --color-warning-light: #fef3e6;
+  --color-danger: #c9353f;
+  --color-danger-light: #fdecee;
+  --color-info: #5e5e5e;
+
+  /* Neutral scale. */
+  --color-gray-1: #f3f3f3;
+  --color-gray-2: #eeeeee;
+  --color-gray-3: #e7e7e7;
+  --color-gray-4: #dcdcdc;
+  --color-gray-5: #c5c5c5;
+  --color-gray-6: #a6a6a6;
+  --color-gray-7: #8b8b8b;
+  --color-gray-8: #777777;
+  --color-gray-9: #5e5e5e;
+  --color-gray-10: #4b4b4b;
+  --color-gray-11: #383838;
+  --color-gray-12: #2c2c2c;
+
+  /* Surfaces. */
+  --color-bg-page: var(--color-gray-2);
+  --color-bg-container: #ffffff;
+  --color-bg-sidebar: #f9f9f9;
+  --color-bg-hover: var(--color-gray-1);
+  --color-bg-active: var(--color-gray-3);
+  --color-bg-muted: var(--color-gray-1);
+
+  /* Text: alpha-based so that it stays readable on any surface above. */
+  --color-text-primary: rgb(0 0 0 / 0.9);
+  --color-text-secondary: rgb(0 0 0 / 0.6);
+  --color-text-placeholder: rgb(0 0 0 / 0.4);
+  --color-text-disabled: rgb(0 0 0 / 0.26);
+  --color-text-inverse: #ffffff;
+
+  /* Overlay scrim behind drawers and dialogs. */
+  --color-mask: rgb(0 0 0 / 0.32);
+
+  /* Borders. */
+  --color-border: var(--color-gray-3);
+  --color-border-strong: var(--color-gray-4);
+
+  /* Shape and elevation. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --radius-xl: 12px;
+  --shadow-1: 0 1px 10px rgb(0 0 0 / 0.05), 0 4px 5px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.12);
+  --shadow-2: 0 3px 14px 2px rgb(0 0 0 / 0.05), 0 8px 10px 1px rgb(0 0 0 / 0.06), 0 5px 5px -3px rgb(0 0 0 / 0.1);
+  --shadow-3: 0 6px 30px 5px rgb(0 0 0 / 0.05), 0 16px 24px 2px rgb(0 0 0 / 0.04), 0 8px 10px -5px rgb(0 0 0 / 0.08);
+
+  /* Spacing on a 4px grid. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+}

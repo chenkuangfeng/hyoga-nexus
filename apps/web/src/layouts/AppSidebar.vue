@@ -188,7 +188,7 @@ function onUserCommand(command: string | number | object) {
 .app-sidebar { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; height: 100vh; width: 248px; padding: 12px; box-sizing: border-box; background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; transition: width 0.2s ease; }
 .app-sidebar--collapsed { width: 60px; }
 .sidebar-head { display: flex; align-items: center; gap: 8px; min-height: 40px; }
-.brand { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--el-color-primary); color: #fff; font-weight: 700; font-size: 13px; flex: none; }
+.brand { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--el-color-primary); color: var(--color-text-inverse); font-weight: 700; font-size: 13px; flex: none; }
 .brand-name { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icon-button { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 16px; line-height: 1; flex: none; }
 .icon-button--solo { margin: 0 auto; }
@@ -213,7 +213,7 @@ function onUserCommand(command: string | number | object) {
 .sidebar-user { padding-top: 10px; border-top: 1px solid var(--border); }
 .user-button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 4px; border: 0; border-radius: 6px; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .user-button:hover { background: var(--selected); }
-.avatar { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--el-color-primary); color: #fff; font-weight: 600; flex: none; }
+.avatar { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--el-color-primary); color: var(--color-text-inverse); font-weight: 600; flex: none; }
 .user-text { display: grid; min-width: 0; }
 .muted { color: var(--muted-text); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .app-sidebar { transition: none; } }
