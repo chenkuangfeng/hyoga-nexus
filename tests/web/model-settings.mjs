@@ -73,6 +73,8 @@ try {
   assert.equal(await page.locator('#provider-key').inputValue(), '')
   await page.getByRole('button', { name: '取消', exact: true }).click()
   await page.setViewportSize({ width: 375, height: 900 })
+  // Let the shell finish its responsive transition before measuring; checking mid-transition is flaky.
+  await page.waitForTimeout(150)
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
   await page.getByRole('button', { name: '停用供应商', exact: true }).click()
   await page.getByRole('button', { name: '停用', exact: true }).click()
