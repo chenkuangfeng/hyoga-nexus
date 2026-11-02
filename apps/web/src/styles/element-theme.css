@@ -1,7 +1,8 @@
 /*
  * Maps the workbench tokens (tokens.css) onto Element Plus so every Element component shares one
  * palette, radius and type scale. Loaded after element-plus/dist/index.css so these values win.
- * Status and primary colours are the -7 shades from tokens.css (AA contrast for labels and text).
+ * Primary is the -8 shade and status colours are -7 shades from tokens.css, chosen for AA contrast
+ * on the gray page surface, not only on white.
  * The light-N/dark-2 variants are mixes with white/black, as in Element Plus's own scale.
  */
 :root {
@@ -14,13 +15,13 @@
   --el-font-size-extra-small: var(--text-sm);
   --el-font-line-height-primary: 1.5;
 
-  --el-color-primary: #038626;
-  --el-color-primary-light-3: #4faa67;
-  --el-color-primary-light-5: #81c292;
-  --el-color-primary-light-7: #b3dbbe;
-  --el-color-primary-light-8: #cde7d4;
-  --el-color-primary-light-9: #e6f3e9;
-  --el-color-primary-dark-2: #026b1e;
+  --el-color-primary: #027218;
+  --el-color-primary-light-3: #4e9c5d;
+  --el-color-primary-light-5: #80b88c;
+  --el-color-primary-light-7: #b3d5ba;
+  --el-color-primary-light-8: #cce3d1;
+  --el-color-primary-light-9: #e6f1e8;
+  --el-color-primary-dark-2: #025b13;
   --el-color-success: #067945;
   --el-color-success-light-3: #51a17d;
   --el-color-success-light-5: #82bca2;
@@ -75,4 +76,67 @@
   --el-box-shadow: var(--shadow-2);
   --el-box-shadow-light: var(--shadow-1);
   --el-box-shadow-dark: var(--shadow-3);
+}
+
+/*
+ * Element Plus under <html data-theme="dark"> (see tokens.css). Text, surface and border colours come
+ * through the token references above, so only the values that are literal here are redefined.
+ * Tints and shades are computed against the dark container (#242424) instead of white, so light-N
+ * is a subtle wash (N/10 of the surface) and dark-2 is 20% black.
+ */
+:root[data-theme="dark"] {
+  --el-color-primary: #07c05f;
+  --el-color-primary-light-3: #10914d;
+  --el-color-primary-light-5: #167242;
+  --el-color-primary-light-7: #1b5336;
+  --el-color-primary-light-8: #1e4330;
+  --el-color-primary-light-9: #21342a;
+  --el-color-primary-dark-2: #069a4c;
+  --el-color-success: #46bf96;
+  --el-color-success-light-3: #3c9074;
+  --el-color-success-light-5: #35725d;
+  --el-color-success-light-7: #2e5346;
+  --el-color-success-light-8: #2b433b;
+  --el-color-success-light-9: #27332f;
+  --el-color-success-dark-2: #389978;
+  --el-color-warning: #e8935c;
+  --el-color-warning-light-3: #ad724b;
+  --el-color-warning-light-5: #865c40;
+  --el-color-warning-light-7: #5f4535;
+  --el-color-warning-light-8: #4b3a2f;
+  --el-color-warning-light-9: #382f2a;
+  --el-color-warning-dark-2: #ba764a;
+  --el-color-danger: #de6670;
+  --el-color-danger-light-3: #a65259;
+  --el-color-danger-light-5: #81454a;
+  --el-color-danger-light-7: #5c383b;
+  --el-color-danger-light-8: #493133;
+  --el-color-danger-light-9: #372b2c;
+  --el-color-danger-dark-2: #b2525a;
+  --el-color-info: #a6a6a6;
+  --el-color-info-light-3: #7f7f7f;
+  --el-color-info-light-5: #656565;
+  --el-color-info-light-7: #4b4b4b;
+  --el-color-info-light-8: #3e3e3e;
+  --el-color-info-light-9: #313131;
+  --el-color-info-dark-2: #858585;
+
+  /* Light-theme fills were gray-2 and gray-1, which would be bright panels on the dark surface. */
+  --el-fill-color: var(--color-gray-12);
+  --el-fill-color-light: var(--color-gray-13);
+  --el-fill-color-lighter: var(--color-gray-13);
+  --el-fill-color-blank: var(--color-bg-container);
+  --el-border-color-extra-light: var(--color-gray-12);
+}
+
+/*
+ * Filled buttons keep white text in the light theme. In dark, the bright fills need dark text to meet AA.
+ */
+:root[data-theme="dark"] .el-button--primary,
+:root[data-theme="dark"] .el-button--success,
+:root[data-theme="dark"] .el-button--warning,
+:root[data-theme="dark"] .el-button--danger {
+  --el-button-text-color: var(--color-text-inverse);
+  --el-button-hover-text-color: var(--color-text-inverse);
+  --el-button-disabled-text-color: var(--color-text-inverse);
 }
