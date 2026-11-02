@@ -32,35 +32,31 @@ Python 3.11+ / FastAPI / 多包 uv workspace；Vue 3 / TypeScript / Element Plus
 uv sync --locked --extra dev
 # 首次配置；已有文件时不要覆盖。
 cp configs/nexus.example.toml configs/nexus.toml
-# 编辑 configs/nexus.toml，填写实际的数据库连接串后执行：
-export NEXUS_AUTH_MODE=development
-export NEXUS_DEV_USER_ID=local-developer
+# 编辑 configs/nexus.toml，填写实际的数据库连接串，并在 `[auth]` 中取消注释 `mode = "development"`（仅本机）后执行：
 uv run alembic -c alembic.ini upgrade head
 uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
 ```
 
-API、worker 和 Alembic 自动读取当前工作目录下的 `configs/nexus.toml`，无需加载 `.env`。请从仓库根目录启动；安装后部署在部署工作目录提供相同路径的文件。模板见 [configs/nexus.example.toml](configs/nexus.example.toml)，配置规则见 [configs 说明](configs/README.md)。真实配置文件已被 Git 忽略；不要提交数据库密码。PostgreSQL 连接串中用户名或密码的特殊字符需进行 URL 编码。
+API、worker 和 Alembic 自动读取当前工作目录下的 `configs/nexus.toml`，它是全部部署配置的唯一来源（数据库、认证、日志、加密主密钥、模型凭据与网络白名单等）；不读取环境变量和 `.env`。请从仓库根目录启动；安装后部署在部署工作目录提供相同路径的文件。模板见 [configs/nexus.example.toml](configs/nexus.example.toml)，配置规则见 [configs 说明](configs/README.md)。真实配置文件已被 Git 忽略；不要提交数据库密码。PostgreSQL 连接串中用户名或密码的特殊字符需进行 URL 编码。
 
 Windows PowerShell 首次配置：
 
 ```powershell
 Copy-Item configs/nexus.example.toml configs/nexus.toml
 notepad configs/nexus.toml
-$env:NEXUS_AUTH_MODE = "development"
-$env:NEXUS_DEV_USER_ID = "local-developer"
+# 在 configs/nexus.toml 的 [auth] 中设置 mode = "development"
 uv run alembic -c alembic.ini upgrade head
 uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
 ```
 
-配置优先级为显式传入的数据库连接串 > TOML 文件中的 `[database].url` > 已设置的 `NEXUS_DATABASE_URL`。文件缺失或没有数据库字段时才回退环境变量；格式错误、空值或错误类型会明确报错。认证与模型加密等其他部署配置仍使用原有环境变量，不从 `.env` 自动读取。开发认证使用固定的单一主体，不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `NEXUS_AUTH_MODE=external` 并在 API 组合入口注册 provider。
+显式传入的数据库连接串优先；否则读取 `[database].url`，缺失或格式错误会明确报错，不回退其他来源。认证模式按 `[auth].mode` 配置（`development`、`session` 或 `external`），开发认证的主体为 `[auth].dev_user_id`（缺省 `local-developer`），不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `mode = "external"` 并在 API 组合入口注册 provider。
 
 或者使用 Python 3.11+ 环境：
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-export NEXUS_AUTH_MODE=development
-export NEXUS_DEV_USER_ID=local-developer
+# 在 configs/nexus.toml 的 [auth] 中设置 mode = "development"
 python -m pip install --upgrade pip
 python scripts/install_dev.py
 uvicorn nexus_api.main:app --reload

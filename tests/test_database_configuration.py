@@ -13,30 +13,29 @@ from nexus_platform.persistence.database import create_database_engine
 
 
 @pytest.fixture
-def deployment(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv('NEXUS_DATABASE_URL', raising=False)
-    (tmp_path / 'configs').mkdir()
-    return tmp_path / 'configs' / 'nexus.toml'
+def deployment(deployment_config):
+    """Empty deployment directory; the test writes configs/nexus.toml through the returned path."""
+    return deployment_config()
 
 
 def test_sources_and_explicit_injection(deployment, monkeypatch):
+    # Missing file, missing section and missing key are all errors: there is no environment fallback.
     with pytest.raises(DatabaseConfigurationError, match='configs/nexus.toml'):
         resolve_database_url()
-    monkeypatch.setenv('NEXUS_DATABASE_URL', 'sqlite:///environment.db')
-    assert resolve_database_url() == 'sqlite:///environment.db'
     deployment.write_text('[other]\nvalue = true\n')
-    assert resolve_database_url() == 'sqlite:///environment.db'
+    with pytest.raises(DatabaseConfigurationError, match='configs/nexus.toml'):
+        resolve_database_url()
     deployment.write_text('[database]\n')
-    assert resolve_database_url() == 'sqlite:///environment.db'
+    with pytest.raises(DatabaseConfigurationError, match='configs/nexus.toml'):
+        resolve_database_url()
     deployment.write_text('[database]\nurl = "sqlite:///file.db"\n')
     assert resolve_database_url() == 'sqlite:///file.db'
     assert resolve_database_url('sqlite:///explicit.db') == 'sqlite:///explicit.db'
     engine = create_database_engine('sqlite://')
     assert engine.url.database is None
     engine.dispose()
-    # dotenv is deliberately ignored.
-    monkeypatch.delenv('NEXUS_DATABASE_URL')
+    # Neither environment variables nor a .env file are read.
+    monkeypatch.setenv('NEXUS_DATABASE_URL', 'sqlite:///environment.db')
     deployment.unlink()
     Path('.env').write_text('NEXUS_DATABASE_URL=sqlite:///dotenv.db\n')
     with pytest.raises(DatabaseConfigurationError):
@@ -52,9 +51,8 @@ def test_sources_and_explicit_injection(deployment, monkeypatch):
     '[database]\nurl = "secret-password"',
     '[database]\nurl = "postgresql://user:secret-password@localhost:bad/db"',
 ])
-def test_invalid_file_does_not_fall_back_or_expose_values(deployment, monkeypatch, content):
+def test_invalid_file_does_not_fall_back_or_expose_values(deployment, content):
     deployment.write_text(content)
-    monkeypatch.setenv('NEXUS_DATABASE_URL', 'sqlite:///fallback.db')
     with pytest.raises(DatabaseConfigurationError) as error:
         resolve_database_url()
     assert 'secret-password' not in str(error.value)

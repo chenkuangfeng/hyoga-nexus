@@ -8,14 +8,14 @@ import signal
 import socket
 import threading
 
-from nexus_platform.configuration import DatabaseConfigurationError, model_connection_pool, resolve_database_url
+from nexus_platform.configuration import DatabaseConfigurationError, logging_level, model_connection_pool, resolve_database_url
 from nexus_runtimes.native.models.network import configure_connection_pool
 from nexus_platform.persistence.database import create_database_engine, session_factory
 from nexus_core.platform import utc_now
 from nexus_platform.runs import session_ledger as ledger
 from nexus_platform.runs.service import claim_next, process_claimed
 
-logging.basicConfig(level=os.getenv("NEXUS_LOG_LEVEL", "INFO"))
+logging.basicConfig(level=logging_level())
 logger = logging.getLogger("nexus_worker")
 
 

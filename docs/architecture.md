@@ -376,7 +376,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 **乐观并发**：保存快照带预期水位，不一致则以 `session_watermark_conflict` 拒绝并重新读取。消息写入只递增水位，不做比较。
 
-**连接配置**：`configs/nexus.toml` 的 `[database].url` 为默认来源，优先级为显式参数 > TOML > `NEXUS_DATABASE_URL`。API、worker 与 Alembic 共用解析逻辑，不自动加载 `.env`。
+**连接配置**：`configs/nexus.toml` 的 `[database].url` 为唯一来源，显式参数优先。API、worker 与 Alembic 共用解析逻辑；环境变量与 `.env` 不参与配置。
 
 ### 2.13 模型与凭据
 
@@ -385,7 +385,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 - **配置**：供应商记录归属 Tenant；`owner_user_id` 非空时仅该用户可用，为空时为空间共享。每个供应商有多个 ModelProfile，修改产生不可变版本。
 - **协议**：`options.protocol` 必须显式设置（如 `openai_chat_completions`），不从供应商名称猜测。首个适配器使用锁定版本的 `openai` SDK 异步 Chat Completions 流；禁用 SDK 自动重试；工具执行后不重放整个回合。
 - **凭据**：Key 通过 API 一次性接收，使用 Fernet 加密保存在独立凭据表。主密钥经环境注入 API 与 worker，不写入数据库或仓库。缺少主密钥或密文无效时拒绝解析，不回退为明文。
-- **环境变量凭据**：`env://` 引用需同时登记在 `NEXUS_MODEL_CREDENTIAL_ALLOWLIST` 中，默认拒绝全部环境变量名。
+- **部署模型凭据**：`env://NAME` 引用需同时登记在 `configs/nexus.toml` 的 `[model_credentials]` 中，未登记的名称一律拒绝。
 - **网络出口**：HTTPX 调用经目的地址策略：默认只允许公网 HTTPS，检查 DNS 解析结果并固定 IP，保留 TLS/SNI 校验，禁用重定向，不使用环境代理。连接测试与正式调用共用同一策略。
 - **默认与固定**：显式模型优先于个人默认，个人默认优先于空间默认。默认只用于新智能体选择，不改已发布版本与已有会话。个人模型在发布、会话创建和执行时都校验归属。
 - **运维边界**：主密钥丢失则密文无法恢复，需纳入部署秘密管理备份；轮换需离线重加密，不提供自动轮换。停用供应商不撤回已发出的请求，之后的回合拒绝执行。

@@ -44,8 +44,8 @@ def test_non_table_section_fails_closed(tmp_path):
         model_connection_pool(_write(tmp_path, 'model_connection_pool = 3\n'))
 
 
-def test_configured_limits_apply_to_pools_created_afterwards(monkeypatch):
-    monkeypatch.setenv('NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST', '127.0.0.1')
+def test_configured_limits_apply_to_pools_created_afterwards(monkeypatch, deployment_config):
+    deployment_config('[model_network]\nprivate_host_allowlist = ["127.0.0.1"]\n')
     monkeypatch.setattr(network, '_POOLS', {})
     monkeypatch.setattr(network, '_POOL_LIMITS', network._POOL_LIMITS)
     network.configure_connection_pool(max_connections=7, max_keepalive_connections=3, keepalive_expiry=2.5)

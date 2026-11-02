@@ -55,9 +55,8 @@ def test_content_is_bounded_before_storage(database):
             assert len(record.content) == 8000
 
 
-def test_migration_keeps_existing_summaries_and_downgrade_keeps_the_effective_one(tmp_path, monkeypatch):
+def test_migration_keeps_existing_summaries_and_downgrade_keeps_the_effective_one(tmp_path):
     url = 'sqlite:///' + str(tmp_path / 'summary-migration.db')
-    monkeypatch.setenv('NEXUS_DATABASE_URL', url)
     config = Config('alembic.ini')
     config.attributes['database_url'] = url
     command.upgrade(config, 'a8c4e2f1d7b3')

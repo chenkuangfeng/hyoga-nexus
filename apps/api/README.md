@@ -4,8 +4,8 @@ FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型�
 
 ## 登录与首个账号
 
-- 会话 Cookie 默认带 `Secure` 标记；仅在本地 HTTP 调试时设置 `NEXUS_COOKIE_SECURE=0`。
-- 企业微信扫码登录需要 `NEXUS_WECOM_CORP_ID`、`NEXUS_WECOM_AGENT_ID`、`NEXUS_WECOM_SECRET`、`NEXUS_WECOM_REDIRECT_URI`；未配置时只影响企业微信入口，密码登录不受影响。
+- 会话 Cookie 默认带 `Secure` 标记；仅在本地 HTTP 调试时在 `[auth]` 中设置 `cookie_secure = false`。
+- 企业微信扫码登录需要 `configs/nexus.toml` 的 `[wecom]` 中填写 `corp_id`、`agent_id`、`secret`、`redirect_uri`；未配置时只影响企业微信入口，密码登录不受影响。
 - 首个 owner 账号通过运维命令创建，密码以隐藏输入方式读取，不接受命令行参数或环境变量：
 
   ```bash

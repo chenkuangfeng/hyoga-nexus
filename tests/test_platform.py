@@ -312,8 +312,9 @@ def test_platform_api_publishes_agent_and_exposes_run_events(database):
         app.state.session_factory = None
 
 
-def test_platform_api_does_not_default_to_a_development_identity(database, monkeypatch):
-    monkeypatch.delenv("NEXUS_AUTH_MODE", raising=False)
+def test_platform_api_does_not_default_to_a_development_identity(database, monkeypatch, tmp_path):
+    # Run from an empty deployment directory so a developer's configs/nexus.toml [auth] cannot leak in.
+    monkeypatch.chdir(tmp_path)
     app.state.session_factory = database
 
     def override_db():

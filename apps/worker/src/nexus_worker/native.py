@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from contextlib import suppress
 from datetime import timedelta
@@ -11,6 +10,7 @@ from dataclasses import fields
 from nexus_core.platform import utc_now
 from nexus_core.native import NativePolicy
 from nexus_core.runtime import ExecutionBudget, RuntimeFault, RuntimeOutcome, ToolDefinition, ToolDisposition, ToolResult
+from nexus_platform.configuration import DatabaseConfigurationError, model_credentials
 from nexus_platform.models.ports import CredentialLease
 from nexus_platform.models.provider_settings import StoredCredentialResolver
 from nexus_platform.errors import PlatformError
@@ -23,14 +23,20 @@ from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
 from nexus_tools.builtins import builtins
 
 
-class EnvironmentCredentialResolver:
-    """Only explicitly allowed handles may be resolved, never arbitrary process variables."""
+class DeploymentCredentialResolver:
+    """Only names listed in ``[model_credentials]`` in configs/nexus.toml may be resolved.
+
+    Stored references keep the ``environment`` backend and ``env://NAME`` handle for compatibility;
+    the value now comes from the deployment file, and the table itself is the allowlist.
+    """
     def resolve(self, reference, *, principal_id, run_id):
-        allowed = {name.strip() for name in os.getenv('NEXUS_MODEL_CREDENTIAL_ALLOWLIST', '').split(',') if name.strip()}
         name = reference.handle.removeprefix('env://')
-        if reference.backend != 'environment' or not reference.handle.startswith('env://') or name not in allowed or not re.fullmatch(r'[A-Z_][A-Z0-9_]*', name):
+        if reference.backend != 'environment' or not reference.handle.startswith('env://') or not re.fullmatch(r'[A-Z_][A-Z0-9_]*', name):
             raise RuntimeFault('model_credential_unavailable')
-        value = os.getenv(name)
+        try:
+            value = model_credentials().get(name)
+        except DatabaseConfigurationError:
+            raise RuntimeFault('model_credential_unavailable') from None
         if not value:
             raise RuntimeFault('model_credential_unavailable')
         return CredentialLease(value, utc_now() + timedelta(minutes=5))
@@ -130,7 +136,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             model = model_factory(context)
         else:
             from .models import configured_routing
-            model = configured_routing(context, factory, resolver or StoredCredentialResolver(factory, EnvironmentCredentialResolver()))
+            model = configured_routing(context, factory, resolver or StoredCredentialResolver(factory, DeploymentCredentialResolver()))
         if context.runtime_type != 'native':
             raise RuntimeFault('runtime_not_configured')
         # Builtin definitions are shared for the process; the Run's store reaches handlers via services.
@@ -158,7 +164,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             # The summarizer is authorized per summary call; a revoked grant degrades compaction only.
             from .models import compaction_model
             version_id = policy.compaction_model_profile_version_id
-            compaction_resolver = resolver or StoredCredentialResolver(factory, EnvironmentCredentialResolver())
+            compaction_resolver = resolver or StoredCredentialResolver(factory, DeploymentCredentialResolver())
             compaction_model_factory = lambda: compaction_model(context, factory, compaction_resolver, version_id)
         outcome = await NativeEngine(model, gateway, store, hooks=hooks, policy=policy,
                                      compaction_model_factory=compaction_model_factory).run(

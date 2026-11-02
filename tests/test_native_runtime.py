@@ -27,7 +27,7 @@ from nexus_platform.authz.resources import grant_resource, register_resource, re
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.registry import RegisteredTool, ToolRegistry
 from nexus_worker.__main__ import run_once
-from nexus_worker.native import EnvironmentCredentialResolver
+from nexus_worker.native import DeploymentCredentialResolver
 
 
 class FakeModel:
@@ -326,14 +326,14 @@ def test_provider_fragmented_calls_usage_and_error_redaction():
     asyncio.run(verify())
 
 
-def test_environment_credentials_are_allowlisted_and_not_repr(monkeypatch):
+def test_environment_credentials_are_allowlisted_and_not_repr(deployment_config):
     from nexus_core.platform import CredentialRef
-    monkeypatch.setenv('MODEL_TEST_KEY', 'private-value')
+    deployment_config('')
     reference = CredentialRef(new_id(), 'environment', 'env://MODEL_TEST_KEY', 'tenant')
-    resolver = EnvironmentCredentialResolver()
+    resolver = DeploymentCredentialResolver()
     with pytest.raises(RuntimeFault):
         resolver.resolve(reference, principal_id=new_id(), run_id=new_id())
-    monkeypatch.setenv('NEXUS_MODEL_CREDENTIAL_ALLOWLIST', 'MODEL_TEST_KEY')
+    deployment_config('[model_credentials]\nMODEL_TEST_KEY = "private-value"\n')
     lease = resolver.resolve(reference, principal_id=new_id(), run_id=new_id())
     assert 'private-value' not in repr(lease)
     assert lease.reveal_for_call() == 'private-value'

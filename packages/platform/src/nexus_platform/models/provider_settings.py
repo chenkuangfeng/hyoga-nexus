@@ -1,7 +1,6 @@
 """Scoped model settings and write-only, authenticated credential storage."""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
@@ -12,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import Principal, CredentialRef
 
 from nexus_core.platform import new_id, utc_now
+from nexus_platform.configuration import DatabaseConfigurationError, credential_encryption_key
 from nexus_platform.errors import Forbidden, NotFound, ServiceUnavailable, Conflict
 from nexus_platform.identity.service import resolve_user, require_tenant, require_membership
 from nexus_platform.authz.permissions import require_api_permission
@@ -32,8 +32,11 @@ def cipher() -> Fernet:
 
     API and worker must share this key. Its value never leaves the credential adapter."""
     try:
-        return Fernet(os.environ['NEXUS_CREDENTIAL_ENCRYPTION_KEY'].encode('ascii'))
-    except (KeyError, ValueError, UnicodeError):
+        key = credential_encryption_key()
+        if key is None:
+            raise ServiceUnavailable('Credential encryption key is not configured correctly')
+        return Fernet(key.encode('ascii'))
+    except (DatabaseConfigurationError, ValueError, UnicodeError):
         raise ServiceUnavailable('Credential encryption key is not configured correctly') from None
 
 

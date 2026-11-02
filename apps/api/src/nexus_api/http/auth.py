@@ -1,11 +1,10 @@
 """Login routes: password sign-in, WeCom QR sign-in and binding, sign-out and the current user.
 
-Session cookies are HttpOnly and SameSite=Lax. Secure is on unless NEXUS_COOKIE_SECURE=0 (local
+Session cookies are HttpOnly and SameSite=Lax. Secure is on unless ``[auth].cookie_secure = false`` in configs/nexus.toml (local
 HTTP development only). Unsafe methods require the X-Nexus-Request header (see dependencies).
 """
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from uuid import UUID
 
@@ -17,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal
 from nexus_platform.auth import accounts, sessions, wecom
+from nexus_platform.configuration import auth_settings
 from nexus_platform.errors import Conflict, Forbidden, Unauthenticated
 from nexus_platform.persistence.models import UserIdentityRecord, UserRecord
 from nexus_api.dependencies.platform import CSRF_HEADER, SESSION_COOKIE, get_database_session, get_principal
@@ -43,7 +43,8 @@ class CurrentUser(BaseModel):
 
 
 def _cookie_secure() -> bool:
-    return os.getenv("NEXUS_COOKIE_SECURE", "1") != "0"
+    """Read from the deployment file; a malformed file raises a configuration error (fails closed)."""
+    return auth_settings().cookie_secure
 
 
 def _set_session(response: Response, token: str, expires: datetime) -> None:
@@ -55,7 +56,7 @@ def _set_session(response: Response, token: str, expires: datetime) -> None:
 
 def _directory(request: Request):
     override = getattr(request.app.state, "wecom_directory", None)
-    return override if override is not None else HttpWeComDirectory.from_environment()
+    return override if override is not None else HttpWeComDirectory.from_configuration()
 
 
 def _require_csrf(request: Request) -> None:

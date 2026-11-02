@@ -35,9 +35,8 @@ class FakeWeCom:
 
 
 @pytest.fixture
-def client(database, monkeypatch):
-    monkeypatch.setenv("NEXUS_AUTH_MODE", "session")
-    monkeypatch.setenv("NEXUS_COOKIE_SECURE", "0")
+def client(database, deployment_config):
+    deployment_config('[auth]\nmode = "session"\ncookie_secure = false\n')
     fake = FakeWeCom()
     app.state.session_factory = database
     app.state.wecom_directory = fake

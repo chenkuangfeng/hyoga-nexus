@@ -4,9 +4,8 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 
-def test_model_type_migration_keeps_defaults_as_chat_and_downgrades(tmp_path, monkeypatch):
+def test_model_type_migration_keeps_defaults_as_chat_and_downgrades(tmp_path):
     url = 'sqlite:///' + str(tmp_path / 'model-types.db')
-    monkeypatch.setenv('NEXUS_DATABASE_URL', url)
     config = Config('alembic.ini')
     config.attributes["database_url"] = url
     command.upgrade(config, 'e6d1a7b3c8f2')

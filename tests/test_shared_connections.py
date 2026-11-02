@@ -27,8 +27,8 @@ async def _serve(accepted):
 
 
 @pytest.fixture()
-def allow_loopback(monkeypatch):
-    monkeypatch.setenv('NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST', '127.0.0.1')
+def allow_loopback(deployment_config):
+    deployment_config('[model_network]\nprivate_host_allowlist = ["127.0.0.1"]\n')
 
 
 def _run_sequential_runs(port, *, share, runs=3):
@@ -90,8 +90,8 @@ def test_no_pool_outside_a_running_loop(allow_loopback):
     assert network.shared_connection_pool('http://127.0.0.1:10/v1') is None
 
 
-def test_shared_pool_still_refuses_disallowed_destinations(allow_loopback, monkeypatch):
-    monkeypatch.setenv('NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST', '')
+def test_shared_pool_still_refuses_disallowed_destinations(allow_loopback, deployment_config):
+    deployment_config('[model_network]\nprivate_host_allowlist = []\n')
     async def main():
         # Validation happens when the client is built, before any connection is looked up in the pool.
         with pytest.raises(RuntimeFault) as caught:

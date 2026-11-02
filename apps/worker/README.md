@@ -6,9 +6,9 @@ worker 领取平台 Outbox，装配 Native Engine，并通过短事务保存消�
 uv run python -m nexus_worker
 ```
 
-在仓库根目录运行上述命令，配置步骤见[项目入口](../../README.md#本地开发)。API 与 worker 自动读取同一个 `configs/nexus.toml` 中的 `[database].url`，无需加载 `.env`，启动前运行 `uv run alembic -c alembic.ini upgrade head`。SQLite 用于本轮隔离测试；PostgreSQL 部署验收仍待目标环境执行。
+在仓库根目录运行上述命令，配置步骤见[项目入口](../../README.md#本地开发)。API 与 worker 自动读取同一个 `configs/nexus.toml` 中的 `[database].url`，启动前运行 `uv run alembic -c alembic.ini upgrade head`。SQLite 用于本轮隔离测试；PostgreSQL 部署验收仍待目标环境执行。
 
-推荐通过前端「用户设置 → 模型供应商」创建供应商、填写 API 地址与 Key，添加账号可用模型，并设置个人/空间默认模型。管理员先在 API 与 worker 环境中配置相同的 `NEXUS_CREDENTIAL_ENCRYPTION_KEY`（Fernet 格式），随后重启服务；主密钥不进入仓库。可以在本地安全终端生成后保存到部署秘密管理中：
+推荐通过前端「用户设置 → 模型供应商」创建供应商、填写 API 地址与 Key，添加账号可用模型，并设置个人/空间默认模型。管理员先在 API 与 worker 共用的 `configs/nexus.toml` 的 `[security]` 中配置相同的 `credential_encryption_key`（Fernet 格式），随后重启服务；主密钥不进入仓库。可以在本地安全终端生成后保存到部署秘密管理中：
 
 ```bash
 uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
@@ -19,7 +19,7 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 既有环境凭据方式仍可通过平台 `/docs` 创建：
 
 1. 创建 `environment` 类型凭据引用，handle 为 `env://NEXUS_MODEL_API_KEY`。引用不包含秘密值。
-2. 在 worker 的本地环境设置该变量，并设置 `NEXUS_MODEL_CREDENTIAL_ALLOWLIST=NEXUS_MODEL_API_KEY`。不将变量值写进仓库或聊天。
+2. 在 `configs/nexus.toml` 的 `[model_credentials]` 中添加 `NEXUS_MODEL_API_KEY = "..."`。表中的名称即白名单，未列出的名称无法解析；不将真实值写进仓库或聊天。
 3. 模型配置 `provider` 按供应商命名，`model_name` 填账号实际可用的模型，`options` 设置 `{"protocol":"openai_chat_completions","base_url":"https://api.openai.com/v1"}`，并关联凭据引用。兼容供应商须验证支持流式工具调用、usage 和 `max_completion_tokens`。
 4. 创建并发布 Native Agent，选择该模型版本，配置预算；前端选择已发布智能体新建会话。
 
@@ -27,7 +27,7 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 
 自定义 Python 工具在应用组合入口通过 `ToolRegistry` 注册；处理器接收可信 `ToolContext` 和取消信号，显式声明副作用、deadline 和公开输出投影。不得注册阻塞宿主命令或把普通 Python 函数称作沙箱。
 
-缺少协议/Runtime 时以 `runtime_not_configured` 失败；凭据不可用时为 `model_credential_unavailable`。收到进程停止信号会取消当前受控执行；可能发生但结果未知的副作用标记 interrupted，不自动重试。外部 Runtime、隔离 Sandbox、文件产物和外部凭据保险库仍未接入。模型请求默认只允许公网 HTTPS；可信私有模型需部署端显式配置 `NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST`，API 与 worker 使用相同配置。沙箱仅保留接口。
+缺少协议/Runtime 时以 `runtime_not_configured` 失败；凭据不可用时为 `model_credential_unavailable`。收到进程停止信号会取消当前受控执行；可能发生但结果未知的副作用标记 interrupted，不自动重试。外部 Runtime、隔离 Sandbox、文件产物和外部凭据保险库仍未接入。模型请求默认只允许公网 HTTPS；可信私有模型需部署端在 `configs/nexus.toml` 的 `[model_network].private_host_allowlist` 中显式配置，API 与 worker 使用相同文件。沙箱仅保留接口。
 
 ## 模块文档
 

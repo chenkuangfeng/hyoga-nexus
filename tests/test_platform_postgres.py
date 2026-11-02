@@ -37,7 +37,6 @@ def test_postgres_migrations_concurrent_claim_and_lease_recovery(monkeypatch):
     try:
         with admin_engine.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-        monkeypatch.setenv("NEXUS_DATABASE_URL", scoped_url)
         config = Config("alembic.ini")
         config.attributes["database_url"] = scoped_url
         command.upgrade(config, "head")

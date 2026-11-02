@@ -1,15 +1,15 @@
 """HTTP adapter for WeCom internal-app QR login (`WeComDirectory`).
 
-Reads deployment secrets from the environment, never from the database:
-NEXUS_WECOM_CORP_ID, NEXUS_WECOM_AGENT_ID, NEXUS_WECOM_SECRET, NEXUS_WECOM_REDIRECT_URI.
+Reads deployment secrets from the ``[wecom]`` table of configs/nexus.toml, never from the database:
+corp_id, agent_id, secret, redirect_uri.
 """
 from __future__ import annotations
 
-import os
 from urllib.parse import quote
 
 import httpx
 
+from nexus_platform.configuration import DatabaseConfigurationError, wecom_settings
 from nexus_platform.errors import ServiceUnavailable, Unauthenticated
 
 API_BASE = "https://qyapi.weixin.qq.com"
@@ -24,13 +24,15 @@ class HttpWeComDirectory:
         self.corp_id, self.agent_id, self.secret, self.redirect_uri = corp_id, agent_id, secret, redirect_uri
 
     @classmethod
-    def from_environment(cls) -> "HttpWeComDirectory":
-        values = {name: os.getenv(name, "").strip() for name in (
-            "NEXUS_WECOM_CORP_ID", "NEXUS_WECOM_AGENT_ID", "NEXUS_WECOM_SECRET", "NEXUS_WECOM_REDIRECT_URI")}
-        if not all(values.values()):
+    def from_configuration(cls) -> "HttpWeComDirectory":
+        """Build from ``[wecom]``; a missing value or malformed file reports the login as unavailable."""
+        try:
+            settings = wecom_settings()
+        except DatabaseConfigurationError as exc:
+            raise ServiceUnavailable("企业微信登录尚未配置") from exc
+        if not settings.configured:
             raise ServiceUnavailable("企业微信登录尚未配置")
-        return cls(values["NEXUS_WECOM_CORP_ID"], values["NEXUS_WECOM_AGENT_ID"],
-                   values["NEXUS_WECOM_SECRET"], values["NEXUS_WECOM_REDIRECT_URI"])
+        return cls(settings.corp_id, settings.agent_id, settings.secret, settings.redirect_uri)
 
     def authorize_url(self, state: str) -> str:
         return (f"{QR_BASE}?login_type=CorpApp&appid={quote(self.corp_id, safe='')}"

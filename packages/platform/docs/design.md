@@ -2,7 +2,7 @@
 
 `models/provider_settings.py` 提供模型设置应用服务；持久化按领域组织于 `persistence/models/`，通过原 `nexus_platform.persistence.models` 路径导出。`model_providers` 表保存空间与可选用户归属，`provider_models` 关联既有不可变模型版本，`model_defaults` 按空间和用户/空间范围保存默认。
 
-`provider_credentials` 保存与凭据引用和供应商绑定的认证密文；密文内绑定凭据 ID，防止跨引用替换。部署端配置 `NEXUS_CREDENTIAL_ENCRYPTION_KEY`，不存入数据库。worker 使用 StoredCredentialResolver，环境凭据继续走原解析器。
+`provider_credentials` 保存与凭据引用和供应商绑定的认证密文；密文内绑定凭据 ID，防止跨引用替换。部署端在 `configs/nexus.toml` 的 `[security].credential_encryption_key` 配置主密钥，不存入数据库。worker 使用 StoredCredentialResolver，部署凭据（`[model_credentials]`）继续走原解析器。
 
 修改 API 地址必须提供新 Key，产生新的凭据引用与模型版本；旧版本保留原地址和原凭据。同一地址替换 Key 属于轮换，已有版本下一次解析使用新值；已经取得凭据并发出的请求不会被撤回。停用在下一次授权/模型回合生效，不声称能终止供应商已经接收的请求。
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 
 from fastapi import Depends, HTTPException, Request
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal
 from nexus_platform.auth.sessions import resolve_session
+from nexus_platform.configuration import AuthFileSettings, DatabaseConfigurationError, DEFAULT_DEV_USER_ID, auth_settings
 from nexus_platform.errors import Forbidden, ServiceUnavailable, Unauthenticated
 from nexus_platform.persistence.database import create_database_engine, session_factory
 
@@ -36,13 +36,20 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CSRF_HEADER = "X-Nexus-Request"
 
 
+def _auth_file_settings() -> AuthFileSettings:
+    """Read ``[auth]`` from configs/nexus.toml; a malformed file fails closed with 503."""
+    try:
+        return auth_settings()
+    except DatabaseConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def get_principal(request: Request, db: Session = Depends(get_database_session)) -> Principal:
-    mode = os.getenv("NEXUS_AUTH_MODE", "unconfigured").casefold()
+    settings = _auth_file_settings()
+    mode = (settings.mode or "unconfigured").casefold()
     if mode == "development":
         # A fixed process identity supports local single-user development without trusting a client header.
-        subject = os.getenv("NEXUS_DEV_USER_ID", "local-developer").strip()
-        if not subject:
-            raise HTTPException(status_code=503, detail="NEXUS_DEV_USER_ID is not configured")
+        subject = (settings.dev_user_id or DEFAULT_DEV_USER_ID).strip()
         return Principal(id=subject, issuer="nexus-development")
     provider = getattr(request.app.state, "principal_provider", None)
     if mode not in {"session", "external"} and provider is None:

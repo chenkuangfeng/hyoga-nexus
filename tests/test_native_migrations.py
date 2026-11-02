@@ -4,9 +4,8 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 
-def test_native_migration_preserves_existing_p1_data(tmp_path, monkeypatch):
+def test_native_migration_preserves_existing_p1_data(tmp_path):
     url = 'sqlite:///' + str(tmp_path / 'native-migration.db')
-    monkeypatch.setenv('NEXUS_DATABASE_URL', url)
     config = Config('alembic.ini')
     config.attributes["database_url"] = url
     command.upgrade(config, '9608e45573e5')

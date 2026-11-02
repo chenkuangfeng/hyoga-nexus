@@ -1,6 +1,43 @@
-# Copy to configs/nexus.toml and fill in your local database credentials.
+# Copy to configs/nexus.toml and fill in local values. This file is the only source of deployment
+# configuration: environment variables and .env files are not read. configs/nexus.toml is git-ignored.
+
 [database]
 url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
+
+[auth]
+# Sign-in model for the API: "development", "session" or "external". Leave unset for production-like runs.
+# "development" gives every request one fixed identity: local machine only, API bound to 127.0.0.1.
+# "session" shows the password sign-in form (accounts created with the create-owner command).
+# mode = "development"
+# dev_user_id = "local-developer"
+# Set to false only for local HTTP development; session cookies are Secure by default.
+# cookie_secure = false
+
+[logging]
+# Worker log level: DEBUG, INFO, WARNING or ERROR.
+level = "INFO"
+
+[security]
+# Fernet key shared by API and worker for encrypting saved model keys. Required before saving keys.
+# Generate with: uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Do not replace a key that already encrypted stored data.
+# credential_encryption_key = ""
+
+[model_credentials]
+# Named provider secrets used by Native Runs. Names must be upper-case identifiers and match the
+# env://NAME handle stored with a provider credential. Only listed names can be resolved.
+# MODEL_PROVIDER_KEY = ""
+
+[model_network]
+# Hostnames allowed to use http:// or private addresses for model providers (for example a local gateway).
+# private_host_allowlist = ["127.0.0.1"]
+
+[wecom]
+# Enterprise WeChat internal-app QR login. Leave empty to keep it disabled.
+# corp_id = ""
+# agent_id = ""
+# secret = ""
+# redirect_uri = ""
 
 [platform]
 # Sessions allowed to hold queued, started or unknown work at once; new sessions beyond this get 503.

@@ -23,9 +23,9 @@ from test_platform import database  # noqa: F401 (pytest fixture)
 SECRET = 'owner-secret-key-123'
 
 
-def _owner_model(database, principal, tenant_id, monkeypatch, protocol='openai_chat_completions'):
+def _owner_model(database, principal, tenant_id, deployment_config, protocol='openai_chat_completions'):
     """A capture model that uses the owner's personal key, stored encrypted like any provider key."""
-    monkeypatch.setenv('NEXUS_CREDENTIAL_ENCRYPTION_KEY', Fernet.generate_key().decode())
+    deployment_config(f'[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n')
     with database() as db:
         provider = save_provider(db, principal, tenant_id, name='Mine', base_url='https://model.example/v1',
                                  scope='personal', api_key=SECRET)
@@ -41,9 +41,9 @@ def _enable(database, principal, tenant_id, version_id):
                             capacity_policy='reject')
 
 
-def test_owner_key_is_used_per_call_and_each_use_is_audited(database, monkeypatch):  # noqa: F811
+def test_owner_key_is_used_per_call_and_each_use_is_audited(database, monkeypatch, deployment_config):  # noqa: F811
     principal, tenant, session, run, _ = stack(database)
-    version_id = _owner_model(database, principal, tenant.id, monkeypatch)
+    version_id = _owner_model(database, principal, tenant.id, deployment_config)
     _enable(database, principal, tenant.id, version_id)
     _messages(database, session.id, 4)
     job_id = UUID(_enqueue(database, run.id, utc_now()))
@@ -66,9 +66,9 @@ def test_owner_key_is_used_per_call_and_each_use_is_audited(database, monkeypatc
         assert SECRET not in repr(job.__dict__) and SECRET not in str(job.actions)
 
 
-def test_unsupported_protocol_is_skipped_without_calling_any_model(database, monkeypatch):  # noqa: F811
+def test_unsupported_protocol_is_skipped_without_calling_any_model(database, monkeypatch, deployment_config):  # noqa: F811
     principal, tenant, session, run, _ = stack(database)
-    version_id = _owner_model(database, principal, tenant.id, monkeypatch)
+    version_id = _owner_model(database, principal, tenant.id, deployment_config)
     _enable(database, principal, tenant.id, version_id)
     _messages(database, session.id, 4)
     job_id = UUID(_enqueue(database, run.id, utc_now()))
@@ -84,9 +84,9 @@ def test_unsupported_protocol_is_skipped_without_calling_any_model(database, mon
         assert db.get(MemoryCaptureJobRecord, job_id).last_error == 'model_unavailable'
 
 
-def test_worker_tick_waits_until_the_job_delay_has_passed(database, monkeypatch):  # noqa: F811
+def test_worker_tick_waits_until_the_job_delay_has_passed(database, monkeypatch, deployment_config):  # noqa: F811
     principal, tenant, session, run, _ = stack(database)
-    version_id = _owner_model(database, principal, tenant.id, monkeypatch)
+    version_id = _owner_model(database, principal, tenant.id, deployment_config)
     _enable(database, principal, tenant.id, version_id)
     _messages(database, session.id, 4)
     _enqueue(database, run.id, utc_now())

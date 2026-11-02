@@ -29,8 +29,8 @@ from nexus_runtimes.native.models.network import PinnedTransport, validate_url
 
 
 @pytest.fixture
-def settings_client(database, monkeypatch):
-    monkeypatch.setenv('NEXUS_CREDENTIAL_ENCRYPTION_KEY', Fernet.generate_key().decode())
+def settings_client(database, deployment_config):
+    deployment_config(f'[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n')
     owner = Principal('settings-owner', 'test')
     member = Principal('settings-member', 'test')
     with database() as db:
@@ -145,9 +145,9 @@ def test_personal_isolation_and_tenant_admin(settings_client):
     assert created.status_code == 201, created.text
 
 
-def test_missing_key_invalid_input_and_key_not_reflected(settings_client, monkeypatch):
+def test_missing_key_invalid_input_and_key_not_reflected(settings_client, deployment_config):
     client, path, *_ = settings_client
-    monkeypatch.delenv('NEXUS_CREDENTIAL_ENCRYPTION_KEY')
+    deployment_config('')
     result = client.post(path + '/providers', json={'name': 'P', 'base_url': 'https://public.example/v1', 'api_key': 'do-not-reflect'})
     assert result.status_code == 503
     assert 'do-not-reflect' not in result.text
@@ -211,7 +211,7 @@ def test_destination_transport_pins_validated_ip_and_rejects_private(monkeypatch
             validate_url(url)
 
 
-def test_credential_integrity_and_legacy_api_cannot_bypass_scope(settings_client, database, monkeypatch):
+def test_credential_integrity_and_legacy_api_cannot_bypass_scope(settings_client, database, deployment_config):
     client, path, identity, owner, member, tenant_id = settings_client
     provider = add_provider(client, path)
     model = add_model(client, path, provider)
@@ -219,7 +219,7 @@ def test_credential_integrity_and_legacy_api_cannot_bypass_scope(settings_client
         secret = db.scalar(select(ProviderCredentialRecord))
         credential_id = str(secret.credential_id)
         assert decrypt(secret) == 'test-private-key'
-        monkeypatch.setenv('NEXUS_CREDENTIAL_ENCRYPTION_KEY', Fernet.generate_key().decode())
+        deployment_config(f'[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n')
         from nexus_platform.errors import ServiceUnavailable
         with pytest.raises(ServiceUnavailable, match='cannot be decrypted'):
             decrypt(secret)

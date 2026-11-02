@@ -4,16 +4,15 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 
-def _config(url, monkeypatch):
-    monkeypatch.setenv('NEXUS_DATABASE_URL', url)
+def _config(url):
     config = Config('alembic.ini')
     config.attributes['database_url'] = url
     return config
 
 
-def test_upgrade_backfills_existing_versions_into_the_keyword_index(tmp_path, monkeypatch):
+def test_upgrade_backfills_existing_versions_into_the_keyword_index(tmp_path):
     url = 'sqlite:///' + str(tmp_path / 'memory-stage1.db')
-    config = _config(url, monkeypatch)
+    config = _config(url)
     command.upgrade(config, 'a6c3e9f2b1d8')
     engine = create_engine(url)
     entry, draft, run = 'a' * 32, 'b' * 32, 'c' * 32
@@ -39,9 +38,9 @@ def test_upgrade_backfills_existing_versions_into_the_keyword_index(tmp_path, mo
     command.upgrade(config, 'head')
 
 
-def test_fresh_database_gets_the_keyword_index_from_the_migration(tmp_path, monkeypatch):
+def test_fresh_database_gets_the_keyword_index_from_the_migration(tmp_path):
     url = 'sqlite:///' + str(tmp_path / 'memory-fresh.db')
-    config = _config(url, monkeypatch)
+    config = _config(url)
     command.upgrade(config, 'head')
     engine = create_engine(url)
     with engine.connect() as db:

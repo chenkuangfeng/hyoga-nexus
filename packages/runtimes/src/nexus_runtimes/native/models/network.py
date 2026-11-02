@@ -3,13 +3,28 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import os
 import socket
 import threading
 from urllib.parse import urlsplit
 
 import httpx
+from nexus_core.deployment import DeploymentConfigError, section
 from nexus_core.runtime import RuntimeFault
+
+
+def private_host_allowlist() -> set[str]:
+    """Hostnames allowed to use http or private addresses, from ``[model_network].private_host_allowlist``.
+
+    Absent means none. A malformed value raises RuntimeFault so that model calls fail closed.
+    Hostnames are lower-cased so that comparisons match the URL host.
+    """
+    try:
+        values = section("model_network").get("private_host_allowlist", [])
+    except DeploymentConfigError:
+        raise RuntimeFault('model_destination_denied') from None
+    if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+        raise RuntimeFault('model_destination_denied')
+    return {item.strip().lower() for item in values if item.strip()}
 
 
 def validate_url(value: str) -> str:
@@ -20,7 +35,7 @@ def validate_url(value: str) -> str:
     """
     try:
         parsed = urlsplit(value)
-        allowed = {host.strip().lower() for host in os.getenv('NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST', '').split(',') if host.strip()}
+        allowed = private_host_allowlist()
         if (not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
                 or any(c.isspace() or ord(c) < 32 for c in value) or '\\' in value
                 or parsed.scheme not in ('https', 'http')
@@ -64,7 +79,7 @@ class PinnedTransport(httpx.AsyncBaseTransport):
                 type=socket.SOCK_STREAM), 5)
         except (OSError, asyncio.TimeoutError):
             raise RuntimeFault('model_provider_unavailable') from None
-        allowed = {host.strip().lower() for host in os.getenv('NEXUS_MODEL_PRIVATE_HOST_ALLOWLIST', '').split(',') if host.strip()}
+        allowed = private_host_allowlist()
         addresses = [item[4][0] for item in results]
         if not addresses or (request.url.host.lower() not in allowed and
                 any(not ipaddress.ip_address(address).is_global for address in addresses)):

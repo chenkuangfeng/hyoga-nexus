@@ -25,9 +25,8 @@ def _unmapped_differences(connection):
     return differences
 
 
-def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path, monkeypatch):
+def test_platform_migration_upgrade_downgrade_roundtrip(tmp_path):
     url = "sqlite:///" + str(tmp_path / "platform.db")
-    monkeypatch.setenv("NEXUS_DATABASE_URL", url)
     config = Config("alembic.ini")
     config.attributes["database_url"] = url
 
