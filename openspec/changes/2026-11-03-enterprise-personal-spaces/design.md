@@ -52,16 +52,16 @@
 
 ---
 
-## 2. 组织、部门与成员
+## 2. 机构管理、成员与用户
 
-### 2.1 组织树归属企业
+### 2.1 机构树归属企业
 
 - `org_units.tenant_id` 必填，每个企业一棵树（一个根节点，`parent_id` 为空）。
 - 根节点名称默认为企业名称，可修改。
 - 节点规则沿用 `2026-11-01-user-org-management`：层级不限、同级名称唯一、不能移到子孙节点下、停用节点不能作为新归属、删除前不能有子节点或人员。
 - `org_units.source`：`manual`（企业管理员维护）或 `wecom`（预留，本阶段只用 `manual`）。
 
-### 2.2 成员与部门的关系
+### 2.2 用户、成员与机构的关系
 
 ```
 tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
@@ -70,10 +70,35 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
                  unit_id → org_units (tenant_id, …)
 ```
 
-- 加入时（管理员创建账号、接受邀请、申请通过），同时写入 `tenant_memberships`（`source` 分别为 `manual`、`invitation`、`application`）与一条主部门记录（必须选择一个部门，默认根节点）。
-- 人员可以有多个部门，但只能有一个主部门。主部门唯一约束为 `(tenant_id, user_id)`。
+**三层关系**
+
+1. **用户（`users`）**：全局一条，以邮箱为唯一标识。一个人只有一个账号，不随空间变化。
+2. **空间成员（`tenant_memberships`）**：每个（空间，用户）一条，表示这个人在该空间的身份。这是唯一决定"能否进入空间"的记录。个人空间的成员只有本人。
+3. **机构归属（`user_org_units`）**：每个（空间，用户，机构节点）一条，表示成员在本企业机构树中的位置。只对企业空间有意义，个人空间没有机构。
+
+**约束**
+
+- `user_org_units` 增加 `tenant_id`，并用复合外键 `(tenant_id, user_id)` 引用 `tenant_memberships`。这样只有成员才能被分配机构，不能给非成员挂节点。
+- 同一人在多个企业中的机构归属互不影响，因为每条记录都带 `tenant_id`。
+- 主节点唯一约束为 `(tenant_id, user_id)` 上的部分唯一索引（`is_primary` 为真）。每个成员在一个企业内只有一个主节点，可以另加多个节点。
+- 机构节点的 `tenant_id` 必须与归属记录的 `tenant_id` 一致，由服务层与复合外键保证。
+
+**加入与离开**
+
+- 加入时（管理员创建账号、接受邀请、申请通过），同时写入 `tenant_memberships`（`source` 分别为 `manual`、`invitation`、`application`）与一条主节点记录。主节点必须选择，默认为根节点。
+- 停用成员（`tenant_memberships.status = revoked`）：保留 `user_org_units` 记录，用于审计与恢复，但不计入机构人数和批量选人。
+- 成员主动退出或被移除：同上，保留归属记录。
+
+**节点的停用与删除**
+
+- 停用节点：节点下的成员保留归属，界面标记"已停用"；不能把新成员归属到已停用节点。
+- 删除节点：要求节点下没有子节点，且没有任何成员（包括已停用成员）以它为主节点。否则提示先迁移。
+- 迁移成员的主节点：只能在本企业内选择另一个节点，不能跨企业。
+
+**权限**
+
 - 部门只决定组织位置与界面筛选，不决定权限。权限只来自 `tenant_user_roles`。
-- 停用账号：`tenant_memberships.status = revoked`，保留部门记录，用于审计与恢复。
+- 机构节点不参与知识库、智能体的访问判断，也不参与共享空间（`shared_space_*`）的权限判断。
 
 ### 2.3 角色与部门
 
