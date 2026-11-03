@@ -12,7 +12,7 @@ export function newPasswordRules(
 ): FormRule[] {
   const common: FormRule[] = [
     { required: true, message: t('auth.passwordRequired'), type: 'error' },
-    { min: 8, message: t('auth.passwordMinLength'), type: 'error' },
+    { min: 10, message: t('auth.passwordMinLength'), type: 'error' },
     { max: 32, message: t('auth.passwordMaxLength'), type: 'error' },
   ]
   if (complexEnabled) {

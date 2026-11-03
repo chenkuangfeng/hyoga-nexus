@@ -281,6 +281,24 @@
           <div class="form-content">
             <t-form ref="registerFormRef" :data="registerData" :rules="registerRules" @submit="handleRegister"
               layout="vertical" label-align="top">
+              <t-form-item :label="$t('auth.spaceKind')" name="spaceKind">
+                <t-radio-group v-model="registerData.spaceKind" :disabled="loading" variant="default-filled">
+                  <t-radio-button value="personal">{{ $t('auth.personalSpace') }}</t-radio-button>
+                  <t-radio-button value="enterprise">{{ $t('auth.enterpriseSpace') }}</t-radio-button>
+                </t-radio-group>
+              </t-form-item>
+
+              <template v-if="registerData.spaceKind === 'enterprise'">
+                <t-form-item :label="$t('auth.enterpriseName')" name="spaceName">
+                  <t-input v-model="registerData.spaceName" :placeholder="$t('auth.enterpriseNamePlaceholder')"
+                    size="large" :disabled="loading" />
+                </t-form-item>
+                <t-form-item :label="$t('auth.companyCode')" name="companyCode" :help="$t('auth.companyCodeHint')">
+                  <t-input v-model="registerData.companyCode" :placeholder="$t('auth.companyCodePlaceholder')"
+                    size="large" :disabled="loading" />
+                </t-form-item>
+              </template>
+
               <t-form-item :label="$t('auth.username')" name="username">
                 <t-input v-model="registerData.username" :placeholder="$t('auth.usernamePlaceholder')" size="large"
                   :disabled="loading" />
@@ -456,11 +474,22 @@ const formData = reactive<{ [key: string]: any }>({
 
 // Register form data
 const registerData = reactive<{ [key: string]: any }>({
+  spaceKind: 'personal',
+  spaceName: '',
+  companyCode: '',
   username: '',
   email: '',
   password: '',
   confirmPassword: ''
 })
+
+// Clear the register form; the space type goes back to the default (personal).
+const resetRegisterData = () => {
+  Object.keys(registerData).forEach(key => {
+    (registerData as any)[key] = ''
+  })
+  registerData.spaceKind = 'personal'
+}
 
 // Login form validation rules
 const formRules = computed(() => ({
@@ -477,9 +506,28 @@ const formRules = computed(() => ({
 
 // Register form validation rules
 const registerRules = computed(() => ({
+  spaceName: [
+    {
+      validator: (val: string) => registerData.spaceKind !== 'enterprise' || !!val?.trim(),
+      message: t('auth.enterpriseNameRequired'),
+      type: 'error'
+    }
+  ],
+  companyCode: [
+    {
+      validator: (val: string) => registerData.spaceKind !== 'enterprise' || !!val,
+      message: t('auth.companyCodeRequired'),
+      type: 'error'
+    },
+    {
+      validator: (val: string) => !val || /^[a-zA-Z0-9_-]{3,32}$/.test(val),
+      message: t('auth.companyCodeInvalid'),
+      type: 'error'
+    }
+  ],
   username: [
     { required: true, message: t('auth.usernameRequired'), type: 'error' },
-    { min: 2, message: t('auth.usernameMinLength'), type: 'error' },
+    { min: 3, message: t('auth.usernameMinLength'), type: 'error' },
     { max: 20, message: t('auth.usernameMaxLength'), type: 'error' },
     {
       pattern: /^[a-zA-Z0-9_\u4e00-\u9fa5]+$/,
@@ -505,10 +553,7 @@ const registerRules = computed(() => ({
 // Toggle login/register mode
 const toggleMode = () => {
   isRegisterMode.value = !isRegisterMode.value && registrationEnabled.value
-
-  Object.keys(registerData).forEach(key => {
-    (registerData as any)[key] = ''
-  })
+  resetRegisterData()
 }
 
 // Toggle language menu
@@ -731,10 +776,14 @@ const handleRegister = async () => {
       return
     }
 
+    const enterprise = registerData.spaceKind === 'enterprise'
     const response = await register({
       username: registerData.username,
       email: registerData.email,
-      password: registerData.password
+      password: registerData.password,
+      space_kind: enterprise ? 'enterprise' : 'personal',
+      space_name: enterprise ? registerData.spaceName.trim() : '',
+      company_code: enterprise ? registerData.companyCode.trim() : '',
     })
 
     if (response.success) {
@@ -744,10 +793,7 @@ const handleRegister = async () => {
       isRegisterMode.value = false
       formData.email = registerData.email
 
-      // Clear register form
-      Object.keys(registerData).forEach(key => {
-        (registerData as any)[key] = ''
-      })
+      resetRegisterData()
     } else {
       MessagePlugin.error(response.message || t('auth.registerFailed'))
     }

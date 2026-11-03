@@ -73,6 +73,10 @@ export interface RegisterRequest {
   username: string
   email: string
   password: string
+  /** 个人空间（默认）或企业空间；企业空间需要名称与唯一的企业编码。 */
+  space_kind?: 'personal' | 'enterprise'
+  space_name?: string
+  company_code?: string
 }
 
 export interface RegisterResponse {
