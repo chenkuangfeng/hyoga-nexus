@@ -1,4 +1,8 @@
 export default {
+  planned: {
+    title: 'Not available yet',
+    body: 'This page belongs to a later phase. Only the menu entry exists in this version and it is not connected to the Nexus API yet.',
+  },
   modelCatalog: {
     "title": "Model catalog",
     "description": "The model catalog defines which models are offered when adding a model, along with defaults such as context window and reasoning support. Changes here apply to all workspaces immediately.",

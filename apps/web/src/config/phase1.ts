@@ -1,0 +1,19 @@
+/**
+ * Settings sections implemented in the current phase (see openspec/changes/2026-11-03-enterprise-personal-spaces).
+ *
+ * The settings navigation keeps every WeKnora entry so the menu is complete. A section outside this
+ * set renders the planned-page notice instead of its copied content, which still targets WeKnora's
+ * backend contracts. A later phase adds its key here when the section is implemented against the Nexus API.
+ */
+export const PHASE1_SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
+  'general',
+  'userprofile',
+  'tenant',
+  'members',
+  'platform-api-keys',
+  'system-audit-log',
+])
+
+export function isPhase1Section(key: string): boolean {
+  return PHASE1_SETTINGS_SECTIONS.has(key)
+}

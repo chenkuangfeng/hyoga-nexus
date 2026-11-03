@@ -85,7 +85,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       keywords: ['org', 'organization', 'team', 'space', '组织', '共享'],
       run: () => {
         close()
-        router.push('/platform/organizations')
+        router.push('/platform/shared-spaces')
       },
     },
     {

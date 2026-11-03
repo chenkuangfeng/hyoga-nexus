@@ -95,7 +95,7 @@ export function pageLinkLocation(link: AssistantPageLink): PageLinkLocation | nu
     case 'knowledge_bases':
       return { path: '/platform/knowledge-bases', query: {} }
     case 'organizations':
-      return { path: '/platform/organizations', query: {} }
+      return { path: '/platform/shared-spaces', query: {} }
     case 'automations':
       return {
         path: link.automation_id

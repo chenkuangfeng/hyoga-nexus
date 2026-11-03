@@ -4,12 +4,17 @@
 
 ## 0. 前端基础（`apps/web`）
 
-- [ ] 依赖对齐 WeKnora：`tdesign-vue-next`、`tdesign-icons-vue-next`、`pinia`、`vue-i18n`、`axios`、`vue-router`；移除 Element Plus。
-- [ ] 设计令牌与 WeKnora 的 `styles/` 对齐，去掉自定义组件样式。
-- [ ] 国际化：`src/i18n` 结构与 WeKnora 一致，中英文文案从 WeKnora 对应文件照抄后按本仓库语义调整。
-- [ ] 请求层：`src/api` 按 WeKnora 的 axios 实例与拦截器结构（token 刷新、错误提示、`X-Tenant-ID`）。
-- [ ] 路由：按 `design.md` 9.1 的路由表注册；未实现的菜单项指向占位页。
-- [ ] 侧栏与设置菜单按 WeKnora `menu.vue` 与 `Settings.vue` 的分组补全，只显示允许的项。
+按 2026-11-03 的决定，`apps/web` 整体替换为 WeKnora 前端的复制版本（删除原 Element Plus 界面），以下为复制后的处理结果。生产构建在本机因内存不足无法完成，以 CI 为准。
+
+- [x] 依赖：复制 WeKnora 的 `package.json`（TDesign、pinia、vue-router、vue-i18n、axios），改用 pnpm，`pnpm install` 通过。
+- [x] 设计令牌与样式：使用 WeKnora 的 `styles/` 与 `assets/theme/`；原 `tokens.css` 与 `tdesign-theme.css` 删除。
+- [x] 国际化：使用 WeKnora 的 `i18n/locales`；补充占位页文案（`planned.*`，zh-CN 与 en-US）。品牌文案与 Nexus 术语的调整留待对应分组。
+- [x] 请求层：使用 WeKnora 的 `utils/request.ts`（Bearer 令牌、`X-Tenant-ID`、刷新）。Nexus 后端的登录与令牌返回格式在第 2 组按 WeKnora 实现。
+- [x] 路由：`/platform/organizations` 改为 `/platform/shared-spaces`（菜单、命令面板、页面链接同步修改）。默认入口改为 `/platform/settings`。本阶段未实现的页面（知识库、智能体、会话、产物、工具箱、自动化、创建会话）指向 `views/placeholder/PlannedPage.vue`。
+- [x] 设置菜单：保留 WeKnora 的全部入口。`config/phase1.ts` 定义本阶段已实现的分区（常规、个人资料、空间信息、成员、API Key、审计）；其余分区显示占位提示。
+- [ ] 设置分组按 `design.md` 9.3 调整（账户、空间、共享空间、部门架构、审计）。
+- [ ] 侧栏菜单按 `design.md` 9.1 的入口调整（新对话、共享空间，其余按阶段显示）。
+- [ ] 类型检查与生产构建（`pnpm build`、`vue-tsc`）在有足够内存的环境中通过。
 
 ## 1. 数据模型与迁移（`packages/platform`）
 

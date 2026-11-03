@@ -576,7 +576,7 @@ function handleKbClick(kbId: string | undefined) {
 function handleOrgClick(orgName: string | undefined) {
   if (!orgName) return;
   // 目前组织详情页可能不存在，统一跳转到组织列表页
-  router.push('/platform/organizations');
+  router.push('/platform/shared-spaces');
 }
 
 const onScroll = (e: Event) => {

@@ -9,6 +9,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
 import { normalizeSettingsSection } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
+import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
 const LITE_LAST_PATH_KEY = 'weknora_lite_last_path'
@@ -32,7 +33,7 @@ function isLiteSpaDefaultEntry(to: RouteLocationNormalized) {
 }
 
 function isSafeLiteRestoreTarget(path: string) {
-  return path.startsWith('/platform/') && !path.startsWith('/platform/organizations')
+  return path.startsWith('/platform/') && !path.startsWith('/platform/shared-spaces')
 }
 
 function hasPendingOIDCCallback() {
@@ -46,7 +47,7 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: "/platform/knowledge-bases",
+      redirect: "/platform/settings",
     },
     {
       path: "/login",
@@ -79,7 +80,7 @@ const router = createRouter({
       redirect: (to) => {
         const code = to.query.code as string
         return {
-          path: '/platform/organizations',
+          path: '/platform/shared-spaces',
           query: code ? { invite_code: code } : {}
         }
       },
@@ -88,7 +89,7 @@ const router = createRouter({
     {
       path: "/knowledgeBase",
       name: "home",
-      component: () => import("../views/knowledge/KnowledgeBase.vue"),
+      component: PlannedPage,
       meta: { requiresInit: true, requiresAuth: true }
     },
     {
@@ -111,13 +112,13 @@ const router = createRouter({
         {
           path: "knowledge-bases",
           name: "knowledgeBaseList",
-          component: () => import("../views/knowledge/KnowledgeBaseList.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "knowledge-bases/:kbId",
           name: "knowledgeBaseDetail",
-          component: () => import("../views/knowledge/KnowledgeBase.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -134,25 +135,25 @@ const router = createRouter({
         {
           path: "artifacts",
           name: "artifactLibrary",
-          component: () => import("../views/artifacts/ArtifactLibrary.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'settings.sandbox' }
         },
         {
           path: "toolbox/:section?",
           name: "toolbox",
-          component: () => import("../views/toolbox/Toolbox.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "automations/:automationId?",
           name: "automationList",
-          component: () => import("../views/automation/AutomationList.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "agents",
           name: "agentList",
-          component: () => import("../views/agent/AgentList.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
         },
         {
@@ -175,19 +176,19 @@ const router = createRouter({
         {
           path: "creatChat",
           name: "globalCreatChat",
-          component: () => import("../views/creatChat/creatChat.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "knowledge-bases/:kbId/creatChat",
           name: "kbCreatChat",
-          component: () => import("../views/creatChat/creatChat.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "chat/:chatid",
           name: "chat",
-          component: () => import("../views/chat/index.vue"),
+          component: PlannedPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {

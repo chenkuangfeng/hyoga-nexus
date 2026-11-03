@@ -1195,7 +1195,7 @@ const handleMenuClick = async (path: string) => {
         router.push('/platform/agents')
     } else if (path === 'organizations') {
         // 组织菜单项：跳转到组织列表
-        router.push('/platform/organizations')
+        router.push('/platform/shared-spaces')
     } else if (path === 'settings') {
         // 设置菜单项：打开设置弹窗并跳转路由
         uiStore.openSettings()

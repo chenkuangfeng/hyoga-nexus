@@ -76,91 +76,94 @@
       </div>
       <template v-else>
         <!-- 常规设置 -->
+        <div v-if="!isPhase1Section(currentSection)" class="section">
+          <PlannedPage />
+        </div>
         <div v-if="currentSection === 'general'" class="section">
           <GeneralSettings />
         </div>
 
         <!-- Ollama 设置 -->
-        <div v-if="currentSection === 'ollama'" class="section">
+        <div v-if="currentSection === 'ollama' && isPhase1Section('ollama')" class="section">
           <OllamaSettings />
         </div>
 
         <!-- WeKnora Cloud -->
-        <div v-if="currentSection === 'weknoracloud'" class="section">
+        <div v-if="currentSection === 'weknoracloud' && isPhase1Section('weknoracloud')" class="section">
           <WeKnoraCloudSettings />
         </div>
 
         <!-- 模型配置 -->
-        <div v-if="currentSection === 'models'" class="section">
+        <div v-if="currentSection === 'models' && isPhase1Section('models')" class="section">
           <ModelSettings />
         </div>
 
         <!-- 网络搜索配置 -->
-        <div v-if="currentSection === 'websearch'" class="section">
+        <div v-if="currentSection === 'websearch' && isPhase1Section('websearch')" class="section">
           <WebSearchSettings />
         </div>
 
         <!-- 消息管理 -->
-        <div v-if="currentSection === 'chathistory'" class="section">
+        <div v-if="currentSection === 'chathistory' && isPhase1Section('chathistory')" class="section">
           <ChatHistorySettings />
         </div>
 
         <!-- 长期记忆（空间级开关） -->
-        <div v-if="currentSection === 'memory'" class="section">
+        <div v-if="currentSection === 'memory' && isPhase1Section('memory')" class="section">
           <MemoryWorkspaceSettings />
         </div>
 
         <!-- 助手（个人偏好 + 空间名称与权限上限） -->
-        <div v-if="currentSection === 'assistant'" class="section">
+        <div v-if="currentSection === 'assistant' && isPhase1Section('assistant')" class="section">
           <AssistantSettings />
         </div>
 
         <!-- 我的记忆（个人记忆管理） -->
-        <div v-if="currentSection === 'mymemory'" class="section">
+        <div v-if="currentSection === 'mymemory' && isPhase1Section('mymemory')" class="section">
           <MemorySettings />
         </div>
 
         <!-- 沙箱密钥（成员自己的技能 / 沙箱密钥） -->
-        <div v-if="currentSection === 'envvars'" class="section">
+        <div v-if="currentSection === 'envvars' && isPhase1Section('envvars')" class="section">
           <EnvVarSettings />
         </div>
 
         <!-- 向量数据库引擎 -->
-        <div v-if="currentSection === 'vectorstore'" class="section">
+        <div v-if="currentSection === 'vectorstore' && isPhase1Section('vectorstore')" class="section">
           <VectorStoreSettings />
         </div>
 
         <!-- 解析引擎 -->
-        <div v-if="currentSection === 'parser'" class="section">
+        <div v-if="currentSection === 'parser' && isPhase1Section('parser')" class="section">
           <ParserEngineSettings />
         </div>
 
         <!-- 存储引擎 -->
-        <div v-if="currentSection === 'storage'" class="section">
+        <div v-if="currentSection === 'storage' && isPhase1Section('storage')" class="section">
           <StorageBackendSettings />
         </div>
 
         <!-- 沙箱 -->
-        <div v-if="currentSection === 'sandbox'" class="section">
+        <div v-if="currentSection === 'sandbox' && isPhase1Section('sandbox')" class="section">
           <SandboxSettings />
         </div>
 
         <!-- 系统信息 -->
-        <div v-if="currentSection === 'system'" class="section">
+        <div v-if="currentSection === 'system' && isPhase1Section('system')" class="section">
           <SystemInfo />
         </div>
 
         <!-- 系统管理员可见的全局运行时设置 -->
-        <div v-if="currentSection === 'system-global'" class="section">
+        <div v-if="currentSection === 'system-global' && isPhase1Section('system-global')" class="section">
           <SystemSettings />
         </div>
 
-        <div v-if="currentSection === 'model-catalog'" class="section">
+        <div v-if="currentSection === 'model-catalog' && isPhase1Section('model-catalog')" class="section">
           <ModelCatalog />
         </div>
 
         <!-- 系统管理员可见的任务队列运行状态 -->
-        <div v-if="currentSection === 'runtime-queues'" class="section">
+        <div v-if="currentSection === 'runtime-queues' && isPhase1Section('runtime-queues')" class="section">
           <RuntimeQueues />
         </div>
 
@@ -199,6 +202,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { isPhase1Section } from '@/config/phase1'
+import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import { useUIStore } from '@/stores/ui'

@@ -1,4 +1,8 @@
 export default {
+  planned: {
+    title: '该功能尚未接入',
+    body: '此页面属于后续阶段，当前版本只保留菜单入口，尚未对接 Nexus 接口。',
+  },
   modelCatalog: {
     "title": "模型目录",
     "description": "模型目录决定添加模型时可选的模型列表，以及上下文窗口、是否支持思考等默认参数。在这里修改后，所有空间立即生效。",
