@@ -8644,6 +8644,27 @@ export default {
       }
     }
   },
+  tenantApplication: {
+    tabTitle: 'Join requests',
+    empty: 'No join requests waiting for review',
+    retry: 'Retry',
+    failed: 'The action failed. Try again later',
+    approve: 'Approve',
+    reject: 'Reject',
+    cancel: 'Cancel',
+    approveTitle: 'Approve join request',
+    rejectTitle: 'Reject join request',
+    unitLabel: 'Department',
+    unitPlaceholder: 'Choose a department',
+    unitRequired: 'Choose the department to join',
+    roleLabel: 'Role to grant',
+    reasonLabel: 'Reason for rejecting',
+    reasonRequired: 'Enter a reason for rejecting',
+    approved: 'Join request approved',
+    rejected: 'Join request rejected',
+    roles: { admin: 'Admin', contributor: 'Contributor', viewer: 'Viewer' },
+    columns: { applicant: 'Applicant', message: 'Message', appliedAt: 'Applied at', operation: 'Actions' },
+  },
   tenantInvitation: {
     inboxTooltip: 'View pending invitations',
     pendingSectionTitle: 'Pending invitations',

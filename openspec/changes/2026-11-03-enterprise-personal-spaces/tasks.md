@@ -61,7 +61,9 @@
 - [x] 所有写操作写入审计（`audit_records`）。
 - [x] 前端成员与邀请接口封装（`api/tenant/members.ts`、`api/tenant/invitations.ts`）已对接 Nexus 端点与返回结构：成员列表含邮箱、用户名、显示名（`MemberView` 增加字段）；按邮箱邀请；待处理邀请列表；接受与拒绝；撤销。成员页与邀请列表沿用原组件。
 - [x] 空间信息页（`TenantInfo`）改名与描述通过 `PATCH /api/v1/tenants/current`（owner、admin；`description` 可清空，最长 500 字）；删除空间通过 `DELETE /api/v1/tenants/:id`（仅企业空间的 owner；个人空间返回 403；仍创建着有效共享空间时返回 409；删除为归档，成员列表中消失，之后访问返回 404）。`tests/test_registration_spaces.py`、`tests/test_shared_spaces.py` 覆盖。
-- [ ] 前端：成员页的邀请链接弹窗与申请审批列表尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
+- [x] 前端：成员页新增"加入申请"标签（`components/tenant/JoinApplicationsPanel.vue`）：列出待审批申请，批准时选择部门与角色，拒绝时填写原因，对接 `join-requests` 接口。部门选项来自 `org-units/tree`。
+- [ ] 前端：成员页的邀请链接弹窗尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
+- [ ] 前端："加入申请"与成员页目前只对 owner 显示（沿用原页面的 `canManage`），后端允许 admin 审批，待统一。
 - [ ] 前端：按邮箱添加且邮箱无账号时，后端需要用户名与初始密码，成员页尚未提供这两个输入项。
 - 实施说明（2026-11-03）：测试 `tests/test_membership_flows.py` 通过 HTTP 覆盖邀请、接受与拒绝、按邮箱建账号、申请与审批、拒绝冷却、撤回、离开、批量角色。全量 pytest 569 通过。
 

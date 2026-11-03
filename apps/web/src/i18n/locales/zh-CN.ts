@@ -607,6 +607,27 @@ export default {
       auditRead: '查看系统审计'
     }
   },
+  tenantApplication: {
+    tabTitle: '加入申请',
+    empty: '暂无待审批的加入申请',
+    retry: '重试',
+    failed: '操作失败，请稍后重试',
+    approve: '批准',
+    reject: '拒绝',
+    cancel: '取消',
+    approveTitle: '批准加入申请',
+    rejectTitle: '拒绝加入申请',
+    unitLabel: '加入部门',
+    unitPlaceholder: '选择部门',
+    unitRequired: '请选择加入的部门',
+    roleLabel: '授予角色',
+    reasonLabel: '拒绝原因',
+    reasonRequired: '请填写拒绝原因',
+    approved: '已批准加入',
+    rejected: '已拒绝申请',
+    roles: { admin: '管理员', contributor: '贡献者', viewer: '查看者' },
+    columns: { applicant: '申请人', message: '申请说明', appliedAt: '申请时间', operation: '操作' },
+  },
   tenantInvitation: {
     inboxTooltip: '查看待接受的邀请',
     pendingSectionTitle: '待接受的邀请',

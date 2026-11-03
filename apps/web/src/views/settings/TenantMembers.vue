@@ -181,6 +181,13 @@
             </span>
           </template>
         </t-tab-panel>
+        <t-tab-panel v-if="canManage" value="applications">
+          <template #label>
+            <span class="members-tab-label"><t-icon name="user-add" size="16px" />
+              {{ $t('tenantApplication.tabTitle') }}
+            </span>
+          </template>
+        </t-tab-panel>
       </t-tabs>
       <t-input v-show="activeListTab === 'members'" v-model="searchQuery" class="members-list-search"
         :placeholder="$t('tenantMember.searchPlaceholder')" :aria-label="$t('tenantMember.searchPlaceholder')" clearable>
@@ -287,6 +294,10 @@
               :page-size-options="INVITATIONS_PAGE_SIZE_OPTIONS" @change="onInvitationsPageChange" />
           </div>
         </div>
+      </div>
+
+      <div v-if="canManage" v-show="activeListTab === 'applications'" class="join-applications-section">
+        <JoinApplicationsPanel :tenant-id="activeTenantId" @changed="loadMembers" />
       </div>
 
       <div v-show="activeListTab === 'members'" class="members-list-wrap">
@@ -523,6 +534,7 @@ import {
   type TenantInvitation,
 } from '@/api/tenant/invitations'
 import { docsUrl } from '@/utils/docsUrl'
+import JoinApplicationsPanel from '@/components/tenant/JoinApplicationsPanel.vue'
 import {
   listAuditLog,
   type AuditLog,
