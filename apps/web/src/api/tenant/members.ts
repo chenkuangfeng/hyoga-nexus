@@ -1,17 +1,19 @@
-import { get, post, put, del } from '@/utils/request'
+import { del, get, patch, post } from '@/utils/request'
 
-// TenantRole mirrors internal/types/tenant_member.go's four-role enum.
-// Keep the string values aligned with the Go constants.
+// TenantRole：owner / admin / contributor / viewer（与后端 TenantRole 一致）。
 export type TenantRole = 'owner' | 'admin' | 'contributor' | 'viewer'
 
 export type TenantMemberStatus = 'active' | 'invited' | 'suspended'
 
-// TenantMember is the API projection of a (user, tenant) membership row,
-// already joined with the user's email/username/avatar by the backend.
+/**
+ * 空间成员的页面视图。后端 `GET /tenants/:id/members` 返回 `user_id`、`role`、`status`、
+ * `joined_at` 以及用户的 `email`、`username`、`display_name`；这里补齐页面需要的字段。
+ */
 export interface TenantMember {
   user_id: string
   email: string
   username: string
+  display_name?: string | null
   avatar?: string
   role: TenantRole
   status: TenantMemberStatus
@@ -33,19 +35,19 @@ export interface ListMembersResponse {
 export interface ListMembersParams {
   page?: number
   page_size?: number
-  /** 按邮箱/用户名筛选（服务端模糊匹配） */
+  /** 按邮箱 / 用户名 / 显示名筛选（本地过滤：后端一次返回全部成员） */
   q?: string
 }
 
-function buildMembersQuery(params: ListMembersParams | undefined): string {
-  if (!params) return ''
-  const u = new URLSearchParams()
-  if (params.page != null && params.page > 0) u.set('page', String(params.page))
-  if (params.page_size != null && params.page_size > 0) u.set('page_size', String(params.page_size))
-  const q = params.q?.trim()
-  if (q) u.set('q', q)
-  const qs = u.toString()
-  return qs ? `?${qs}` : ''
+/** 后端成员行（`MemberView`）。 */
+interface MemberRow {
+  user_id: string
+  role: TenantRole
+  status: TenantMemberStatus
+  joined_at: string
+  email?: string | null
+  username?: string | null
+  display_name?: string | null
 }
 
 export interface AddMemberRequest {
@@ -53,9 +55,20 @@ export interface AddMemberRequest {
   role: TenantRole
 }
 
+/**
+ * 按邮箱添加成员的结果（`POST /tenants/:id/members/by-email`）：
+ * - `invited`：已有账号，发出邀请（`invitation_id`），对方接受后才成为成员；
+ * - `created`：邮箱没有账号，由管理员设置初始密码创建，已直接加入（`user_id`）。
+ */
+export interface AddMemberResult {
+  status: 'invited' | 'created'
+  invitation_id?: string
+  user_id?: string
+}
+
 export interface AddMemberResponse {
   success: boolean
-  data?: TenantMember
+  data?: AddMemberResult
   message?: string
 }
 
@@ -64,90 +77,95 @@ export interface SimpleResponse {
   message?: string
 }
 
+function toTenantMember(row: MemberRow): TenantMember {
+  return {
+    user_id: row.user_id,
+    email: row.email ?? '',
+    username: row.username ?? '',
+    display_name: row.display_name ?? null,
+    role: row.role,
+    status: row.status,
+    joined_at: row.joined_at,
+  }
+}
+
 /**
- * 分页列出空间成员。
- * Backend: GET /api/v1/tenants/:id/members (Viewer+)。查询参数：`q`、`page`、`page_size`。
+ * 列出空间成员。后端一次返回全部活跃成员，分页与 `q` 筛选在此处完成。
+ * Backend: GET /api/v1/tenants/:id/members（需要 members:manage）。
  */
 export async function listMembers(
   tenantId: string,
   params: ListMembersParams = {},
 ): Promise<ListMembersResponse> {
-  const qs = buildMembersQuery(params)
-  return (await get(
-    `/api/v1/tenants/${tenantId}/members${qs}`,
-  )) as unknown as ListMembersResponse
+  const rows = (await get<MemberRow[]>(`/api/v1/tenants/${tenantId}/members`)) as unknown as MemberRow[]
+  const keyword = params.q?.trim().toLowerCase()
+  let members = (Array.isArray(rows) ? rows : []).map(toTenantMember)
+  if (keyword) {
+    members = members.filter((m) =>
+      [m.email, m.username, m.display_name ?? ''].some((v) => v.toLowerCase().includes(keyword)),
+    )
+  }
+  const total = members.length
+  const pageSize = params.page_size && params.page_size > 0 ? params.page_size : total
+  const page = params.page && params.page > 0 ? params.page : 1
+  const start = (page - 1) * pageSize
+  return {
+    success: true,
+    data: { members: members.slice(start, start + pageSize), total, page, page_size: pageSize },
+  }
 }
 
 /**
- * 遍历分页拉取空间的全部成员（每页最大 100，最多 500 页兜底）。
- * 用于「退出空间」等对全量成员的轻量校验；普通表格请直接使用 {@link listMembers} 分页接口。
+ * 遍历分页拉取空间的全部成员。用于「退出空间」等对全量成员的轻量校验。
  */
 export async function fetchAllTenantMembers(tenantId: string): Promise<TenantMember[]> {
-  const pageSize = 100
-  let page = 1
-  const out: TenantMember[] = []
-  let total = Number.POSITIVE_INFINITY
-  for (let guard = 0; guard < 500 && out.length < total; guard++) {
-    const resp = await listMembers(tenantId, { page, page_size: pageSize })
-    if (!resp.success || !resp.data) break
-    total = resp.data.total
-    const batch = resp.data.members || []
-    if (batch.length === 0 && page >= 2) break
-    out.push(...batch)
-    if (batch.length < pageSize) break
-    page++
-  }
-  return out
+  const resp = await listMembers(tenantId)
+  return resp.data?.members ?? []
 }
 
 /**
- * Invite an existing user (by email) to the tenant with the given role.
- * Backend: POST /api/v1/tenants/:id/members (Owner+).
- *
- * Returns 404 when the email does not match any registered user — the
- * caller should ask the invitee to register first. PR 3 does not yet
- * support email-based invites for users who don't have an account.
+ * 按邮箱邀请或添加成员（管理员及以上）。
+ * Backend: POST /api/v1/tenants/:id/members/by-email。
+ * 邮箱没有账号时后端要求提供用户名与初始密码，此处只传邮箱与角色。
  */
 export async function addMember(
   tenantId: string,
   body: AddMemberRequest,
 ): Promise<AddMemberResponse> {
-  return (await post(`/api/v1/tenants/${tenantId}/members`, body)) as unknown as AddMemberResponse
+  const result = (await post(`/api/v1/tenants/${tenantId}/members/by-email`, body)) as unknown as AddMemberResult
+  return { success: true, data: result }
 }
 
 /**
- * Change an existing member's role.
- * Backend: PUT /api/v1/tenants/:id/members/:user_id (Owner+).
- *
- * Returns 409 when this would demote the last active Owner of the tenant.
+ * 修改成员角色。`userId` 即成员的用户 id（成员行以 (tenant, user) 为主键）。
+ * Backend: PATCH /api/v1/tenants/:id/members/:user_id（owner 与 admin 可改；转让 owner 仅 owner）。
  */
 export async function updateMemberRole(
   tenantId: string,
   userId: string,
   role: TenantRole,
 ): Promise<SimpleResponse> {
-  return (await put(`/api/v1/tenants/${tenantId}/members/${userId}`, { role })) as unknown as SimpleResponse
+  await patch(`/api/v1/tenants/${tenantId}/members/${userId}`, { role })
+  return { success: true }
 }
 
 /**
- * Remove a member from the tenant.
- * Backend: DELETE /api/v1/tenants/:id/members/:user_id (Owner+).
- *
- * Returns 409 when this would remove the last active Owner.
+ * 移出成员。Backend: DELETE /api/v1/tenants/:id/members/:user_id。
+ * 移出最后一名 owner 会被拒绝（409）。
  */
 export async function removeMember(
   tenantId: string,
   userId: string,
 ): Promise<SimpleResponse> {
-  return (await del(`/api/v1/tenants/${tenantId}/members/${userId}`)) as unknown as SimpleResponse
+  await del(`/api/v1/tenants/${tenantId}/members/${userId}`)
+  return { success: true }
 }
 
 /**
- * Quit the tenant on your own. Same last-Owner invariant as
- * removeMember, but does NOT require Owner+ — any active member can
- * call it.
- * Backend: POST /api/v1/tenants/:id/leave (Viewer+).
+ * 自行退出空间（任何活跃成员均可，最后一名 owner 不可退出）。
+ * Backend: POST /api/v1/tenants/:id/leave。
  */
 export async function leaveTenant(tenantId: string): Promise<SimpleResponse> {
-  return (await post(`/api/v1/tenants/${tenantId}/leave`)) as unknown as SimpleResponse
+  await post(`/api/v1/tenants/${tenantId}/leave`)
+  return { success: true }
 }

@@ -169,3 +169,19 @@ def test_member_leaves_and_role_is_granted_to_everyone_in_a_node(client):
     assert second.json()["assigned"] == [] and len(second.json()["skipped"]) == 1
     assert client.post(f"/api/v1/tenants/{space_id}/leave", headers=fay).status_code == 204
     assert _role_in(client, "fay@example.com", space_id)[1] == "revoked"
+
+
+def test_member_list_shows_who_each_member_is(client):
+    space_id, owner = _owner_space(client)
+    _register(client, "bea", "bea@example.com")
+    added = client.post(f"/api/v1/tenants/{space_id}/members/by-email", headers=owner,
+                        json={"email": "bea@example.com", "role": "viewer"})
+    assert added.status_code == 201, added.text
+    accepted_id = client.get("/api/v1/me/invitations", headers=_token(client, "bea@example.com")).json()[0]["id"]
+    client.post(f"/api/v1/me/invitations/{accepted_id}/accept", headers=_token(client, "bea@example.com"))
+    members = client.get(f"/api/v1/tenants/{space_id}/members", headers=owner)
+    assert members.status_code == 200, members.text
+    by_email = {m["email"]: m for m in members.json()}
+    assert by_email["owner@acme.example"]["username"] == "owner-acme"
+    assert by_email["bea@example.com"]["username"] == "bea"
+    assert by_email["bea@example.com"]["role"] == "viewer"

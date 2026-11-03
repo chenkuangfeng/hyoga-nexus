@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole
 from nexus_platform.agents import service as agents
+from nexus_platform.auth import accounts
 from nexus_platform.memory import snapshots
 from nexus_platform.agents.access import require_agent_permission, set_agent_grants, visible_agent_ids
 from nexus_platform.errors import NotFound
@@ -28,6 +29,8 @@ from nexus_platform.persistence.models import (
     ModelProfileVersionRecord,
     ResourceGrantRecord,
     ResourceBindingRecord,
+    UserIdentityRecord,
+    UserRecord,
 )
 from nexus_platform.runs import service as runs
 from nexus_platform.sessions import service as sessions
@@ -124,7 +127,8 @@ def add_tenant_member(
     row = tenants.add_member(
         db, principal, tenant_id, Principal(id=body.subject, issuer=body.issuer), TenantRole(body.role)
     )
-    return MemberView.model_validate(row, from_attributes=True)
+    with db.begin():
+        return _member_view(db, row)
 
 
 @router.get("/tenants/{tenant_id}/members", response_model=list[MemberView])
@@ -145,7 +149,20 @@ def list_tenant_members(
                 .order_by(MembershipRecord.joined_at)
             )
         )
-    return [MemberView.model_validate(row, from_attributes=True) for row in rows]
+    with db.begin():
+        return [_member_view(db, row) for row in rows]
+
+
+def _member_view(db: Session, row) -> MemberView:
+    """A membership row joined with its user's email, password-account username and display name."""
+    user = db.get(UserRecord, row.user_id)
+    username = db.scalar(select(UserIdentityRecord.external_id).where(
+        UserIdentityRecord.user_id == row.user_id, UserIdentityRecord.provider == accounts.PASSWORD_PROVIDER))
+    return MemberView(
+        tenant_id=row.tenant_id, user_id=row.user_id, role=row.role, status=row.status, joined_at=row.joined_at,
+        email=user.email if user else None, username=username,
+        display_name=user.display_name if user else None,
+    )
 
 
 @router.patch("/tenants/{tenant_id}/members/{member_id}", response_model=MemberView)
@@ -157,7 +174,8 @@ def update_tenant_member(
     db: Session = Depends(get_database_session),
 ):
     row = tenants.update_member_role(db, principal, tenant_id, member_id, TenantRole(body.role))
-    return MemberView.model_validate(row, from_attributes=True)
+    with db.begin():
+        return _member_view(db, row)
 
 
 @router.delete("/tenants/{tenant_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
