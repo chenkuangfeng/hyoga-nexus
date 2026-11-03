@@ -263,8 +263,9 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 | `tenant_org_bindings` | 企业空间不再使用，迁移后删除 |
 | `user_org_units` 主部门每人一个 | 改为每个企业一个 |
 | `tenant_memberships.source` 含 `organization` | 改为 `manual`、`invitation`、`application`；`organization` 取消 |
-| `users.phone` 无唯一约束 | 全局唯一（部分唯一索引） |
-| 无申请与邀请 | 新表 `space_join_requests`（见 proposal 数据模型） |
+| `users` 无 `must_change_password` | 增加，默认否；首次登录改密前只允许改密与退出 |
+| 无申请与邀请 | 新表 `space_join_requests`：企业的申请与邀请（用户 → 企业）。与共享空间的 `shared_space_join_requests`（空间 → 共享空间）保留为两张表，不合并；两者共用一套状态机与审计代码（2026-11-03 确认） |
+| 无共享空间 | 新表 `shared_spaces`、`shared_space_tenant_members`，共享表 `knowledge_base_shares`、`agent_shares` 的外键列为 `shared_space_id` |
 | `GET /api/v1/tenants/{id}/…` 的组织信息接口（空间内查看绑定组织） | 改为查看本企业组织树 |
 
 ## 6. 与 web 外壳提案的关系
