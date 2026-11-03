@@ -204,9 +204,27 @@ def upgrade():
         sa.CheckConstraint("role IN ('admin', 'contributor', 'viewer')", name='ck_space_invite_links_role'),
     )
     op.create_index('ix_space_invite_links_tenant', 'space_invite_links', ['tenant_id'])
+    # Agent shares: an agent of an enterprise is shared into a shared space at a level (viewer, editor or admin).
+    op.create_table(
+        'agent_shares',
+        sa.Column('id', sa.Uuid(), primary_key=True),
+        sa.Column('tenant_id', sa.Uuid(), sa.ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('agent_id', sa.Uuid(), sa.ForeignKey('agents.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('shared_space_id', sa.Uuid(), sa.ForeignKey('shared_spaces.id', ondelete='CASCADE'),
+                  nullable=False),
+        sa.Column('level', sa.String(16), nullable=False),
+        sa.Column('created_by', sa.Uuid(), sa.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint('agent_id', 'shared_space_id', name='uq_agent_shares_agent_space'),
+        sa.CheckConstraint("level IN ('viewer', 'editor', 'admin')", name='ck_agent_shares_level'),
+    )
+    op.create_index('ix_agent_shares_space', 'agent_shares', ['shared_space_id'])
 
 
 def downgrade():
+    op.drop_index('ix_agent_shares_space', table_name='agent_shares')
+    op.drop_table('agent_shares')
     op.drop_index('ix_space_invite_links_tenant', table_name='space_invite_links')
     op.drop_table('space_invite_links')
     op.drop_index('uq_shared_space_join_pending', table_name='shared_space_join_requests')

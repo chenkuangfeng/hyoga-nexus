@@ -73,7 +73,10 @@
 - [x] 补充：`GET /api/v1/shared-spaces/:id/join-requests` 与 `.../join-requests/:req_id/approve|reject`（审批加入与升级申请，WeKnora 同样提供）。
 - [x] 共享空间内角色 `admin` / `editor` / `viewer`。空间（而非人）加入共享空间；创建方空间为 admin 且不能退出，只能删除（软删除）。
 - [x] 加入规则：邀请码（有效期可设）、直接加入（需 `searchable` 且不需要审批）、申请（`require_approval` 时直接加入也转为申请）。申请与升级共用 `shared_space_join_requests`，与人员加入的 `space_join_requests` 分开。
-- [ ] 资源共享的有效权限（WeKnora `kbshare.go`：取共享方、所属空间角色、调用方上限三者的最小值）尚未实现，属于知识库与智能体的共享，待对应模块接入。
+- [x] 智能体共享（后端）：表 `agent_shares`；所属企业的 owner、admin 共享到共享空间（需本企业是该共享空间成员），级别 viewer / editor / admin；共享空间成员通过 `/tenants/:id/shared-agents` 读取，有效级别 = min(共享级别, 本企业在共享空间中的角色, 调用方在本企业的上限：owner/admin→admin，contributor→editor，viewer→viewer)。级别映射：viewer→查看、运行；editor→+编辑；admin→+发布、管理。`tests/test_agent_shares.py` 覆盖。
+- [ ] 智能体共享的运行：跨空间运行会使用所属企业的模型配置与凭据，需要单独确认授权规则，本阶段未开放（共享智能体只能读取）。
+- [ ] 智能体共享的界面：`views/` 中的 WeKnora 原样 `AgentShareSettings.vue` 尚未对接（API 封装已在 `api/agent-share`）。
+- [ ] 知识库共享（`knowledge_base_shares`）：依赖知识库模块，尚未接入。
 - [x] 前端：`/platform/shared-spaces` 页面（`views/shared-space/SharedSpaceList.vue`，接口封装 `api/shared-space`）：列表、创建、邀请码预览与加入、详情中的成员与设置、邀请码重新生成、申请审批与拒绝、离开与删除。界面文案为"共享空间"。知识库与智能体的共享设置仍是 WeKnora 原样（依赖未实现的资源共享接口），待对应模块接入。
 - [x] 部门架构（扩展）：服务与接口 `/api/v1/tenants/{tenant_id}/org-units` 已在第 1 组实现，表仍为 `org_units`。
 - [x] 部门架构页面（企业设置 → 部门架构，仅企业空间与 owner 可见）：部门树、新增子部门与根部门、重命名、移动（修改上级）、停用与启用、删除，部门成员的加入（可设为主部门）与移出。对接 `/api/v1/tenants/:id/org-units`。

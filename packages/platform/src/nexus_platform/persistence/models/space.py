@@ -140,3 +140,25 @@ class SpaceInviteLinkRecord(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     accepted_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+
+class AgentShareRecord(Base):
+    """An agent of an enterprise shared into a shared space. `level` caps what the space's members may do
+    with it: viewer (view, run), editor (adds edit), admin (adds publish and manage). See `shared_spaces.agent_shares`
+    for the effective permission, which also takes the caller's role in the shared space and in their own space."""
+
+    __tablename__ = "agent_shares"
+    __table_args__ = (
+        UniqueConstraint("agent_id", "shared_space_id", name="uq_agent_shares_agent_space"),
+        CheckConstraint("level IN ('viewer', 'editor', 'admin')", name="ck_agent_shares_level"),
+        Index("ix_agent_shares_space", "shared_space_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    agent_id: Mapped[UUID] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    shared_space_id: Mapped[UUID] = mapped_column(ForeignKey("shared_spaces.id", ondelete="CASCADE"), nullable=False)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
