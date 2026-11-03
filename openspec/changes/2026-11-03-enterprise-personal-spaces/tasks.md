@@ -12,8 +12,8 @@
 - [x] 请求层：使用 WeKnora 的 `utils/request.ts`（Bearer 令牌、`X-Tenant-ID`、刷新）。Nexus 后端的登录与令牌返回格式在第 2 组按 WeKnora 实现。
 - [x] 路由：`/platform/organizations` 改为 `/platform/shared-spaces`（菜单、命令面板、页面链接同步修改）。默认入口改为 `/platform/settings`。本阶段未实现的页面（知识库、智能体、会话、产物、工具箱、自动化、创建会话）指向 `views/placeholder/PlannedPage.vue`。
 - [x] 设置菜单：保留 WeKnora 的全部入口。`config/phase1.ts` 定义本阶段已实现的分区（常规、个人资料、空间信息、成员、API Key、审计）；其余分区显示占位提示。
-- [ ] 设置分组按 `design.md` 9.3 调整（账户、空间、共享空间、部门架构、审计）。
-- [ ] 侧栏菜单按 `design.md` 9.1 的入口调整（新对话、共享空间，其余按阶段显示）。
+- [x] 设置分组：保留 WeKnora `Settings.vue` 的分组与顺序（`design.md` 9.3 规定按 WeKnora 分组显示）。本阶段实现的分区见 `config/phase1.ts`，审计与成员分别在"系统管理"与"空间"分组。
+- [x] 侧栏：保留 WeKnora 的全部入口（`design.md` 9.1 规定菜单项保留、页面占位）。未实现页面指向 `PlannedPage`。侧栏会话列表仍调用 WeKnora 接口，待第 2 组对接后可用。
 - [ ] 类型检查与生产构建（`pnpm build`、`vue-tsc`）在有足够内存的环境中通过。
 
 ## 1. 数据模型与迁移（`packages/platform`）
