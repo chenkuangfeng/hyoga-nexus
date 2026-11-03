@@ -9,16 +9,17 @@ Cookies are Secure unless ``[auth].cookie_secure = false`` (local HTTP developme
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole
-from nexus_platform.auth import accounts, sessions, wecom
+from nexus_platform.auth import accounts, preferences, sessions, wecom
 from nexus_platform.configuration import auth_settings
 from nexus_platform.errors import Conflict, Forbidden, NotFound, Unauthenticated
 from nexus_platform.identity.service import resolve_user
@@ -51,6 +52,17 @@ class SwitchTenant(BaseModel):
     tenant_id: UUID
 
 
+class PreferencesUpdate(BaseModel):
+    """Partial update: only the fields sent are changed. `last_active_tenant_id: null` clears it.
+    Unknown keys are rejected (422) so typos do not silently do nothing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    last_active_tenant_id: str | None = Field(default=None, max_length=64)
+    browser_search_instructions: str | None = Field(default=None, max_length=4000)
+    gallery: dict[str, Any] | None = None
+
+
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=10, max_length=256)
@@ -79,7 +91,9 @@ def _require_csrf(request: Request) -> None:
 
 
 def _space_view(tenant: TenantRecord, role: str) -> dict:
-    return {"id": tenant.id, "name": tenant.name, "kind": tenant.kind, "role": role}
+    """One space the user belongs to, in the shape of WeKnora's membership (`tenant_id`, `tenant_name`)."""
+    return {"id": tenant.id, "tenant_id": tenant.id, "name": tenant.name, "tenant_name": tenant.name,
+            "kind": tenant.kind, "role": role}
 
 
 def _user_view(db: Session, user: UserRecord) -> dict:
@@ -90,6 +104,7 @@ def _user_view(db: Session, user: UserRecord) -> dict:
         "id": user.id, "username": username, "email": user.email, "display_name": user.display_name,
         "providers": sorted({prov for prov, _ in identities}),
         "is_platform_admin": user.is_platform_admin, "must_change_password": user.must_change_password,
+        "preferences": dict(user.preferences or {}),
     }
 
 
@@ -148,7 +163,11 @@ def login(body: EmailLogin, request: Request, response: Response, db: Session = 
     memberships = _memberships(db, principal)
     # The home space is the personal space when there is one, otherwise the first space. The client may
     # pick another space with switch-tenant, sending its id as X-Tenant-ID.
-    home = next((m for m in memberships if m["kind"] == "personal"), memberships[0] if memberships else None)
+    # A remembered space (users.preferences.last_active_tenant_id) wins while the user is still a member.
+    remembered = (user_view["preferences"] or {}).get("last_active_tenant_id")
+    home = next((m for m in memberships if str(m["id"]) == remembered), None)
+    if home is None:
+        home = next((m for m in memberships if m["kind"] == "personal"), memberships[0] if memberships else None)
     user_view["tenant_id"] = home["id"] if home else None
     return {
         "success": True,
@@ -188,6 +207,18 @@ def current_user(
         current = _space_view(tenant, role)
     return {"success": True, "data": {"user": user_view, "tenant": current,
                                       "memberships": _memberships(db, principal)}}
+
+
+@router.put("/me/preferences")
+def update_my_preferences(body: PreferencesUpdate, request: Request, response: Response,
+                          principal: Principal = Depends(get_principal),
+                          db: Session = Depends(get_database_session)):
+    """Save the user's preferences (currently the space to open at sign-in). Returns the stored preferences."""
+    if request.cookies.get(SESSION_COOKIE) and bearer_token(request) is None:
+        _require_csrf(request)
+    patch = body.model_dump(exclude_unset=True)
+    stored = preferences.update_preferences(db, principal, patch)
+    return {"success": True, "data": {"preferences": stored}}
 
 
 @router.post("/switch-tenant")

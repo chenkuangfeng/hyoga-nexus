@@ -35,7 +35,7 @@
 - [x] `POST /api/v1/auth/login`：邮箱与密码；返回 `user`、`memberships`、默认空间 `tenant`（个人空间优先）与 `token`；失败信息统一，连续 5 次锁定 15 分钟。
 - [x] `POST /api/v1/auth/switch-tenant`：校验成员身份后返回空间。与设计稿 9.2 的差异见 `design.md` 9.5：令牌不变，空间由请求头 `X-Tenant-ID` 逐次指定并校验成员身份。
 - [x] `GET /api/v1/auth/me`、`POST /api/v1/auth/change-password`（`/auth/password` 作为别名保留）。`must_change_password` 为真时，除 `/auth/me`、退出与改密外的接口返回 403。
-- [ ] `PUT /api/v1/auth/me/preferences` 未实现（需要偏好存储，留到后续）。
+- [x] `PUT /api/v1/auth/me/preferences`：`users.preferences` 存储；`last_active_tenant_id` 仅在仍是有效成员时于登录沿用，空值清除；未知键返回 422。`browser_search_instructions`、`gallery` 按原样保存。`tests/test_registration_spaces.py` 覆盖。
 - [x] `GET /api/v1/tenants/current`、`PATCH /api/v1/tenants/current`（仅 owner、admin 可改名）；`GET /api/v1/tenants`、`POST /api/v1/tenants` 沿用。
 - [x] Bearer 令牌：`Authorization: Bearer <token>`，无需 CSRF 头；Cookie 登录仍保留（企业微信回调使用）。
 - [x] 前端：改初始密码页（`/auth/change-password`），登录后若需改密则跳转。

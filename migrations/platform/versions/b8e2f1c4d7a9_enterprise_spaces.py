@@ -41,6 +41,8 @@ def upgrade():
         batch.add_column(sa.Column('email', sa.String(255), nullable=True))
         batch.add_column(sa.Column('must_change_password', sa.Boolean(), nullable=False,
                                    server_default=sa.false()))
+        # Per-user preferences, e.g. the last space the user worked in (`last_active_tenant_id`).
+        batch.add_column(sa.Column('preferences', sa.JSON(), nullable=False, server_default='{}'))
     op.create_index('uq_users_email', 'users', ['email'], unique=True)
 
     # Memberships: map old roles and sources, then replace the checks.
@@ -245,6 +247,7 @@ def downgrade():
 
     op.drop_index('uq_users_email', table_name='users')
     with op.batch_alter_table('users') as batch:
+        batch.drop_column('preferences')
         batch.drop_column('must_change_password')
         batch.drop_column('email')
     with op.batch_alter_table('tenants') as batch:

@@ -22,7 +22,7 @@
           </div>
         </div>
 
-        <div class="tenant-list" ref="tenantListRef" @scroll="handleScroll">
+        <div class="tenant-list" ref="tenantListRef">
           <div v-if="loading && tenants.length === 0" class="tenant-loading">
             <t-loading size="small" />
             <span>{{ $t('tenant.loading') }}</span>
@@ -72,7 +72,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { searchTenants, type TenantInfo } from '@/api/tenant'
+import type { TenantInfo } from '@/api/tenant'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
@@ -94,10 +94,6 @@ const selectorRef = ref<HTMLElement | null>(null)
 const tenantListRef = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 
-// 分页相关
-const currentPage = ref(1)
-const pageSize = ref(20)
-const total = ref(0)
 const loading = ref(false)
 const searchTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
@@ -126,10 +122,6 @@ const currentTenantName = computed(() => {
   return authStore.tenant?.name || t('tenant.unknown')
 })
 
-const hasMore = computed(() => {
-  return tenants.value.length < total.value
-})
-
 const isSelected = (tenantId: string) => {
   return currentTenantId.value === tenantId
 }
@@ -149,7 +141,6 @@ const toggleDropdown = () => {
 const closeDropdown = () => {
   showDropdown.value = false
   searchQuery.value = ''
-  currentPage.value = 1
   if (searchTimer.value) {
     clearTimeout(searchTimer.value)
     searchTimer.value = null
@@ -158,9 +149,6 @@ const closeDropdown = () => {
 
 const clearSearch = () => {
   searchQuery.value = ''
-  currentPage.value = 1
-  tenants.value = []
-  total.value = 0
   loadTenants()
 }
 
@@ -204,33 +192,21 @@ const selectTenant = (tenantId: string) => {
     .finally(() => navigateAfterTenantSwitch())
 }
 
-const loadTenants = async (append = false) => {
-  if (loading.value) return
-
+// 空间列表来自当前用户的 memberships（/auth/me 与登录响应），不再调用分页搜索接口：
+// Nexus 没有全局空间搜索，用户只能看到自己所属的空间。关键字只在本地按名称过滤。
+const loadTenants = () => {
   loading.value = true
   try {
-    const keyword = searchQuery.value.trim()
-    // Spaces are UUIDs, so the keyword only searches names.
-    const tenantID: string | undefined = undefined
-
-    const response = await searchTenants({
-      keyword: keyword || undefined,
-      tenant_id: tenantID,
-      page: currentPage.value,
-      page_size: pageSize.value
-    })
-
-    if (response.success && response.data) {
-      if (append) {
-        tenants.value = [...tenants.value, ...response.data.items]
-      } else {
-        tenants.value = response.data.items
-      }
-      total.value = response.data.total
-      authStore.setAllTenants(tenants.value)
-    } else {
-      MessagePlugin.error(response.message || t('tenant.loadTenantsFailed'))
-    }
+    const keyword = searchQuery.value.trim().toLowerCase()
+    tenants.value = (authStore.memberships ?? [])
+      .map((m) => ({
+        id: String(m.tenant_id),
+        name: m.tenant_name || '',
+        created_at: '',
+        updated_at: '',
+      }))
+      .filter((tenant) => !keyword || tenant.name.toLowerCase().includes(keyword))
+    authStore.setAllTenants(tenants.value)
   } catch (error) {
     console.error('Failed to load tenants:', error)
     MessagePlugin.error(t('tenant.loadTenantsFailed'))
@@ -245,23 +221,8 @@ const handleSearchInput = () => {
   }
 
   searchTimer.value = window.setTimeout(() => {
-    currentPage.value = 1
-    tenants.value = []
-    total.value = 0
     loadTenants()
   }, 300)
-}
-
-const handleScroll = () => {
-  if (!tenantListRef.value) return
-
-  const { scrollTop, scrollHeight, clientHeight } = tenantListRef.value
-  const isNearBottom = scrollHeight - scrollTop - clientHeight < 50
-
-  if (isNearBottom && hasMore.value && !loading.value) {
-    currentPage.value++
-    loadTenants(true)
-  }
 }
 
 // ---- 创建新工作区 ----
@@ -282,7 +243,6 @@ const onTenantCreated = async (newTenant: TenantInfo) => {
   // setSelectedTenant + navigateAfterTenantSwitch。后端 X-Tenant-ID 中
   // 间件会查 tenant_members 校验，EnsureOwner 已经在后端写好 owner 行。
   tenants.value = [newTenant, ...tenants.value.filter(t => t.id !== newTenant.id)]
-  total.value = total.value + 1
   authStore.setAllTenants(tenants.value)
   await authStore.refreshFromAuthMe()
   authStore.setSelectedTenant(newTenant.id, newTenant.name)

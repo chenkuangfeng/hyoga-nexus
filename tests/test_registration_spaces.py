@@ -95,3 +95,68 @@ def test_public_auth_config_tells_the_login_page_the_registration_mode(client, d
     assert client.get("/api/v1/auth/oidc/config").json() == {"success": True, "enabled": False}
     deployment_config('[auth]\nmode = "session"\ncookie_secure = false\nregistration_enabled = false\n')
     assert client.get("/api/v1/auth/config").json()["registration_mode"] == "invite_only"
+
+
+def _login(client, email="ann@example.com"):
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_preferences_remember_the_space_opened_at_sign_in(client):
+    _register(client)
+    login = _login(client)
+    assert login["user"]["preferences"] == {}
+    personal = next(m["id"] for m in login["memberships"] if m["kind"] == "personal")
+    # The home space is the personal space until a preference is saved.
+    assert login["active_tenant"]["id"] == personal
+
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    second = client.post("/api/v1/tenants", json={"name": "Second"}, headers=headers)
+    assert second.status_code == 201, second.text
+    second_space = second.json()["id"]
+    saved = client.put("/api/v1/auth/me/preferences", json={"last_active_tenant_id": second_space}, headers=headers)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["data"]["preferences"] == {"last_active_tenant_id": second_space}
+    assert _login(client)["active_tenant"]["id"] == second_space
+    assert client.get("/api/v1/auth/me", headers=headers).json()["data"]["user"]["preferences"] == {
+        "last_active_tenant_id": second_space}
+
+    cleared = client.put("/api/v1/auth/me/preferences", json={"last_active_tenant_id": None}, headers=headers)
+    assert cleared.json()["data"]["preferences"] == {}
+    assert _login(client)["active_tenant"]["id"] == personal
+
+
+def test_preferences_refuse_unknown_keys_and_spaces_the_user_is_not_in(client):
+    _register(client)
+    _register(client, username="work", email="work@example.com", kind="enterprise", name="Work Co", code="WORK-2")
+    headers = {"Authorization": f"Bearer {_login(client)['token']}"}
+    unknown = client.put("/api/v1/auth/me/preferences", json={"theme": "dark"}, headers=headers)
+    assert unknown.status_code == 422
+    other = _login(client, "work@example.com")
+    foreign = other["memberships"][0]["id"]
+    refused = client.put("/api/v1/auth/me/preferences", json={"last_active_tenant_id": foreign}, headers=headers)
+    assert refused.status_code == 404
+    malformed = client.put("/api/v1/auth/me/preferences", json={"last_active_tenant_id": "not-a-uuid"},
+                           headers=headers)
+    assert malformed.status_code == 422
+
+
+def test_membership_view_carries_tenant_id_and_name(client):
+    _register(client)
+    login = _login(client)
+    entry = login["memberships"][0]
+    assert entry["tenant_id"] == entry["id"]
+    assert entry["tenant_name"] == entry["name"]
+
+
+def test_ui_preferences_are_stored_as_given_and_cleared_with_null(client):
+    _register(client)
+    headers = {"Authorization": f"Bearer {_login(client)['token']}"}
+    saved = client.put("/api/v1/auth/me/preferences", headers=headers,
+                       json={"browser_search_instructions": "only news", "gallery": {"mode": "custom"}})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["data"]["preferences"] == {"browser_search_instructions": "only news",
+                                                   "gallery": {"mode": "custom"}}
+    cleared = client.put("/api/v1/auth/me/preferences", headers=headers, json={"gallery": None})
+    assert cleared.json()["data"]["preferences"] == {"browser_search_instructions": "only news"}

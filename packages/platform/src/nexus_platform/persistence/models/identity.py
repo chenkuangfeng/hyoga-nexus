@@ -7,9 +7,10 @@ is '' for providers without tenant-scoped IDs; WeCom userids will use the corp i
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, Uuid, false
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -25,6 +26,8 @@ class UserRecord(Base):
     email: Mapped[str | None] = mapped_column(String(255))
     # Set for accounts created with an initial password; cleared when the owner changes it.
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    # Preferences the user chose (currently `last_active_tenant_id`); validated by `auth.preferences`.
+    preferences: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     # Platform-wide flag: may manage organization trees and bind them to spaces. Set by an operator
     # (see `nexus_platform.orgs.service.set_platform_admin`), never through a tenant role.

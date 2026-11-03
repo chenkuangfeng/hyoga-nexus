@@ -5,7 +5,7 @@ const t = (key: string) => i18n.global.t(key)
 
 // 空间信息接口
 export interface TenantInfo {
-  id: number
+  id: string
   name: string
   description?: string
   status?: string
