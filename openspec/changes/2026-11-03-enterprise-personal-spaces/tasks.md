@@ -64,7 +64,7 @@
 - [x] 前端：成员页新增"加入申请"标签（`components/tenant/JoinApplicationsPanel.vue`）：列出待审批申请，批准时选择部门与角色，拒绝时填写原因，对接 `join-requests` 接口。部门选项来自 `org-units/tree`。
 - [ ] 前端：成员页的邀请链接弹窗尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
 - [ ] 前端："加入申请"与成员页目前只对 owner 显示（沿用原页面的 `canManage`），后端允许 admin 审批，待统一。
-- [ ] 前端：按邮箱添加且邮箱无账号时，后端需要用户名与初始密码，成员页尚未提供这两个输入项。
+- [x] 前端：按邮箱添加时，若邮箱没有账号（后端 422），邀请表单展开用户名与初始密码，重新提交即创建账号并直接加入。
 - 实施说明（2026-11-03）：测试 `tests/test_membership_flows.py` 通过 HTTP 覆盖邀请、接受与拒绝、按邮箱建账号、申请与审批、拒绝冷却、撤回、离开、批量角色。全量 pytest 569 通过。
 
 ## 4. 共享空间（WeKnora `organization.go`、`OrganizationHandler`，本仓库命名 `shared_space`）

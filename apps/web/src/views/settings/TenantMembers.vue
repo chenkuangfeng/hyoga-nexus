@@ -65,6 +65,17 @@
                   <t-form-item :label="$t('tenantMember.add.roleLabel')" name="role">
                     <t-select v-model="addForm.role" :options="roleOptions" :popup-props="roleSelectPopupProps" />
                   </t-form-item>
+                  <template v-if="needsNewAccount">
+                    <p class="new-account-hint">{{ $t('tenantMember.newAccount.hint') }}</p>
+                    <t-form-item :label="$t('tenantMember.newAccount.usernameLabel')" name="username">
+                      <t-input v-model="addForm.username" :placeholder="$t('tenantMember.newAccount.usernamePlaceholder')"
+                        clearable />
+                    </t-form-item>
+                    <t-form-item :label="$t('tenantMember.newAccount.passwordLabel')" name="password">
+                      <t-input v-model="addForm.password" type="password" autocomplete="new-password"
+                        :placeholder="$t('tenantMember.newAccount.passwordPlaceholder')" />
+                    </t-form-item>
+                  </template>
                 </t-form>
                 <div v-else class="invite-confirm-body">
                   {{ $t('tenantInvitation.confirmInviteBody', {
@@ -636,10 +647,15 @@ let auditScrollObserver: IntersectionObserver | null = null
 // inviting a fresh member with viewer is too restrictive for the
 // expected "let them collaborate on KBs" use case, and admin/owner
 // should be a deliberate promote step after the user accepts.
-const addForm = reactive<{ email: string; role: TenantRole }>({
+const addForm = reactive<{ email: string; role: TenantRole; username: string; password: string }>({
   email: '',
   role: 'contributor',
+  username: '',
+  password: '',
 })
+// Set when the server reports that no account uses the email: the form then asks for a username and an
+// initial password, and the invitation is sent again with them (the account is created and joins at once).
+const needsNewAccount = ref(false)
 
 // Role-aware gates. The server enforces every mutation; UI gates here
 // are presentational only, matching the security note in stores/auth.ts.
@@ -1251,6 +1267,9 @@ watch(invitePopupVisible, (open) => {
   if (!open) return
   addForm.email = ''
   addForm.role = 'contributor'
+  addForm.username = ''
+  addForm.password = ''
+  needsNewAccount.value = false
   addDialogStep.value = 'form'
 })
 
@@ -1309,6 +1328,12 @@ async function submitAdd() {
   if (addDialogStep.value === 'form') {
     const valid = await addFormRef.value?.validate?.()
     if (valid !== true) return
+    if (needsNewAccount.value && (!addForm.username.trim() || addForm.password.length < 10)) {
+      MessagePlugin.warning(
+        !addForm.username.trim() ? t('tenantMember.newAccount.usernameRequired') : t('tenantMember.newAccount.passwordRequired'),
+      )
+      return
+    }
     if (authStore.autoAcceptInvitation) {
       await sendInvitation(addForm.email.trim(), addForm.role)
       return
@@ -1336,7 +1361,10 @@ const dialogConfirmLabel = computed(() =>
 async function sendInvitation(email: string, role: TenantRole) {
   adding.value = true
   try {
-    const resp = await createInvitation(activeTenantId.value, { email, role })
+    const newAccount = needsNewAccount.value
+      ? { username: addForm.username.trim(), password: addForm.password }
+      : {}
+    const resp = await createInvitation(activeTenantId.value, { email, role, ...newAccount })
     if (resp.success) {
       // auto-accept returns a member (user_id) instead of an invitation (id)
       const autoJoined = !!resp.data && 'user_id' in resp.data
@@ -1355,7 +1383,11 @@ async function sendInvitation(email: string, role: TenantRole) {
     }
   } catch (err: any) {
     const status = err?.status
-    if (status === 404) {
+    if (status === 422 && !needsNewAccount.value) {
+      // No account uses this email: ask for a username and initial password, then the user submits again.
+      needsNewAccount.value = true
+      MessagePlugin.info(err?.message || t('tenantMember.newAccount.hint'))
+    } else if (status === 404) {
       MessagePlugin.error(t('tenantMember.errors.userNotFound'))
     } else if (status === 409) {
       // Server returns the same 409 for both "already a member" and
@@ -1939,6 +1971,13 @@ watch(
   color: var(--td-text-color-primary);
   margin: 0 0 12px;
   line-height: 1.35;
+}
+
+.new-account-hint {
+  margin: 0 0 12px;
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .member-invite-form {

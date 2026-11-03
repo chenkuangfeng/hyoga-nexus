@@ -51,6 +51,9 @@ export interface CreateInvitationRequest {
   email: string
   role: TenantRole
   message?: string
+  /** 邮箱没有账号时必填：后端据此创建账号并直接加入空间。 */
+  username?: string
+  password?: string
 }
 
 export interface CreateInvitationResponse {
@@ -155,6 +158,8 @@ export async function createInvitation(
   const result = (await post(`/api/v1/tenants/${tenantId}/members/by-email`, {
     email: body.email,
     role: body.role,
+    username: body.username,
+    password: body.password,
   })) as unknown as { status: 'invited' | 'created'; invitation_id?: string; user_id?: string }
   if (result.status === 'created' && result.user_id) {
     const member: TenantMember = {

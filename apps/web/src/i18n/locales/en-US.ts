@@ -8547,6 +8547,15 @@ export default {
     retry: 'Retry',
     empty: 'No members yet. Invite a teammate to get started.',
     emptySearch: 'No members match "{q}".',
+    newAccount: {
+      hint: 'No account uses this email yet. Set a username and an initial password; the account joins the workspace right away and must change the password at first sign-in.',
+      usernameLabel: 'Username',
+      usernamePlaceholder: '3-64 characters',
+      passwordLabel: 'Initial password',
+      passwordPlaceholder: 'At least 10 characters',
+      usernameRequired: 'Enter a username',
+      passwordRequired: 'The initial password must be at least 10 characters',
+    },
     searchPlaceholder: 'Search by name or email',
     permissions: {
       title: 'Role permissions',

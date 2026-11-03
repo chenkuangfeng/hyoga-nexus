@@ -706,6 +706,15 @@ export default {
     retry: '重试',
     empty: '尚未邀请任何成员。点击右上角邀请伙伴加入。',
     emptySearch: '没有匹配 "{q}" 的成员。',
+    newAccount: {
+      hint: '该邮箱还没有账号。请设置用户名和初始密码，账号创建后会直接加入空间，并要求首次登录时修改密码。',
+      usernameLabel: '用户名',
+      usernamePlaceholder: '3-64 个字符',
+      passwordLabel: '初始密码',
+      passwordPlaceholder: '至少 10 个字符',
+      usernameRequired: '请填写用户名',
+      passwordRequired: '初始密码至少 10 个字符',
+    },
     searchPlaceholder: '按姓名或邮箱搜索',
     audit: {
       tabLabel: '审计日志',
