@@ -9,6 +9,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
 import { normalizeSettingsSection } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
+import { rememberPendingInviteCode } from '@/utils/pendingInvite'
 import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
@@ -383,6 +384,8 @@ router.beforeEach(async (to, from, next) => {
           // Auto-setup may be unavailable outside the native Lite shell.
         }
       }
+      // Keep an invite code from /join so the shared-space page can use it after sign-in.
+      if (typeof to.query.invite_code === 'string') rememberPendingInviteCode(to.query.invite_code)
       next('/login')
       return
     }

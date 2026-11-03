@@ -41,7 +41,8 @@
 - [x] 前端：改初始密码页（`/auth/change-password`），登录后若需改密则跳转。
 - [x] 租户 ID 统一为 UUID 字符串：前端副本中约 70 处数字类型的租户 ID 与 `Number(...)` 转换已改为字符串，登录后总是选中当前空间并发送 `X-Tenant-ID`（`App.vue`、`views/auth/Login.vue`）。`tsc -p tsconfig.app.json` 对 `.ts` 文件无错误；`.vue` 文件仅做语法检查（`vue-tsc` 本机内存不足）。
 - [x] 前端：注册页增加空间类型（个人 / 企业）；选择企业时填写企业名称与企业编码，提交到 `POST /api/v1/auth/register`。用户名最少 3 位、密码最少 10 位，与后端一致。
-- [ ] 前端：空间选择页（`/onboarding/workspace`）、邀请落地页（`/join`）仍是 WeKnora 复制版的原样，尚未按 Nexus 接口调整。
+- [x] 前端：`/join?code=` 跳转到共享空间页并打开加入对话框，自动填入并预览邀请码；未登录时邀请码暂存在 sessionStorage，登录后使用。
+- [x] 前端：空间选择页（`/onboarding/workspace`）使用 Nexus 已有接口（auth/me、创建空间、我的邀请），无需改动。
 - [ ] 前端：其他语言包（ja-JP、ko-KR、ru-RU、zh-TW）尚未补充新增的注册文案，显示时回退到其他语言。
 - [ ] 前端：`/auth/config`、`/auth/oidc/*`、`/auth/auto-setup` 等 WeKnora 启动接口在本仓库尚未实现，启动时会返回 404。
 - 实施说明（2026-11-03）：测试 `tests/test_auth.py`（改为邮箱登录，覆盖改密门禁）与 `tests/test_registration_spaces.py`（注册两类空间、编码唯一、注册开关、Bearer、空间选择与改名）。全量 pytest 通过。前端仅做语法检查（本机构建内存不足，以 CI 为准）。

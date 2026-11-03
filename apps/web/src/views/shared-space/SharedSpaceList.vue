@@ -147,6 +147,8 @@
 // The acting space is the caller's current space (X-Tenant-ID). Business rules are in the backend.
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
+import { takePendingInviteCode } from '@/utils/pendingInvite'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -378,7 +380,18 @@ const removeSpace = () => {
   })
 }
 
-onMounted(load)
+// `/join?code=...` lands here with `invite_code` (or with the code kept across sign-in): open the join dialog
+// with the code filled in and preview it, so the user only confirms.
+const route = useRoute()
+onMounted(async () => {
+  await load()
+  const fromQuery = typeof route.query.invite_code === 'string' ? route.query.invite_code : ''
+  const code = (fromQuery || takePendingInviteCode()).trim()
+  if (!code) return
+  openJoinDialog()
+  joinCode.value = code
+  await previewCode()
+})
 </script>
 
 <style scoped lang="less">
