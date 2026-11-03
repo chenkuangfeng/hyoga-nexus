@@ -198,10 +198,14 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          path: "shared-spaces",
+          name: "sharedSpaces",
+          component: () => import("../views/shared-space/SharedSpaceList.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
           path: "organizations",
-          name: "organizationList",
-          component: () => import("../views/organization/OrganizationList.vue"),
-          meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'organizations' }
+          redirect: "/platform/shared-spaces",
         },
         // Compatibility redirects for /platform/system/* URLs. System
         // administration surfaces live as dedicated sections inside the

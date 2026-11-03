@@ -39,7 +39,8 @@
 - [x] `GET /api/v1/tenants/current`、`PATCH /api/v1/tenants/current`（仅 owner、admin 可改名）；`GET /api/v1/tenants`、`POST /api/v1/tenants` 沿用。
 - [x] Bearer 令牌：`Authorization: Bearer <token>`，无需 CSRF 头；Cookie 登录仍保留（企业微信回调使用）。
 - [x] 前端：改初始密码页（`/auth/change-password`），登录后若需改密则跳转。
-- [ ] 前端：注册页的个人 / 企业 Tab、空间选择页（`/onboarding/workspace`）、邀请落地页（`/join`）仍是 WeKnora 复制版的原样，尚未按 Nexus 接口调整。
+- [x] 租户 ID 统一为 UUID 字符串：前端副本中约 70 处数字类型的租户 ID 与 `Number(...)` 转换已改为字符串，登录后总是选中当前空间并发送 `X-Tenant-ID`（`App.vue`、`views/auth/Login.vue`）。`tsc -p tsconfig.app.json` 对 `.ts` 文件无错误；`.vue` 文件仅做语法检查（`vue-tsc` 本机内存不足）。
+- [ ] 前端：注册页的企业 Tab、空间选择页（`/onboarding/workspace`）、邀请落地页（`/join`）仍是 WeKnora 复制版的原样，尚未按 Nexus 接口调整。
 - [ ] 前端：`/auth/config`、`/auth/oidc/*`、`/auth/auto-setup` 等 WeKnora 启动接口在本仓库尚未实现，启动时会返回 404。
 - 实施说明（2026-11-03）：测试 `tests/test_auth.py`（改为邮箱登录，覆盖改密门禁）与 `tests/test_registration_spaces.py`（注册两类空间、编码唯一、注册开关、Bearer、空间选择与改名）。全量 pytest 通过。前端仅做语法检查（本机构建内存不足，以 CI 为准）。
 
@@ -65,7 +66,7 @@
 - [x] 共享空间内角色 `admin` / `editor` / `viewer`。空间（而非人）加入共享空间；创建方空间为 admin 且不能退出，只能删除（软删除）。
 - [x] 加入规则：邀请码（有效期可设）、直接加入（需 `searchable` 且不需要审批）、申请（`require_approval` 时直接加入也转为申请）。申请与升级共用 `shared_space_join_requests`，与人员加入的 `space_join_requests` 分开。
 - [ ] 资源共享的有效权限（WeKnora `kbshare.go`：取共享方、所属空间角色、调用方上限三者的最小值）尚未实现，属于知识库与智能体的共享，待对应模块接入。
-- [ ] 前端：`/platform/shared-spaces` 列表、创建、加入、设置弹窗尚未按新接口调整。界面文案为"共享空间"。
+- [x] 前端：`/platform/shared-spaces` 页面（`views/shared-space/SharedSpaceList.vue`，接口封装 `api/shared-space`）：列表、创建、邀请码预览与加入、详情中的成员与设置、邀请码重新生成、申请审批与拒绝、离开与删除。界面文案为"共享空间"。知识库与智能体的共享设置仍是 WeKnora 原样（依赖未实现的资源共享接口），待对应模块接入。
 - [x] 部门架构（扩展）：服务与接口 `/api/v1/tenants/{tenant_id}/org-units` 已在第 1 组实现，表仍为 `org_units`。
 - [ ] 部门架构页面（企业设置下）尚未实现，见第 6 组。
 - 实施说明（2026-11-03）：测试 `tests/test_shared_spaces.py` 覆盖创建、邀请码与预览、直接加入与审批、升级申请、离开与删除、角色限制。`shared_spaces` 包位于 `packages/platform/src/nexus_platform/shared_spaces/`。

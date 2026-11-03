@@ -669,7 +669,7 @@ export interface RuntimeTask {
   max_retry: number
   is_orphaned?: boolean
   worker?: string
-  tenant_id?: number
+  tenant_id?: string
   knowledge_base_id?: string
   knowledge_id?: string
   task_id?: string
@@ -933,7 +933,7 @@ export interface SandboxInventory {
 
 export interface UserSandbox {
   digest: string
-  owner_tenant_id: number
+  owner_tenant_id: string
   owner_id?: string
   live_sessions: number
   empty_since?: string

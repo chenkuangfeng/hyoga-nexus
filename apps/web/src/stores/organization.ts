@@ -383,7 +383,7 @@ export const useOrganizationStore = defineStore('organization', () => {
   /**
    * Update a member's role (member identified by tenant_id)
    */
-  async function changeMemberRole(orgId: string, tenantId: number, role: 'admin' | 'editor' | 'viewer') {
+  async function changeMemberRole(orgId: string, tenantId: string, role: 'admin' | 'editor' | 'viewer') {
     loading.value = true
     error.value = null
     try {
@@ -409,7 +409,7 @@ export const useOrganizationStore = defineStore('organization', () => {
   /**
    * Remove a member from organization (member identified by tenant_id)
    */
-  async function kickMember(orgId: string, tenantId: number) {
+  async function kickMember(orgId: string, tenantId: string) {
     loading.value = true
     error.value = null
     try {

@@ -11,7 +11,7 @@ function encodeSlugPath(slug: string): string {
 // Wiki Page Types
 export interface WikiPage {
   id: string;
-  tenant_id: number;
+  tenant_id: string;
   knowledge_base_id: string;
   slug: string;
   title: string;
@@ -50,7 +50,7 @@ export interface WikiPageListResponse {
 
 export interface WikiFolder {
   id: string;
-  tenant_id: number;
+  tenant_id: string;
   knowledge_base_id: string;
   parent_id: string;
   name: string;
@@ -100,7 +100,7 @@ export interface WikiStats {
 
 export interface WikiPageIssue {
   id: string;
-  tenant_id: number;
+  tenant_id: string;
   knowledge_base_id: string;
   slug: string;
   issue_type: string;
@@ -210,7 +210,7 @@ export function deleteWikiPage(kbId: string, slug: string) {
 // `content` is only populated when fetching a single revision.
 export interface WikiPageRevision {
   id: string;
-  tenant_id: number;
+  tenant_id: string;
   knowledge_base_id: string;
   page_id: string;
   slug: string;

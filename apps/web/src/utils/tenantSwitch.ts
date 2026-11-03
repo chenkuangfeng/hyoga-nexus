@@ -84,9 +84,10 @@ export function consumePendingTenantSwitchToast(): PendingTenantSwitchToast | nu
  * persist is recoverable on the next switch.
  */
 export function persistLastActiveTenantPreference(
-  tenantId: number | null,
+  tenantId: string | null,
 ): Promise<void> {
-  const payload = { last_active_tenant_id: tenantId == null ? 0 : tenantId }
+  // An empty string clears the preference.
+  const payload = { last_active_tenant_id: tenantId ?? '' }
   return updateMyPreferences(payload)
     .then((res) => {
       if (!res.success) {

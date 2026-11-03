@@ -828,7 +828,7 @@ const addMemberPopupVisible = ref(false)
 const addMemberSubmitting = ref(false)
 const tenantSearchLoading = ref(false)
 const tenantSearchResults = ref<TenantInviteCandidate[]>([])
-const selectedTenantId = ref<number | null>(null)
+const selectedTenantId = ref<string | null>(null)
 const addMemberRole = ref<'admin' | 'editor' | 'viewer'>('viewer')
 
 const formData = ref({

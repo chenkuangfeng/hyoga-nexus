@@ -749,7 +749,7 @@ const dsCount = ref(0)
 // that predate per-KB ownership tracking; those KBs have no "owner" and
 // only tenant Admin+ can mutate their share settings.
 const kbCreatorId = ref<string>('')
-const kbTenantId = ref<number>(0)
+const kbTenantId = ref<string>('')
 
 // Backend gate for /knowledge-bases/:id/shares (POST/PUT/DELETE) is
 // g.OwnedKBOrAdmin(): only the KB creator or tenant Admin+ may mutate
@@ -770,7 +770,7 @@ const isKbOwner = computed(() => {
 
 const canViewActivity = computed(() => {
   if (editorMode.value !== 'edit' || !activeKbId.value) return false
-  if (Number(kbTenantId.value || 0) !== Number(authStore.currentTenantId || 0)) return false
+  if (String(kbTenantId.value || '') !== String(authStore.currentTenantId || '')) return false
   return isKbOwner.value || authStore.hasRole('admin')
 })
 // 用户是否在分块设置中手动改过任何值。一旦为 true，就不再根据索引策略自动调整默认分块参数。
@@ -1078,7 +1078,7 @@ const loadKBData = async (
     hasFiles.value = (filesResult as any)?.total > 0
     generatedProfile.value = (kb as any).generated_profile || null
     kbCreatorId.value = (kb as any).creator_id || ''
-    kbTenantId.value = Number((kb as any).tenant_id || 0)
+    kbTenantId.value = String((kb as any).tenant_id || '')
 
     // 设置表单数据
     const kbType = (kb.type as 'document' | 'faq') || 'document'

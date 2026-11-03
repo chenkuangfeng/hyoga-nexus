@@ -148,7 +148,7 @@ export function useStream() {
         postBody.agent_id = params.agent_id;
       }
       if (params.agent_source_tenant_id) {
-        postBody.agent_source_tenant_id = Number(params.agent_source_tenant_id);
+        postBody.agent_source_tenant_id = params.agent_source_tenant_id;
       }
       // Include web_search_enabled if provided
       if (params.web_search_enabled !== undefined) {

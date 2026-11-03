@@ -714,7 +714,7 @@ const saving = ref(false)
 const error = ref('')
 const authStore = useAuthStore()
 const chatResources = useChatResourcesStore()
-const tenantId = ref(0)
+const tenantId = ref('')
 const apiKey = ref('')
 const config = ref<APIPrincipalConfig | null>(null)
 const apiKeys = ref<TenantAPIKey[]>([])
@@ -1057,7 +1057,7 @@ const hasPlaygroundResult = computed(() => Boolean(
 ))
 
 const tokenSignExample = computed(() => {
-  const tid = tenantId.value || 10000
+  const tid = tenantId.value || '<tenant_id>'
   const headerName = tokenHeaderName.value
   return `import (
 	"time"
@@ -1139,7 +1139,7 @@ async function load() {
     if (!activeTenantId) {
       throw new Error(t('integrations.api.loadFailed'))
     }
-    tenantId.value = Number(activeTenantId)
+    tenantId.value = String(activeTenantId)
     await Promise.all([
       loadAPIKeys(),
       loadKnowledgeBaseOptions(),

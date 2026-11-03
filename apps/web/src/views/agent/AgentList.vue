@@ -784,7 +784,7 @@ interface AgentWithUI extends CustomAgent {
 /** Merged agent for "all" tab: my agents (isMine: true) or shared
  *  (isMine: false, org_name, source_tenant_id, share_id, permission, disabled_by_me?).
  *  `permission` drives the「可编辑 / 仅查看」分组，仅在 shared 分支携带。 */
-type DisplayAgent = (AgentWithUI & { isMine: true }) | (CustomAgent & { isMine: false; org_name: string; source_tenant_id: number; share_id: string; permission?: string; showMore?: boolean; disabled_by_me?: boolean })
+type DisplayAgent = (AgentWithUI & { isMine: true }) | (CustomAgent & { isMine: false; org_name: string; source_tenant_id: string; share_id: string; permission?: string; showMore?: boolean; disabled_by_me?: boolean })
 
 const flatAgentSortAccessors: ResourceSortAccessors<any> = {
   getName: item => item?.name,

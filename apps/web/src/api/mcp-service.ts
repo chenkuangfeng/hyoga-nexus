@@ -2,7 +2,7 @@ import { get, post, put, del } from '@/utils/request'
 
 export interface MCPService {
   id: string
-  tenant_id?: number
+  tenant_id?: string
   name: string
   description: string
   usage_instructions?: string
@@ -70,7 +70,7 @@ export interface MCPTool {
 
 export interface MCPToolApprovalRow {
   id: string
-  tenant_id?: number
+  tenant_id?: string
   service_id: string
   tool_name: string
   require_approval: boolean

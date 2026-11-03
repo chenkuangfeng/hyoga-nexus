@@ -4,7 +4,7 @@ export type McpEndpointToolGroup = 'retrieve' | 'chat' | 'wiki' | 'ingest'
 
 export interface McpEndpoint {
   id: string
-  tenant_id: number
+  tenant_id: string
   name: string
   description: string
   enabled: boolean

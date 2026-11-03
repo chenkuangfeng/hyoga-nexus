@@ -53,22 +53,21 @@ export function useRoleLabel() {
  */
 export function useHomeTenant() {
   const authStore = useAuthStore()
-  const homeTenantId = computed<number | null>(() => {
+  const homeTenantId = computed<string | null>(() => {
     const raw = authStore.user?.tenant_id
     if (raw === null || raw === undefined || raw === '') return null
-    const n = Number(raw)
-    return Number.isFinite(n) && n > 0 ? n : null
+    return String(raw)
   })
-  const activeTenantId = computed<number | null>(() => authStore.effectiveTenantId)
+  const activeTenantId = computed<string | null>(() => authStore.effectiveTenantId)
   const isHomeTenantActive = computed(() => {
     const home = homeTenantId.value
     const active = activeTenantId.value
     return home !== null && active !== null && home === active
   })
-  const isHomeTenant = (id: number | string | null | undefined): boolean => {
+  const isHomeTenant = (id: string | null | undefined): boolean => {
     if (id === null || id === undefined || id === '') return false
     const home = homeTenantId.value
-    return home !== null && Number(id) === home
+    return home !== null && String(id) === home
   }
   return { homeTenantId, activeTenantId, isHomeTenantActive, isHomeTenant }
 }

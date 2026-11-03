@@ -129,7 +129,7 @@ export interface UpdateTenantAPIKeyPayload {
 // 搜索空间参数
 export interface SearchTenantsParams {
   keyword?: string
-  tenant_id?: number
+  tenant_id?: string
   page?: number
   page_size?: number
 }
@@ -163,7 +163,7 @@ export async function listAllTenants(): Promise<{ success: boolean; data?: { ite
 }
 
 export async function getAPIPrincipalConfig(
-  tenantId: number,
+  tenantId: string,
 ): Promise<{ success: boolean; data?: APIPrincipalConfig; message?: string }> {
   try {
     const response = await get(`/api/v1/tenants/${tenantId}/api-principal-config`)
@@ -177,7 +177,7 @@ export async function getAPIPrincipalConfig(
 }
 
 export async function updateAPIPrincipalConfig(
-  tenantId: number,
+  tenantId: string,
   payload: UpdateAPIPrincipalConfigPayload,
 ): Promise<{ success: boolean; data?: APIPrincipalConfig; message?: string }> {
   try {
@@ -192,7 +192,7 @@ export async function updateAPIPrincipalConfig(
 }
 
 export async function createAPIPrincipalTestToken(
-  tenantId: number,
+  tenantId: string,
   payload: CreateAPIPrincipalTestTokenPayload,
 ): Promise<{ success: boolean; data?: APIPrincipalTestToken; message?: string }> {
   try {
@@ -207,7 +207,7 @@ export async function createAPIPrincipalTestToken(
 }
 
 export async function listTenantAPIKeys(
-  tenantId: number,
+  tenantId: string,
 ): Promise<{ success: boolean; data?: TenantAPIKey[]; message?: string }> {
   try {
     const response = await get(`/api/v1/tenants/${tenantId}/api-keys`)
@@ -221,7 +221,7 @@ export async function listTenantAPIKeys(
 }
 
 export async function createTenantAPIKey(
-  tenantId: number,
+  tenantId: string,
   payload: CreateTenantAPIKeyPayload,
 ): Promise<{ success: boolean; data?: CreatedTenantAPIKey; message?: string }> {
   try {
@@ -237,7 +237,7 @@ export async function createTenantAPIKey(
 
 /** 更新已创建租户 API Key 的授权范围和其他可配置属性。 */
 export async function updateTenantAPIKey(
-  tenantId: number,
+  tenantId: string,
   keyId: number,
   payload: UpdateTenantAPIKeyPayload,
 ): Promise<{ success: boolean; data?: TenantAPIKey; message?: string }> {
@@ -253,7 +253,7 @@ export async function updateTenantAPIKey(
 }
 
 export async function deleteTenantAPIKey(
-  tenantId: number,
+  tenantId: string,
   keyId: number,
 ): Promise<{ success: boolean; message?: string }> {
   try {
@@ -274,7 +274,7 @@ export async function deleteTenantAPIKey(
  * 权限：owner（与 router.go 中的 g.Owner() 守卫保持一致）。
  */
 export async function updateTenant(
-  tenantId: number,
+  tenantId: string,
   payload: { name?: string; description?: string },
 ): Promise<{ success: boolean; data?: TenantInfo; message?: string }> {
   try {
@@ -292,7 +292,7 @@ export async function updateTenant(
  * 删除当前工作区。权限：owner。
  */
 export async function deleteTenant(
-  tenantId: number,
+  tenantId: string,
 ): Promise<{ success: boolean; message?: string }> {
   try {
     const response = await del(`/api/v1/tenants/${tenantId}`)

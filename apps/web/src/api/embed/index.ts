@@ -3,7 +3,7 @@ import { resolveEmbedBaseUrl } from '@/utils/embedBaseUrl'
 
 export interface EmbedChannel {
   id: string
-  tenant_id: number
+  tenant_id: string
   agent_id: string
   name: string
   enabled: boolean

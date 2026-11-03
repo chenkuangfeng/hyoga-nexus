@@ -37,14 +37,14 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref<string>('')
   const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
   const currentKnowledgeBase = ref<KnowledgeBaseInfo | null>(null)
-  const selectedTenantId = ref<number | null>(null)
+  const selectedTenantId = ref<string | null>(null)
   const selectedTenantName = ref<string | null>(null)
   const allTenants = ref<TenantInfoFromAPI[]>([])
   // memberships lists every tenant the user can authenticate into,
   // along with their role in each. Populated from /auth/login response.
   // v1 deployments will typically have length 1; the field is wired now
   // so PR 3 can render a tenant-switcher UI without a store migration.
-  const memberships = ref<Array<{ tenant_id: number; tenant_name?: string; role: string }>>([])
+  const memberships = ref<Array<{ tenant_id: string; tenant_name?: string; role: string }>>([])
   const isLiteMode = ref(false)
   // pendingInvitationCount is the number of pending tenant invitations
   // addressed to the current user. Renders as a badge next to the
@@ -183,7 +183,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const effectiveTenantId = computed(() => {
     // 如果选择了其他空间，使用选择的空间ID，否则使用用户默认空间ID
-    return selectedTenantId.value || (tenant.value?.id ? Number(tenant.value.id) : null)
+    return selectedTenantId.value || (tenant.value?.id ? String(tenant.value.id) : null)
   })
 
   // 操作方法
@@ -267,7 +267,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const setSelectedTenant = (tenantId: number | null, tenantName: string | null = null) => {
+  const setSelectedTenant = (tenantId: string | null, tenantName: string | null = null) => {
     const previousTenantId = selectedTenantId.value
     const tenantChanged = previousTenantId !== tenantId
     selectedTenantId.value = tenantId
@@ -291,7 +291,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const setMemberships = (
-    list: Array<{ tenant_id: number; tenant_name?: string; role: string }>
+    list: Array<{ tenant_id: string; tenant_name?: string; role: string }>
   ) => {
     memberships.value = Array.isArray(list) ? list : []
     localStorage.setItem('weknora_memberships', JSON.stringify(memberships.value))
@@ -411,7 +411,7 @@ export const useAuthStore = defineStore('auth', () => {
   // 提示与跳转交给调用方（store 不碰 router）。
   const acceptInvitationByTokenAndRefresh = async (
     token: string,
-  ): Promise<{ ok: boolean; tenantId?: number; tenantName?: string }> => {
+  ): Promise<{ ok: boolean; tenantId?: string; tenantName?: string }> => {
     try {
       const { acceptInvitationByToken } = await import('@/api/tenant/invitations')
       const resp = await acceptInvitationByToken(token)
@@ -541,7 +541,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (storedSelectedTenantId) {
       try {
-        selectedTenantId.value = Number(storedSelectedTenantId)
+        selectedTenantId.value = storedSelectedTenantId
         if (storedSelectedTenantName) {
           selectedTenantName.value = storedSelectedTenantName
         }

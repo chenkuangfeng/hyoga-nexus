@@ -274,7 +274,7 @@ const error = ref('')
 const canEditTenant = computed(() => authStore.hasRole('owner'))
 
 /** 与原 TenantMembers.vue 一致：最后一位 Owner 不展示退出，避免与服务端 last-owner 对齐失败。 */
-const activeTenantNumericId = computed(() => Number(authStore.currentTenantId ?? 0))
+const activeTenantId = computed(() => String(authStore.currentTenantId ?? ''))
 
 const leaveMembersSnap = ref<TenantMember[]>([])
 const leaveGateReady = ref(false)
@@ -294,13 +294,13 @@ const showLeaveDangerZone = computed(() => {
   if (loading.value || error.value || !tenantInfo.value) return false
   if (!leaveGateReady.value || leaveGateLoading.value) return false
   if (!currentTenantRole.value) return false
-  if (Number(tenantInfo.value.id) !== activeTenantNumericId.value) return false
+  if (String(tenantInfo.value.id) !== activeTenantId.value) return false
   return canLeaveSpace.value
 })
 
 const showDeleteDangerZone = computed(() => {
   if (loading.value || error.value || !tenantInfo.value) return false
-  if (Number(tenantInfo.value.id) !== activeTenantNumericId.value) return false
+  if (String(tenantInfo.value.id) !== activeTenantId.value) return false
   return authStore.hasRole('owner')
 })
 
@@ -309,7 +309,7 @@ async function evaluateLeaveGate(): Promise<void> {
   leaveMembersSnap.value = []
   leaveGateLoading.value = false
 
-  const infoId = tenantInfo.value?.id != null ? Number(tenantInfo.value.id) : 0
+  const infoId = tenantInfo.value?.id != null ? String(tenantInfo.value.id) : ''
   if (!infoId || !activeTenantNumericId.value || infoId !== activeTenantNumericId.value) {
     leaveGateReady.value = true
     return
@@ -335,7 +335,7 @@ async function evaluateLeaveGate(): Promise<void> {
 }
 
 function confirmLeaveTenant() {
-  const tid = Number(tenantInfo.value?.id ?? 0)
+  const tid = String(tenantInfo.value?.id ?? '')
   if (!tid) return
 
   const dlg = DialogPlugin.confirm({
@@ -369,7 +369,7 @@ function confirmLeaveTenant() {
 }
 
 function confirmDeleteTenant() {
-  const tid = Number(tenantInfo.value?.id ?? 0)
+  const tid = String(tenantInfo.value?.id ?? '')
   const tenantName = tenantInfo.value?.name || ''
   if (!tid || !tenantName) return
   deleteConfirmName.value = ''
@@ -377,7 +377,7 @@ function confirmDeleteTenant() {
 }
 
 async function deleteCurrentTenant() {
-  const tid = Number(tenantInfo.value?.id ?? 0)
+  const tid = String(tenantInfo.value?.id ?? '')
   const tenantName = tenantInfo.value?.name || ''
   if (!tid || !tenantName) return
   if (deleteConfirmName.value.trim() !== tenantName) {
@@ -515,7 +515,7 @@ const saveTenantDescription = async () => {
 
   try {
     savingDescription.value = true
-    const resp = await updateTenantApi(Number(tenantInfo.value.id), { description: newDesc })
+    const resp = await updateTenantApi(String(tenantInfo.value.id), { description: newDesc })
     if (resp.success) {
       // 本地立即回显，避免等 /auth/me 往返。描述不像名称那样会出现在空间切换器等
       // 顶部组件里，所以无需同步 authStore.tenant / memberships。
@@ -548,7 +548,7 @@ const saveTenantName = async () => {
 
   try {
     saving.value = true
-    const resp = await updateTenantApi(Number(tenantInfo.value.id), { name: newName })
+    const resp = await updateTenantApi(String(tenantInfo.value.id), { name: newName })
     if (resp.success) {
       // 本地立即回显，避免等 /auth/me 往返；同步刷新登录态里的 tenant
       // 缓存（若当前激活空间就是 home tenant，顶部空间切换器等地方也跟着更新）。

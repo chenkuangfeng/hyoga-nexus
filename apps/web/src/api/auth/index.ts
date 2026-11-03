@@ -17,7 +17,7 @@ export interface LoginResponse {
     username: string
     email: string
     avatar?: string
-    tenant_id: number
+    tenant_id: string
     can_access_all_tenants?: boolean
     is_system_admin?: boolean
     is_active: boolean
@@ -99,7 +99,7 @@ export interface UserPreferences {
   // last_active_tenant_id 持久化「刷新 / 换设备 / 重新登录后回到上次的空间」
   // 偏好；后端在 Login / RefreshToken 时校验 membership 有效后才会沿用，
   // 否则回退到 home 并清掉这个字段。传 0 给 PATCH 表示「清除偏好」。
-  last_active_tenant_id?: number | null
+  last_active_tenant_id?: string | null
   // oidc_only_login 为 true 表示账号由 OIDC 自动开通且用户尚未设置已知密码。
   oidc_only_login?: boolean
   // gallery 记录图库的个人状态：搜索激活模式与逐字段开/关（按属性 ID）。
@@ -150,7 +150,7 @@ export function userInfoFromApi(
     u?.tenant_id !== undefined && u?.tenant_id !== null && u.tenant_id !== ''
       ? u.tenant_id
       : fallbackTenantId ?? ''
-  const tid = Number(rawTenantId) > 0 ? rawTenantId : ''
+  const tid = rawTenantId ? String(rawTenantId) : ''
   return {
     id: u?.id || '',
     username: u?.username || '',
@@ -338,7 +338,7 @@ export function autoSetup(): Promise<LoginResponse> {
  * in.
  */
 export interface MembershipInfo {
-  tenant_id: number
+  tenant_id: string
   tenant_name?: string
   role: string
 }
@@ -514,7 +514,7 @@ export async function validateToken(): Promise<{ success: boolean; valid?: boole
 // /register?token=xxx — enough to render the registration page header
 // ("X invited you to Y") without leaking sensitive inviter fields.
 export interface InviteLookup {
-  tenant_id: number
+  tenant_id: string
   tenant_name?: string
   role: string
   expires_at: string

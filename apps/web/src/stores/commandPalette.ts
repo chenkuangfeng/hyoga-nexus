@@ -9,7 +9,7 @@ const RECENT_LIMIT = 4
 // The previous global key leaked queries between users sharing a browser
 // and across tenant switches inside the same account. Falling back to
 // "anon" keeps the palette functional before login finishes hydrating.
-function recentKey(userId: string | null | undefined, tenantId: number | string | null | undefined): string {
+function recentKey(userId: string | null | undefined, tenantId: string | null | undefined): string {
   const u = userId ? String(userId) : 'anon'
   const t = tenantId !== null && tenantId !== undefined && tenantId !== '' ? String(tenantId) : 'none'
   return `${RECENT_KEY_PREFIX}:${u}:${t}`

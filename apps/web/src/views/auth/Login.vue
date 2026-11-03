@@ -585,13 +585,9 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
     // subsequent requests carry X-Tenant-ID and the UI stays consistent.
     // Otherwise clear any stale override left in localStorage by a
     // previous session for a different account.
-    const activeIdNum = Number(activeTenant?.id)
-    const homeIdNum = Number(homeTenantIdRaw)
-    if (Number.isFinite(activeIdNum) && Number.isFinite(homeIdNum) && activeIdNum !== homeIdNum) {
-      authStore.setSelectedTenant(activeIdNum, activeTenant?.name || null)
-    } else {
-      authStore.setSelectedTenant(null, null)
-    }
+    // Spaces are UUIDs; the active space is always selected so X-Tenant-ID is sent with every request.
+    const activeId = activeTenant?.id != null ? String(activeTenant.id) : ''
+    authStore.setSelectedTenant(activeId || null, activeId ? activeTenant?.name || null : null)
   }
 
   // Pull runtime capabilities (including whether ordinary users may create

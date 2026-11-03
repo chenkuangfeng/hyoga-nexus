@@ -159,7 +159,7 @@ interface ChatHeaderSession {
   title?: string
   description?: string
   kind?: string
-  tenant_id?: number | string
+  tenant_id?: string
   is_pinned?: boolean
   host_workspace_dir?: string
 }

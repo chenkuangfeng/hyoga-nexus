@@ -18,7 +18,7 @@ export interface StorageBackendConfig {
 
 export interface StorageBackend {
   id: string
-  tenant_id?: number
+  tenant_id?: string
   name: string
   provider: string
   config: StorageBackendConfig

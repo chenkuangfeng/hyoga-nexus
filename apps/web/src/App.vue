@@ -89,13 +89,10 @@ const syncOIDCUserContext = async () => {
   // landed us in a non-home tenant (because the backend honoured a
   // remembered last-active-tenant preference) make sure X-Tenant-ID
   // override is set; otherwise drop any stale override.
-  const activeIdNum = tenant?.id != null ? Number(tenant.id) : NaN
-  const homeIdNum = user.tenant_id != null ? Number(user.tenant_id) : NaN
-  if (Number.isFinite(activeIdNum) && Number.isFinite(homeIdNum) && activeIdNum !== homeIdNum) {
-    authStore.setSelectedTenant(activeIdNum, tenant?.name || null)
-  } else {
-    authStore.setSelectedTenant(null, null)
-  }
+  // Spaces are UUIDs and every space-scoped request needs X-Tenant-ID, so the active space is always
+  // selected explicitly (the home space included); the server re-checks membership on each request.
+  const activeId = tenant?.id != null ? String(tenant.id) : ''
+  authStore.setSelectedTenant(activeId || null, activeId ? tenant?.name || null : null)
 }
 
 const persistOIDCLoginResponse = async (response: any) => {

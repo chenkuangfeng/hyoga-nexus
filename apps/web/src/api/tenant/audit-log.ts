@@ -22,7 +22,7 @@ export type AuditOutcome = 'accepted' | 'success' | 'failed' | 'partial' | 'canc
 // breaking change.
 export interface AuditLog {
   id: number
-  tenant_id: number
+  tenant_id: string
   actor_user_id: string
   actor_role: string
   action: AuditAction
@@ -66,7 +66,7 @@ export interface ListAuditLogParams {
  * comes back as 0 (no older rows).
  */
 export async function listAuditLog(
-  tenantId: number,
+  tenantId: string,
   params: ListAuditLogParams = {},
 ): Promise<ListAuditLogResponse> {
   const qs = new URLSearchParams()

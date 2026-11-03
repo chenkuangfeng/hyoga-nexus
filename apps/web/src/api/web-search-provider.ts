@@ -3,7 +3,7 @@ import { get, post, put, del } from '@/utils/request'
 // WebSearchProviderEntity represents a configured web search provider instance
 export interface WebSearchProviderEntity {
   id?: string
-  tenant_id?: number
+  tenant_id?: string
   name: string
   provider: 'brave' | 'bing' | 'google' | 'duckduckgo' | 'tavily' | 'ollama' | 'baidu' | 'searxng' | 'keenable' | 'zhipu' | 'metaso' | 'exa' | 'bocha' | 'serply'
   description?: string

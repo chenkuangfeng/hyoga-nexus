@@ -153,7 +153,7 @@ export interface CustomAgent {
   description?: string;
   avatar?: string;
   is_builtin: boolean;
-  tenant_id?: number;
+  tenant_id?: string;
   created_by?: string;
   // creator_name 由后端 list 接口批量回填，仅用于列表卡片来源徽章。
   creator_name?: string;
@@ -347,7 +347,7 @@ export function getAgentTools() {
 
 export interface IMChannel {
   id: string;
-  tenant_id?: number;
+  tenant_id?: string;
   agent_id: string;
   // 'lark' is Feishu's international edition; it shares Feishu's credentials and modes.
   platform: 'wecom' | 'feishu' | 'lark' | 'slack' | 'telegram' | 'dingtalk' | 'mattermost' | 'wechat' | 'qqbot' | 'yunzhijia';
@@ -371,7 +371,7 @@ export function listIMChannels(agentId: string) {
 // listIMChannels(agentId) when you need to edit a specific channel.
 export interface IMChannelOverview {
   id: string;
-  tenant_id: number;
+  tenant_id: string;
   agent_id: string;
   agent_name: string; // localized built-in name when the agent is built-in
   platform: IMChannel['platform'];

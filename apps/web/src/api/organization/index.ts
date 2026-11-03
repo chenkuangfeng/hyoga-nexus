@@ -15,7 +15,7 @@ export interface Organization {
    * May be 0 on pre-000046 legacy rows; in that case fall back to
    * owner_id for display only.
    */
-  owner_tenant_id: number
+  owner_tenant_id: string
   invite_code?: string
   invite_code_expires_at?: string | null
   invite_code_validity_days?: number
@@ -55,7 +55,7 @@ export interface OrganizationMember {
   email: string
   avatar?: string
   role: 'admin' | 'editor' | 'viewer'
-  tenant_id: number
+  tenant_id: string
   tenant_name?: string
   joined_at: string
 }
@@ -71,7 +71,7 @@ export interface KnowledgeBaseShare {
   organization_name?: string
   shared_by_user_id: string
   shared_by_username?: string
-  source_tenant_id: number
+  source_tenant_id: string
   /** Share permission: what the space was granted (viewer/editor) */
   permission: 'admin' | 'editor' | 'viewer'
   /** Current user's role in this organization (admin/editor/viewer) */
@@ -96,7 +96,7 @@ export interface SharedKnowledgeBase {
   organization_id: string
   org_name: string
   permission: 'admin' | 'editor' | 'viewer'
-  source_tenant_id: number
+  source_tenant_id: string
   shared_at: string
 }
 
@@ -247,7 +247,7 @@ export interface RequestRoleUpgradeRequest {
  *   (the server resolves the user's tenant if `tenant_id` is unset).
  */
 export interface InviteMemberRequest {
-  tenant_id?: number
+  tenant_id?: string
   representative_user_id?: string
   user_id?: string
   role: 'admin' | 'editor' | 'viewer'
@@ -266,7 +266,7 @@ export interface UserSearchResult {
  * user that caused the tenant to appear in the search (for display only).
  */
 export interface TenantInviteCandidate {
-  tenant_id: number
+  tenant_id: string
   tenant_name: string
   representative_user_id: string
   representative_username: string
@@ -288,7 +288,7 @@ export interface AgentShareResponse {
   organization_name?: string
   shared_by_user_id: string
   shared_by_username?: string
-  source_tenant_id: number
+  source_tenant_id: string
   permission: string
   my_role_in_org?: string
   my_permission?: string
@@ -309,7 +309,7 @@ export interface SharedAgentInfo {
   organization_id: string
   org_name: string
   permission: string
-  source_tenant_id: number
+  source_tenant_id: string
   shared_at: string
   shared_by_user_id?: string
   shared_by_username?: string
@@ -524,7 +524,7 @@ export async function listMembers(orgId: string): Promise<ApiResponse<ListMember
 /**
  * Update member role (member is identified by tenant_id)
  */
-export async function updateMemberRole(orgId: string, tenantId: number, req: UpdateMemberRoleRequest): Promise<ApiResponse<void>> {
+export async function updateMemberRole(orgId: string, tenantId: string, req: UpdateMemberRoleRequest): Promise<ApiResponse<void>> {
   try {
     const response = await put(`/api/v1/organizations/${orgId}/members/${tenantId}`, req)
     return response as unknown as ApiResponse<void>
@@ -536,7 +536,7 @@ export async function updateMemberRole(orgId: string, tenantId: number, req: Upd
 /**
  * Remove member (member is identified by tenant_id)
  */
-export async function removeMember(orgId: string, tenantId: number): Promise<ApiResponse<void>> {
+export async function removeMember(orgId: string, tenantId: string): Promise<ApiResponse<void>> {
   try {
     const response = await del(`/api/v1/organizations/${orgId}/members/${tenantId}`)
     return response as unknown as ApiResponse<void>

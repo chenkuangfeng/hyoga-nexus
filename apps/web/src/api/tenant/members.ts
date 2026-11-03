@@ -69,7 +69,7 @@ export interface SimpleResponse {
  * Backend: GET /api/v1/tenants/:id/members (Viewer+)。查询参数：`q`、`page`、`page_size`。
  */
 export async function listMembers(
-  tenantId: number,
+  tenantId: string,
   params: ListMembersParams = {},
 ): Promise<ListMembersResponse> {
   const qs = buildMembersQuery(params)
@@ -82,7 +82,7 @@ export async function listMembers(
  * 遍历分页拉取空间的全部成员（每页最大 100，最多 500 页兜底）。
  * 用于「退出空间」等对全量成员的轻量校验；普通表格请直接使用 {@link listMembers} 分页接口。
  */
-export async function fetchAllTenantMembers(tenantId: number): Promise<TenantMember[]> {
+export async function fetchAllTenantMembers(tenantId: string): Promise<TenantMember[]> {
   const pageSize = 100
   let page = 1
   const out: TenantMember[] = []
@@ -109,7 +109,7 @@ export async function fetchAllTenantMembers(tenantId: number): Promise<TenantMem
  * support email-based invites for users who don't have an account.
  */
 export async function addMember(
-  tenantId: number,
+  tenantId: string,
   body: AddMemberRequest,
 ): Promise<AddMemberResponse> {
   return (await post(`/api/v1/tenants/${tenantId}/members`, body)) as unknown as AddMemberResponse
@@ -122,7 +122,7 @@ export async function addMember(
  * Returns 409 when this would demote the last active Owner of the tenant.
  */
 export async function updateMemberRole(
-  tenantId: number,
+  tenantId: string,
   userId: string,
   role: TenantRole,
 ): Promise<SimpleResponse> {
@@ -136,7 +136,7 @@ export async function updateMemberRole(
  * Returns 409 when this would remove the last active Owner.
  */
 export async function removeMember(
-  tenantId: number,
+  tenantId: string,
   userId: string,
 ): Promise<SimpleResponse> {
   return (await del(`/api/v1/tenants/${tenantId}/members/${userId}`)) as unknown as SimpleResponse
@@ -148,6 +148,6 @@ export async function removeMember(
  * call it.
  * Backend: POST /api/v1/tenants/:id/leave (Viewer+).
  */
-export async function leaveTenant(tenantId: number): Promise<SimpleResponse> {
+export async function leaveTenant(tenantId: string): Promise<SimpleResponse> {
   return (await post(`/api/v1/tenants/${tenantId}/leave`)) as unknown as SimpleResponse
 }

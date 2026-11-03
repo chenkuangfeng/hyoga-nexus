@@ -4,7 +4,7 @@ import { get, post, put, del } from '../../utils/request'
 
 export interface DataSource {
   id: string
-  tenant_id: number
+  tenant_id: string
   knowledge_base_id: string
   name: string
   type: string

@@ -10,7 +10,7 @@ export interface VectorStoreEntity {
   index_config: Record<string, any>
   source: 'env' | 'user'
   readonly: boolean
-  tenant_id?: number
+  tenant_id?: string
   created_at?: string
   updated_at?: string
 }

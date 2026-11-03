@@ -17,7 +17,7 @@ export type TenantInvitationStatus =
 // raw id in the UI rather than dropping the row.
 export interface TenantInvitation {
   id: number
-  tenant_id: number
+  tenant_id: string
   tenant_name?: string
   invitee_user_id: string
   invitee_email?: string
@@ -93,7 +93,7 @@ export interface AcceptInvitationResponse {
   success: boolean
   data?: {
     membership: {
-      tenant_id: number
+      tenant_id: string
       role: TenantRole
       status: string
       joined_at: string
@@ -107,7 +107,7 @@ export interface AcceptInvitationByTokenResponse {
   success: boolean
   data?: {
     membership: {
-      tenant_id: number
+      tenant_id: string
       role: TenantRole
       status: string
       joined_at: string
@@ -130,7 +130,7 @@ export interface PendingCountResponse {
  * Backend: GET /api/v1/tenants/:id/invitations (Viewer+).
  */
 export async function listTenantInvitations(
-  tenantId: number,
+  tenantId: string,
   options: ListTenantInvitationsParams = {},
 ): Promise<ListInvitationsResponse> {
   const qs = buildTenantInvitationsQuery(options)
@@ -149,7 +149,7 @@ export async function listTenantInvitations(
  * when the invitee is already an active member.
  */
 export async function createInvitation(
-  tenantId: number,
+  tenantId: string,
   body: CreateInvitationRequest,
 ): Promise<CreateInvitationResponse> {
   return (await post(
@@ -165,7 +165,7 @@ export async function createInvitation(
  * Backend: DELETE /api/v1/tenants/:id/invitations/:inv_id (Owner+).
  */
 export async function revokeInvitation(
-  tenantId: number,
+  tenantId: string,
   invId: number,
 ): Promise<SimpleResponse> {
   return (await del(
@@ -257,7 +257,7 @@ export interface CreateInviteLinkResponse {
  * Backend: POST /api/v1/tenants/:id/invite-links (Owner+).
  */
 export async function createInviteLink(
-  tenantId: number,
+  tenantId: string,
   body: CreateInviteLinkRequest,
 ): Promise<CreateInviteLinkResponse> {
   return (await post(

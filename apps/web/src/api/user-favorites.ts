@@ -12,7 +12,7 @@ export type FavoriteResourceType = 'kb' | 'agent'
 
 export interface FavoriteEntry {
   user_id: string
-  tenant_id: number
+  tenant_id: string
   resource_type: FavoriteResourceType
   resource_id: string
   /** ISO timestamp from the server (created_at column). */

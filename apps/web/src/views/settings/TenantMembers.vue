@@ -658,7 +658,7 @@ const currentUserId = computed(() => authStore.user?.id ?? '')
 // Use the active tenant id from the auth store; the route only allows
 // :id == active tenant (auth middleware enforces membership), so we
 // don't expose a tenant picker here.
-const activeTenantId = computed(() => Number(authStore.currentTenantId ?? 0))
+const activeTenantId = computed(() => String(authStore.currentTenantId ?? ''))
 
 const roleOptions = computed(() => [
   { label: t('tenantMember.role.owner'), value: 'owner' },

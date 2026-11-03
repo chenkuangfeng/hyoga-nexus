@@ -367,7 +367,7 @@ const onTenantCreated = async (newTenant: TenantInfo) => {
 // authStore.selectedTenantId here is enough — the next page reload re-issues
 // every request with the new header and the server resolves the role server-side.
 type Membership = {
-  tenant_id: number
+  tenant_id: string
   tenant_name?: string
   role: string
 }

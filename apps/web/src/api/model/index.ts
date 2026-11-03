@@ -48,7 +48,7 @@ export interface ModelSpecOverride {
 // 模型类型定义
 export interface ModelConfig {
   id?: string;
-  tenant_id?: number;
+  tenant_id?: string;
   name: string;
   display_name?: string;
   type: 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' | 'ASR';
