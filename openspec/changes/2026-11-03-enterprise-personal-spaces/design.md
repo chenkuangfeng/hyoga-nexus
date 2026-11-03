@@ -287,7 +287,7 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 | `/join` | 邀请链接落地页 | 邀请链接（`accept-by-token`）与待处理邀请 | 本阶段 |
 | `/platform/tenant` | `views/settings/TenantInfo.vue`、`TenantMembers.vue` | 空间信息（名称、描述、类型）与成员列表、邀请、角色 | 本阶段 |
 | `/platform/settings` | `views/settings/Settings.vue`（`?section=`） | 设置分组，见 9.3 | 本阶段（分组与已有项），其余项为占位 |
-| `/platform/organizations` | `views/organization/OrganizationList.vue`、`OrganizationSettingsModal.vue` | 组织列表、创建、按邀请码加入、加入申请、组织设置与成员 | 本阶段 |
+| `/platform/organizations` | `views/organization/OrganizationList.vue`、`OrganizationSettingsModal.vue` | 共享空间列表、创建、按邀请码加入、加入申请、组织设置与成员 | 本阶段 |
 | `/platform/knowledge-bases`、`agents`、`creatChat`、`chat/:id` 等 | 对应业务页 | 菜单项保留，页面为占位 | 后续阶段 |
 | `/platform/system/*` | `views/system/*`（平台管理员） | 只读汇总（企业与组织数量），见 9.4 | 本阶段（只读） |
 
