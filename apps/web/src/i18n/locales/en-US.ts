@@ -6449,6 +6449,11 @@ export default {
         agentShareDesc: 'Share this agent to a shared space so members can use it',
         sharedFrom: 'From',
         permissionReadonly: 'Read-only',
+        levelLabel: 'Share level',
+        level: { viewer: 'View and run', editor: 'Can edit', admin: 'Can manage' },
+        levelUpdated: 'Share level updated',
+        enterpriseOnly: 'Agent sharing is managed by owners and admins of enterprise spaces; personal spaces cannot share yet',
+        loadFailed: 'Failed to load sharing information',
         permissionEditable: 'Editable'
       }
     },

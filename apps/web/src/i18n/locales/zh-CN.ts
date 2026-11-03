@@ -3021,6 +3021,11 @@ export default {
       agentShareDesc: '将智能体共享到共享空间，共享空间成员可使用该智能体',
       sharedFrom: '来自',
       permissionReadonly: '只读',
+      levelLabel: '共享级别',
+      level: { viewer: '可查看运行', editor: '可编辑', admin: '可管理' },
+      levelUpdated: '共享级别已更新',
+      enterpriseOnly: '智能体共享由企业空间的所有者或管理员管理，个人空间暂不支持共享',
+      loadFailed: '加载共享信息失败',
       permissionEditable: '可编辑',
       columns: {
         space: '共享空间',

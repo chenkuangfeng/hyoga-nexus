@@ -50,17 +50,24 @@
               <div class="share-add-popup-inner" @click.stop>
                 <div class="member-invite-popup-title">{{ $t('organization.share.addShareDialogTitle') }}</div>
                 <div class="org-upgrade-fields">
-                  <div class="org-upgrade-field org-upgrade-field--last">
+                  <div class="org-upgrade-field">
                     <label class="org-upgrade-field-label">{{ $t('organization.share.selectOrg') }}</label>
-                    <ShareToSpaceOrgSelect v-model="selectedOrgId" :organizations="availableOrganizations"
-                      :loading="loadingOrgs" />
+                    <t-select v-model="selectedSpaceId" :loading="loadingSpaces"
+                      :placeholder="$t('organization.share.selectOrgPlaceholder')">
+                      <t-option v-for="space in availableSpaces" :key="space.id" :value="space.id"
+                        :label="space.name" />
+                    </t-select>
+                  </div>
+                  <div class="org-upgrade-field org-upgrade-field--last">
+                    <label class="org-upgrade-field-label">{{ $t('organization.share.levelLabel') }}</label>
+                    <t-select v-model="selectedLevel" :options="levelOptions" />
                   </div>
                 </div>
                 <div class="invite-popup-footer">
                   <t-button variant="outline" :disabled="submitting" @click="addPopupVisible = false">
                     {{ $t('common.cancel') }}
                   </t-button>
-                  <t-button theme="primary" :loading="submitting" :disabled="!selectedOrgId" @click="handleShare">
+                  <t-button theme="primary" :loading="submitting" :disabled="!selectedSpaceId" @click="handleShare">
                     {{ $t('knowledgeEditor.share.addShare') }}
                   </t-button>
                 </div>
@@ -70,7 +77,9 @@
         </div>
       </div>
 
-      <div v-if="loadingShares && shares.length === 0" class="share-panel-loading">
+      <t-alert v-if="!canManageShares" theme="info" class="share-panel-alert"
+        :message="$t('organization.share.enterpriseOnly')" />
+      <div v-else-if="loadingShares && shares.length === 0" class="share-panel-loading">
         <t-loading size="small" />
         <span>{{ $t('organization.share.loading') }}</span>
       </div>
@@ -85,24 +94,19 @@
           <template #space="{ row }">
             <div class="share-space-cell">
               <span class="share-space-name">
-                <SpaceAvatar :name="row.organization_name || ''"
-                  :avatar="getOrgForShare(row.organization_id)?.avatar" size="small" />
-                <span class="share-space-name-text">{{ row.organization_name }}</span>
-              </span>
-              <span v-if="row.shared_by_username" class="share-space-meta">
-                {{ $t('organization.share.sharedFrom') }} {{ row.shared_by_username }}
+                <SpaceAvatar :name="row.shared_space_name || ''" size="small" />
+                <span class="share-space-name-text">{{ row.shared_space_name }}</span>
               </span>
             </div>
           </template>
-          <template #permission>
-            <t-tag size="small" theme="default" variant="light">
-              {{ $t('organization.share.permissionReadonly') }}
-            </t-tag>
+          <template #permission="{ row }">
+            <t-select :model-value="row.level" :options="levelOptions" size="small" :clearable="false"
+              :disabled="!canManageShares" @change="(value: AgentShareLevel) => handleLevelChange(row, value)" />
           </template>
           <template #created_at="{ row }">{{ formatShareDate(row.created_at) }}</template>
           <template #actions="{ row }">
             <div class="share-table-actions">
-              <t-popconfirm :content="$t('knowledgeEditor.share.unshareConfirm', { name: row.organization_name })"
+              <t-popconfirm :content="$t('knowledgeEditor.share.unshareConfirm', { name: row.shared_space_name })"
                 :confirm-btn="{ content: $t('common.confirm'), theme: 'danger' }"
                 :cancel-btn="{ content: $t('common.cancel') }" placement="left" @confirm="handleUnshare(row)">
                 <t-tooltip :content="$t('organization.share.unshareAction')" placement="top">
@@ -123,19 +127,20 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { useOrganizationStore } from '@/stores/organization'
-import { listAgentShares } from '@/api/organization'
-import type { AgentShareResponse } from '@/api/organization'
+import { useAuthStore } from '@/stores/auth'
+import { listSharedSpaces } from '@/api/shared-space'
+import type { SharedSpaceSummary } from '@/api/shared-space'
+import {
+  listAgentShares,
+  shareAgent,
+  unshareAgent,
+} from '@/api/agent-share'
+import type { AgentShare, AgentShareLevel } from '@/api/agent-share'
 import type { CustomAgent } from '@/api/agent'
 import SpaceAvatar from '@/components/SpaceAvatar.vue'
-import ShareToSpaceOrgSelect from '@/components/ShareToSpaceOrgSelect.vue'
 
 const { t } = useI18n()
-const orgStore = useOrganizationStore()
-
-function getOrgForShare(organizationId: string) {
-  return orgStore.organizations.find(o => o.id === organizationId)
-}
+const authStore = useAuthStore()
 
 interface Props {
   agentId: string
@@ -143,6 +148,16 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+/**
+ * 智能体共享只在企业空间内由 owner/admin 管理（后端 `is_space_manager`）；
+ * 个人空间没有共享入口，因此这里不发起请求，只提示。
+ */
+const currentTenantId = computed(() => authStore.currentTenantId ?? '')
+const canManageShares = computed(() => {
+  const membership = authStore.memberships.find(m => String(m.tenant_id) === currentTenantId.value)
+  return membership?.kind === 'enterprise' && (membership.role === 'owner' || membership.role === 'admin')
+})
 
 // Members run this agent's skills in this workspace's sandbox, with the
 // environment values its admins configured for them, and can have the model
@@ -163,35 +178,37 @@ const shareHintPopupInnerStyle = {
   overflow: 'hidden',
 }
 
-const loadingOrgs = ref(false)
+const loadingSpaces = ref(false)
 const loadingShares = ref(false)
 const submitting = ref(false)
 const addPopupVisible = ref(false)
 const searchQuery = ref('')
-const selectedOrgId = ref('')
-const shares = ref<(AgentShareResponse & { organization_name?: string })[]>([])
+const selectedSpaceId = ref('')
+const selectedLevel = ref<AgentShareLevel>('viewer')
+const shares = ref<AgentShare[]>([])
+const sharedSpaces = ref<SharedSpaceSummary[]>([])
 
-const availableOrganizations = computed(() => {
-  const sharedOrgIds = new Set(shares.value.map(s => s.organization_id))
-  return orgStore.organizations.filter(
-    (org) =>
-      !sharedOrgIds.has(org.id) &&
-      (org.is_owner === true || org.my_role === 'admin' || org.my_role === 'editor')
-  )
+const levelOptions = computed(() => [
+  { value: 'viewer', label: t('organization.share.level.viewer') },
+  { value: 'editor', label: t('organization.share.level.editor') },
+  { value: 'admin', label: t('organization.share.level.admin') },
+])
+
+// Shared spaces this enterprise is a member of that do not yet carry this agent.
+const availableSpaces = computed(() => {
+  const sharedIds = new Set(shares.value.map(s => s.shared_space_id))
+  return sharedSpaces.value.filter(space => !sharedIds.has(space.id))
 })
 
 const filteredShares = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) return shares.value
-  return shares.value.filter((share) => {
-    const haystack = [share.organization_name, share.shared_by_username].filter(Boolean).join(' ').toLowerCase()
-    return haystack.includes(query)
-  })
+  return shares.value.filter(share => share.shared_space_name.toLowerCase().includes(query))
 })
 
 const shareColumns = computed(() => [
   { colKey: 'space', title: t('organization.share.columns.space'), ellipsis: true, minWidth: 180 },
-  { colKey: 'permission', title: t('organization.share.columns.permission'), width: 96 },
+  { colKey: 'permission', title: t('organization.share.columns.permission'), width: 120 },
   { colKey: 'created_at', title: t('organization.share.columns.sharedAt'), width: 154 },
   { colKey: 'actions', title: t('organization.share.columns.operations'), width: 72, align: 'left' },
 ])
@@ -203,84 +220,85 @@ function formatShareDate(dateStr?: string) {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
-async function loadOrganizations() {
-  loadingOrgs.value = true
+function errorMessage(e: unknown, fallback: string) {
+  return e instanceof Error && e.message ? e.message : fallback
+}
+
+async function loadSharedSpaces() {
+  loadingSpaces.value = true
   try {
-    await orgStore.fetchOrganizations()
+    sharedSpaces.value = (await listSharedSpaces()) as unknown as SharedSpaceSummary[]
+  } catch (e) {
+    MessagePlugin.error(errorMessage(e, t('organization.share.loadFailed')))
   } finally {
-    loadingOrgs.value = false
+    loadingSpaces.value = false
   }
 }
 
 async function loadShares() {
-  if (!props.agentId) return
+  if (!props.agentId || !currentTenantId.value || !canManageShares.value) {
+    shares.value = []
+    return
+  }
   loadingShares.value = true
   try {
-    const result = await listAgentShares(props.agentId)
-    if (result.success && result.data) {
-      const sharesData = (result.data as { shares?: AgentShareResponse[] }).shares || result.data
-      const sharesList = Array.isArray(sharesData) ? sharesData : []
-      shares.value = sharesList.map((share: AgentShareResponse) => ({
-        ...share,
-        organization_name: share.organization_name || orgStore.organizations.find(o => o.id === share.organization_id)?.name || share.organization_id
-      }))
-    }
+    shares.value = await listAgentShares(currentTenantId.value, props.agentId)
   } catch (e) {
-    console.error('Failed to load agent shares:', e)
+    MessagePlugin.error(errorMessage(e, t('organization.share.loadFailed')))
   } finally {
     loadingShares.value = false
   }
 }
 
 async function handleShare() {
-  if (!selectedOrgId.value) return
+  if (!selectedSpaceId.value) return
   submitting.value = true
   try {
-    const result = await orgStore.shareAgent(props.agentId, {
-      organization_id: selectedOrgId.value,
-      permission: 'viewer'
+    await shareAgent(currentTenantId.value, props.agentId, {
+      shared_space_id: selectedSpaceId.value,
+      level: selectedLevel.value,
     })
-    if (result.success) {
-      MessagePlugin.success(t('organization.share.shareSuccess'))
-      selectedOrgId.value = ''
-      addPopupVisible.value = false
-      await loadShares()
-    } else {
-      MessagePlugin.error(result.message || t('organization.share.shareFailed'))
-    }
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('organization.share.shareFailed')
-    MessagePlugin.error(message)
+    MessagePlugin.success(t('organization.share.shareSuccess'))
+    selectedSpaceId.value = ''
+    selectedLevel.value = 'viewer'
+    addPopupVisible.value = false
+    await loadShares()
+  } catch (e) {
+    MessagePlugin.error(errorMessage(e, t('organization.share.shareFailed')))
   } finally {
     submitting.value = false
   }
 }
 
-async function handleUnshare(share: AgentShareResponse) {
+/** 修改已共享空间的级别：后端对同一 (agent, space) 做 upsert，直接重新提交即可。 */
+async function handleLevelChange(share: AgentShare, level: AgentShareLevel) {
+  if (level === share.level) return
   try {
-    const result = await orgStore.unshareAgent(
-      props.agentId,
-      share.id,
-      share.organization_id
-    )
-    if (result.success) {
-      MessagePlugin.success(t('organization.share.unshareSuccess'))
-      await loadShares()
-    } else {
-      MessagePlugin.error(result.message || t('organization.share.unshareFailed'))
-    }
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('organization.share.unshareFailed')
-    MessagePlugin.error(message)
+    await shareAgent(currentTenantId.value, props.agentId, { shared_space_id: share.shared_space_id, level })
+    MessagePlugin.success(t('organization.share.levelUpdated'))
+    await loadShares()
+  } catch (e) {
+    MessagePlugin.error(errorMessage(e, t('organization.share.shareFailed')))
+    await loadShares()
   }
 }
 
-watch(() => props.agentId, async (newId) => {
-  if (newId) await Promise.all([loadOrganizations(), loadShares()])
-}, { immediate: true })
+async function handleUnshare(share: AgentShare) {
+  try {
+    await unshareAgent(currentTenantId.value, props.agentId, share.shared_space_id)
+    MessagePlugin.success(t('organization.share.unshareSuccess'))
+    await loadShares()
+  } catch (e) {
+    MessagePlugin.error(errorMessage(e, t('organization.share.unshareFailed')))
+  }
+}
+
+watch(() => [props.agentId, currentTenantId.value] as const, async ([newId]) => {
+  if (newId) await Promise.all([loadSharedSpaces(), loadShares()])
+})
 
 onMounted(async () => {
-  if (props.agentId) await Promise.all([loadOrganizations(), loadShares()])
+  if (props.agentId) await Promise.all([loadSharedSpaces(), loadShares()])
 })
 
 defineExpose({ loadShares })
