@@ -95,7 +95,7 @@ onMounted(async () => {
 
 h1 {
   margin: 0 0 12px;
-  font-size: 22px;
+  font-size: var(--app-text-4xl);
 }
 
 .join-message {

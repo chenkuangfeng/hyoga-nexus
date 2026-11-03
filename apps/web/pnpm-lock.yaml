@@ -100,11 +100,14 @@ importers:
         version: 2.0.1(vue@3.5.44(typescript@6.0.3))
       webpack:
         specifier: ^5.106.2
-        version: 5.112.2
+        version: 5.112.2(esbuild@0.25.12)
       xlsx:
         specifier: https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz
         version: https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz
     devDependencies:
+      '@intlify/core-base':
+        specifier: 11.4.18
+        version: 11.4.18
       '@tsconfig/node22':
         specifier: ^22.0.5
         version: 22.0.6
@@ -117,18 +120,27 @@ importers:
       '@vitejs/plugin-vue-jsx':
         specifier: 5.1.5
         version: 5.1.5(vite@7.3.7(@types/node@22.20.5)(less@4.9.1)(terser@5.51.2)(tsx@4.23.15))(vue@3.5.44(typescript@6.0.3))
+      '@vue/compiler-sfc':
+        specifier: 3.5.44
+        version: 3.5.44
+      '@vue/server-renderer':
+        specifier: 3.5.44
+        version: 3.5.44
       '@vue/tsconfig':
         specifier: ^0.9.1
         version: 0.9.1(typescript@6.0.3)(vue@3.5.44(typescript@6.0.3))
       '@xmldom/xmldom':
         specifier: 0.9.12
         version: 0.9.12
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
       less:
         specifier: ^4.6.4
         version: 4.9.1
       less-loader:
         specifier: ^12.3.2
-        version: 12.3.3(less@4.9.1)(webpack@5.112.2)
+        version: 12.3.3(less@4.9.1)(webpack@5.112.2(esbuild@0.25.12))
       npm-run-all2:
         specifier: ^8.0.4
         version: 8.0.4
@@ -3548,11 +3560,11 @@ snapshots:
 
   layout-base@2.0.1: {}
 
-  less-loader@12.3.3(less@4.9.1)(webpack@5.112.2):
+  less-loader@12.3.3(less@4.9.1)(webpack@5.112.2(esbuild@0.25.12)):
     dependencies:
       less: 4.9.1
     optionalDependencies:
-      webpack: 5.112.2
+      webpack: 5.112.2(esbuild@0.25.12)
 
   less@4.9.1:
     dependencies:
@@ -3640,12 +3652,14 @@ snapshots:
   mime@1.6.0:
     optional: true
 
-  minimizer-webpack-plugin@5.14.0(webpack@5.112.2):
+  minimizer-webpack-plugin@5.14.0(esbuild@0.25.12)(webpack@5.112.2(esbuild@0.25.12)):
     dependencies:
       jest-worker: 27.5.1
-      schema-utils: 4.8.2(webpack@5.112.2)
+      schema-utils: 4.8.2(webpack@5.112.2(esbuild@0.25.12))
       terser: 5.51.2
-      webpack: 5.112.2
+      webpack: 5.112.2(esbuild@0.25.12)
+    optionalDependencies:
+      esbuild: 0.25.12
 
   mitt@2.1.0: {}
 
@@ -3828,14 +3842,14 @@ snapshots:
   sax@1.6.1:
     optional: true
 
-  schema-utils@4.8.2(webpack@5.112.2):
+  schema-utils@4.8.2(webpack@5.112.2(esbuild@0.25.12)):
     dependencies:
       '@types/json-schema': 7.0.15
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       ajv-keywords: 5.1.0(ajv@8.20.0)
     optionalDependencies:
-      webpack: 5.112.2
+      webpack: 5.112.2(esbuild@0.25.12)
 
   semver@6.3.2: {}
 
@@ -4016,7 +4030,7 @@ snapshots:
 
   webpack-sources@3.7.0: {}
 
-  webpack@5.112.2:
+  webpack@5.112.2(esbuild@0.25.12):
     dependencies:
       '@types/estree': 1.0.10
       '@types/json-schema': 7.0.15
@@ -4030,8 +4044,8 @@ snapshots:
       events: 3.3.0
       graceful-fs: 4.2.11
       mime-db: 1.54.0
-      minimizer-webpack-plugin: 5.14.0(webpack@5.112.2)
-      schema-utils: 4.8.2(webpack@5.112.2)
+      minimizer-webpack-plugin: 5.14.0(esbuild@0.25.12)(webpack@5.112.2(esbuild@0.25.12))
+      schema-utils: 4.8.2(webpack@5.112.2(esbuild@0.25.12))
       tapable: 2.3.3
       watchpack: 2.6.3
       webpack-sources: 3.7.0

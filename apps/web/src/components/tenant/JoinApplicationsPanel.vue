@@ -211,7 +211,7 @@ watch(() => props.tenantId, () => {
 .applicant-email {
   display: block;
   color: var(--td-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
 }
 
 .empty-state {

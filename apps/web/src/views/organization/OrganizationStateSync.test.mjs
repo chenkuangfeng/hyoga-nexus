@@ -49,8 +49,10 @@ test('knowledge base and agent share editors use store actions', () => {
   assert.match(kbShareSource, /orgStore\.shareKnowledgeBase\(/)
   assert.match(kbShareSource, /orgStore\.unshareKnowledgeBase\(/)
   assert.match(kbShareSource, /orgStore\.changeKnowledgeBaseSharePermission\(/)
-  assert.match(agentShareSource, /orgStore\.shareAgent\(/)
-  assert.match(agentShareSource, /orgStore\.unshareAgent\(/)
+  // 智能体共享已改为直接调用 agent-share API（见 AgentShareSettings.vue 与 api/agent-share）。
+  assert.match(agentShareSource, /from '@\/api\/agent-share'/)
+  assert.match(agentShareSource, /await shareAgent\(currentTenantId/)
+  assert.match(agentShareSource, /await unshareAgent\(currentTenantId/)
 })
 
 test('store invalidates all affected organization caches after sharing', () => {

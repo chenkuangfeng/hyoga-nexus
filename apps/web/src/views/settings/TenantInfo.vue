@@ -310,7 +310,7 @@ async function evaluateLeaveGate(): Promise<void> {
   leaveGateLoading.value = false
 
   const infoId = tenantInfo.value?.id != null ? String(tenantInfo.value.id) : ''
-  if (!infoId || !activeTenantNumericId.value || infoId !== activeTenantNumericId.value) {
+  if (!infoId || !activeTenantId.value || infoId !== activeTenantId.value) {
     leaveGateReady.value = true
     return
   }

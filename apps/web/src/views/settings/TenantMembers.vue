@@ -1972,7 +1972,7 @@ watch(
 .new-account-hint {
   margin: 0 0 12px;
   color: var(--td-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.6;
 }
 

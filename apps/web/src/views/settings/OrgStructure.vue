@@ -428,7 +428,7 @@ watch(selectedId, () => {
 .org-secondary,
 .org-empty {
   color: var(--td-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
 }
 
 .org-meta {

@@ -23,7 +23,7 @@ const route = useRoute()
 
 <style scoped>
 .planned-page { max-width: 640px; margin: 48px auto; padding: 24px; line-height: 1.6; }
-.planned-page h1 { font-size: 20px; margin: 0 0 12px; }
-.planned-page p { margin: 0 0 8px; color: var(--td-text-color-secondary, #666); }
-.planned-path code { font-size: 12px; }
+.planned-page h1 { font-size: var(--app-text-3xl); margin: 0 0 12px; }
+.planned-page p { margin: 0 0 8px; color: var(--td-text-color-secondary); }
+.planned-path code { font-size: var(--app-text-sm); }
 </style>
