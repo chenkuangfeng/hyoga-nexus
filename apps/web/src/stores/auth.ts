@@ -44,7 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
   // along with their role in each. Populated from /auth/login response.
   // v1 deployments will typically have length 1; the field is wired now
   // so PR 3 can render a tenant-switcher UI without a store migration.
-  const memberships = ref<Array<{ tenant_id: string; tenant_name?: string; role: string }>>([])
+  const memberships = ref<Array<{ tenant_id: string; tenant_name?: string; role: string; kind?: 'personal' | 'enterprise' }>>([])
   const isLiteMode = ref(false)
   // pendingInvitationCount is the number of pending tenant invitations
   // addressed to the current user. Renders as a badge next to the

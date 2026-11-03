@@ -44,7 +44,7 @@
 - [x] 前端：`/join?code=` 跳转到共享空间页并打开加入对话框，自动填入并预览邀请码；未登录时邀请码暂存在 sessionStorage，登录后使用。
 - [x] 前端：空间选择页（`/onboarding/workspace`）使用 Nexus 已有接口（auth/me、创建空间、我的邀请），无需改动。
 - [ ] 前端：其他语言包（ja-JP、ko-KR、ru-RU、zh-TW）尚未补充新增的注册文案，显示时回退到其他语言。
-- [ ] 前端：`/auth/config`、`/auth/oidc/*`、`/auth/auto-setup` 等 WeKnora 启动接口在本仓库尚未实现，启动时会返回 404。
+- [x] 前端：`/auth/config`、`/auth/oidc/config` 已实现（OIDC 未启用，不再请求 `/auth/oidc/url`）。`/auth/auto-setup` 只在桌面壳中调用，网页版不请求。
 - 实施说明（2026-11-03）：测试 `tests/test_auth.py`（改为邮箱登录，覆盖改密门禁）与 `tests/test_registration_spaces.py`（注册两类空间、编码唯一、注册开关、Bearer、空间选择与改名）。全量 pytest 通过。前端仅做语法检查（本机构建内存不足，以 CI 为准）。
 
 ## 3. 成员、邀请与角色（WeKnora `tenant_member.go`、`tenant_invitation`）
@@ -76,7 +76,7 @@
 - [ ] 资源共享的有效权限（WeKnora `kbshare.go`：取共享方、所属空间角色、调用方上限三者的最小值）尚未实现，属于知识库与智能体的共享，待对应模块接入。
 - [x] 前端：`/platform/shared-spaces` 页面（`views/shared-space/SharedSpaceList.vue`，接口封装 `api/shared-space`）：列表、创建、邀请码预览与加入、详情中的成员与设置、邀请码重新生成、申请审批与拒绝、离开与删除。界面文案为"共享空间"。知识库与智能体的共享设置仍是 WeKnora 原样（依赖未实现的资源共享接口），待对应模块接入。
 - [x] 部门架构（扩展）：服务与接口 `/api/v1/tenants/{tenant_id}/org-units` 已在第 1 组实现，表仍为 `org_units`。
-- [ ] 部门架构页面（企业设置下）尚未实现，见第 6 组。
+- [x] 部门架构页面（企业设置 → 部门架构，仅企业空间与 owner 可见）：部门树、新增子部门与根部门、重命名、移动（修改上级）、停用与启用、删除，部门成员的加入（可设为主部门）与移出。对接 `/api/v1/tenants/:id/org-units`。
 - 实施说明（2026-11-03）：测试 `tests/test_shared_spaces.py` 覆盖创建、邀请码与预览、直接加入与审批、升级申请、离开与删除、角色限制。`shared_spaces` 包位于 `packages/platform/src/nexus_platform/shared_spaces/`。
 
 ## 5. 权限（`packages/platform/authz`）
@@ -91,7 +91,8 @@
 - [ ] 分组与顺序按 `design.md` 9.3 在前端实现（第 0 组已保留分组与占位，本阶段实现分区的页面逐项对接尚未完成）。
 - [x] 其余分组显示占位页，菜单项保留（第 0 组）。
 - [x] 企业审计接口：`GET /api/v1/tenants/:id/audit-log`（与既有 `/audit` 相同，需要 `audit:read`；owner 始终拥有，admin 需自定义角色）。
-- [ ] 前端：企业审计页、空间信息页、成员页、部门架构页尚未按新接口调整。
+- [x] 前端：空间信息页、成员页、部门架构页已按新接口调整。
+- [ ] 前端：成员页的审计标签（`listAuditLog`）的响应结构尚未对照 `GET /api/v1/tenants/:id/audit-log` 核对。
 
 ## 7. 企业微信
 

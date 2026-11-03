@@ -10,6 +10,7 @@ export const PHASE1_SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
   'userprofile',
   'tenant',
   'members',
+  'org-structure',
   'platform-api-keys',
   'system-audit-log',
 ])

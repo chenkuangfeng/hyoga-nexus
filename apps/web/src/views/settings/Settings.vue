@@ -191,6 +191,11 @@
           <TenantMembers />
         </div>
 
+        <!-- 部门架构（企业空间） -->
+        <div v-if="currentSection === 'org-structure' && isPhase1Section('org-structure')" class="section">
+          <OrgStructure />
+        </div>
+
         <!-- 发布集成 -->
         <div v-if="isIntegrationSection(currentSection)" class="section">
           <IntegrationSettingsSection :tab="integrationTabFromSection(currentSection)" />
@@ -232,6 +237,7 @@ import StorageBackendSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
 import WeKnoraCloudSettings from './WeKnoraCloudSettings.vue'
 import TenantMembers from './TenantMembers.vue'
+import OrgStructure from './OrgStructure.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import PlatformAPIKeys from '@/views/system/PlatformAPIKeys.vue'
@@ -352,6 +358,12 @@ const canSeeSection = (key: string): boolean => {
   return authStore.hasRole(min)
 }
 
+// The department page belongs to enterprise spaces only; personal spaces answer 404 for the org APIs.
+const isEnterpriseSpace = computed(() => {
+  const current = String(authStore.currentTenantId ?? '')
+  return (authStore.memberships ?? []).some((m) => String(m.tenant_id) === current && m.kind === 'enterprise')
+})
+
 const navItems = computed(() => {
   // 一律走 SETTINGS_SECTION_MIN_ROLE 表，避免 ad-hoc isAdmin/isOwner 散落在多处。
   // 服务端在每条路由上仍以 g.Viewer/Admin/Owner 为准，这里只决定 UI 是
@@ -386,6 +398,7 @@ const navItems = computed(() => {
     { key: 'envvars', icon: 'key', label: envNavLabel() },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
+    ...(isEnterpriseSpace.value ? [{ key: 'org-structure', icon: 'organization', label: t('orgStructure.title') }] : []),
     ...integrationItems,
   ]
   // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
@@ -413,7 +426,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'members', 'chathistory', 'memory']),
+      items: pickItems(['tenant', 'members', 'org-structure', 'chathistory', 'memory']),
     },
     {
       key: 'models_runtime',

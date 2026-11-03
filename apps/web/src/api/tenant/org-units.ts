@@ -1,4 +1,4 @@
-import { get } from '@/utils/request'
+import { del, get, patch, post, put } from '@/utils/request'
 
 /** 部门树节点（后端 `NodeView`）。停用的节点不能接收新成员。 */
 export interface OrgUnitNode {
@@ -39,4 +39,66 @@ export function flattenOrgUnits(nodes: OrgUnitNode[]): Array<{ label: string; va
   }
   walk(null, 0)
   return options
+}
+
+/** 部门的成员（后端 `UnitMemberView`）。`is_primary` 为主部门；一名成员只有一个主部门。 */
+export interface OrgUnitMember {
+  user_id: string
+  display_name: string | null
+  is_primary: boolean
+}
+
+/**
+ * 新建部门。`parentId` 为空时创建企业根部门（每个企业只能有一个根）。
+ * Backend: POST /api/v1/tenants/:id/org-units。
+ */
+export async function createOrgUnit(
+  tenantId: string,
+  body: { name: string; parent_id?: string | null },
+): Promise<OrgUnitNode> {
+  const unit = (await post(`/api/v1/tenants/${tenantId}/org-units`, body)) as unknown as OrgUnitNode
+  return unit
+}
+
+/**
+ * 修改部门：名称、上级（移动）或状态（停用 / 启用）。只发送传入的字段。
+ * Backend: PATCH /api/v1/tenants/:id/org-units/:unit_id。
+ */
+export async function updateOrgUnit(
+  tenantId: string,
+  unitId: string,
+  body: { name?: string; parent_id?: string | null; status?: 'active' | 'disabled' },
+): Promise<void> {
+  await patch(`/api/v1/tenants/${tenantId}/org-units/${unitId}`, body)
+}
+
+/**
+ * 删除部门。仍有子部门或成员时后端返回 409。
+ * Backend: DELETE /api/v1/tenants/:id/org-units/:unit_id。
+ */
+export async function deleteOrgUnit(tenantId: string, unitId: string): Promise<void> {
+  await del(`/api/v1/tenants/${tenantId}/org-units/${unitId}`)
+}
+
+/** 列出部门成员。Backend: GET /api/v1/tenants/:id/org-units/:unit_id/members。 */
+export async function listOrgUnitMembers(tenantId: string, unitId: string): Promise<OrgUnitMember[]> {
+  const rows = (await get(`/api/v1/tenants/${tenantId}/org-units/${unitId}/members`)) as unknown as OrgUnitMember[]
+  return Array.isArray(rows) ? rows : []
+}
+
+/**
+ * 把成员加入部门（可设为主部门）。Backend: PUT /api/v1/tenants/:id/org-units/:unit_id/members/:user_id。
+ */
+export async function assignOrgUnitMember(
+  tenantId: string,
+  unitId: string,
+  userId: string,
+  isPrimary: boolean,
+): Promise<void> {
+  await put(`/api/v1/tenants/${tenantId}/org-units/${unitId}/members/${userId}`, { is_primary: isPrimary })
+}
+
+/** 把成员移出部门。Backend: DELETE /api/v1/tenants/:id/org-units/:unit_id/members/:user_id。 */
+export async function unassignOrgUnitMember(tenantId: string, unitId: string, userId: string): Promise<void> {
+  await del(`/api/v1/tenants/${tenantId}/org-units/${unitId}/members/${userId}`)
 }
