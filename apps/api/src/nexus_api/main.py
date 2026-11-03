@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from nexus_api.http.platform import router as platform_router
 from nexus_api.http.orgs import router as orgs_router
 from nexus_api.http.memberships import router as memberships_router
+from nexus_api.http.shared_spaces import router as shared_spaces_router
 from nexus_platform.errors import PlatformError
 from nexus_platform.configuration import DatabaseConfigurationError
 from nexus_platform.persistence.database import create_database_engine, session_factory
@@ -16,6 +17,7 @@ app = FastAPI(title="Hyoga Nexus", version="0.1.0")
 app.include_router(platform_router)
 app.include_router(orgs_router)
 app.include_router(memberships_router)
+app.include_router(shared_spaces_router)
 from nexus_api.http.model_settings import router as model_settings_router
 app.include_router(model_settings_router)
 from nexus_api.http.native import router as native_router

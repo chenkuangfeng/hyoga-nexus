@@ -60,11 +60,15 @@
 
 ## 4. 共享空间（WeKnora `organization.go`、`OrganizationHandler`，本仓库命名 `shared_space`）
 
-- [ ] `GET/POST /api/v1/shared-spaces`、`GET /api/v1/shared-spaces/search`、`GET /api/v1/shared-spaces/preview/:code`、`POST /api/v1/shared-spaces/join`、`POST /api/v1/shared-spaces/join-request`、`POST /api/v1/shared-spaces/join-by-id`、`GET/PUT/DELETE /api/v1/shared-spaces/:id`、`POST /api/v1/shared-spaces/:id/leave`、`POST /api/v1/shared-spaces/:id/request-upgrade`、`POST /api/v1/shared-spaces/:id/invite-code`。
-- [ ] 共享空间内角色 `admin` / `editor` / `viewer`；权限判断沿用 WeKnora 的 `access` 逻辑。
-- [ ] 前端：`/platform/shared-spaces` 列表、创建、加入、设置弹窗。界面文案为"共享空间"。
-- [ ] 部门架构（扩展）：子公司与部门树的服务与接口 `/api/v1/tenants/{tenant_id}/org-units`，表仍为 `org_units`；节点规则（环检测、停用、删除前检查）沿用既有实现。界面名称为"部门架构"。
-- [ ] 部门架构页面位于企业设置下，作为本仓库扩展，在 `design.md` 9.5 列明。
+- [x] `GET/POST /api/v1/shared-spaces`、`GET /api/v1/shared-spaces/search`、`GET /api/v1/shared-spaces/preview/:code`、`POST /api/v1/shared-spaces/join`、`POST /api/v1/shared-spaces/join-request`、`POST /api/v1/shared-spaces/join-by-id`、`GET/PUT/DELETE /api/v1/shared-spaces/:id`、`POST /api/v1/shared-spaces/:id/leave`、`POST /api/v1/shared-spaces/:id/request-upgrade`、`POST /api/v1/shared-spaces/:id/invite-code`。以上均需要 `X-Tenant-ID`（搜索与预览除外）。
+- [x] 补充：`GET /api/v1/shared-spaces/:id/join-requests` 与 `.../join-requests/:req_id/approve|reject`（审批加入与升级申请，WeKnora 同样提供）。
+- [x] 共享空间内角色 `admin` / `editor` / `viewer`。空间（而非人）加入共享空间；创建方空间为 admin 且不能退出，只能删除（软删除）。
+- [x] 加入规则：邀请码（有效期可设）、直接加入（需 `searchable` 且不需要审批）、申请（`require_approval` 时直接加入也转为申请）。申请与升级共用 `shared_space_join_requests`，与人员加入的 `space_join_requests` 分开。
+- [ ] 资源共享的有效权限（WeKnora `kbshare.go`：取共享方、所属空间角色、调用方上限三者的最小值）尚未实现，属于知识库与智能体的共享，待对应模块接入。
+- [ ] 前端：`/platform/shared-spaces` 列表、创建、加入、设置弹窗尚未按新接口调整。界面文案为"共享空间"。
+- [x] 部门架构（扩展）：服务与接口 `/api/v1/tenants/{tenant_id}/org-units` 已在第 1 组实现，表仍为 `org_units`。
+- [ ] 部门架构页面（企业设置下）尚未实现，见第 6 组。
+- 实施说明（2026-11-03）：测试 `tests/test_shared_spaces.py` 覆盖创建、邀请码与预览、直接加入与审批、升级申请、离开与删除、角色限制。`shared_spaces` 包位于 `packages/platform/src/nexus_platform/shared_spaces/`。
 
 ## 5. 权限（`packages/platform/authz`）
 
