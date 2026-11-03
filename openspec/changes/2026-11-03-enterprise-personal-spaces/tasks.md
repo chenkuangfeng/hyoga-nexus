@@ -1,71 +1,83 @@
 # 实施任务
 
-状态：提案待确认（2026-11-03）。确认前不编码。确认时请先回答 `proposal.md` 中"需要你确认的项"的 7 个问题，并确认 `org:manage` 权限键与 `must_change_password` 字段。
+状态：已确认（2026-11-03），第 1 阶段实施中。确认结果见 `proposal.md`，对齐映射见 `design.md` 第 9 节。每组完成后与 WeKnora 对应页面逐项比对，结果记录在该组末尾。
 
-## 准备
+## 0. 前端基础（`apps/web`）
 
-- [ ] 确认 `proposal.md` 决定 1–12 与需要确认的项 1–9。
-- [ ] 确认对已有决定的取代（`2026-11-01-user-org-management`、`2026-11-01-org-agent-sharing` 中绑定相关条款）。
-- [ ] 确认 `2026-11-03-web-shell-tdesign` 的侧栏与设置分组由本提案取代（见 `design.md` 第 6 节）。
+- [ ] 依赖对齐 WeKnora：`tdesign-vue-next`、`tdesign-icons-vue-next`、`pinia`、`vue-i18n`、`axios`、`vue-router`；移除 Element Plus。
+- [ ] 设计令牌与 WeKnora 的 `styles/` 对齐，去掉自定义组件样式。
+- [ ] 国际化：`src/i18n` 结构与 WeKnora 一致，中英文文案从 WeKnora 对应文件照抄后按本仓库语义调整。
+- [ ] 请求层：`src/api` 按 WeKnora 的 axios 实例与拦截器结构（token 刷新、错误提示、`X-Tenant-ID`）。
+- [ ] 路由：按 `design.md` 9.1 的路由表注册；未实现的菜单项指向占位页。
+- [ ] 侧栏与设置菜单按 WeKnora `menu.vue` 与 `Settings.vue` 的分组补全，只显示允许的项。
 
-## 数据模型与迁移（`packages/platform`）
+## 1. 数据模型与迁移（`packages/platform`）
 
-- [ ] `tenants` 增加 `kind`、`wecom_corp_id`。
-- [ ] `users.phone` 全局唯一（部分唯一索引）；`must_change_password`。
-- [ ] `org_units` 增加 `tenant_id`、`source`；按企业建根节点。
-- [ ] `user_org_units` 增加 `tenant_id`；主部门唯一约束改为 `(tenant_id, user_id)`。
-- [ ] 按需确认的数据迁移方案（A 重建或 B 回填与组织树复制）写入一次 Alembic 迁移（`alembic/`）。
-- [ ] 删除 `tenant_org_bindings` 的使用；表的删除放在数据迁移完成之后的独立迁移中。
-- [ ] `tenant_memberships.source` 允许值改为 `manual`、`invitation`、`application`；停止写入 `organization`。
-- [ ] 新增 `space_join_requests` 表（申请与邀请，见 proposal 数据模型）。
+- [ ] `tenants` 增加 `kind`（`personal` / `enterprise`）、`wecom_corp_id`（可空）。
+- [ ] `users` 增加 `must_change_password`；邮箱唯一（沿用 WeKnora `users.email` 唯一索引）。不增加手机号字段。
+- [ ] `tenant_memberships` 的角色使用 `owner` / `admin` / `contributor` / `viewer`；`source` 允许值为 `manual`、`invitation`、`application`。
+- [ ] `org_units` 增加 `tenant_id`、`source`；每个企业一棵树。
+- [ ] `user_org_units` 增加 `tenant_id`；主部门唯一约束为 `(tenant_id, user_id)`。
+- [ ] 跨空间组织（WeKnora `organizations`）表结构按 WeKnora `internal/types/organization.go` 翻译。
+- [ ] 新增 `space_join_requests`（申请与邀请）。
+- [ ] 开发库重建方案（A）：单个 Alembic 迁移，不做数据回填。
 
-## 注册与登录（`packages/platform/auth`、`apps/api/http/auth.py`）
+## 2. 注册、登录与空间（WeKnora `auth.go`、`tenant.go`）
 
-- [ ] 个人注册：手机号、密码（账号可选）；创建个人空间与 owner。
-- [ ] 企业注册：企业名称、企业编码（唯一校验）、管理员账号、手机号、密码；创建企业空间与 owner。
-- [ ] 企业注册开关（配置项，由需要确认的第 1 项决定默认值）。
-- [ ] 统一登录（账号或手机号 + 密码）；登录后返回可选空间列表；记住上次空间；统一失败信息。
-- [ ] 首次登录改密：`must_change_password` 为真时只允许改密与退出。
-- [ ] 锁定计数按账号计算。
+- [ ] `POST /auth/register`：用户名、邮箱、密码，`space_kind` 决定创建个人空间或企业空间。企业注册需要企业名称与企业编码（唯一）。注册开关由配置控制。
+- [ ] `POST /auth/login`：邮箱与密码；返回用户与可选空间列表；统一失败信息。
+- [ ] `POST /auth/switch-tenant`：切换空间。
+- [ ] `GET /auth/me`、`PUT /auth/me/preferences`、`POST /auth/change-password`；首次登录改密时只允许改密与退出。
+- [ ] `GET /tenants`、`POST /tenants`、`GET /tenants/current`、`PATCH /tenants/current`（差异见 `design.md` 9.5）。
+- [ ] 前端：登录页、注册页（个人 / 企业 Tab）、空间选择页（`/onboarding/workspace`）、邀请落地页（`/join`）、首次改密页。
 
-## 组织、成员与角色（`packages/platform`、`apps/api`）
+## 3. 成员、邀请与角色（WeKnora `tenant_member.go`、`tenant_invitation`）
 
-- [ ] 组织树的服务与接口改为按企业（`/api/v1/tenants/{tenant_id}/org-units`），沿用节点规则（环检测、停用、删除前检查）。
-- [ ] 成员：创建账号（写入 `tenant_memberships` 与主部门）、编辑、禁用、恢复、重置密码、部门归属。
-- [ ] 角色分配：单人分配、按部门批量选人分配（逐人写入 `tenant_user_roles`）。
-- [ ] 申请与邀请：提交申请（一人一企业一条待处理）、撤回、审批（指定部门与角色，不能指定 owner）、拒绝（原因与冷却期）、邀请与接受或拒绝、成员主动退出（owner 除外）；全部写审计。
-- [ ] 手机号已存在时管理员只能邀请；手机号不存在时才创建账号并设置初始密码。
-- [ ] `authz/catalog.py` 增加 `org:manage`；内置角色的默认权限不变。
-- [ ] 企业 owner 不能被禁用或降级；只有 owner 能变更 owner。
-- [ ] 平台管理员的组织接口改为只读汇总（企业与组织数量）。
-- [ ] 所有写操作写入审计（组织、成员、角色、登录相关）。
+- [ ] `GET/POST /tenants/:id/members`、`PUT/DELETE /tenants/:id/members/:user_id`、`POST /tenants/:id/leave`。owner 不能被移除或降级。
+- [ ] `GET/POST /tenants/:id/invitations`、`DELETE .../:inv_id`、`POST /tenants/:id/invite-links`。
+- [ ] `GET /me/invitations`、`.../pending-count`、`POST .../accept`、`.../decline`、`accept-by-token`。
+- [ ] 管理员按邮箱添加：邮箱已存在时只能邀请，不能设置密码；不存在时创建账号并设置初始密码，首次登录改密。
+- [ ] 申请加入企业：一人一企业一条待处理；撤回；审批时指定部门与角色；拒绝时填写原因，冷却 7 天。
+- [ ] 按部门批量选人分配角色，逐人写入 `tenant_user_roles`。
+- [ ] 所有写操作写入审计。
+- [ ] 前端：空间信息页（`TenantInfo`）、成员页（`TenantMembers`）、邀请弹窗、待处理邀请列表、申请审批列表。
 
-## 企业微信
+## 4. 组织（WeKnora `organization.go`、`OrganizationHandler`）
+
+- [ ] `GET/POST /organizations`、`GET /organizations/search`、`GET /organizations/preview/:code`、`POST /organizations/join`、`POST /organizations/join-request`、`POST /organizations/join-by-id`、`GET/PUT/DELETE /organizations/:id`、`POST /organizations/:id/leave`、`POST /organizations/:id/request-upgrade`、`POST /organizations/:id/invite-code`。
+- [ ] 组织内角色 `admin` / `editor` / `viewer`；权限判断沿用 WeKnora 的 `access` 逻辑。
+- [ ] 前端：`/platform/organizations` 列表、创建、加入、设置弹窗（`OrganizationSettingsModal`）。
+- [ ] 企业组织架构（扩展）：子公司与部门树的服务与接口 `/api/v1/tenants/{tenant_id}/org-units`，节点规则（环检测、停用、删除前检查）沿用既有实现。
+- [ ] 企业组织架构页面位于企业设置下，作为本仓库扩展，在 `design.md` 9.5 列明。
+
+## 5. 权限（`packages/platform/authz`）
+
+- [ ] 角色与权限键对照 WeKnora 的 `RBAC` 守卫（`Viewer` / `Contributor` / `Admin` / `Owner`）。
+- [ ] `authz/catalog.py` 增加 `org:manage`；内置角色默认权限与 WeKnora 对应。
+- [ ] 个人空间不返回企业接口（404）；企业成员角色不足时返回 403。
+- [ ] 平台管理员组织接口改为只读汇总。
+
+## 6. 设置（WeKnora `Settings.vue`）
+
+- [ ] 分组与顺序按 `design.md` 9.3；本阶段实现的分组：常规、个人资料、空间信息、成员、API Key、组织、审计（企业）。
+- [ ] 其余分组显示占位页，菜单项保留。
+- [ ] 企业审计页（Admin+）读取 `GET /tenants/:id/audit-log`。
+
+## 7. 企业微信
 
 - [ ] 绑定时，若企业空间记录了 `wecom_corp_id`，只允许绑定到本企业账号。
-- [ ] 通讯录同步不在本提案范围，另开提案。
+- [ ] 通讯录同步不在本阶段，另开提案。
 
-## Web（`apps/web`，依赖 `2026-11-03-web-shell-tdesign`）
+## 8. 测试
 
-- [ ] 注册页：个人 / 企业 Tab。
-- [ ] 登录页：账号或手机号 + 密码；多空间时进入空间选择页。
-- [ ] 空间选择页：空间列表、"加入其他企业"、待处理邀请、我的申请。
-- [ ] 首次改密页。
-- [ ] 侧栏：新建会话、智能体（新建会话下方的快捷入口，只在智能体能力开启时显示）、最近会话、底部用户菜单（设置、空间切换、退出）。
-- [ ] 设置：按空间类型与角色显示分组（`design.md` 第 3.2 节）；"功能"分组收纳知识库、智能体、工具箱、产物、自动化。
-- [ ] 企业分组页面：企业信息、组织架构、成员、角色与权限、审计；三级弹窗按第 3.3 节。
-- [ ] 个人空间不显示企业分组。
+- [ ] `uv run --locked pytest`：注册两种类型；登录与多空间选择；切换空间；首次改密；邮箱已存在时管理员只能邀请；申请、审批、拒绝与冷却；邀请接受与拒绝；成员退出（owner 除外）；角色逐人写入；组织加入与权限；主部门唯一；移动成环拒绝；个人空间不暴露企业接口；企业成员 403。
+- [ ] `pnpm test:browser`：注册、登录、空间选择、企业设置、组织页面。
+- [ ] 每组页面与 WeKnora 逐项比对，结果写在对应分组末尾。
 
-## 测试
-
-- [ ] `uv run --locked pytest`：注册两种类型、登录分支、企业编码错误、首次改密、手机号已存在时管理员只能邀请（不能设密码）、申请与审批、冷却期、主部门唯一、移动成环拒绝、停用节点、角色逐人写入与撤销、个人空间不暴露企业接口、企业成员 403。
-- [ ] 迁移测试：A 或 B 方案的数据结果。
-- [ ] `pnpm test:browser`：注册、企业登录、企业设置三级弹窗、用户菜单与设置路由。
-
-## 不做
+## 不做（本阶段）
 
 - 企业微信通讯录同步。
 - 部门级角色继承。
-- 邀请码（链接）加入。
-- 短信验证码。
+- 短信验证码与手机号。
+- 对话、知识库、智能体等业务页面（占位，由后续子提案实现）。
 - 计费与配额。
