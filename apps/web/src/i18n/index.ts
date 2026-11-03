@@ -1,39 +1,39 @@
-/**
- * Interface languages (zh-CN, en-US). The choice is stored in localStorage; without one, the browser
- * language decides. Components read text with `t(key)` from `useI18n()`; never hard-code user-visible text.
- *
- * Keys are nested by area (`shell.*`, `chat.*`, `settings.*` ...). A missing English key falls back to Chinese.
- */
 import { createI18n } from 'vue-i18n'
-import zhCN from './locales/zh-CN'
-import enUS from './locales/en-US'
+import zhCN from './locales/zh-CN.ts'
+import ruRU from './locales/ru-RU.ts'
+import enUS from './locales/en-US.ts'
+import koKR from './locales/ko-KR.ts'
+import jaJP from './locales/ja-JP.ts'
+import zhTW from './locales/zh-TW.ts'
+import { BUILT_IN_DEFAULT, resolveDefaultLocale } from './resolveDefaultLocale.ts'
+import { pluralRules } from './pluralizationRules.ts'
 
-export type Locale = 'zh-CN' | 'en-US'
-export const LOCALES: { value: Locale; label: string }[] = [
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'en-US', label: 'English' },
-]
-const STORAGE_KEY = 'nexus_locale'
-
-/** The stored choice if it is a supported language, otherwise a guess from the browser. */
-export function initialLocale(): Locale {
-  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
-  if (stored === 'zh-CN' || stored === 'en-US') return stored
-  return typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN'
+const messages = {
+  'zh-CN': zhCN,
+  'zh-TW': zhTW,
+  'en-US': enUS,
+  'ru-RU': ruRU,
+  'ko-KR': koKR,
+  'ja-JP': jaJP
 }
 
-export const i18n = createI18n({
+// User's explicit past choice wins; otherwise use the deployment default.
+const savedLocale = localStorage.getItem('locale') || resolveDefaultLocale(
+  window.__RUNTIME_CONFIG__?.DEFAULT_LOCALE,
+  import.meta.env.VITE_DEFAULT_LOCALE,
+)
+
+const i18n = createI18n({
   legacy: false,
-  locale: initialLocale(),
-  fallbackLocale: 'zh-CN',
-  messages: { 'zh-CN': zhCN, 'en-US': enUS },
+  locale: savedLocale,
+  fallbackLocale: BUILT_IN_DEFAULT,
+  globalInjection: true,
+  pluralRules,
+  // Some translations intentionally embed `<strong>` markup (e.g. agent step summaries).
+  // We render them via v-html with our own sanitization, so silence vue-i18n's HTML warning
+  // to avoid flooding the console and slowing renders during history loads.
+  warnHtmlMessage: false,
+  messages
 })
 
-/** Switch the interface language and remember it. */
-export function setLocale(locale: Locale): void {
-  i18n.global.locale.value = locale
-  localStorage.setItem(STORAGE_KEY, locale)
-  document.documentElement.lang = locale
-}
-
-document.documentElement.lang = i18n.global.locale.value
+export default i18n
