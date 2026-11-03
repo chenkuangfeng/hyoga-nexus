@@ -323,7 +323,7 @@ def assign_role_to_unit(session: Session, principal: Principal, tenant_id: UUID,
                         role_id: UUID) -> dict:
     """Give a custom role to every active member placed directly in one node (not its subtree).
 
-    Owners and admins already hold the full catalog and are skipped. People who already have the role are
+    The owner already holds the full catalog and is skipped. People who already have the role are
     skipped too, so the call can be repeated safely. Returns `assigned` and `skipped` user ids.
     """
     now = utc_now()
@@ -340,7 +340,7 @@ def assign_role_to_unit(session: Session, principal: Principal, tenant_id: UUID,
                 (MembershipRecord.tenant_id == UserOrgUnitRecord.tenant_id)
                 & (MembershipRecord.user_id == UserOrgUnitRecord.user_id))
             .where(UserOrgUnitRecord.tenant_id == tenant_id, UserOrgUnitRecord.unit_id == unit_id,
-                   MembershipRecord.status == "active", MembershipRecord.role.not_in(["owner", "admin"]))
+                   MembershipRecord.status == "active", MembershipRecord.role != "owner")
             .distinct()))
         assigned, skipped = [], []
         for user_id in member_ids:

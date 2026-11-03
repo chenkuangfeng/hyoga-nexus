@@ -112,5 +112,5 @@ def leave_space(tenant_id: UUID, principal: Principal = Depends(get_principal), 
 @router.post("/tenants/{tenant_id}/org-units/{unit_id}/role-assignments")
 def assign_role_to_unit(tenant_id: UUID, unit_id: UUID, body: RoleToUnit, principal: Principal = Depends(get_principal),
                         db=Depends(get_database_session)):
-    """Give a custom role to every member placed directly in this node (repeatable; owners and admins skipped)."""
+    """Give a custom role to every member placed directly in this node (repeatable; the owner is skipped)."""
     return flows.assign_role_to_unit(db, principal, tenant_id, unit_id, body.role_id)

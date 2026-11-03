@@ -1,7 +1,8 @@
 """Tenant role management and effective-permission resolution.
 
 Effective access of an active member is the union of:
-- the built-in full catalog, for owner and admin memberships;
+- the built-in full catalog, for owner memberships; admins get the built-in access minus the governance
+  keys (see `authz.permissions.ADMIN_BASELINE`);
 - the menu and API grants of every custom role assigned to the member.
 A member holding `roles:manage` may create and assign roles, but only grant permissions they
 hold themselves, so role administration cannot escalate privileges.
@@ -110,8 +111,8 @@ def assign_role(session: Session, principal: Principal, tenant_id: UUID, member_
         member = session.get(MembershipRecord, (tenant_id, member_id))
         if member is None or member.status != "active":
             raise NotFound("Tenant member not found")
-        if member.role in {TenantRole.OWNER.value, TenantRole.ADMIN.value}:
-            raise Conflict("Owner and admin already have full access")
+        if member.role == TenantRole.OWNER.value:
+            raise Conflict("The owner already has full access")
         grants = effective_permissions_for_role(session, role.id)
         _ensure_within_actor(actor, grants[0], grants[1])
         if session.get(TenantUserRoleRecord, (tenant_id, member_id, role.id)) is not None:

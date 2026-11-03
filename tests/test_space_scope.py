@@ -51,3 +51,32 @@ def test_platform_summary_is_read_only_and_admin_only(client):
     summary = client.get("/api/v1/admin/summary", headers=headers)
     assert summary.status_code == 200
     assert summary.json() == {"enterprises": 1, "personal_spaces": 1, "shared_spaces": 0}
+
+
+def test_enterprise_admin_needs_a_role_for_governance_but_keeps_everyday_access(client):
+    owner, acme = _register(client, "owner2", "enterprise", "Beta", "beta")
+    admin, _ = _register(client, "adma")
+    client.post(f"/api/v1/tenants/{acme}/members/by-email", headers={**owner, "X-Tenant-ID": acme},
+                json={"email": "adma@example.com", "role": "admin"})
+    client.post("/api/v1/me/invitations/" + client.get("/api/v1/me/invitations", headers=admin).json()[0]["id"] + "/accept",
+                headers=admin)
+    scoped = {**admin, "X-Tenant-ID": acme}
+    # Governance is not part of the built-in admin access.
+    assert client.post(f"/api/v1/tenants/{acme}/org-units", headers=scoped, json={"name": "Dept"}).status_code == 403
+    assert client.get(f"/api/v1/tenants/{acme}/roles", headers=scoped).status_code == 403
+    # Everyday access stays: admins can still use the space's sessions and shared-space settings.
+    assert client.get(f"/api/v1/tenants/{acme}/sessions", headers=scoped).status_code == 200
+    # Once a custom role grants members:manage, the admin can invite.
+    role = client.post(f"/api/v1/tenants/{acme}/roles", headers={**owner, "X-Tenant-ID": acme},
+                       json={"name": "People", "menus": [], "apis": ["members:manage"]})
+    assert role.status_code == 201, role.text
+    adma_id = client.get(f"/api/v1/tenants/{acme}/members", headers={**owner, "X-Tenant-ID": acme}).json()
+    member_id = next(m["user_id"] for m in adma_id if m["role"] == "admin")
+    assigned = client.put(f"/api/v1/tenants/{acme}/members/{member_id}/roles/{role.json()['id']}",
+                          headers={**owner, "X-Tenant-ID": acme})
+    assert assigned.status_code == 204, assigned.text
+    assert client.post(f"/api/v1/tenants/{acme}/org-units", headers=scoped, json={"name": "Dept"}).status_code == 403
+    invited = client.post(f"/api/v1/tenants/{acme}/members/by-email", headers=scoped,
+                          json={"email": "newbie@example.com", "role": "viewer"})
+    # Permission passes (422 is only the missing username and password for a new email).
+    assert invited.status_code == 422

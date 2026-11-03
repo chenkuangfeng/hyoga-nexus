@@ -1,5 +1,10 @@
-"""Effective tenant permissions of a member: built-in full access for owner/admin, otherwise the
-union of the menu and API grants of every role assigned to the member.
+"""Effective tenant permissions of a member.
+
+- Owner: built-in full access.
+- Admin: built-in access to everything except the governance keys in `GOVERNANCE_APIS`
+  (organization tree, member administration, role administration, audit). Those are granted only
+  through a custom role, as in openspec 2026-11-03-enterprise-personal-spaces section 4.
+- Other members: the union of the menu and API grants of every role assigned to them.
 
 Kept free of tenant-service imports so tenant, model and run services can all depend on it.
 """
@@ -34,13 +39,17 @@ class EffectivePermissions:
 
 FULL_ACCESS = EffectivePermissions(MENUS, API_PERMISSIONS)
 
+# Keys an admin does not hold by default; they come only from a custom role assigned to the admin.
+GOVERNANCE_APIS = frozenset({"org:manage", "members:manage", "roles:manage", "audit:read"})
+ADMIN_BASELINE = EffectivePermissions(MENUS, API_PERMISSIONS - GOVERNANCE_APIS)
+
 
 def effective_permissions(session: Session, tenant_id: UUID, user_id: UUID) -> EffectivePermissions:
     """Return the union of permissions for an active member; no membership yields no access."""
     membership = session.get(MembershipRecord, (tenant_id, user_id))
     if not membership_is_active(session, membership):
         return EffectivePermissions(frozenset(), frozenset())
-    if membership.role in {TenantRole.OWNER.value, TenantRole.ADMIN.value}:
+    if membership.role == TenantRole.OWNER.value:
         return FULL_ACCESS
     role_ids = select(TenantUserRoleRecord.role_id).where(
         TenantUserRoleRecord.tenant_id == tenant_id, TenantUserRoleRecord.user_id == user_id
@@ -51,6 +60,9 @@ def effective_permissions(session: Session, tenant_id: UUID, user_id: UUID) -> E
     apis = set(session.scalars(
         select(TenantRoleApiGrantRecord.permission).where(TenantRoleApiGrantRecord.role_id.in_(role_ids))
     ))
+    if membership.role == TenantRole.ADMIN.value:
+        menus |= ADMIN_BASELINE.menus
+        apis |= ADMIN_BASELINE.apis
     return EffectivePermissions(frozenset(menus), frozenset(apis))
 
 
