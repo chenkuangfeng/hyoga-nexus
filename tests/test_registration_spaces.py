@@ -160,3 +160,62 @@ def test_ui_preferences_are_stored_as_given_and_cleared_with_null(client):
                                                    "gallery": {"mode": "custom"}}
     cleared = client.put("/api/v1/auth/me/preferences", headers=headers, json={"gallery": None})
     assert cleared.json()["data"]["preferences"] == {"browser_search_instructions": "only news"}
+
+
+def test_owner_or_admin_edits_name_and_description_and_clears_description(client):
+    _register(client, kind="enterprise", name="Acme", code="ACME-SET")
+    login = _login(client)
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    space_headers = {**headers, "X-Tenant-ID": login["memberships"][0]["id"]}
+    described = client.patch("/api/v1/tenants/current", headers=space_headers,
+                             json={"description": "Hardware and services"})
+    assert described.status_code == 200, described.text
+    assert described.json()["description"] == "Hardware and services"
+    renamed = client.patch("/api/v1/tenants/current", headers=space_headers, json={"name": "Acme Holdings"})
+    assert renamed.json()["name"] == "Acme Holdings"
+    assert renamed.json()["description"] == "Hardware and services"
+    cleared = client.patch("/api/v1/tenants/current", headers=space_headers, json={"description": ""})
+    assert cleared.json()["description"] is None
+    empty = client.patch("/api/v1/tenants/current", headers=space_headers, json={})
+    assert empty.status_code == 422
+    too_long = client.patch("/api/v1/tenants/current", headers=space_headers, json={"description": "x" * 501})
+    assert too_long.status_code == 422
+
+
+def test_owner_archives_enterprise_space_and_it_disappears(client):
+    _register(client, kind="enterprise", name="Gone Co", code="GONE-CO")
+    headers = {"Authorization": f"Bearer {_login(client)['token']}"}
+    space_id = _login(client)["memberships"][0]["id"]
+    deleted = client.delete(f"/api/v1/tenants/{space_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+    after = _login(client)
+    assert space_id not in [m["id"] for m in after["memberships"]]
+    gone = client.get("/api/v1/tenants/current", headers={**headers, "X-Tenant-ID": space_id})
+    assert gone.status_code == 404
+
+
+def test_personal_space_cannot_be_deleted(client):
+    _register(client)
+    login = _login(client)
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    personal = login["active_tenant"]["id"]
+    refused = client.delete(f"/api/v1/tenants/{personal}", headers=headers)
+    assert refused.status_code == 403
+    assert "personal space" in refused.json()["error"]["message"]
+
+
+def test_admin_cannot_delete_enterprise_space(client):
+    _register(client, kind="enterprise", name="Owned Co", code="OWNED-CO")
+    owner = {"Authorization": f"Bearer {_login(client)['token']}"}
+    space_id = next(m["id"] for m in _login(client)["memberships"] if m["kind"] == "enterprise")
+    _register(client, username="ops", email="ops@example.com")
+    ops_token = _login(client, "ops@example.com")["token"]
+    ops = {"Authorization": f"Bearer {ops_token}"}
+    ops_space = {**ops, "X-Tenant-ID": space_id}
+    invited = client.post(f"/api/v1/tenants/{space_id}/members/by-email", headers=owner,
+                          json={"email": "ops@example.com", "role": "admin"})
+    assert invited.status_code == 201, invited.text
+    inv_id = client.get("/api/v1/me/invitations", headers=ops).json()[0]["id"]
+    assert client.post(f"/api/v1/me/invitations/{inv_id}/accept", headers=ops).status_code in (200, 204)
+    refused = client.delete(f"/api/v1/tenants/{space_id}", headers=ops_space)
+    assert refused.status_code == 403

@@ -103,9 +103,22 @@ def update_current_tenant(
 ):
     if tenant_id is None:
         raise NotFound("No current space was selected")
-    row = tenants.update_space(db, principal, tenant_id, name=body.name)
+    fields = body.model_dump(exclude_unset=True)
+    row = tenants.update_space(db, principal, tenant_id, name=fields.get("name"),
+                               description=fields.get("description"))
     _, role = tenants.current_space(db, principal, tenant_id)
     return tenant_view(row, role)
+
+
+@router.delete("/tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tenant(
+    tenant_id: UUID,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Archive an enterprise space (owner only). Personal spaces cannot be deleted."""
+    tenants.delete_space(db, principal, tenant_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/tenants", response_model=list[TenantView])
@@ -596,7 +609,8 @@ def list_audit_records(
 
 
 def tenant_view(row, role: str) -> TenantView:
-    return TenantView(id=row.id, name=row.name, kind=row.kind, role=role, status=row.status, created_at=row.created_at)
+    return TenantView(id=row.id, name=row.name, kind=row.kind, description=row.description, role=role,
+                      status=row.status, created_at=row.created_at)
 
 
 def model_profile_view(profile, version) -> ModelProfileView:

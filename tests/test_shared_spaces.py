@@ -101,3 +101,15 @@ def test_acting_requires_a_space_header_and_shared_admin_role_for_settings(clien
     assert client.get(f"/api/v1/shared-spaces/{shared}/join-requests", headers=_as(bob, bob_space)).status_code == 403
     assert client.post("/api/v1/shared-spaces/join", json={"invite_code": "unknown-code"},
                        headers=_as(bob, bob_space)).status_code == 404
+
+
+def test_enterprise_with_active_shared_space_cannot_be_deleted_until_it_is_removed(client):
+    ann, acme = _register(client, "ann", kind="enterprise", name="Acme", code="acme-del")
+    acme_id = client.get("/api/v1/auth/me", headers=ann).json()["data"]["memberships"][0]["id"]
+    shared = client.post("/api/v1/shared-spaces", json={"name": "Alliance"}, headers=_as(ann, acme)).json()["id"]
+    blocked = client.delete(f"/api/v1/tenants/{acme_id}", headers=ann)
+    assert blocked.status_code == 409, blocked.text
+    removed = client.delete(f"/api/v1/shared-spaces/{shared}", headers=_as(ann, acme))
+    assert removed.status_code in (200, 204), removed.text
+    archived = client.delete(f"/api/v1/tenants/{acme_id}", headers=ann)
+    assert archived.status_code == 204, archived.text

@@ -31,6 +31,8 @@ def upgrade():
     with op.batch_alter_table('tenants') as batch:
         batch.add_column(sa.Column('kind', sa.String(16), nullable=False, server_default='enterprise'))
         batch.add_column(sa.Column('wecom_corp_id', sa.String(64), nullable=True))
+        # Free-text description the space owner or admin edits in the space settings (up to 500 characters).
+        batch.add_column(sa.Column('description', sa.String(500), nullable=True))
         # Enterprise code used at registration to join or create an enterprise; unique among spaces that have one.
         batch.add_column(sa.Column('code', sa.String(32), nullable=True))
         batch.create_unique_constraint('uq_tenants_code', ['code'])
@@ -254,5 +256,6 @@ def downgrade():
         batch.drop_constraint('ck_tenants_kind', type_='check')
         batch.drop_constraint('uq_tenants_code', type_='unique')
         batch.drop_column('code')
+        batch.drop_column('description')
         batch.drop_column('wecom_corp_id')
         batch.drop_column('kind')

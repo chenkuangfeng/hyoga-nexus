@@ -21,6 +21,8 @@ class TenantRecord(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     # Recorded only (no directory sync yet). Binding a WeCom account is limited to this corp when set.
     wecom_corp_id: Mapped[str | None] = mapped_column(String(64))
+    # Shown in the space settings. Empty means no description.
+    description: Mapped[str | None] = mapped_column(String(500))
     # Enterprise code (企业编码) used at registration; unique when set. Personal spaces have none.
     code: Mapped[str | None] = mapped_column(String(32), unique=True)
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)

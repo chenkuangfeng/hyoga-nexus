@@ -268,25 +268,29 @@ export async function deleteTenantAPIKey(
 }
 
 /**
- * 修改当前空间的名称。Backend: PATCH /api/v1/tenants/current（owner、admin；X-Tenant-ID 指定空间）。
- * 后端目前只支持改名：空间描述未存储，删除空间也未提供，两者在此直接返回失败，不发请求。
+ * 修改当前空间的名称和/或描述。Backend: PATCH /api/v1/tenants/current（owner、admin；X-Tenant-ID 指定空间）。
+ * 只发送传入的字段；描述传空字符串即清除。
  */
 export async function updateTenant(
   _tenantId: string,
   payload: { name?: string; description?: string },
 ): Promise<{ success: boolean; data?: TenantInfo; message?: string }> {
-  if (payload.description !== undefined && payload.name === undefined) {
-    return { success: false, message: t('error.tenant.updateFailed') }
-  }
+  const body: Record<string, string> = {}
+  if (payload.name !== undefined) body.name = payload.name
+  if (payload.description !== undefined) body.description = payload.description
   try {
-    const response = await patch('/api/v1/tenants/current', { name: payload.name ?? '' })
-    const space = response as unknown as { id: string; name: string; kind: string; created_at: string }
+    const space = (await patch('/api/v1/tenants/current', body)) as unknown as {
+      id: string
+      name: string
+      description?: string | null
+      created_at: string
+    }
     return {
       success: true,
       data: {
         id: space.id,
         name: space.name,
-        description: '',
+        description: space.description ?? '',
         status: 'active',
         created_at: space.created_at,
         updated_at: space.created_at,
@@ -301,12 +305,21 @@ export async function updateTenant(
 }
 
 /**
- * 删除空间。Nexus 尚未提供删除空间的接口，这里直接返回失败，不发请求。
+ * 删除（归档）企业空间，仅 owner。Backend: DELETE /api/v1/tenants/:id。
+ * 个人空间不能删除；仍创建着共享空间时后端返回 409。
  */
 export async function deleteTenant(
-  _tenantId: string,
+  tenantId: string,
 ): Promise<{ success: boolean; message?: string }> {
-  return { success: false, message: t('error.tenant.deleteFailed') }
+  try {
+    await del(`/api/v1/tenants/${tenantId}`)
+    return { success: true }
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || t('error.tenant.deleteFailed'),
+    }
+  }
 }
 
 /**

@@ -12,13 +12,17 @@ class TenantCreate(BaseModel):
 
 
 class TenantUpdate(BaseModel):
-    name: str = Field(min_length=1, max_length=160)
+    """Partial update of the current space: fields left out keep their value; `description: ""` clears it."""
+
+    name: str | None = Field(default=None, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
 
 
 class TenantView(BaseModel):
     id: UUID
     name: str
     kind: str = "enterprise"
+    description: str | None = None
     role: str
     status: str
     created_at: datetime

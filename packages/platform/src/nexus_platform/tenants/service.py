@@ -95,11 +95,25 @@ def current_space(session: Session, principal: Principal, tenant_id: UUID) -> tu
         return tenant, membership.role
 
 
-def update_space(session: Session, principal: Principal, tenant_id: UUID, *, name: str) -> TenantRecord:
-    """Rename a space. Owners and admins only; the name is 1-160 characters after trimming."""
-    name = name.strip()
-    if not name or len(name) > 160:
-        raise ValueError("Space name must be 1-160 characters")
+def update_space(
+    session: Session, principal: Principal, tenant_id: UUID, *, name: str | None = None,
+    description: str | None = None,
+) -> TenantRecord:
+    """Change the space name and/or description. Owners and admins only.
+
+    `None` leaves a field unchanged. The name is 1-160 characters after trimming; the description is at most
+    500 characters and an empty string clears it.
+    """
+    if name is None and description is None:
+        raise ValueError("Nothing to update")
+    if name is not None:
+        name = name.strip()
+        if not name or len(name) > 160:
+            raise ValueError("Space name must be 1-160 characters")
+    if description is not None:
+        description = description.strip()
+        if len(description) > 500:
+            raise ValueError("Space description must be at most 500 characters")
     now = utc_now()
     with session.begin():
         actor = resolve_user(session, principal)
@@ -107,12 +121,46 @@ def update_space(session: Session, principal: Principal, tenant_id: UUID, *, nam
         require_membership(session, tenant_id, actor.id)
         if not is_space_manager(session, tenant_id, actor.id):
             raise Forbidden("Only a space owner or admin can change the space")
-        previous = tenant.name
-        tenant.name = name
-        tenant.updated_at = now
-        audit(session, tenant_id, actor.id, "tenant.updated", "tenant", str(tenant_id),
-              {"name": {"from": previous, "to": name}})
+        changes: dict[str, dict[str, str | None]] = {}
+        if name is not None and name != tenant.name:
+            changes["name"] = {"from": tenant.name, "to": name}
+            tenant.name = name
+        if description is not None:
+            new_description = description or None
+            if new_description != tenant.description:
+                changes["description"] = {"from": tenant.description, "to": new_description}
+                tenant.description = new_description
+        if changes:
+            tenant.updated_at = now
+            audit(session, tenant_id, actor.id, "tenant.updated", "tenant", str(tenant_id), changes)
     return tenant
+
+
+def delete_space(session: Session, principal: Principal, tenant_id: UUID) -> None:
+    """Archive an enterprise space so it disappears from every member's space list.
+
+    Owner only. Personal spaces cannot be deleted, and a space that still created active shared spaces must
+    have them deleted first (a shared space keeps its creating space as its owner).
+    Archiving keeps the rows, so audit history remains; the space stops accepting requests (404).
+    """
+    from nexus_platform.persistence.models import SharedSpaceRecord
+
+    now = utc_now()
+    with session.begin():
+        actor = resolve_user(session, principal)
+        tenant = lock_tenant(session, tenant_id)
+        membership = require_membership(session, tenant_id, actor.id)
+        if membership.role != TenantRole.OWNER.value:
+            raise Forbidden("Only the space owner can delete the space")
+        if tenant.kind == "personal":
+            raise Forbidden("A personal space cannot be deleted")
+        owned_shared = session.scalar(select(func.count()).select_from(SharedSpaceRecord).where(
+            SharedSpaceRecord.owner_tenant_id == tenant_id, SharedSpaceRecord.deleted_at.is_(None))) or 0
+        if owned_shared:
+            raise Conflict("Delete the shared spaces this space created before deleting the space")
+        tenant.status = "archived"
+        tenant.updated_at = now
+        audit(session, tenant_id, actor.id, "tenant.archived", "tenant", str(tenant_id))
 
 
 def add_member(

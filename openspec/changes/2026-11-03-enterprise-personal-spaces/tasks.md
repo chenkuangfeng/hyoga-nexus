@@ -36,7 +36,7 @@
 - [x] `POST /api/v1/auth/switch-tenant`：校验成员身份后返回空间。与设计稿 9.2 的差异见 `design.md` 9.5：令牌不变，空间由请求头 `X-Tenant-ID` 逐次指定并校验成员身份。
 - [x] `GET /api/v1/auth/me`、`POST /api/v1/auth/change-password`（`/auth/password` 作为别名保留）。`must_change_password` 为真时，除 `/auth/me`、退出与改密外的接口返回 403。
 - [x] `PUT /api/v1/auth/me/preferences`：`users.preferences` 存储；`last_active_tenant_id` 仅在仍是有效成员时于登录沿用，空值清除；未知键返回 422。`browser_search_instructions`、`gallery` 按原样保存。`tests/test_registration_spaces.py` 覆盖。
-- [x] `GET /api/v1/tenants/current`、`PATCH /api/v1/tenants/current`（仅 owner、admin 可改名）；`GET /api/v1/tenants`、`POST /api/v1/tenants` 沿用。
+- [x] `GET /api/v1/tenants/current`、`PATCH /api/v1/tenants/current`（owner、admin 可改名与描述）；`GET /api/v1/tenants`、`POST /api/v1/tenants` 沿用。
 - [x] Bearer 令牌：`Authorization: Bearer <token>`，无需 CSRF 头；Cookie 登录仍保留（企业微信回调使用）。
 - [x] 前端：改初始密码页（`/auth/change-password`），登录后若需改密则跳转。
 - [x] 租户 ID 统一为 UUID 字符串：前端副本中约 70 处数字类型的租户 ID 与 `Number(...)` 转换已改为字符串，登录后总是选中当前空间并发送 `X-Tenant-ID`（`App.vue`、`views/auth/Login.vue`）。`tsc -p tsconfig.app.json` 对 `.ts` 文件无错误；`.vue` 文件仅做语法检查（`vue-tsc` 本机内存不足）。
@@ -57,7 +57,7 @@
 - [x] 按部门批量分配自定义角色 `POST /api/v1/tenants/:id/org-units/:unit_id/role-assignments`：逐人写入 `tenant_user_roles`，跳过 owner、admin 与已有该角色的人，可重复调用。
 - [x] 所有写操作写入审计（`audit_records`）。
 - [x] 前端成员与邀请接口封装（`api/tenant/members.ts`、`api/tenant/invitations.ts`）已对接 Nexus 端点与返回结构：成员列表含邮箱、用户名、显示名（`MemberView` 增加字段）；按邮箱邀请；待处理邀请列表；接受与拒绝；撤销。成员页与邀请列表沿用原组件。
-- [x] 前端空间信息页（`TenantInfo`）改名通过 `PATCH /api/v1/tenants/current`。空间描述与删除空间后端未提供，前端直接返回失败、不发请求。
+- [x] 空间信息页（`TenantInfo`）改名与描述通过 `PATCH /api/v1/tenants/current`（owner、admin；`description` 可清空，最长 500 字）；删除空间通过 `DELETE /api/v1/tenants/:id`（仅企业空间的 owner；个人空间返回 403；仍创建着有效共享空间时返回 409；删除为归档，成员列表中消失，之后访问返回 404）。`tests/test_registration_spaces.py`、`tests/test_shared_spaces.py` 覆盖。
 - [ ] 前端：成员页的邀请链接弹窗与申请审批列表尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
 - [ ] 前端：按邮箱添加且邮箱无账号时，后端需要用户名与初始密码，成员页尚未提供这两个输入项。
 - 实施说明（2026-11-03）：测试 `tests/test_membership_flows.py` 通过 HTTP 覆盖邀请、接受与拒绝、按邮箱建账号、申请与审批、拒绝冷却、撤回、离开、批量角色。全量 pytest 569 通过。
