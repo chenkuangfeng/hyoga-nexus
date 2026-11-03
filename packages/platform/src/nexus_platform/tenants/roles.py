@@ -28,7 +28,6 @@ from nexus_platform.persistence.models import (
     TenantRoleRecord,
     TenantUserRoleRecord,
 )
-from nexus_platform.orgs.access import SOURCE_ORGANIZATION
 from nexus_platform.tenants.service import lock_tenant
 
 
@@ -134,13 +133,6 @@ def unassign_role(session: Session, principal: Principal, tenant_id: UUID, membe
             raise NotFound("Role assignment not found")
         session.delete(assignment)
         session.flush()
-        # An organization-sourced membership exists only to carry roles; drop it with the last role.
-        membership = session.get(MembershipRecord, (tenant_id, member_id))
-        if membership is not None and membership.source == SOURCE_ORGANIZATION:
-            remaining = session.scalar(select(TenantUserRoleRecord.role_id).where(
-                TenantUserRoleRecord.tenant_id == tenant_id, TenantUserRoleRecord.user_id == member_id).limit(1))
-            if remaining is None:
-                session.delete(membership)
         audit(session, tenant_id, actor_id, "tenant.role_unassigned", "user", str(member_id),
               {"role_id": str(role_id)})
 

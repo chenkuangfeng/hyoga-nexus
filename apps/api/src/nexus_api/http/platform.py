@@ -80,7 +80,7 @@ def create_tenant(
 def list_tenants(
     principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)
 ):
-    return [tenant_view(row, role, via_org) for row, role, via_org in tenants.list_tenants(db, principal)]
+    return [tenant_view(row, role) for row, role in tenants.list_tenants(db, principal)]
 
 
 @router.post(
@@ -405,13 +405,12 @@ def list_all_agents(principal: Principal = Depends(get_principal), db: Session =
 def list_all_sessions(
     tenant_id: UUID | None = None,
     agent_id: UUID | None = None,
-    org_unit_id: UUID | None = None,
     principal: Principal = Depends(get_principal),
     db: Session = Depends(get_database_session),
 ):
-    """Platform administrators only: sessions across spaces, filtered by space, agent or organization node."""
+    """Platform administrators only: sessions across spaces, filtered by space or agent."""
     rows = sessions.list_sessions_for_platform_admin(
-        db, principal, tenant_id=tenant_id, agent_id=agent_id, org_unit_id=org_unit_id)
+        db, principal, tenant_id=tenant_id, agent_id=agent_id)
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
 
 
@@ -542,9 +541,8 @@ def list_audit_records(
     } for row in rows]
 
 
-def tenant_view(row, role: str, via_organization: bool = False) -> TenantView:
-    return TenantView(id=row.id, name=row.name, role=role, status=row.status, created_at=row.created_at,
-                      via_organization=via_organization)
+def tenant_view(row, role: str) -> TenantView:
+    return TenantView(id=row.id, name=row.name, role=role, status=row.status, created_at=row.created_at)
 
 
 def model_profile_view(profile, version) -> ModelProfileView:

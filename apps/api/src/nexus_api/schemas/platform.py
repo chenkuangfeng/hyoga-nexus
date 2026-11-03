@@ -17,18 +17,16 @@ class TenantView(BaseModel):
     role: str
     status: str
     created_at: datetime
-    # True when access comes from an organization; the space list marks these as "组织".
-    via_organization: bool = False
 
 
 class MemberCreate(BaseModel):
     issuer: str = Field(min_length=1, max_length=128)
     subject: str = Field(min_length=1, max_length=255)
-    role: Literal["admin", "member"] = "member"
+    role: Literal["admin", "contributor", "viewer"] = "contributor"
 
 
 class MemberRoleUpdate(BaseModel):
-    role: Literal["owner", "admin", "member"]
+    role: Literal["owner", "admin", "contributor", "viewer"]
 
 
 class MemberView(BaseModel):
@@ -165,8 +163,6 @@ class SessionView(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-    # Organization node the owner came through when the session was created; null for manual members.
-    org_unit_id: UUID | None = None
 
 
 class RunCreate(BaseModel):
@@ -277,7 +273,7 @@ class AccountCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     display_name: str = Field(default="", max_length=160)
     password: str = Field(min_length=10, max_length=256)
-    role: Literal["admin", "member"] = "member"
+    role: Literal["admin", "contributor", "viewer"] = "contributor"
 
 
 class AccountView(BaseModel):

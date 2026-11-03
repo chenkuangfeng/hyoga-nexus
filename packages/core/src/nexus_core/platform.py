@@ -27,7 +27,8 @@ def utc_now() -> datetime:
 class TenantRole(StrEnum):
     OWNER = "owner"
     ADMIN = "admin"
-    MEMBER = "member"
+    CONTRIBUTOR = "contributor"
+    VIEWER = "viewer"
 
 
 class MembershipStatus(StrEnum):

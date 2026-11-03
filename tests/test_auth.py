@@ -122,7 +122,7 @@ def test_admin_creates_member_account_and_member_logs_in(client):
     _login(client, "owner-one")
     tenant_id = client.get("/api/v1/tenants").json()[0]["id"]
     created = client.post(f"/api/v1/tenants/{tenant_id}/accounts", headers=CSRF,
-                          json={"username": "Staff.One", "display_name": "Staff", "password": "staff-password-1", "role": "member"})
+                          json={"username": "Staff.One", "display_name": "Staff", "password": "staff-password-1", "role": "contributor"})
     assert created.status_code == 201, created.text
     assert created.json()["username"] == "staff.one"
     duplicate = client.post(f"/api/v1/tenants/{tenant_id}/accounts", headers=CSRF,

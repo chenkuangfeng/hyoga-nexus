@@ -18,14 +18,16 @@
 
 ## 1. 数据模型与迁移（`packages/platform`）
 
-- [ ] `tenants` 增加 `kind`（`personal` / `enterprise`）、`wecom_corp_id`（可空）。
-- [ ] `users` 增加 `must_change_password`；邮箱唯一（沿用 WeKnora `users.email` 唯一索引）。不增加手机号字段。
-- [ ] `tenant_memberships` 的角色使用 `owner` / `admin` / `contributor` / `viewer`；`source` 允许值为 `manual`、`invitation`、`application`。
-- [ ] `org_units` 增加 `tenant_id`、`source`；每个企业一棵树。
-- [ ] `user_org_units` 增加 `tenant_id`；主部门唯一约束为 `(tenant_id, user_id)`。
-- [ ] 共享空间表结构按 WeKnora `internal/types/organization.go` 翻译，命名改为 `shared_spaces`、`shared_space_tenant_members`、`shared_space_join_requests`，共享表外键列改为 `shared_space_id`（见 `design.md` 9.5）。
-- [ ] 新增 `space_join_requests`（申请与邀请）。
-- [ ] 开发库重建方案（A）：单个 Alembic 迁移，不做数据回填。
+- [x] `tenants` 增加 `kind`（`personal` / `enterprise`）、`wecom_corp_id`（可空）。
+- [x] `users` 增加 `must_change_password`；邮箱唯一（沿用 WeKnora `users.email` 唯一索引）。不增加手机号字段。
+- [x] `tenant_memberships` 的角色使用 `owner` / `admin` / `contributor` / `viewer`；`source` 允许值为 `manual`、`invitation`、`application`。
+- [x] `org_units` 增加 `tenant_id`、`source`；每个企业一棵树。
+- [x] `user_org_units` 增加 `tenant_id`；主部门唯一约束为 `(tenant_id, user_id)`。
+- [x] 共享空间表结构按 WeKnora `internal/types/organization.go` 翻译，命名改为 `shared_spaces`、`shared_space_tenant_members`、`shared_space_join_requests`，共享表外键列改为 `shared_space_id`（见 `design.md` 9.5）。
+- [x] 新增 `space_join_requests`（申请与邀请）。
+- [x] 开发库重建方案（A）：单个 Alembic 迁移，不做数据回填。
+- 实施说明（2026-11-03）：迁移 `b8e2f1c4d7a9_enterprise_spaces` 为开发库重建方案，不回填数据；`tenant_org_bindings` 删除，`sessions.org_unit_id` 删除，机构节点不再参与访问判断。角色枚举改为 `owner` / `admin` / `contributor` / `viewer`，`TenantRole.MEMBER` 同步改名。`org:manage` 加入 `API_PERMISSIONS`，owner 与 admin 通过内置完整目录获得。机构服务与接口改为企业范围（`/api/v1/tenants/{tenant_id}/org-units`），旧的绑定、平台管理员全局视图与 `from-organization` 批量加入已移除，分别在第 4、5、3 组重新实现。测试：`tests/test_org_tree.py` 覆盖一企业一棵树、主节点唯一、成环拒绝、停用与删除规则、撤销成员不计入人数；全量 `pytest` 553 通过，1 跳过。
+
 
 ## 2. 注册、登录与空间（WeKnora `auth.go`、`tenant.go`）
 

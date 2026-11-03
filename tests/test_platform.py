@@ -131,7 +131,7 @@ def test_tenant_isolation_and_last_owner_protection(database):
         owner_id = owner.id
     from nexus_platform.tenants.service import add_member, remove_member
     with database() as db:
-        add_member(db, alice, tenant.id, bob, TenantRole.MEMBER)
+        add_member(db, alice, tenant.id, bob, TenantRole.CONTRIBUTOR)
     with database() as db:
         with pytest.raises(Forbidden):
             remove_member(db, bob, tenant.id, owner_id)
@@ -283,7 +283,7 @@ def test_platform_api_publishes_agent_and_exposes_run_events(database):
             assert draft_response.status_code == 201, draft_response.text
             member_response = client.post(
                 f"/api/v1/tenants/{tenant_id}/members",
-                json={"issuer": "test", "subject": "workflow-member", "role": "member"},
+                json={"issuer": "test", "subject": "workflow-member", "role": "contributor"},
             )
             assert member_response.status_code == 201, member_response.text
 

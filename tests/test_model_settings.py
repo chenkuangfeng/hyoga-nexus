@@ -37,7 +37,7 @@ def settings_client(database, deployment_config):
         tenant = create_tenant(db, owner, 'Settings')
         with db.begin():
             user = resolve_user(db, member)
-            db.add(MembershipRecord(tenant_id=tenant.id, user_id=user.id, role='member', status='active', joined_at=utc_now()))
+            db.add(MembershipRecord(tenant_id=tenant.id, user_id=user.id, role='contributor', status='active', joined_at=utc_now()))
     identity = [owner]
     def session():
         with database() as db:
@@ -53,7 +53,7 @@ def add_member_role(client, tenant_path, identity, owner):
     """Give the seeded member a role that may create agents; built-in member roles have no agent access."""
     identity[0] = owner
     members = client.get(tenant_path + '/members').json()
-    member_user_id = next(item['user_id'] for item in members if item['role'] == 'member')
+    member_user_id = next(item['user_id'] for item in members if item['role'] == 'contributor')
     role = client.post(tenant_path + '/roles', json={'name': 'agent-builder', 'menus': ['agents'], 'apis': ['agents:write']})
     assert role.status_code == 201, role.text
     assigned = client.put(tenant_path + '/members/' + member_user_id + '/roles/' + role.json()['id'])

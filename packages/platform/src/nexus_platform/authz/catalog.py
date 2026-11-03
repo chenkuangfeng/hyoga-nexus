@@ -20,6 +20,7 @@ API_PERMISSIONS: frozenset[str] = frozenset({
     "audit:read",
     "members:manage",
     "roles:manage",
+    "org:manage",
     "tools:manage",
 })
 

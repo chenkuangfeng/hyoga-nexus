@@ -33,9 +33,6 @@ class SessionRecord(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    # Snapshot of the bound organization node the owner came through, set only for organization-sourced
-    # memberships at creation time. Null for manual members. Kept for audit when people move later.
-    org_unit_id: Mapped[UUID | None] = mapped_column(ForeignKey("org_units.id", ondelete="SET NULL"))
     agent_version_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     runtime_type: Mapped[str] = mapped_column(String(48), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="")

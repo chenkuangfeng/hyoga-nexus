@@ -35,7 +35,8 @@ from .memory import (
 )
 from .approval import InputRequestRecord, ActionApprovalRecord
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
-from .org import OrgUnitRecord, UserOrgUnitRecord, TenantOrgBindingRecord, OrgAuditRecord
+from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
+from .space import SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
 
 __all__ = [
     'SessionMemorySnapshotRecord',
@@ -46,6 +47,10 @@ __all__ = [
     'UserRecord',
     'UserIdentityRecord',
     'TenantRecord',
+    'SpaceJoinRequestRecord',
+    'SharedSpaceRecord',
+    'SharedSpaceTenantMemberRecord',
+    'SharedSpaceJoinRequestRecord',
     'MembershipRecord',
     'TenantRoleRecord',
     'TenantRoleMenuGrantRecord',
@@ -90,6 +95,6 @@ __all__ = [
     'ActionApprovalRecord',
     'OrgUnitRecord',
     'UserOrgUnitRecord',
-    'TenantOrgBindingRecord',
+    
     'OrgAuditRecord',
 ]

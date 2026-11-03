@@ -10,8 +10,8 @@ from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.agents.access import require_agent_permission
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
-from nexus_platform.orgs.access import SOURCE_ORGANIZATION, is_space_manager, organization_unit_for, subtree_ids
-from nexus_platform.persistence.models import AgentRecord, AgentVersionRecord, MembershipRecord, SessionRecord
+from nexus_platform.orgs.access import is_space_manager
+from nexus_platform.persistence.models import AgentRecord, AgentVersionRecord, SessionRecord
 
 
 def create_session(
@@ -36,11 +36,8 @@ def create_session(
         agent_version = row[1]
         require_agent_permission(session, tenant_id, user.id, row[0], "run")
         authorize_model(session, tenant_id, user.id, agent_version.model_profile_version_id)
-        membership = session.get(MembershipRecord, (tenant_id, user.id))
-        # Snapshot the organization node only for people who came through an organization.
-        org_unit_id = organization_unit_for(session, tenant_id, user.id) if membership.source == SOURCE_ORGANIZATION else None
         created = SessionRecord(
-            id=new_id(), tenant_id=tenant_id, owner_user_id=user.id, org_unit_id=org_unit_id,
+            id=new_id(), tenant_id=tenant_id, owner_user_id=user.id,
             agent_version_id=agent_version.id, runtime_type=agent_version.runtime_type,
             title=title.strip(), status="active", created_at=now, updated_at=now,
         )
@@ -62,12 +59,12 @@ def list_sessions(session: Session, principal: Principal, tenant_id: UUID) -> li
 
 def list_sessions_for_platform_admin(
     session: Session, principal: Principal, *, tenant_id: UUID | None = None,
-    agent_id: UUID | None = None, org_unit_id: UUID | None = None, limit: int = 200,
+    agent_id: UUID | None = None, limit: int = 200,
 ) -> list[SessionRecord]:
     """Sessions across all spaces for a platform administrator, optionally filtered.
 
-    `agent_id` matches the agent behind the session's version; `org_unit_id` matches the session's
-    organization snapshot and everything under that node. Non-administrators get Forbidden.
+    `agent_id` matches the agent behind the session's version. Organization nodes do not affect
+    session access, so there is no organization filter. Non-administrators get Forbidden.
     """
     with session.begin():
         user = resolve_user(session, principal)
@@ -79,8 +76,6 @@ def list_sessions_for_platform_admin(
         if agent_id is not None:
             query = query.join(AgentVersionRecord, AgentVersionRecord.id == SessionRecord.agent_version_id).where(
                 AgentVersionRecord.agent_id == agent_id)
-        if org_unit_id is not None:
-            query = query.where(SessionRecord.org_unit_id.in_(subtree_ids(session, org_unit_id)))
         return list(session.scalars(query.order_by(SessionRecord.updated_at.desc()).limit(limit)))
 
 

@@ -176,7 +176,7 @@ def test_member_and_cross_tenant_cannot_mutate_another_run(database, operation):
     principal, tenant, _, run, request = waiting(database)
     bob = Principal(id='other-member', issuer='test')
     with database() as db:
-        add_member(db, principal, tenant.id, bob, TenantRole.MEMBER)
+        add_member(db, principal, tenant.id, bob, TenantRole.CONTRIBUTOR)
         other_tenant = create_tenant(db, principal, 'other')
     for actor, space in [(bob, tenant.id), (principal, other_tenant.id)]:
         with database() as db, pytest.raises(NotFound):

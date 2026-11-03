@@ -27,9 +27,9 @@ def _setup(factory):
         tenant = create_tenant(db, OWNER, "Roles")
         tid = tenant.id
     with factory() as db:
-        add_member(db, OWNER, tid, MEMBER, TenantRole.MEMBER)
+        add_member(db, OWNER, tid, MEMBER, TenantRole.CONTRIBUTOR)
     with factory() as db:
-        add_member(db, OWNER, tid, OTHER, TenantRole.MEMBER)
+        add_member(db, OWNER, tid, OTHER, TenantRole.CONTRIBUTOR)
     return tid
 
 
@@ -122,7 +122,7 @@ def test_roles_api_enforces_manage_permission(database):
         with TestClient(app) as client:
             tid = client.post("/api/v1/tenants", json={"name": "API roles"}).json()["id"]
             added = client.post(f"/api/v1/tenants/{tid}/members",
-                                json={"issuer": "test", "subject": "member", "role": "member"})
+                                json={"issuer": "test", "subject": "member", "role": "contributor"})
             assert added.status_code == 201, added.text
             created = client.post(f"/api/v1/tenants/{tid}/roles",
                                   json={"name": "viewer", "menus": ["agents"], "apis": ["agents:read"]})
@@ -174,7 +174,7 @@ def test_agent_permissions_follow_implication_and_visibility(database):
     tenant, _, _, agent, _, _ = create_agent_stack(database, owner_principal)
     tid = tenant.id
     with database() as db:
-        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.CONTRIBUTOR)
     _grant_agent(database, owner_principal, tid, agent.id, ["edit"])
     with database() as db:
         record = db.get(AgentRecord, agent.id)
@@ -195,7 +195,7 @@ def test_agent_without_grant_is_hidden_and_run_requires_run_permission(database)
     tenant, _, _, agent, version, session = create_agent_stack(database, owner_principal)
     tid = tenant.id
     with database() as db:
-        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.CONTRIBUTOR)
     member = _uid(database, MEMBER)
     with database() as db:
         assert agent_access.visible_agent_ids(db, tid, member) == set()
@@ -216,7 +216,7 @@ def test_edit_and_publish_need_agent_permission_and_manager_cannot_over_grant(da
     tenant, profile, model_version, agent, _, _ = create_agent_stack(database, owner_principal)
     tid = tenant.id
     with database() as db:
-        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.CONTRIBUTOR)
     _grant_agent(database, owner_principal, tid, agent.id, ["view"])
     with database() as db:
         with pytest.raises(Forbidden):
@@ -248,7 +248,7 @@ def test_revoking_run_grant_blocks_new_runs_in_existing_session(database):
     tenant, _, _, agent, version, _ = create_agent_stack(database, owner_principal)
     tid = tenant.id
     with database() as db:
-        add_member(db, owner_principal, tid, MEMBER, TenantRole.MEMBER)
+        add_member(db, owner_principal, tid, MEMBER, TenantRole.CONTRIBUTOR)
     role_id = _grant_agent(database, owner_principal, tid, agent.id, ["view", "run"])
     with database() as db:
         session = create_session(db, MEMBER, tid, agent_version_id=version.id, title="ongoing")
@@ -280,7 +280,7 @@ def test_agent_grants_listed_for_managers(database):
     owner_principal = Principal(id="grant-list-owner", issuer="test")
     tenant, _, _, agent, _, _ = create_agent_stack(database, owner_principal)
     with database() as db:
-        add_member(db, owner_principal, tenant.id, MEMBER, TenantRole.MEMBER)
+        add_member(db, owner_principal, tenant.id, MEMBER, TenantRole.CONTRIBUTOR)
     role_id = _grant_agent(database, owner_principal, tenant.id, agent.id, ["edit"])
     with database() as db:
         rows = roles.list_agent_grants(db, owner_principal, tenant.id)
