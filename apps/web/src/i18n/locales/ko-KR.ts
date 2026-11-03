@@ -713,6 +713,15 @@ export default {
       manageInfra: '모델 / 벡터 저장소 / IM 채널 구성',
       createOwnKB: '내 지식 베이스 및 에이전트 생성/편집',
       readAll: '워크스페이스 콘텐츠 조회'
+    },
+    newAccount: {
+      hint: "이 이메일을 사용하는 계정이 아직 없습니다. 사용자 이름과 초기 비밀번호를 설정하면 계정이 바로 워크스페이스에 참여하며, 처음 로그인할 때 비밀번호를 변경해야 합니다.",
+      usernameLabel: "사용자 이름",
+      usernamePlaceholder: "3~64자",
+      passwordLabel: "초기 비밀번호",
+      passwordPlaceholder: "10자 이상",
+      usernameRequired: "사용자 이름을 입력하세요",
+      passwordRequired: "초기 비밀번호는 10자 이상이어야 합니다"
     }
   },
   userProfile: {
@@ -2882,7 +2891,16 @@ export default {
         permission: '권한',
         sharedAt: '공유 시간',
         operations: '작업'
-      }
+      },
+      levelLabel: "공유 수준",
+      level: {
+        viewer: "보기 및 실행",
+        editor: "편집 가능",
+        admin: "관리 가능"
+      },
+      levelUpdated: "공유 수준을 업데이트했습니다",
+      enterpriseOnly: "에이전트 공유는 기업 스페이스의 소유자와 관리자가 관리합니다. 개인 스페이스는 아직 공유할 수 없습니다",
+      loadFailed: "공유 정보를 불러오지 못했습니다"
     },
     addMember: {
       button: '회원 추가',
@@ -6253,7 +6271,18 @@ export default {
       inviteOnlyNotice: '이 계정은 초대를 통해서만 기존 공간에 참여할 수 있습니다',
       help: '지금 작업 공간을 만들거나 나중에 돌아와 초대를 수락할 수 있습니다.',
       inviteOnlyHelp: '초대가 없다면 등록 이메일을 공간 관리자에게 전달하고 초대를 요청하세요.'
-    }
+    },
+    spaceKind: "스페이스 유형",
+    personalSpace: "개인 스페이스",
+    enterpriseSpace: "기업 스페이스",
+    enterpriseName: "기업 이름",
+    enterpriseNameRequired: "기업 이름을 입력하세요",
+    enterpriseNamePlaceholder: "기업 이름 입력",
+    companyCode: "기업 코드",
+    companyCodeHint: "영문, 숫자, 하이픈, 밑줄 3~32자. 고유해야 하며 구성원은 이 코드로 참여합니다",
+    companyCodeRequired: "기업 코드를 입력하세요",
+    companyCodeInvalid: "기업 코드는 영문, 숫자, 하이픈, 밑줄 3~32자입니다",
+    companyCodePlaceholder: "예: acme-cn"
   },
   inviteRegister: {
     bannerTitle: '「{tenant}」에 초대되었습니다',
@@ -8802,6 +8831,153 @@ export default {
       },
       description:
         '먼저 이미지 특징을 관찰하여 설명을 생성하고, 그 특징을 바탕으로 OCR 실행 여부를 결정합니다. 모델 호출을 절약하고 분석 속도를 높입니다 이미지가 보정 가능한 문서나 라벨 사진으로 인식되면 인식 전에 페이지를 자동으로 정렬하고 잘라내어 OCR 정확도를 높입니다. 보정에 실패하면 원본 이미지를 사용합니다.'
+    }
+  },
+  changePassword: {
+    title: "초기 비밀번호 변경",
+    description: "현재 비밀번호는 임시입니다. 계속하기 전에 변경하세요. 변경 후 다시 로그인합니다.",
+    current: "현재 비밀번호",
+    next: "새 비밀번호(10자 이상)",
+    confirm: "새 비밀번호 확인",
+    mismatch: "새 비밀번호 두 개가 일치하지 않습니다",
+    submit: "저장 후 다시 로그인",
+    success: "비밀번호가 변경되었습니다. 다시 로그인하세요.",
+    failed: "비밀번호 변경에 실패했습니다"
+  },
+  sharedSpace: {
+    title: "공유 스페이스",
+    description: "공유 스페이스를 통해 여러 스페이스가 리소스를 공유할 수 있습니다. 스페이스는 공유 스페이스에 참여하며 역할은 하나입니다.",
+    create: "공유 스페이스 만들기",
+    joinByCode: "초대 코드로 참여",
+    noCurrentSpace: "먼저 스페이스를 선택하세요.",
+    empty: "아직 공유 스페이스가 없습니다",
+    createdByMe: "이 스페이스가 만듦",
+    name: "이름",
+    spaceName: "스페이스",
+    descriptionLabel: "설명",
+    nameRequired: "이름을 입력하세요",
+    created: "공유 스페이스를 만들었습니다",
+    inviteCode: "초대 코드",
+    inviteCodePlaceholder: "초대 코드 입력",
+    inviteCodeDays: "초대 코드 유효 기간(일)",
+    noInviteCode: "발급되지 않음",
+    regenerate: "다시 발급",
+    preview: "미리보기",
+    join: "참여",
+    joined: "참여했습니다",
+    requestSent: "참여 요청을 보냈습니다. 관리자가 검토합니다.",
+    memberCount: "{count}개 스페이스",
+    requiresApproval: "승인 필요",
+    members: "참여 스페이스",
+    myRole: "역할",
+    settings: "설정",
+    requireApproval: "참여에 승인 필요",
+    searchable: "검색 가능 및 직접 참여 허용",
+    memberLimit: "참여 스페이스 수 상한",
+    saved: "저장했습니다",
+    pendingRequests: "대기 중인 요청",
+    noRequests: "대기 중인 요청이 없습니다",
+    requestKind: "유형",
+    joinRequest: "참여 요청",
+    upgradeRequest: "역할 상향",
+    requestedRole: "요청 역할",
+    message: "메시지",
+    approve: "승인",
+    reject: "거절",
+    rejectReason: "거절 사유",
+    leave: "공유 스페이스에서 나가기",
+    leaveConfirm: "이 공유 스페이스에서 나가시겠습니까?",
+    delete: "공유 스페이스 삭제",
+    deleteConfirm: "모든 스페이스가 이 공유 스페이스를 잃게 됩니다. 삭제하시겠습니까?",
+    failed: "작업에 실패했습니다",
+    roles: {
+      admin: "관리자",
+      editor: "편집자",
+      viewer: "뷰어"
+    }
+  },
+  planned: {
+    title: "아직 사용할 수 없습니다",
+    body: "이 페이지는 이후 단계에 제공됩니다. 이 버전에는 메뉴 항목만 있으며 Nexus API에는 아직 연결되어 있지 않습니다."
+  },
+  joinLink: {
+    joining: "스페이스에 참여하는 중…",
+    joined: "{name}에 참여했습니다",
+    failedTitle: "이 초대 링크는 사용할 수 없습니다",
+    failedBody: "링크가 만료되었거나 취소되었을 수 있습니다. 공유 스페이스 관리자에게 새 링크를 요청하세요.",
+    backToSpaces: "공유 스페이스로 이동"
+  },
+  orgStructure: {
+    title: "부서 구조",
+    description: "부서별로 조직 트리를 관리합니다. 부서는 구성원의 소속만 보여 주며, 권한은 구성원 역할과 사용자 지정 역할에서 결정됩니다.",
+    retry: "다시 시도",
+    treeTitle: "부서",
+    createRoot: "루트 부서 만들기",
+    createRootTitle: "루트 부서 만들기",
+    emptyTree: "아직 부서가 없습니다. 먼저 루트 부서를 만드세요.",
+    statusActive: "사용",
+    statusDisabled: "사용 안 함",
+    parent: "상위 부서",
+    noParent: "없음(루트)",
+    memberCount: "{count}명",
+    addChild: "하위 부서 추가",
+    addChildTitle: "하위 부서 추가",
+    editUnit: "편집",
+    editTitle: "부서 편집",
+    disable: "사용 안 함",
+    enable: "사용",
+    delete: "삭제",
+    deleteTitle: "부서 삭제",
+    deleteBody: "\"{name}\"을(를) 삭제할까요? 하위 부서나 구성원이 있으면 삭제할 수 없습니다.",
+    deleted: "삭제했습니다",
+    membersTitle: "부서 구성원",
+    pickMember: "구성원 선택",
+    asPrimary: "주 소속 부서",
+    addMember: "부서에 추가",
+    primary: "주 소속",
+    secondary: "겸직",
+    removeMember: "제거",
+    columns: {
+      name: "구성원",
+      primary: "유형",
+      operation: "작업"
+    },
+    nameLabel: "부서 이름",
+    namePlaceholder: "예: 연구개발",
+    parentLabel: "상위 부서",
+    parentPlaceholder: "비워 두면 루트",
+    nameRequired: "부서 이름을 입력하세요",
+    saved: "저장했습니다",
+    failed: "작업에 실패했습니다. 잠시 후 다시 시도하세요"
+  },
+  tenantApplication: {
+    tabTitle: "참여 요청",
+    empty: "검토 대기 중인 참여 요청이 없습니다",
+    retry: "다시 시도",
+    failed: "작업에 실패했습니다. 잠시 후 다시 시도하세요",
+    approve: "승인",
+    reject: "거절",
+    cancel: "취소",
+    approveTitle: "참여 요청 승인",
+    rejectTitle: "참여 요청 거절",
+    unitLabel: "부서",
+    unitPlaceholder: "부서 선택",
+    unitRequired: "참여할 부서를 선택하세요",
+    roleLabel: "부여할 역할",
+    reasonLabel: "거절 사유",
+    reasonRequired: "거절 사유를 입력하세요",
+    approved: "참여 요청을 승인했습니다",
+    rejected: "참여 요청을 거절했습니다",
+    roles: {
+      admin: "관리자",
+      contributor: "기여자",
+      viewer: "뷰어"
+    },
+    columns: {
+      applicant: "신청자",
+      message: "메시지",
+      appliedAt: "신청 일시",
+      operation: "作業"
     }
   }
 }

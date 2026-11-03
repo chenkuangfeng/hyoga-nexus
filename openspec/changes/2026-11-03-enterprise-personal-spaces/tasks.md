@@ -43,7 +43,7 @@
 - [x] 前端：注册页增加空间类型（个人 / 企业）；选择企业时填写企业名称与企业编码，提交到 `POST /api/v1/auth/register`。用户名最少 3 位、密码最少 10 位，与后端一致。
 - [x] 前端：`/join?code=` 跳转到共享空间页并打开加入对话框，自动填入并预览邀请码；未登录时邀请码暂存在 sessionStorage，登录后使用。
 - [x] 前端：空间选择页（`/onboarding/workspace`）使用 Nexus 已有接口（auth/me、创建空间、我的邀请），无需改动。
-- [ ] 前端：其他语言包（ja-JP、ko-KR、ru-RU、zh-TW）尚未补充新增的注册文案，显示时回退到其他语言。
+- [x] 前端：其他语言包（ja-JP、ko-KR、ru-RU、zh-TW）已补充本提案新增的文案（注册、共享空间、部门架构、成员申请、加入链接、改密、智能体共享级别），与 en-US 键集一致。
 - [x] 前端：`/auth/config`、`/auth/oidc/config` 已实现（OIDC 未启用，不再请求 `/auth/oidc/url`）。`/auth/auto-setup` 只在桌面壳中调用，网页版不请求。
 - 实施说明（2026-11-03）：测试 `tests/test_auth.py`（改为邮箱登录，覆盖改密门禁）与 `tests/test_registration_spaces.py`（注册两类空间、编码唯一、注册开关、Bearer、空间选择与改名）。全量 pytest 通过。前端仅做语法检查（本机构建内存不足，以 CI 为准）。
 

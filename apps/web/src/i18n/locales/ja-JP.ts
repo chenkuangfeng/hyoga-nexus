@@ -2982,7 +2982,18 @@ export default {
       inviteOnlyNotice: 'このアカウントは招待によってのみ既存のワークスペースに参加できます',
       help: '今すぐワークスペースを作成することも、後で戻って招待を承諾することもできます。',
       inviteOnlyHelp: 'まだ招待がありませんか？登録したメールアドレスをワークスペース管理者に伝えて、招待を依頼してください。'
-    }
+    },
+    spaceKind: "スペースの種類",
+    personalSpace: "個人スペース",
+    enterpriseSpace: "企業スペース",
+    enterpriseName: "企業名",
+    enterpriseNameRequired: "企業名を入力してください",
+    enterpriseNamePlaceholder: "企業名を入力",
+    companyCode: "企業コード",
+    companyCodeHint: "3〜32 文字の英字、数字、ハイフン、アンダースコア。一意である必要があります。メンバーはこのコードで参加します",
+    companyCodeRequired: "企業コードを入力してください",
+    companyCodeInvalid: "企業コードは 3〜32 文字の英字、数字、ハイフン、アンダースコアです",
+    companyCodePlaceholder: "例: acme-cn"
   },
   authStore: {
     errors: {
@@ -6371,7 +6382,16 @@ export default {
         agentShareDesc: 'このエージェントを共有スペースへ共有し、メンバーが利用できるようにします',
         sharedFrom: '共有元',
         permissionReadonly: '読み取り専用',
-        permissionEditable: '編集可能'
+        permissionEditable: '編集可能',
+      levelLabel: "共有レベル",
+      level: {
+        viewer: "閲覧・実行",
+        editor: "編集可能",
+        admin: "管理可能"
+      },
+      levelUpdated: "共有レベルを更新しました",
+      enterpriseOnly: "エージェントの共有は企業スペースのオーナーと管理者が管理します。個人スペースはまだ共有できません",
+      loadFailed: "共有情報の読み込みに失敗しました"
       }
     },
     preview: {
@@ -8564,6 +8584,15 @@ export default {
         targetId: '対象ID',
         details: '生データ'
       }
+    },
+    newAccount: {
+      hint: "このメールアドレスのアカウントはまだありません。ユーザー名と初期パスワードを設定すると、アカウントはすぐにワークスペースに参加し、初回ログイン時にパスワードの変更が必要です。",
+      usernameLabel: "ユーザー名",
+      usernamePlaceholder: "3〜64 文字",
+      passwordLabel: "初期パスワード",
+      passwordPlaceholder: "10 文字以上",
+      usernameRequired: "ユーザー名を入力してください",
+      passwordRequired: "初期パスワードは 10 文字以上必要です"
     }
   },
   tenantInvitation: {
@@ -8802,6 +8831,153 @@ export default {
       },
       description:
         'まず画像の特徴を観察して説明を生成し、その特徴に基づいて OCR を実行するかどうかを判断します。モデル呼び出しを節約し、解析速度を向上させます 画像が補正可能な書類やラベルの写真と判定された場合、認識前にページを傾き補正・トリミングして OCR 精度を高めます。補正に失敗した場合は元の画像を使用します。'
+    }
+  },
+  changePassword: {
+    title: "初期パスワードを変更",
+    description: "現在のパスワードは仮のものです。続行する前に変更してください。変更後は再度ログインします。",
+    current: "現在のパスワード",
+    next: "新しいパスワード（10 文字以上）",
+    confirm: "新しいパスワード（確認）",
+    mismatch: "2 つの新しいパスワードが一致しません",
+    submit: "保存して再ログイン",
+    success: "パスワードを変更しました。再度ログインしてください。",
+    failed: "パスワードの変更に失敗しました"
+  },
+  sharedSpace: {
+    title: "共有スペース",
+    description: "共有スペースでは複数のスペースがリソースを共有できます。スペースは共有スペースに参加し、そこで 1 つのロールを持ちます。",
+    create: "共有スペースを作成",
+    joinByCode: "招待コードで参加",
+    noCurrentSpace: "先にスペースを選択してください。",
+    empty: "共有スペースはまだありません",
+    createdByMe: "このスペースが作成",
+    name: "名前",
+    spaceName: "スペース",
+    descriptionLabel: "説明",
+    nameRequired: "名前を入力してください",
+    created: "共有スペースを作成しました",
+    inviteCode: "招待コード",
+    inviteCodePlaceholder: "招待コードを入力",
+    inviteCodeDays: "招待コードの有効日数",
+    noInviteCode: "未発行",
+    regenerate: "再発行",
+    preview: "プレビュー",
+    join: "参加",
+    joined: "参加しました",
+    requestSent: "参加申請を送信しました。管理者が確認します。",
+    memberCount: "{count} スペース",
+    requiresApproval: "承認が必要",
+    members: "参加スペース",
+    myRole: "ロール",
+    settings: "設定",
+    requireApproval: "参加に承認を必要とする",
+    searchable: "検索可能にし、直接参加を許可する",
+    memberLimit: "参加スペース数の上限",
+    saved: "保存しました",
+    pendingRequests: "保留中の申請",
+    noRequests: "保留中の申請はありません",
+    requestKind: "種類",
+    joinRequest: "参加申請",
+    upgradeRequest: "ロールの引き上げ",
+    requestedRole: "申請ロール",
+    message: "メッセージ",
+    approve: "承認",
+    reject: "却下",
+    rejectReason: "却下の理由",
+    leave: "共有スペースから退出",
+    leaveConfirm: "この共有スペースから退出しますか？",
+    delete: "共有スペースを削除",
+    deleteConfirm: "すべてのスペースがこの共有スペースを失います。削除しますか？",
+    failed: "操作に失敗しました",
+    roles: {
+      admin: "管理者",
+      editor: "編集者",
+      viewer: "閲覧者"
+    }
+  },
+  planned: {
+    title: "まだ利用できません",
+    body: "このページは後のフェーズのものです。このバージョンではメニュー項目のみ存在し、Nexus API にはまだ接続されていません。"
+  },
+  joinLink: {
+    joining: "スペースに参加しています…",
+    joined: "{name} に参加しました",
+    failedTitle: "この招待リンクは使用できません",
+    failedBody: "リンクの有効期限が切れたか、取り消された可能性があります。共有スペースの管理者に新しいリンクを依頼してください。",
+    backToSpaces: "共有スペースへ"
+  },
+  orgStructure: {
+    title: "部門構造",
+    description: "部門ごとに組織ツリーを管理します。部門はメンバーの所属を示すだけで、権限はメンバーのロールとカスタムロールで決まります。",
+    retry: "再試行",
+    treeTitle: "部門",
+    createRoot: "ルート部門を作成",
+    createRootTitle: "ルート部門を作成",
+    emptyTree: "部門はまだありません。最初にルート部門を作成してください。",
+    statusActive: "有効",
+    statusDisabled: "無効",
+    parent: "親部門",
+    noParent: "なし（ルート）",
+    memberCount: "{count} 人",
+    addChild: "子部門を追加",
+    addChildTitle: "子部門を追加",
+    editUnit: "編集",
+    editTitle: "部門を編集",
+    disable: "無効にする",
+    enable: "有効にする",
+    delete: "削除",
+    deleteTitle: "部門を削除",
+    deleteBody: "「{name}」を削除しますか？ 子部門またはメンバーがいる間は削除できません。",
+    deleted: "削除しました",
+    membersTitle: "部門メンバー",
+    pickMember: "メンバーを選択",
+    asPrimary: "主所属部門",
+    addMember: "部門に追加",
+    primary: "主所属",
+    secondary: "兼務",
+    removeMember: "削除",
+    columns: {
+      name: "メンバー",
+      primary: "種類",
+      operation: "操作"
+    },
+    nameLabel: "部門名",
+    namePlaceholder: "例: 研究開発",
+    parentLabel: "親部門",
+    parentPlaceholder: "空欄でルートになります",
+    nameRequired: "部門名を入力してください",
+    saved: "保存しました",
+    failed: "操作に失敗しました。しばらくしてから再試行してください"
+  },
+  tenantApplication: {
+    tabTitle: "参加申請",
+    empty: "審査待ちの参加申請はありません",
+    retry: "再試行",
+    failed: "操作に失敗しました。しばらくしてから再試行してください",
+    approve: "承認",
+    reject: "却下",
+    cancel: "キャンセル",
+    approveTitle: "参加申請を承認",
+    rejectTitle: "参加申請を却下",
+    unitLabel: "部門",
+    unitPlaceholder: "部門を選択",
+    unitRequired: "参加する部門を選択してください",
+    roleLabel: "付与するロール",
+    reasonLabel: "却下の理由",
+    reasonRequired: "却下の理由を入力してください",
+    approved: "参加申請を承認しました",
+    rejected: "参加申請を却下しました",
+    roles: {
+      admin: "管理者",
+      contributor: "貢献者",
+      viewer: "閲覧者"
+    },
+    columns: {
+      applicant: "申請者",
+      message: "メッセージ",
+      appliedAt: "申請日時",
+      operation: "操作"
     }
   }
 }
