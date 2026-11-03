@@ -185,3 +185,97 @@ def test_member_list_shows_who_each_member_is(client):
     assert by_email["owner@acme.example"]["username"] == "owner-acme"
     assert by_email["bea@example.com"]["username"] == "bea"
     assert by_email["bea@example.com"]["role"] == "viewer"
+
+
+def _share_link(client, space_id, owner, role="viewer", days=7):
+    created = client.post(f"/api/v1/tenants/{space_id}/invite-links", headers=owner,
+                          json={"role": role, "expires_in_days": days})
+    assert created.status_code == 201, created.text
+    return created.json()
+
+
+def _token_of(invite_url):
+    return invite_url.split("token=", 1)[1]
+
+
+def test_share_link_lets_signed_in_people_join_with_the_link_role(client):
+    space_id, owner = _owner_space(client)
+    link = _share_link(client, space_id, owner, role="contributor")
+    assert link["is_share_link"] is True and link["role"] == "contributor" and link["accepted_count"] == 0
+    listed = [row for row in client.get(f"/api/v1/tenants/{space_id}/invitations", headers=owner).json()
+              if row.get("is_share_link")]
+    assert [row["invite_url"] for row in listed] == [link["invite_url"]]
+
+    _register(client, "cyra", "cy@example.com")
+    cy = _token(client, "cy@example.com")
+    joined = client.post("/api/v1/me/invitations/accept-by-token", headers=cy,
+                         json={"token": _token_of(link["invite_url"])})
+    assert joined.status_code == 200, joined.text
+    assert joined.json()["membership"]["role"] == "contributor"
+    assert joined.json()["tenant_name"] == "Acme"
+    assert _role_in(client, "cy@example.com", space_id) == ("contributor", "active", "invitation")
+
+    # Using the same link again changes nothing and is not counted twice.
+    again = client.post("/api/v1/me/invitations/accept-by-token", headers=cy,
+                        json={"token": _token_of(link["invite_url"])})
+    assert again.status_code == 200 and again.json()["membership"]["role"] == "contributor"
+    count = [row for row in client.get(f"/api/v1/tenants/{space_id}/invitations", headers=owner).json()
+             if row.get("is_share_link")][0]["accepted_count"]
+    assert count == 1
+
+
+def test_existing_member_keeps_their_role_when_using_a_share_link(client):
+    space_id, owner = _owner_space(client)
+    _register(client, "dan", "dan@example.com")
+    client.post(f"/api/v1/tenants/{space_id}/members/by-email", headers=owner,
+                json={"email": "dan@example.com", "role": "admin"})
+    dan = _token(client, "dan@example.com")
+    client.post("/api/v1/me/invitations/" + client.get("/api/v1/me/invitations", headers=dan).json()[0]["id"]
+                + "/accept", headers=dan)
+    link = _share_link(client, space_id, owner, role="viewer")
+    result = client.post("/api/v1/me/invitations/accept-by-token", headers=dan,
+                         json={"token": _token_of(link["invite_url"])})
+    assert result.status_code == 200
+    assert _role_in(client, "dan@example.com", space_id)[0] == "admin"
+
+
+def test_revoked_or_expired_or_unknown_links_answer_not_found(client):
+    from datetime import timedelta
+
+    from nexus_core.platform import utc_now
+    from nexus_platform.persistence.models import SpaceInviteLinkRecord
+
+    space_id, owner = _owner_space(client)
+    revoked = _share_link(client, space_id, owner)
+    expired = _share_link(client, space_id, owner)
+    client.delete(f"/api/v1/tenants/{space_id}/invitations/{revoked['id']}", headers=owner)
+    with client.factory() as db, db.begin():
+        row = db.get(SpaceInviteLinkRecord, UUID(expired["id"]))
+        row.expires_at = utc_now() - timedelta(minutes=1)
+
+    _register(client, "eve", "eve@example.com")
+    eve = _token(client, "eve@example.com")
+    for link in (revoked, expired):
+        response = client.post("/api/v1/me/invitations/accept-by-token", headers=eve,
+                               json={"token": _token_of(link["invite_url"])})
+        assert response.status_code == 404, response.text
+    unknown = client.post("/api/v1/me/invitations/accept-by-token", headers=eve, json={"token": "not-a-link"})
+    assert unknown.status_code == 404
+    listed = [row for row in client.get(f"/api/v1/tenants/{space_id}/invitations", headers=owner).json()
+              if row.get("is_share_link")]
+    assert listed == []
+
+
+def test_share_links_need_an_enterprise_space_and_a_valid_expiry(client):
+    _register(client, "fay", "fay@example.com")
+    fay_personal = _token(client, "fay@example.com")
+    personal = client.get("/api/v1/auth/me", headers=fay_personal).json()["data"]["memberships"][0]["id"]
+    refused = client.post(f"/api/v1/tenants/{personal}/invite-links", headers=fay_personal, json={"role": "viewer"})
+    assert refused.status_code == 404
+
+    space_id, owner = _owner_space(client)
+    too_long = client.post(f"/api/v1/tenants/{space_id}/invite-links", headers=owner,
+                           json={"role": "viewer", "expires_in_days": 31})
+    assert too_long.status_code == 422
+    owner_role = client.post(f"/api/v1/tenants/{space_id}/invite-links", headers=owner, json={"role": "owner"})
+    assert owner_role.status_code == 422

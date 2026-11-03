@@ -8653,6 +8653,13 @@ export default {
       }
     }
   },
+  joinLink: {
+    joining: 'Joining the space…',
+    joined: 'Joined {name}',
+    failedTitle: 'This invitation link cannot be used',
+    failedBody: 'The link may have expired or been revoked. Ask a space admin for a new link.',
+    backToSpaces: 'Go to shared spaces',
+  },
   tenantApplication: {
     tabTitle: 'Join requests',
     empty: 'No join requests waiting for review',

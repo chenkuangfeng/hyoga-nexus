@@ -387,6 +387,7 @@ import screenshot1 from '@/assets/img/screenshot-1.svg'
 import screenshot2 from '@/assets/img/screenshot-2.svg'
 import screenshot3 from '@/assets/img/screenshot-3.svg'
 import screenshot4 from '@/assets/img/screenshot-4.svg'
+import { hasPendingInviteCode, hasPendingInviteToken } from '@/utils/pendingInvite'
 
 const router = useRouter()
 const route = useRoute()
@@ -641,7 +642,9 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
   await authStore.refreshFromAuthMe()
   await nextTick()
   if (skipRedirect) return
-  router.replace(authStore.hasValidTenant ? '/platform/knowledge-bases' : '/onboarding/workspace')
+  // An invitation opened while signed out (share link or shared-space code) is handled on /join after sign-in.
+  router.replace(hasPendingInviteToken() || hasPendingInviteCode() ? '/join'
+    : authStore.hasValidTenant ? '/platform/knowledge-bases' : '/onboarding/workspace')
 }
 
 const getBackendOIDCRedirectURI = () => `${window.location.origin}/api/v1/auth/oidc/callback`

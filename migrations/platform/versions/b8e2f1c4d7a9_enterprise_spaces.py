@@ -187,9 +187,28 @@ def upgrade():
     op.create_index('uq_shared_space_join_pending', 'shared_space_join_requests',
                     ['shared_space_id', 'tenant_id', 'request_type'], unique=True,
                     sqlite_where=sa.text("status = 'pending'"), postgresql_where=sa.text("status = 'pending'"))
+    # Share links: one link can be used by many people until it expires or is revoked (WeKnora share-link
+    # invitations). The token is stored as issued so the link can be shown again to the space's managers.
+    op.create_table(
+        'space_invite_links',
+        sa.Column('id', sa.Uuid(), primary_key=True),
+        sa.Column('tenant_id', sa.Uuid(), sa.ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('role', sa.String(16), nullable=False),
+        sa.Column('token', sa.String(64), nullable=False),
+        sa.Column('created_by', sa.Uuid(), sa.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('revoked_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('accepted_count', sa.Integer(), nullable=False, server_default='0'),
+        sa.UniqueConstraint('token', name='uq_space_invite_links_token'),
+        sa.CheckConstraint("role IN ('admin', 'contributor', 'viewer')", name='ck_space_invite_links_role'),
+    )
+    op.create_index('ix_space_invite_links_tenant', 'space_invite_links', ['tenant_id'])
 
 
 def downgrade():
+    op.drop_index('ix_space_invite_links_tenant', table_name='space_invite_links')
+    op.drop_table('space_invite_links')
     op.drop_index('uq_shared_space_join_pending', table_name='shared_space_join_requests')
     op.drop_table('shared_space_join_requests')
     op.drop_index('ix_shared_space_members_tenant', table_name='shared_space_tenant_members')

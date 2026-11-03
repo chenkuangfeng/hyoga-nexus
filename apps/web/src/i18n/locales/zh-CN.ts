@@ -607,6 +607,13 @@ export default {
       auditRead: '查看系统审计'
     }
   },
+  joinLink: {
+    joining: '正在加入空间…',
+    joined: '已加入 {name}',
+    failedTitle: '邀请链接无法使用',
+    failedBody: '链接可能已过期、被撤销，或你已在其他空间。请向空间管理员索取新的链接。',
+    backToSpaces: '前往共享空间',
+  },
   tenantApplication: {
     tabTitle: '加入申请',
     empty: '暂无待审批的加入申请',

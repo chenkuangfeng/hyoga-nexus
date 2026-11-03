@@ -116,3 +116,27 @@ class SharedSpaceJoinRequestRecord(Base):
     review_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SpaceInviteLinkRecord(Base):
+    """A share link that invites anyone signed in to join an enterprise space with a fixed role.
+
+    Unlike a per-person invitation it has no invitee and can be used many times until it expires or is
+    revoked. `token` is stored as issued (as WeKnora does) so managers can copy the link again.
+    """
+
+    __tablename__ = "space_invite_links"
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'contributor', 'viewer')", name="ck_space_invite_links_role"),
+        Index("ix_space_invite_links_tenant", "tenant_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

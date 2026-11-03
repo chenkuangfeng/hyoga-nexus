@@ -54,7 +54,7 @@
 - [x] 按邮箱添加 `POST /api/v1/tenants/:id/members/by-email`：邮箱已有账号时只生成邀请；邮箱没有账号时，需要提供用户名与初始密码创建账号，首次登录改密。
 - [x] 邀请列表与撤销：`GET /api/v1/tenants/:id/invitations`、`DELETE .../invitations/:inv_id`。
 - [x] 用户侧邀请：`GET /api/v1/me/invitations`、`.../pending-count`、`POST .../accept`、`POST .../decline`。
-- [ ] 邀请链接 `POST /api/v1/tenants/:id/invite-links` 与 `accept-by-token` 未实现（需要令牌存储，留到后续）。
+- [x] 邀请链接 `POST /api/v1/tenants/:id/invite-links`（owner，可选 1-30 天有效期，默认 7 天）与 `POST /api/v1/me/invitations/accept-by-token`。链接为多人使用，直到过期或撤销（撤销走 `DELETE .../invitations/:id`）；已是成员时保留原角色且不重复计数；未知、已撤销、已过期的链接统一返回 404。令牌明文存储，与 WeKnora 一致，便于管理员再次复制。`tests/test_membership_flows.py` 覆盖。
 - [x] 申请加入企业：`POST /api/v1/tenants/:id/join-requests`（一人一企业一条待处理；个人空间不接受申请）；撤回 `DELETE .../join-requests/:id`；列表 `GET .../join-requests`。
 - [x] 审批：`POST .../join-requests/:id/approve` 必须指定部门与角色（角色不能是 owner）；拒绝 `POST .../reject` 必须填写原因，之后 7 天内不能再次申请。
 - [x] 按部门批量分配自定义角色 `POST /api/v1/tenants/:id/org-units/:unit_id/role-assignments`：逐人写入 `tenant_user_roles`，跳过 owner、admin 与已有该角色的人，可重复调用。
@@ -62,8 +62,8 @@
 - [x] 前端成员与邀请接口封装（`api/tenant/members.ts`、`api/tenant/invitations.ts`）已对接 Nexus 端点与返回结构：成员列表含邮箱、用户名、显示名（`MemberView` 增加字段）；按邮箱邀请；待处理邀请列表；接受与拒绝；撤销。成员页与邀请列表沿用原组件。
 - [x] 空间信息页（`TenantInfo`）改名与描述通过 `PATCH /api/v1/tenants/current`（owner、admin；`description` 可清空，最长 500 字）；删除空间通过 `DELETE /api/v1/tenants/:id`（仅企业空间的 owner；个人空间返回 403；仍创建着有效共享空间时返回 409；删除为归档，成员列表中消失，之后访问返回 404）。`tests/test_registration_spaces.py`、`tests/test_shared_spaces.py` 覆盖。
 - [x] 前端：成员页新增"加入申请"标签（`components/tenant/JoinApplicationsPanel.vue`）：列出待审批申请，批准时选择部门与角色，拒绝时填写原因，对接 `join-requests` 接口。部门选项来自 `org-units/tree`。
-- [ ] 前端：成员页的邀请链接弹窗尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
-- [ ] 前端："加入申请"与成员页目前只对 owner 显示（沿用原页面的 `canManage`），后端允许 admin 审批，待统一。
+- [x] 前端：成员页的邀请链接弹窗对接新接口；`/join?token=` 页面（`views/auth/JoinEntry.vue`）在登录后兑换链接并进入空间，未登录时先登录，登录后自动继续（`utils/pendingInvite.ts`）。`/join?code=` 仍进入共享空间并预填邀请码。
+- [x] 前端："加入申请"与成员页只对 owner 显示，与后端一致：`members:manage` 属于治理权限，admin 默认不持有（见 `design.md` 权限表），只能通过自定义角色获得。
 - [x] 前端：按邮箱添加时，若邮箱没有账号（后端 422），邀请表单展开用户名与初始密码，重新提交即创建账号并直接加入。
 - 实施说明（2026-11-03）：测试 `tests/test_membership_flows.py` 通过 HTTP 覆盖邀请、接受与拒绝、按邮箱建账号、申请与审批、拒绝冷却、撤回、离开、批量角色。全量 pytest 569 通过。
 

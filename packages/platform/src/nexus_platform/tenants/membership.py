@@ -14,6 +14,7 @@ Rules:
 """
 from __future__ import annotations
 
+import secrets
 from datetime import timedelta
 from uuid import UUID
 
@@ -30,6 +31,7 @@ from nexus_platform.identity.service import require_membership, require_tenant, 
 from nexus_platform.persistence.models import (
     MembershipRecord,
     OrgUnitRecord,
+    SpaceInviteLinkRecord,
     SpaceJoinRequestRecord,
     TenantRecord,
     TenantRoleRecord,
@@ -149,8 +151,16 @@ def invite_existing_account(session: Session, principal: Principal, tenant_id: U
 
 
 def list_invitations(session: Session, principal: Principal, tenant_id: UUID) -> list[dict]:
+    """Pending invitations to people, followed by the share links that are still usable."""
     with session.begin():
         _manager(session, principal, tenant_id)
+        links = session.scalars(
+            select(SpaceInviteLinkRecord)
+            .where(SpaceInviteLinkRecord.tenant_id == tenant_id, SpaceInviteLinkRecord.revoked_at.is_(None))
+            .order_by(SpaceInviteLinkRecord.created_at)
+        ).all()
+        now = utc_now()
+        link_rows = [link_view(link) for link in links if aware(link.expires_at) > now]
         rows = session.execute(
             select(SpaceJoinRequestRecord, UserRecord)
             .join(UserRecord, UserRecord.id == SpaceJoinRequestRecord.user_id)
@@ -159,13 +169,21 @@ def list_invitations(session: Session, principal: Principal, tenant_id: UUID) ->
                    SpaceJoinRequestRecord.status == PENDING)
             .order_by(SpaceJoinRequestRecord.created_at)
         ).all()
-        return [_request_view(req, user) for req, user in rows]
+        return [_request_view(req, user) for req, user in rows] + link_rows
 
 
 def cancel_invitation(session: Session, principal: Principal, tenant_id: UUID, invitation_id: UUID) -> None:
+    """Cancel a pending invitation, or revoke a share link when the id belongs to one."""
     now = utc_now()
     with session.begin():
         actor = _manager(session, principal, tenant_id)
+        link = session.get(SpaceInviteLinkRecord, invitation_id)
+        if link is not None and link.tenant_id == tenant_id:
+            if link.revoked_at is not None:
+                raise Conflict("This share link is already revoked")
+            link.revoked_at = now
+            audit(session, tenant_id, actor.id, "tenant.invite_link_revoked", "space_invite_link", str(link.id))
+            return
         row = _request(session, tenant_id, invitation_id, "invitation")
         if row.status != PENDING:
             raise Conflict("Only a pending invitation can be cancelled")
@@ -386,3 +404,77 @@ __all__ = [
     "leave_space", "place_member", "list_applications", "list_invitations", "my_invitations", "reject_application",
     "respond_to_invitation", "withdraw_application",
 ]
+
+
+# ---- share links -------------------------------------------------------------------------------
+
+INVITE_LINK_DEFAULT_DAYS = 7
+INVITE_LINK_MAX_DAYS = 30
+
+
+def link_view(link: SpaceInviteLinkRecord) -> dict:
+    """A share link as the members page shows it. The URL is relative; the page prefixes its own origin."""
+    return {
+        "id": link.id, "role": link.role, "status": "pending", "is_share_link": True,
+        "invite_url": f"/join?token={link.token}", "accepted_count": link.accepted_count,
+        "expires_at": link.expires_at, "created_at": link.created_at,
+    }
+
+
+def create_invite_link(session: Session, principal: Principal, tenant_id: UUID, *, role: str,
+                       expires_in_days: int = INVITE_LINK_DEFAULT_DAYS) -> SpaceInviteLinkRecord:
+    """Issue a share link with a fixed role. Needs `members:manage`; personal spaces answer NotFound."""
+    role = _invitable_role(role)
+    if not 1 <= expires_in_days <= INVITE_LINK_MAX_DAYS:
+        raise ValueError(f"Expiry must be 1-{INVITE_LINK_MAX_DAYS} days")
+    now = utc_now()
+    with session.begin():
+        actor = _manager(session, principal, tenant_id)
+        lock_tenant(session, tenant_id)
+        link = SpaceInviteLinkRecord(
+            id=new_id(), tenant_id=tenant_id, role=role, token=secrets.token_urlsafe(32), created_by=actor.id,
+            created_at=now, expires_at=now + timedelta(days=expires_in_days), accepted_count=0,
+        )
+        session.add(link)
+        session.flush()
+        audit(session, tenant_id, actor.id, "tenant.invite_link_created", "space_invite_link", str(link.id),
+              {"role": role, "expires_in_days": expires_in_days})
+    return link
+
+
+def accept_invite_token(session: Session, principal: Principal, token: str) -> dict:
+    """Join the space behind a share link. Signed-in users only.
+
+    An unknown, revoked or expired link answers NotFound without saying which, so a token cannot be probed.
+    A person who is already an active member keeps their current role and the link is not counted again.
+    """
+    now = utc_now()
+    with session.begin():
+        user = resolve_user(session, principal)
+        link = session.scalar(select(SpaceInviteLinkRecord).where(SpaceInviteLinkRecord.token == token))
+        if link is None or link.revoked_at is not None or aware(link.expires_at) <= now:
+            raise NotFound("Invitation link is invalid or has expired")
+        tenant_id = link.tenant_id
+        space = lock_tenant(session, tenant_id)
+        membership = session.get(MembershipRecord, (tenant_id, user.id))
+        if membership is not None and membership.status == "active":
+            return {"membership": {"tenant_id": tenant_id, "role": membership.role, "status": membership.status,
+                                   "joined_at": membership.joined_at}, "tenant_name": space.name}
+        _activate(session, tenant_id, user.id, link.role, "invitation", None, now)
+        link.accepted_count += 1
+        audit(session, tenant_id, user.id, "tenant.invite_link_accepted", "user", str(user.id), {"role": link.role})
+        return {"membership": {"tenant_id": tenant_id, "role": link.role, "status": "active", "joined_at": now},
+                "tenant_name": space.name}
+
+
+def list_invite_links(session: Session, principal: Principal, tenant_id: UUID) -> list[dict]:
+    """Usable share links (not revoked, not expired), newest first. Needs `members:manage`."""
+    with session.begin():
+        _manager(session, principal, tenant_id)
+        now = utc_now()
+        links = session.scalars(
+            select(SpaceInviteLinkRecord)
+            .where(SpaceInviteLinkRecord.tenant_id == tenant_id, SpaceInviteLinkRecord.revoked_at.is_(None))
+            .order_by(SpaceInviteLinkRecord.created_at.desc())
+        ).all()
+        return [link_view(link) for link in links if aware(link.expires_at) > now]

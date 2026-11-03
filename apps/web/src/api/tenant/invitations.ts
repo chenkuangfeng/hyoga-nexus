@@ -88,16 +88,20 @@ export interface PendingCountResponse {
   message?: string
 }
 
-/** 后端 `_request_view` 的邀请行（空间侧列表）。 */
+/** 后端空间侧列表的一行：待处理的人员邀请（`_request_view`），或仍可使用的共享链接。 */
 interface InvitationRow {
   id: string
-  user_id: string
+  user_id?: string
   email?: string | null
   display_name?: string | null
   role: TenantRole
   status: TenantInvitationStatus
   message?: string | null
   created_at: string
+  expires_at?: string
+  is_share_link?: boolean
+  invite_url?: string
+  accepted_count?: number
 }
 
 /** 后端 `my_invitations` 的行（被邀请人侧列表）。 */
@@ -113,14 +117,17 @@ function toInvitation(tenantId: string, row: InvitationRow): TenantInvitation {
   return {
     id: row.id,
     tenant_id: tenantId,
-    invitee_user_id: row.user_id,
+    invitee_user_id: row.user_id ?? '',
     invitee_email: row.email ?? '',
     invitee_name: row.display_name ?? '',
     role: row.role,
     status: row.status,
     message: row.message ?? undefined,
-    expires_at: '',
+    expires_at: row.expires_at ?? '',
     created_at: row.created_at,
+    is_share_link: row.is_share_link ?? false,
+    invite_url: row.invite_url,
+    accepted_count: row.accepted_count,
   }
 }
 
@@ -241,11 +248,12 @@ export async function declineInvitation(invId: string): Promise<SimpleResponse> 
   return { success: true }
 }
 
-// ---- 待实现（后端尚无对应接口，调用会得到 404）----
-// 邀请链接与「用令牌加入」尚未在 Nexus 实现，见 openspec 变更 tasks 第 3、6 组的待办项。
+// ---- 共享链接 ----------------------------------------------------------------
 
 export interface CreateInviteLinkRequest {
   role: TenantRole
+  /** 链接有效天数，1-30，默认 7。 */
+  expires_in_days?: number
   message?: string
 }
 
@@ -255,23 +263,32 @@ export interface CreateInviteLinkResponse {
   message?: string
 }
 
-/** 待实现：邀请链接。Backend: POST /api/v1/tenants/:id/invite-links（尚未实现）。 */
+/**
+ * 创建共享链接：任何已登录的人打开链接即可按 `role` 加入空间，直到过期或撤销。
+ * 返回的 `invite_url` 为相对路径 `/join?token=...`，页面前面加上当前站点地址即可复制。
+ * Backend: POST /api/v1/tenants/:id/invite-links（需要 members:manage；个人空间返回 404）。
+ */
 export async function createInviteLink(
   tenantId: string,
   body: CreateInviteLinkRequest,
 ): Promise<CreateInviteLinkResponse> {
-  return (await post(
-    `/api/v1/tenants/${tenantId}/invite-links`,
-    body,
-  )) as unknown as CreateInviteLinkResponse
+  const link = (await post(`/api/v1/tenants/${tenantId}/invite-links`, {
+    role: body.role,
+    expires_in_days: body.expires_in_days ?? 7,
+  })) as unknown as InvitationRow
+  return { success: true, data: toInvitation(tenantId, link) }
 }
 
-/** 待实现：用邀请链接令牌加入。Backend: POST /api/v1/me/invitations/accept-by-token（尚未实现）。 */
+/**
+ * 用共享链接的 token 加入空间（需要已登录）。成功后返回成员关系与空间名称。
+ * Backend: POST /api/v1/me/invitations/accept-by-token。
+ */
 export async function acceptInvitationByToken(
   token: string,
 ): Promise<AcceptInvitationByTokenResponse> {
-  return (await post(
-    `/api/v1/me/invitations/accept-by-token`,
-    { token },
-  )) as unknown as AcceptInvitationByTokenResponse
+  const result = (await post('/api/v1/me/invitations/accept-by-token', { token })) as unknown as {
+    membership: { tenant_id: string; role: TenantRole; status: string; joined_at: string }
+    tenant_name: string
+  }
+  return { success: true, data: { membership: result.membership, tenant_name: result.tenant_name } }
 }

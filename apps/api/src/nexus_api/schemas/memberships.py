@@ -35,3 +35,14 @@ class ApplicationReject(BaseModel):
 
 class RoleToUnit(BaseModel):
     role_id: UUID
+
+
+class InviteLinkCreate(BaseModel):
+    """A share link: anyone signed in who opens it joins with `role`, until it expires (1-30 days)."""
+
+    role: InvitableRole = "contributor"
+    expires_in_days: int = Field(default=7, ge=1, le=30)
+
+
+class InviteToken(BaseModel):
+    token: str = Field(min_length=1, max_length=128)

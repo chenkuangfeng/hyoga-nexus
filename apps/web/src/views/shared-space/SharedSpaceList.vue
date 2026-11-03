@@ -148,7 +148,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { takePendingInviteCode } from '@/utils/pendingInvite'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -386,7 +385,7 @@ const route = useRoute()
 onMounted(async () => {
   await load()
   const fromQuery = typeof route.query.invite_code === 'string' ? route.query.invite_code : ''
-  const code = (fromQuery || takePendingInviteCode()).trim()
+  const code = fromQuery.trim()
   if (!code) return
   openJoinDialog()
   joinCode.value = code

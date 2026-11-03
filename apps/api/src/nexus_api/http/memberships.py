@@ -14,7 +14,9 @@ from nexus_core.platform import Principal, TenantRole
 from nexus_platform.auth import accounts
 from nexus_platform.tenants import membership as flows
 from nexus_api.dependencies.platform import get_database_session, get_principal
-from nexus_api.schemas.memberships import ApplicationApprove, ApplicationCreate, ApplicationReject, MemberByEmail, RoleToUnit
+from nexus_api.schemas.memberships import (
+    ApplicationApprove, ApplicationCreate, ApplicationReject, InviteLinkCreate, InviteToken, MemberByEmail, RoleToUnit,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["Members"])
 
@@ -58,6 +60,21 @@ def my_invitations(principal: Principal = Depends(get_principal), db=Depends(get
 @router.get("/me/invitations/pending-count")
 def pending_count(principal: Principal = Depends(get_principal), db=Depends(get_database_session)):
     return {"count": len(flows.my_invitations(db, principal))}
+
+
+@router.post("/tenants/{tenant_id}/invite-links", status_code=status.HTTP_201_CREATED)
+def create_invite_link(tenant_id: UUID, body: InviteLinkCreate, principal: Principal = Depends(get_principal),
+                       db=Depends(get_database_session)):
+    """Issue a share link for the space (enterprise only, `members:manage`). The link is shown to the manager."""
+    link = flows.create_invite_link(db, principal, tenant_id, role=body.role, expires_in_days=body.expires_in_days)
+    return flows.link_view(link)
+
+
+@router.post("/me/invitations/accept-by-token")
+def accept_invitation_by_token(body: InviteToken, principal: Principal = Depends(get_principal),
+                               db=Depends(get_database_session)):
+    """Join the space behind a share link. Returns the membership and the space name."""
+    return flows.accept_invite_token(db, principal, body.token)
 
 
 @router.post("/me/invitations/{invitation_id}/accept")

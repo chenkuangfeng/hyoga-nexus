@@ -9,7 +9,6 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
 import { normalizeSettingsSection } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
-import { rememberPendingInviteCode } from '@/utils/pendingInvite'
 import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
@@ -83,15 +82,9 @@ const router = createRouter({
     {
       path: "/join",
       name: "joinOrganization",
-      // 重定向到组织列表页，并将 code 参数转换为 invite_code
-      redirect: (to) => {
-        const code = to.query.code as string
-        return {
-          path: '/platform/shared-spaces',
-          query: code ? { invite_code: code } : {}
-        }
-      },
-      meta: { requiresInit: true, requiresAuth: true }
+      // 邀请入口：`?code=` 为共享空间邀请码，`?token=` 为企业邀请链接（见 JoinEntry.vue）。
+      component: () => import("../views/auth/JoinEntry.vue"),
+      meta: { requiresInit: false, requiresAuth: false, requiresTenant: false }
     },
     {
       path: "/knowledgeBase",
@@ -384,8 +377,6 @@ router.beforeEach(async (to, from, next) => {
           // Auto-setup may be unavailable outside the native Lite shell.
         }
       }
-      // Keep an invite code from /join so the shared-space page can use it after sign-in.
-      if (typeof to.query.invite_code === 'string') rememberPendingInviteCode(to.query.invite_code)
       next('/login')
       return
     }
