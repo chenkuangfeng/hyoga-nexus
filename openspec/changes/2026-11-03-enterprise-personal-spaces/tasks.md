@@ -46,7 +46,7 @@
 
 - [ ] `GET/POST /organizations`、`GET /organizations/search`、`GET /organizations/preview/:code`、`POST /organizations/join`、`POST /organizations/join-request`、`POST /organizations/join-by-id`、`GET/PUT/DELETE /organizations/:id`、`POST /organizations/:id/leave`、`POST /organizations/:id/request-upgrade`、`POST /organizations/:id/invite-code`。
 - [ ] 组织内角色 `admin` / `editor` / `viewer`；权限判断沿用 WeKnora 的 `access` 逻辑。
-- [ ] 前端：`/platform/organizations` 列表、创建、加入、设置弹窗（`OrganizationSettingsModal`）。
+- [ ] 前端：`/platform/organizations` 列表、创建、加入、设置弹窗（`OrganizationSettingsModal`）。设置与侧栏中该入口的文案为"企业"，路由与接口名不变。
 - [ ] 企业组织架构（扩展）：子公司与部门树的服务与接口 `/api/v1/tenants/{tenant_id}/org-units`，节点规则（环检测、停用、删除前检查）沿用既有实现。
 - [ ] 企业组织架构页面位于企业设置下，作为本仓库扩展，在 `design.md` 9.5 列明。
 

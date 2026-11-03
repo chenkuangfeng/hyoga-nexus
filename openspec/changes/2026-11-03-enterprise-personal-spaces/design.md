@@ -316,7 +316,7 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 - 常规设置（语言、主题）
 - 个人资料（`UserProfile.vue`）
 - 空间信息（`TenantInfo.vue`）、成员（`TenantMembers.vue`）、API Key
-- 组织（`/platform/organizations`）
+- 企业（WeKnora 的"组织"，即跨空间共享空间；界面文案"企业"，路由 `/platform/organizations`，接口 `/organizations`）
 - 审计（企业空间，Admin+）
 
 其余分组（模型、知识库检索、Web 搜索、MCP、沙箱、记忆、Ollama、存储、向量库、解析引擎等）在菜单中保留，本阶段显示占位，由后续阶段实现。
