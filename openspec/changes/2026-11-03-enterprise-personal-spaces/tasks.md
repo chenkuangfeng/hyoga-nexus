@@ -57,7 +57,8 @@
 - [x] 按部门批量分配自定义角色 `POST /api/v1/tenants/:id/org-units/:unit_id/role-assignments`：逐人写入 `tenant_user_roles`，跳过 owner、admin 与已有该角色的人，可重复调用。
 - [x] 所有写操作写入审计（`audit_records`）。
 - [x] 前端成员与邀请接口封装（`api/tenant/members.ts`、`api/tenant/invitations.ts`）已对接 Nexus 端点与返回结构：成员列表含邮箱、用户名、显示名（`MemberView` 增加字段）；按邮箱邀请；待处理邀请列表；接受与拒绝；撤销。成员页与邀请列表沿用原组件。
-- [ ] 前端：成员页的邀请链接弹窗、申请审批列表（`TenantMembers` 中的审批入口）与空间信息页（`TenantInfo`）尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
+- [x] 前端空间信息页（`TenantInfo`）改名通过 `PATCH /api/v1/tenants/current`。空间描述与删除空间后端未提供，前端直接返回失败、不发请求。
+- [ ] 前端：成员页的邀请链接弹窗与申请审批列表尚未按新接口调整；邀请链接与令牌加入未实现，相关调用会得到 404。
 - [ ] 前端：按邮箱添加且邮箱无账号时，后端需要用户名与初始密码，成员页尚未提供这两个输入项。
 - 实施说明（2026-11-03）：测试 `tests/test_membership_flows.py` 通过 HTTP 覆盖邀请、接受与拒绝、按邮箱建账号、申请与审批、拒绝冷却、撤回、离开、批量角色。全量 pytest 569 通过。
 

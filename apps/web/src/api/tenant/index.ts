@@ -1,4 +1,4 @@
-import { del, get, post, put } from '@/utils/request'
+import { del, get, patch, post, put } from '@/utils/request'
 import i18n from '@/i18n'
 
 const t = (key: string) => i18n.global.t(key)
@@ -268,18 +268,30 @@ export async function deleteTenantAPIKey(
 }
 
 /**
- * 更新空间信息（目前暴露名称、描述两个字段的编辑入口）。
- * 后端 `PUT /tenants/:id` 用指针字段区分"未传"和"显式空串"，未传的列不会
- * 被改动；这里也按需选择性传 `name` / `description`，互不影响。
- * 权限：owner（与 router.go 中的 g.Owner() 守卫保持一致）。
+ * 修改当前空间的名称。Backend: PATCH /api/v1/tenants/current（owner、admin；X-Tenant-ID 指定空间）。
+ * 后端目前只支持改名：空间描述未存储，删除空间也未提供，两者在此直接返回失败，不发请求。
  */
 export async function updateTenant(
-  tenantId: string,
+  _tenantId: string,
   payload: { name?: string; description?: string },
 ): Promise<{ success: boolean; data?: TenantInfo; message?: string }> {
+  if (payload.description !== undefined && payload.name === undefined) {
+    return { success: false, message: t('error.tenant.updateFailed') }
+  }
   try {
-    const response = await put(`/api/v1/tenants/${tenantId}`, payload)
-    return response as unknown as { success: boolean; data?: TenantInfo; message?: string }
+    const response = await patch('/api/v1/tenants/current', { name: payload.name ?? '' })
+    const space = response as unknown as { id: string; name: string; kind: string; created_at: string }
+    return {
+      success: true,
+      data: {
+        id: space.id,
+        name: space.name,
+        description: '',
+        status: 'active',
+        created_at: space.created_at,
+        updated_at: space.created_at,
+      } as unknown as TenantInfo,
+    }
   } catch (error: any) {
     return {
       success: false,
@@ -289,20 +301,12 @@ export async function updateTenant(
 }
 
 /**
- * 删除当前工作区。权限：owner。
+ * 删除空间。Nexus 尚未提供删除空间的接口，这里直接返回失败，不发请求。
  */
 export async function deleteTenant(
-  tenantId: string,
+  _tenantId: string,
 ): Promise<{ success: boolean; message?: string }> {
-  try {
-    const response = await del(`/api/v1/tenants/${tenantId}`)
-    return response as unknown as { success: boolean; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.deleteFailed'),
-    }
-  }
+  return { success: false, message: t('error.tenant.deleteFailed') }
 }
 
 /**
