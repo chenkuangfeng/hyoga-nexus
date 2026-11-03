@@ -21,7 +21,7 @@ export type AuditOutcome = 'accepted' | 'success' | 'failed' | 'partial' | 'canc
 // an opaque record so future detail shapes don't need a frontend
 // breaking change.
 export interface AuditLog {
-  id: number
+  id: string
   tenant_id: string
   actor_user_id: string
   actor_role: string
@@ -57,25 +57,48 @@ export interface ListAuditLogParams {
   actor?: string
 }
 
+/** 后端 `GET /tenants/:id/audit-log` 的一行（最近的记录在前）。 */
+interface AuditRow {
+  id: string
+  actor_user_id: string | null
+  action: string
+  target_type: string
+  target_id: string
+  result: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
 /**
- * List the per-tenant audit log. Cursor-paginated by descending id.
- * Backend: GET /api/v1/tenants/:id/audit-log (Admin+).
- *
- * The first call should pass no cursor. Each subsequent page should
- * pass `after_id = previousResponse.next_cursor` until next_cursor
- * comes back as 0 (no older rows).
+ * 列出空间的审计记录，最近的在前。后端一次返回最近 100 条，没有游标分页：
+ * 返回的 `next_cursor` 恒为 0，`action`、`outcome`、`actor` 筛选在此处完成。
+ * Backend: GET /api/v1/tenants/:id/audit-log（需要 audit:read；owner 始终拥有，admin 需自定义角色）。
  */
 export async function listAuditLog(
   tenantId: string,
   params: ListAuditLogParams = {},
 ): Promise<ListAuditLogResponse> {
-  const qs = new URLSearchParams()
-  if (params.after_id) qs.append('after_id', String(params.after_id))
-  if (params.limit) qs.append('limit', String(params.limit))
-  if (params.action) qs.append('action', params.action)
-  if (params.outcome) qs.append('outcome', params.outcome)
-  if (params.actor) qs.append('actor', params.actor)
-  const tail = qs.toString()
-  const url = `/api/v1/tenants/${tenantId}/audit-log${tail ? '?' + tail : ''}`
-  return (await get(url)) as unknown as ListAuditLogResponse
+  const rows = (await get(`/api/v1/tenants/${tenantId}/audit-log`)) as unknown as AuditRow[]
+  let logs: AuditLog[] = (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: row.id,
+    tenant_id: tenantId,
+    actor_user_id: row.actor_user_id ?? '',
+    actor_role: '',
+    scope_type: 'tenant',
+    scope_id: tenantId,
+    action: row.action,
+    target_type: row.target_type,
+    target_id: row.target_id,
+    target_user_id: row.target_type === 'user' ? row.target_id : '',
+    request_path: '',
+    request_method: '',
+    outcome: row.result as AuditOutcome,
+    details: row.metadata,
+    created_at: row.created_at,
+  }))
+  if (params.action) logs = logs.filter((log) => log.action === params.action)
+  if (params.outcome) logs = logs.filter((log) => log.outcome === params.outcome)
+  if (params.actor) logs = logs.filter((log) => log.actor_user_id === params.actor)
+  if (params.limit) logs = logs.slice(0, params.limit)
+  return { success: true, data: logs, next_cursor: 0 }
 }

@@ -92,7 +92,7 @@
 - [x] 其余分组显示占位页，菜单项保留（第 0 组）。
 - [x] 企业审计接口：`GET /api/v1/tenants/:id/audit-log`（与既有 `/audit` 相同，需要 `audit:read`；owner 始终拥有，admin 需自定义角色）。
 - [x] 前端：空间信息页、成员页、部门架构页已按新接口调整。
-- [ ] 前端：成员页的审计标签（`listAuditLog`）的响应结构尚未对照 `GET /api/v1/tenants/:id/audit-log` 核对。
+- [x] 前端：成员页的审计标签对照后端响应（最近 100 条、无游标）做了映射；审计标签只对 owner 显示，与 `audit:read` 的默认授权一致。
 
 ## 7. 企业微信
 

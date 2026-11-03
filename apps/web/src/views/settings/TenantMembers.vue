@@ -668,18 +668,14 @@ const currentRole = computed<TenantRole | ''>(() => (authStore.currentTenantRole
 const canManage = computed(
   () => currentRole.value === 'owner' || authStore.canAccessAllTenants === true,
 )
-// Admin+ (and cross-tenant superusers) can view the audit log. Mirrors
-// the server's g.Admin() guard on /tenants/:id/audit-log so we don't
-// render a tab that would just 403.
+// The audit log needs `audit:read`: owners always hold it, admins only through a custom role (design
+// permissions table). Cross-tenant superusers can always view it. Other roles would only get a 403.
 watch(canManage, (allowed) => {
   if (!allowed) activeListTab.value = 'members'
 })
 
 const canViewAudit = computed(
-  () =>
-    currentRole.value === 'owner' ||
-    currentRole.value === 'admin' ||
-    authStore.canAccessAllTenants === true,
+  () => currentRole.value === 'owner' || authStore.canAccessAllTenants === true,
 )
 const currentUserId = computed(() => authStore.user?.id ?? '')
 
