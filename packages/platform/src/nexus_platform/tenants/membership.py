@@ -47,9 +47,14 @@ PENDING = "pending"
 # ---- helpers -------------------------------------------------------------------------------------
 
 def _manager(session: Session, principal: Principal, tenant_id: UUID):
-    """The caller, after checking the space exists and `members:manage` is granted to them."""
+    """The caller, after checking the space is an enterprise and `members:manage` is granted to them.
+
+    Personal spaces have no member administration, so they answer NotFound.
+    """
     actor = resolve_user(session, principal)
-    require_tenant(session, tenant_id)
+    space = require_tenant(session, tenant_id)
+    if space.kind != "enterprise":
+        raise NotFound("Member administration is not available in a personal space")
     require_membership(session, tenant_id, actor.id)
     require_api_permission(session, tenant_id, actor.id, "members:manage")
     return actor

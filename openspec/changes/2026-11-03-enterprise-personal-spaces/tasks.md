@@ -72,10 +72,10 @@
 
 ## 5. 权限（`packages/platform/authz`）
 
-- [ ] 角色与权限键对照 WeKnora 的 `RBAC` 守卫（`Viewer` / `Contributor` / `Admin` / `Owner`）。
-- [ ] `authz/catalog.py` 增加 `org:manage`；内置角色默认权限与 WeKnora 对应。
-- [ ] 个人空间不返回企业接口（404）；企业成员角色不足时返回 403。
-- [ ] 平台管理员组织接口改为只读汇总。
+- [ ] 角色与权限键对照 WeKnora 的 `RBAC` 守卫（`Viewer` / `Contributor` / `Admin` / `Owner`）。待确认：`design.md` 第 4 节规定企业 admin 的管理权限"按角色"授予，而现有实现（`tenants/roles.py`）让 admin 拥有内置完整目录。两者不一致，需要确认采用哪一种（见本次对话）。
+- [x] `authz/catalog.py` 增加 `org:manage`；owner 与 admin 通过内置完整目录获得。
+- [x] 个人空间不返回企业接口：成员管理、邀请、申请、部门架构返回 404（`tests/test_space_scope.py`）。企业成员角色不足时返回 403。
+- [x] 平台管理员组织接口改为只读汇总：`GET /api/v1/admin/summary`（企业、个人空间、共享空间数量）。全局部门与绑定接口已删除（第 1 组）。
 
 ## 6. 设置（WeKnora `Settings.vue`）
 

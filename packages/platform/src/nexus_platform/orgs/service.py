@@ -51,9 +51,14 @@ def _clean_name(value: str) -> str:
 
 
 def _manager(session: Session, principal: Principal, tenant_id: UUID) -> UserRecord:
-    """Resolve the caller and require `org:manage` in the enterprise. Raises Forbidden otherwise."""
+    """Resolve the caller and require `org:manage` in the enterprise. Raises Forbidden otherwise.
+
+    A personal space has no organization tree, so it answers NotFound, as for a space the caller is not in.
+    """
     actor = resolve_user(session, principal)
-    require_tenant(session, tenant_id)
+    space = require_tenant(session, tenant_id)
+    if space.kind != "enterprise":
+        raise NotFound("Organization management is not available in a personal space")
     require_membership(session, tenant_id, actor.id)
     require_api_permission(session, tenant_id, actor.id, "org:manage")
     return actor

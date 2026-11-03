@@ -42,6 +42,23 @@ def create_tenant(session: Session, principal: Principal, name: str) -> TenantRe
     return tenant
 
 
+def platform_summary(session: Session, principal: Principal) -> dict:
+    """Read-only counts for the platform administration page: enterprises, personal spaces, shared spaces."""
+    from nexus_platform.persistence.models import SharedSpaceRecord
+
+    with session.begin():
+        user = resolve_user(session, principal)
+        if not user.is_platform_admin:
+            raise Forbidden("Platform administrator required")
+        enterprises = session.scalar(select(func.count()).select_from(TenantRecord).where(
+            TenantRecord.kind == "enterprise", TenantRecord.status == "active")) or 0
+        personal = session.scalar(select(func.count()).select_from(TenantRecord).where(
+            TenantRecord.kind == "personal", TenantRecord.status == "active")) or 0
+        shared = session.scalar(select(func.count()).select_from(SharedSpaceRecord).where(
+            SharedSpaceRecord.deleted_at.is_(None))) or 0
+        return {"enterprises": enterprises, "personal_spaces": personal, "shared_spaces": shared}
+
+
 def list_all_tenants(session: Session, principal: Principal) -> list[TenantRecord]:
     """Every active space, for platform administrators choosing a space filter. Others get Forbidden."""
     with session.begin():

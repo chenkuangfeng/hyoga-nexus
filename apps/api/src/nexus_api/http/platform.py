@@ -422,6 +422,12 @@ def list_all_tenants(principal: Principal = Depends(get_principal), db: Session 
     return [tenant_view(row, "") for row in tenants.list_all_tenants(db, principal)]
 
 
+@router.get("/admin/summary")
+def platform_summary(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Platform administrators only: read-only counts of enterprises, personal spaces and shared spaces."""
+    return tenants.platform_summary(db, principal)
+
+
 @router.get("/admin/agents", response_model=list[AdminAgentView])
 def list_all_agents(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Platform administrators only: every agent across spaces, for the session filter."""
