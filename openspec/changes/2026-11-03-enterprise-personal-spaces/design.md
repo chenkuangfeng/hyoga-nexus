@@ -366,6 +366,8 @@ WeKnora 的 `views/system/*`（用户管理、模型目录、运行队列、审�
 | 更新空间的方法 | `PUT /tenants/current`（部分字段） | `PATCH` | 为与本仓库既有的 PATCH 风格一致，待确认；若要严格一致改为 `PUT` |
 | 登录后的空间选择 | `switch-tenant` 返回新令牌，请求头携带空间 | `switch-tenant` 只校验成员身份并返回空间，令牌不变；空间由 `X-Tenant-ID` 每次指定并校验 | 偏离，第 2 组实施时确定。避免为切换空间而撤销并重建会话，企业微信 Cookie 流程也不受影响 |
 | 登录标识 | 邮箱 + 密码 | 邮箱 + 密码（`users.email` 唯一） | 与 WeKnora 一致；管理员创建的账号必须填写邮箱，初始密码强制首次改密 |
+| 添加成员 | `POST /tenants/:id/members`（用户 ID 与账号） | `POST /tenants/:id/members/by-email`：邮箱已有账号则邀请，没有则建账号（管理员设初始密码） | 偏离，按设计"按邮箱添加"的规则实现，邀请与建账号分开 |
+| 申请审批的角色 | 成员角色 | 审批时指定部门（必选）与角色（`contributor` / `viewer` / `admin`） | 扩展，见 `design.md` 第 3 节 |
 | 记忆、Native 运行、审批 | 部分有 | 本仓库已有实现 | 保留为扩展，不改变 WeKnora 页面结构 |
 
 ### 9.6 验收方式

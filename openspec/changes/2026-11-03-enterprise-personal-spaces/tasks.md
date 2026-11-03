@@ -45,14 +45,18 @@
 
 ## 3. 成员、邀请与角色（WeKnora `tenant_member.go`、`tenant_invitation`）
 
-- [ ] `GET/POST /tenants/:id/members`、`PUT/DELETE /tenants/:id/members/:user_id`、`POST /tenants/:id/leave`。owner 不能被移除或降级。
-- [ ] `GET/POST /tenants/:id/invitations`、`DELETE .../:inv_id`、`POST /tenants/:id/invite-links`。
-- [ ] `GET /me/invitations`、`.../pending-count`、`POST .../accept`、`.../decline`、`accept-by-token`。
-- [ ] 管理员按邮箱添加：邮箱已存在时只能邀请，不能设置密码；不存在时创建账号并设置初始密码，首次登录改密。
-- [ ] 申请加入企业：一人一企业一条待处理；撤回；审批时指定部门与角色；拒绝时填写原因，冷却 7 天。
-- [ ] 按部门批量选人分配角色，逐人写入 `tenant_user_roles`。
-- [ ] 所有写操作写入审计。
-- [ ] 前端：空间信息页（`TenantInfo`）、成员页（`TenantMembers`）、邀请弹窗、待处理邀请列表、申请审批列表。
+- [x] 成员列表 `GET /api/v1/tenants/:id/members`、角色修改 `PATCH .../members/:member_id`（沿用，WeKnora 为 `PUT`，见 `design.md` 9.5）、移除 `DELETE .../members/:member_id`（owner 不能被移除或降级，最后一个 owner 不能移除）。
+- [x] 离开空间 `POST /api/v1/tenants/:id/leave`；owner 不能直接离开。
+- [x] 按邮箱添加 `POST /api/v1/tenants/:id/members/by-email`：邮箱已有账号时只生成邀请；邮箱没有账号时，需要提供用户名与初始密码创建账号，首次登录改密。
+- [x] 邀请列表与撤销：`GET /api/v1/tenants/:id/invitations`、`DELETE .../invitations/:inv_id`。
+- [x] 用户侧邀请：`GET /api/v1/me/invitations`、`.../pending-count`、`POST .../accept`、`POST .../decline`。
+- [ ] 邀请链接 `POST /api/v1/tenants/:id/invite-links` 与 `accept-by-token` 未实现（需要令牌存储，留到后续）。
+- [x] 申请加入企业：`POST /api/v1/tenants/:id/join-requests`（一人一企业一条待处理；个人空间不接受申请）；撤回 `DELETE .../join-requests/:id`；列表 `GET .../join-requests`。
+- [x] 审批：`POST .../join-requests/:id/approve` 必须指定部门与角色（角色不能是 owner）；拒绝 `POST .../reject` 必须填写原因，之后 7 天内不能再次申请。
+- [x] 按部门批量分配自定义角色 `POST /api/v1/tenants/:id/org-units/:unit_id/role-assignments`：逐人写入 `tenant_user_roles`，跳过 owner、admin 与已有该角色的人，可重复调用。
+- [x] 所有写操作写入审计（`audit_records`）。
+- [ ] 前端：空间信息页（`TenantInfo`）、成员页（`TenantMembers`）、邀请弹窗、待处理邀请列表、申请审批列表尚未按新接口调整。
+- 实施说明（2026-11-03）：测试 `tests/test_membership_flows.py` 通过 HTTP 覆盖邀请、接受与拒绝、按邮箱建账号、申请与审批、拒绝冷却、撤回、离开、批量角色。全量 pytest 569 通过。
 
 ## 4. 共享空间（WeKnora `organization.go`、`OrganizationHandler`，本仓库命名 `shared_space`）
 

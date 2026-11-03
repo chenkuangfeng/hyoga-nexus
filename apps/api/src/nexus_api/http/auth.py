@@ -103,6 +103,22 @@ def _memberships(db: Session, principal: Principal) -> list[dict]:
     return [_space_view(tenant, role) for tenant, role in tenants.list_tenants(db, principal)]
 
 
+@router.get("/config")
+def auth_config():
+    """Public sign-in options for the login page. Self-service sign-up is `self_serve` or `invite_only`."""
+    return {
+        "success": True,
+        "registration_mode": "self_serve" if auth_settings().registration_enabled else "invite_only",
+        "complex_password_enabled": True,
+    }
+
+
+@router.get("/oidc/config")
+def oidc_config():
+    """OIDC is not provided by this deployment; the login page then shows only email sign-in."""
+    return {"success": True, "enabled": False}
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(body: RegisterRequest, request: Request, db: Session = Depends(get_database_session)):
     """Create an account with its first space. Personal spaces need no code; enterprises need a unique code."""

@@ -88,3 +88,10 @@ def test_owner_renames_space_and_switch_returns_the_space(client):
     assert switched.status_code == 200 and switched.json()["data"]["tenant"]["role"] == "owner"
     renamed = client.patch("/api/v1/tenants/current", json={"name": "Ann Notes"}, headers=headers)
     assert renamed.status_code == 200 and renamed.json()["name"] == "Ann Notes"
+
+
+def test_public_auth_config_tells_the_login_page_the_registration_mode(client, deployment_config):
+    assert client.get("/api/v1/auth/config").json()["registration_mode"] == "self_serve"
+    assert client.get("/api/v1/auth/oidc/config").json() == {"success": True, "enabled": False}
+    deployment_config('[auth]\nmode = "session"\ncookie_secure = false\nregistration_enabled = false\n')
+    assert client.get("/api/v1/auth/config").json()["registration_mode"] == "invite_only"
