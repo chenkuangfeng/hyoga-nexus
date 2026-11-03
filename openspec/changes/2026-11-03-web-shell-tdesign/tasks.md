@@ -17,7 +17,8 @@
 ## 外壳与菜单
 
 - [ ] `layouts/AppLayout.vue`：TDesign 布局，侧栏 + 内容区；展开、折叠、拖拽调宽（如确认），宽度存入 localStorage。
-- [ ] `layouts/AppSidebar.vue`：品牌区、空间选择器、搜索按钮（打开现有会话搜索）、顶层菜单（9 项，按 `design.md` 第 2.1 节）、底部用户区。
+- [ ] `layouts/AppSidebar.vue`：品牌区、"新建会话"、最近会话列表、"更多功能"折叠区（知识库、制品库、智能体、自动化、工具箱、组织）、底部用户名称与弹出菜单（设置、退出）；按 `design.md` 第 2 节。
+- [ ] 底部用户菜单的"设置"路由到 `/settings`，不弹窗；空间切换位置按 `proposal.md` 待探讨项确定。
 - [ ] 新建对话的会话子列表：按时间分组，结构与入口；会话操作沿用 `session-management` 提案。
 - [ ] 响应式：≥ 1024 展开；768–1023 图标列；< 768 抽屉（Esc 关闭）。
 - [ ] 可访问性：`nav`、`aria-current`、`aria-expanded`、焦点环、图标按钮的可访问名称。
@@ -29,6 +30,8 @@
 
 - [ ] 设置导航：七个分组，23 个分区 + 集成下的子项（按确认结果决定原排除项是否显示）。
 - [ ] 按角色过滤分区；角色不足显示"无权限"。
+- [ ] 设置为独立页面：一级 `/settings`，二级 `/settings/:section` 整页切换；一级与二级有返回按钮（优先 `router.back()`，无历史时回上一级）。
+- [ ] 三级（编辑、新建、详情）使用抽屉或对话框，不新建页面。
 - [ ] 占位页组件：标题、说明、"规划中"与路线图步骤、返回入口（`design.md` 第 6 节）。
 - [ ] 迁入页面：`ModelSettingsView`、`RoleManagementView`、`SpaceOrganizationView`（组织绑定部分）、`AccountView`、`OrganizationManagementView`（顶层菜单）。
 - [ ] 扩展分区（按确认结果）：`NativeSettingsView`（Native 运行）、`AdminSessionsView`（会话查询）、`OverviewView`（版本信息）。
