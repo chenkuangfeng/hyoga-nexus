@@ -551,6 +551,7 @@ def cancel_run(
     return RunView.model_validate(runs.request_cancel(db, principal, tenant_id, run_id), from_attributes=True)
 
 
+@router.get("/tenants/{tenant_id}/audit-log", response_model=list[dict[str, Any]])
 @router.get("/tenants/{tenant_id}/audit", response_model=list[dict[str, Any]])
 def list_audit_records(
     tenant_id: UUID,

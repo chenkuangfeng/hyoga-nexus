@@ -23,7 +23,7 @@ from nexus_platform.auth.sessions import aware, digest, issue_session
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Conflict, Forbidden, Unauthenticated
 from nexus_platform.identity.service import resolve_user
-from nexus_platform.persistence.models import AuthStateRecord, MembershipRecord, UserIdentityRecord, UserRecord
+from nexus_platform.persistence.models import AuthStateRecord, MembershipRecord, TenantRecord, UserIdentityRecord, UserRecord
 
 WECOM_PROVIDER = "wecom"
 STATE_LIFETIME = timedelta(minutes=10)
@@ -117,6 +117,16 @@ def bind_wecom(session: Session, directory: WeComDirectory, *, code: str, state:
             if existing.user_id != expected_user_id:
                 raise Conflict("该企业微信账号已绑定其他用户")
             return
+        # A corp recorded on an enterprise space may only be bound by that enterprise's members.
+        corp_spaces = list(session.scalars(select(TenantRecord.id).where(TenantRecord.wecom_corp_id == corp_id)))
+        if corp_spaces:
+            member_of = session.scalar(select(MembershipRecord.tenant_id).where(
+                MembershipRecord.user_id == expected_user_id,
+                MembershipRecord.tenant_id.in_(corp_spaces),
+                MembershipRecord.status == "active",
+            ).limit(1))
+            if member_of is None:
+                raise Forbidden("该企业微信企业只能绑定本企业成员账号")
         session.add(UserIdentityRecord(
             id=new_id(), user_id=expected_user_id, provider=WECOM_PROVIDER, scope=corp_id,
             external_id=userid, verified_at=now, created_at=now,

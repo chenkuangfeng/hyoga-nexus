@@ -79,20 +79,21 @@
 
 ## 6. 设置（WeKnora `Settings.vue`）
 
-- [ ] 分组与顺序按 `design.md` 9.3；本阶段实现的分组：常规、个人资料、空间信息、成员、API Key、组织、审计（企业）。
-- [ ] 其余分组显示占位页，菜单项保留。
-- [ ] 企业审计页（Admin+）读取 `GET /tenants/:id/audit-log`。
+- [ ] 分组与顺序按 `design.md` 9.3 在前端实现（第 0 组已保留分组与占位，本阶段实现分区的页面逐项对接尚未完成）。
+- [x] 其余分组显示占位页，菜单项保留（第 0 组）。
+- [x] 企业审计接口：`GET /api/v1/tenants/:id/audit-log`（与既有 `/audit` 相同，需要 `audit:read`；owner 始终拥有，admin 需自定义角色）。
+- [ ] 前端：企业审计页、空间信息页、成员页、部门架构页尚未按新接口调整。
 
 ## 7. 企业微信
 
-- [ ] 绑定时，若企业空间记录了 `wecom_corp_id`，只允许绑定到本企业账号。
+- [x] 绑定时，若企业空间记录了 `wecom_corp_id`，只允许该企业的有效成员绑定（`auth/wecom.py`，`tests/test_wecom_corp_scope.py`）。目前没有界面设置该字段，只能由数据库记录。
 - [ ] 通讯录同步不在本阶段，另开提案。
 
 ## 8. 测试
 
-- [ ] `uv run --locked pytest`：注册两种类型；登录与多空间选择；切换空间；首次改密；邮箱已存在时管理员只能邀请；申请、审批、拒绝与冷却；邀请接受与拒绝；成员退出（owner 除外）；角色逐人写入；组织加入与权限；主部门唯一；移动成环拒绝；个人空间不暴露企业接口；企业成员 403。
-- [ ] `pnpm test:browser`：注册、登录、空间选择、企业设置、组织页面。
-- [ ] 每组页面与 WeKnora 逐项比对，结果写在对应分组末尾。
+- [x] `uv run --locked pytest`：注册两种类型（`test_registration_spaces.py`）；登录与空间选择；切换空间；首次改密（`test_auth.py`）；邀请、申请、审批、拒绝与冷却、撤回、离开、批量角色（`test_membership_flows.py`）；共享空间（`test_shared_spaces.py`）；部门主节点唯一、成环拒绝（`test_org_tree.py`）；个人空间不暴露企业接口、企业成员 403（`test_space_scope.py`）。全量 579 通过，1 跳过。
+- [ ] `pnpm test:browser`：注册、登录、空间选择、企业设置、组织页面（前端未对接，未执行）。
+- [ ] 每组页面与 WeKnora 逐项比对，结果写在对应分组末尾（前端对接后进行）。
 
 ## 不做（本阶段）
 
