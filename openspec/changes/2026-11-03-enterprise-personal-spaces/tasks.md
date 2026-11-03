@@ -18,7 +18,7 @@
 - [ ] `tenant_memberships` 的角色使用 `owner` / `admin` / `contributor` / `viewer`；`source` 允许值为 `manual`、`invitation`、`application`。
 - [ ] `org_units` 增加 `tenant_id`、`source`；每个企业一棵树。
 - [ ] `user_org_units` 增加 `tenant_id`；主部门唯一约束为 `(tenant_id, user_id)`。
-- [ ] 跨空间组织（WeKnora `organizations`）表结构按 WeKnora `internal/types/organization.go` 翻译。
+- [ ] 共享空间表结构按 WeKnora `internal/types/organization.go` 翻译，命名改为 `shared_spaces`、`shared_space_tenant_members`、`shared_space_join_requests`，共享表外键列改为 `shared_space_id`（见 `design.md` 9.5）。
 - [ ] 新增 `space_join_requests`（申请与邀请）。
 - [ ] 开发库重建方案（A）：单个 Alembic 迁移，不做数据回填。
 
@@ -42,13 +42,13 @@
 - [ ] 所有写操作写入审计。
 - [ ] 前端：空间信息页（`TenantInfo`）、成员页（`TenantMembers`）、邀请弹窗、待处理邀请列表、申请审批列表。
 
-## 4. 组织（WeKnora `organization.go`、`OrganizationHandler`）
+## 4. 共享空间（WeKnora `organization.go`、`OrganizationHandler`，本仓库命名 `shared_space`）
 
-- [ ] `GET/POST /organizations`、`GET /organizations/search`、`GET /organizations/preview/:code`、`POST /organizations/join`、`POST /organizations/join-request`、`POST /organizations/join-by-id`、`GET/PUT/DELETE /organizations/:id`、`POST /organizations/:id/leave`、`POST /organizations/:id/request-upgrade`、`POST /organizations/:id/invite-code`。
-- [ ] 组织内角色 `admin` / `editor` / `viewer`；权限判断沿用 WeKnora 的 `access` 逻辑。
-- [ ] 前端：`/platform/organizations` 列表、创建、加入、设置弹窗（`OrganizationSettingsModal`）。设置与侧栏中该入口的文案为"共享空间"，路由与接口名不变。
-- [ ] 企业组织架构（扩展）：子公司与部门树的服务与接口 `/api/v1/tenants/{tenant_id}/org-units`，节点规则（环检测、停用、删除前检查）沿用既有实现。
-- [ ] 企业组织架构页面位于企业设置下，作为本仓库扩展，在 `design.md` 9.5 列明。
+- [ ] `GET/POST /api/v1/shared-spaces`、`GET /api/v1/shared-spaces/search`、`GET /api/v1/shared-spaces/preview/:code`、`POST /api/v1/shared-spaces/join`、`POST /api/v1/shared-spaces/join-request`、`POST /api/v1/shared-spaces/join-by-id`、`GET/PUT/DELETE /api/v1/shared-spaces/:id`、`POST /api/v1/shared-spaces/:id/leave`、`POST /api/v1/shared-spaces/:id/request-upgrade`、`POST /api/v1/shared-spaces/:id/invite-code`。
+- [ ] 共享空间内角色 `admin` / `editor` / `viewer`；权限判断沿用 WeKnora 的 `access` 逻辑。
+- [ ] 前端：`/platform/shared-spaces` 列表、创建、加入、设置弹窗。界面文案为"共享空间"。
+- [ ] 部门架构（扩展）：子公司与部门树的服务与接口 `/api/v1/tenants/{tenant_id}/org-units`，表仍为 `org_units`；节点规则（环检测、停用、删除前检查）沿用既有实现。界面名称为"部门架构"。
+- [ ] 部门架构页面位于企业设置下，作为本仓库扩展，在 `design.md` 9.5 列明。
 
 ## 5. 权限（`packages/platform/authz`）
 

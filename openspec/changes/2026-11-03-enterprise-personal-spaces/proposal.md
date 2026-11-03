@@ -22,9 +22,10 @@
 5. **重写 Web 与 API，不在现有实现上调整**：`apps/web` 与空间、登录、组织、权限、设置相关的 `apps/api` 路由按 WeKnora 重写。现有的接口路径、响应结构和页面不作为约束，开发阶段不保留兼容层。
 6. **登录标识改为邮箱加密码**：WeKnora 使用邮箱（`LoginRequest.email`）。本阶段取消手机号登录与手机号字段，决定 2、10 及相关表格中的 `phone` 作废。
 7. **角色使用 WeKnora 的四级角色**：`owner`、`admin`、`contributor`、`viewer`（`tenant_members`，对应 `TenantRole`）。决定 4、7、8、11 中的 `member`、`admin`（作为成员角色）按此替换。
-8. **组织有两层含义**：
-   - WeKnora 的"组织"是跨空间的共享组（邀请码、加入申请、组织内角色 `admin`/`editor`/`viewer`）。它是"组织"页面的主体，按 WeKnora 实现。界面名称为"共享空间"（WeKnora 代码与接口中为 organization，界面不使用"组织"一词）。设置与侧栏中该入口的界面文案为"共享空间"；路由、接口与代码名保持 `organizations`。
-   - 企业内部的子公司与部门树（决定 3、7、9）是本仓库的扩展，放在企业设置的"组织架构"中，并在 `design.md` 的扩展清单中列出。
+8. **WeKnora 的"组织"改名为"共享空间"（偏离严格对齐，2026-11-03 确认）**：
+   - WeKnora 的 `organization` 是跨空间的共享组（邀请码、加入申请、组内角色 `admin`/`editor`/`viewer`）。本仓库统一称为"共享空间"，内部命名为 `shared_space`：表 `shared_spaces`、`shared_space_tenant_members`、`shared_space_join_requests`，共享表的外键列 `shared_space_id`，接口 `/api/v1/shared-spaces`，前端路由 `/platform/shared-spaces`。界面不使用"组织"一词。
+   - 理由：本仓库已有的部门树与 WeKnora 的共享组同样用"组织"一词，名称混用会造成混淆。
+   - 企业内部的子公司与部门树（决定 3、7、9）是本仓库的扩展，界面名称为"部门架构"，数据表仍为 `org_units`、`user_org_units`，并在 `design.md` 9.5 列出。
 9. **沿用的已确认建议**：开发库直接重建（需确认第 3 条的方案 A）；平台管理员只有只读汇总（第 4 条）；部门不继承角色、按人分配并支持按部门批量选人（第 5 条）；企业微信只做登录与绑定，记录 `corp_id`（第 6 条）；注册时暴露邮箱是否已存在，与 WeKnora 一致（第 7 条）；申请理由选填，拒绝后冷却 7 天，成员可以退出，owner 除外（第 8 条）；一人一账号（第 9 条）。
 10. **注册**：个人注册与企业注册都按 WeKnora `POST /auth/register` 的字段（用户名、邮箱、密码），并增加空间类型。不做短信验证码。企业注册开关由平台配置控制。
 

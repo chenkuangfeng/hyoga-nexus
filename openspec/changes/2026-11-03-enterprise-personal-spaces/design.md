@@ -149,7 +149,7 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 
 | 分组 | 分区 |
 | --- | --- |
-| 企业 | 企业信息、组织架构、成员、角色与权限、审计 |
+| 企业 | 企业信息、部门架构、成员、角色与权限、审计 |
 | 账户 | 个人资料、通用、我的记忆、环境变量 |
 | 功能 | 知识库、智能体、工具箱、产物、自动化（按角色显示） |
 | 模型与运行 | 模型管理（企业默认与个人 Key）、Native 运行 |
@@ -164,7 +164,7 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 
 **企业信息（二级）**：企业名称、企业编码（只读）、创建时间、企业微信 `corp_id`（可空，只读展示；本阶段由平台配置）。编辑名称使用对话框（三级）。
 
-**组织架构（二级）**：
+**部门架构（二级）**：
 
 ```
 ┌─────────────────┬──────────────────────────────────────┐
@@ -275,25 +275,27 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 
 ## 9. WeKnora 对应关系（第 1 阶段）
 
-参考版本：WeKnora `e1f9a6166`（`/project/opensource/knowledge-base/WeKnora`）。本节优先于第 1–8 节中与之冲突的表述（登录标识、角色名、手机号），见 `proposal.md` 的"确认结果"。
+参考版本：WeKnora `e1f9a6166`（`/project/opensource/knowledge-base/WeKnora`）。本节优先于第 1–8 节中与之冲突的表述（登录标识、角色名、手机号、组织名），见 `proposal.md` 的"确认结果"。
+
+命名约定：WeKnora 的 `organization`（跨空间共享组）在本仓库统一称为**共享空间**（`shared_space`）。表、接口、路由、代码名都使用 `shared_space`，不沿用 WeKnora 的 `organization`。这是对"严格遵从 WeKnora"的明确偏离，见 9.5。本仓库的部门树沿用 `org_units`，界面名称为"部门架构"。
 
 ### 9.1 前端页面与路由
 
-| WeKnora 路由 | WeKnora 视图 | 本仓库对应 | 阶段 |
-| --- | --- | --- | --- |
-| `/login` | `views/auth/Login.vue` | 邮箱与密码登录；登录后若有多个空间，进入空间选择 | 本阶段 |
-| `/register` | `views/auth/registrationPolicy.ts` 与注册表单 | 个人 / 企业 Tab，字段：用户名、邮箱、密码；企业额外填写空间名称与企业编码 | 本阶段 |
-| `/onboarding/workspace` | `views/auth/WorkspaceOnboarding.vue` | 空间选择与"创建企业 / 加入企业"入口 | 本阶段 |
-| `/join` | 邀请链接落地页 | 邀请链接（`accept-by-token`）与待处理邀请 | 本阶段 |
-| `/platform/tenant` | `views/settings/TenantInfo.vue`、`TenantMembers.vue` | 空间信息（名称、描述、类型）与成员列表、邀请、角色 | 本阶段 |
-| `/platform/settings` | `views/settings/Settings.vue`（`?section=`） | 设置分组，见 9.3 | 本阶段（分组与已有项），其余项为占位 |
-| `/platform/organizations` | `views/organization/OrganizationList.vue`、`OrganizationSettingsModal.vue` | 共享空间列表、创建、按邀请码加入、加入申请、组织设置与成员 | 本阶段 |
-| `/platform/knowledge-bases`、`agents`、`creatChat`、`chat/:id` 等 | 对应业务页 | 菜单项保留，页面为占位 | 后续阶段 |
-| `/platform/system/*` | `views/system/*`（平台管理员） | 只读汇总（企业与组织数量），见 9.4 | 本阶段（只读） |
+| WeKnora 路由（参考） | WeKnora 视图（参考） | 本仓库路由 | 本仓库视图 | 阶段 |
+| --- | --- | --- | --- | --- |
+| `/login` | `views/auth/Login.vue` | `/login` | 邮箱与密码登录；多个空间时进入空间选择 | 本阶段 |
+| `/register` | `views/auth/registrationPolicy.ts` 与注册表单 | `/register` | 个人 / 企业 Tab，字段：用户名、邮箱、密码；企业额外填写空间名称与企业编码 | 本阶段 |
+| `/onboarding/workspace` | `views/auth/WorkspaceOnboarding.vue` | `/onboarding/workspace` | 空间选择，以及"创建企业 / 加入企业"入口 | 本阶段 |
+| `/join` | 邀请链接落地页 | `/join` | 邀请链接（`accept-by-token`）与待处理邀请 | 本阶段 |
+| `/platform/tenant` | `views/settings/TenantInfo.vue`、`TenantMembers.vue` | `/platform/tenant` | 空间信息与成员列表、邀请、角色 | 本阶段 |
+| `/platform/settings` | `views/settings/Settings.vue`（`?section=`） | `/platform/settings` | 设置分组，见 9.3 | 本阶段（分组与已有项），其余项为占位 |
+| `/platform/organizations` | `views/organization/OrganizationList.vue`、`OrganizationSettingsModal.vue` | `/platform/shared-spaces` | `views/shared-space/SharedSpaceList.vue`、`SharedSpaceSettingsModal.vue`：共享空间列表、创建、按邀请码加入、加入申请、共享空间设置与成员 | 本阶段 |
+| `/platform/knowledge-bases`、`agents`、`creatChat`、`chat/:id` 等 | 对应业务页 | 同路径 | 菜单项保留，页面为占位 | 后续阶段 |
+| `/platform/system/*` | `views/system/*`（平台管理员） | `/platform/system` | 只读汇总（企业与共享空间数量），见 9.4 | 本阶段（只读） |
 
 ### 9.2 后端接口
 
-| WeKnora 接口 | 本仓库接口 | 说明 |
+| WeKnora 接口（参考） | 本仓库接口 | 说明 |
 | --- | --- | --- |
 | `POST /auth/register` | `POST /api/v1/auth/register` | 字段 `username`、`email`、`password`；本仓库增加 `space_kind`（`personal` 或 `enterprise`）与企业字段 |
 | `POST /auth/login` | `POST /api/v1/auth/login` | `email`、`password`；返回用户与可选空间列表 |
@@ -304,8 +306,8 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 | `GET/POST /tenants/:id/invitations`、`DELETE .../:inv_id`、`POST /tenants/:id/invite-links` | 同路径 | 邀请与邀请链接 |
 | `GET /me/invitations`、`.../pending-count`、`POST .../accept`、`.../decline`、`accept-by-token` | 同路径 | 用户侧的邀请收件箱 |
 | `GET/POST /tenants/:id/api-keys`、`PUT/DELETE .../:key_id` | 同路径 | 空间 API Key（Owner） |
-| `GET /tenants/:id/audit-log` | 同路径 | 审计（Admin+），与决定 12 的审计要求一致 |
-| `GET/POST /organizations`、`GET /organizations/search`、`GET /organizations/preview/:code`、`POST /organizations/join`、`POST /organizations/join-request`、`POST /organizations/join-by-id`、`GET/PUT/DELETE /organizations/:id`、`POST /organizations/:id/leave`、`POST /organizations/:id/request-upgrade`、`POST /organizations/:id/invite-code` | 同路径 | 跨空间组织，按 WeKnora 的 `OrganizationHandler` 翻译 |
+| `GET /tenants/:id/audit-log` | 同路径 | 审计（Admin+） |
+| `GET/POST /organizations`、`GET /organizations/search`、`GET /organizations/preview/:code`、`POST /organizations/join`、`POST /organizations/join-request`、`POST /organizations/join-by-id`、`GET/PUT/DELETE /organizations/:id`、`POST /organizations/:id/leave`、`POST /organizations/:id/request-upgrade`、`POST /organizations/:id/invite-code` | `GET/POST /api/v1/shared-spaces`、`GET /api/v1/shared-spaces/search`、`GET /api/v1/shared-spaces/preview/:code`、`POST /api/v1/shared-spaces/join`、`POST /api/v1/shared-spaces/join-request`、`POST /api/v1/shared-spaces/join-by-id`、`GET/PUT/DELETE /api/v1/shared-spaces/:id`、`POST /api/v1/shared-spaces/:id/leave`、`POST /api/v1/shared-spaces/:id/request-upgrade`、`POST /api/v1/shared-spaces/:id/invite-code` | 路径与 WeKnora 对应，只把 `organizations` 换成 `shared-spaces`；请求与响应结构按 WeKnora `OrganizationHandler` 翻译 |
 
 所有接口的错误码与错误结构沿用 WeKnora 的 `errors` 包约定，Python 侧映射到 `nexus_platform.errors`。
 
@@ -316,20 +318,23 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 - 常规设置（语言、主题）
 - 个人资料（`UserProfile.vue`）
 - 空间信息（`TenantInfo.vue`）、成员（`TenantMembers.vue`）、API Key
-- 共享空间（WeKnora 的 organization，跨空间共享；界面文案"共享空间"，路由 `/platform/organizations`，接口 `/organizations`）
+- 共享空间（`/platform/shared-spaces`）
+- 部门架构（企业扩展，见 9.5）
 - 审计（企业空间，Admin+）
 
 其余分组（模型、知识库检索、Web 搜索、MCP、沙箱、记忆、Ollama、存储、向量库、解析引擎等）在菜单中保留，本阶段显示占位，由后续阶段实现。
 
 ### 9.4 平台管理员
 
-WeKnora 的 `views/system/*`（用户管理、模型目录、运行队列、审计）属于平台管理员。本阶段只实现只读汇总（企业与组织数量），不实现企业内部结构的修改，对应确认结果第 9 条。
+WeKnora 的 `views/system/*`（用户管理、模型目录、运行队列、审计）属于平台管理员。本阶段只实现只读汇总（企业与共享空间数量），不实现企业内部结构的修改，对应确认结果第 9 条。
 
-### 9.5 与 WeKnora 的差异（扩展与暂缓，需列明）
+### 9.5 与 WeKnora 的差异（扩展、偏离与暂缓，需列明）
 
 | 项 | WeKnora | 本仓库 | 说明 |
 | --- | --- | --- | --- |
-| 组织架构（子公司、部门树） | 无 | 企业设置的"组织架构"页 | 扩展，保留，见 `proposal.md` 确认结果第 8 条 |
+| 跨空间共享组的命名 | `organization`（表、接口、代码、界面"组织"） | `shared_space`（表、接口、代码、界面"共享空间"） | 偏离，用户于 2026-11-03 确认。目的是与部门树区分。同步 WeKnora 上游时需要做名称翻译 |
+| 共享表的外键列 | `organization_id` | `shared_space_id` | 随上一条偏离 |
+| 企业内部的子公司与部门树 | 无 | 企业设置的"部门架构"页，数据表仍为 `org_units`、`user_org_units` | 扩展，保留，见 `proposal.md` 确认结果第 8 条。部门只表示位置，不参与权限判断 |
 | 成员来源 `source` | 无 | `manual`、`invitation`、`application` | 扩展，用于审计 |
 | 企业微信绑定 | 无 | 登录与绑定，记录 `corp_id` | 扩展，沿用本仓库 `auth/wecom.py` |
 | 更新空间的方法 | `PUT /tenants/current`（部分字段） | `PATCH` | 为与本仓库既有的 PATCH 风格一致，待确认；若要严格一致改为 `PUT` |
@@ -337,4 +342,4 @@ WeKnora 的 `views/system/*`（用户管理、模型目录、运行队列、审�
 
 ### 9.6 验收方式
 
-每个页面完成后，与 WeKnora 对应页面逐项比对：页面结构、交互、文案（中英文）、接口的请求与响应结构、错误码。比对结果记录在 `tasks.md` 的对应分组末尾。
+每个页面完成后，与 WeKnora 对应页面逐项比对：页面结构、交互、文案（中英文）、接口的请求与响应结构、错误码。比对时，命名按 9.5 的偏离规则换算。比对结果记录在 `tasks.md` 的对应分组末尾。
