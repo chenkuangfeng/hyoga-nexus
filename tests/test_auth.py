@@ -60,22 +60,25 @@ def client(database, deployment_config):
 def _bootstrap_owner(factory, username="owner-one"):
     with factory() as db:
         return accounts.create_owner_account(db, tenant_name="Acme", username=username,
+                                             email=f"{username}@example.com",
                                              display_name="Owner", password=PASSWORD)
 
 
 def _login(client, username, password=PASSWORD):
-    return client.post("/api/v1/auth/login", json={"username": username, "password": password}, headers=CSRF)
+    """Sign in by email. `username` is the local part of the test address, see `_bootstrap_owner`."""
+    return client.post("/api/v1/auth/login", json={"email": f"{username}@example.com", "password": password})
 
 
 def test_password_login_sets_http_only_cookie_and_logout_revokes(client):
     tenant_id = _bootstrap_owner(client.factory)
     assert client.get("/api/v1/tenants").status_code == 401
     response = _login(client, "owner-one")
-    assert response.status_code == 204, response.text
+    assert response.status_code == 200, response.text
     cookie = response.headers["set-cookie"]
     assert "nexus_session=" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie
+    assert response.json()["memberships"][0]["id"] == str(tenant_id)
     me = client.get("/api/v1/auth/me")
-    assert me.status_code == 200 and me.json()["providers"] == ["password"]
+    assert me.status_code == 200 and me.json()["data"]["user"]["username"] == "owner-one"
     assert client.get("/api/v1/tenants").json()[0]["id"] == str(tenant_id)
     assert client.post("/api/v1/tenants", json={"name": "No header"}).status_code == 403
     assert client.post("/api/v1/auth/logout").status_code == 403
@@ -88,7 +91,7 @@ def test_failures_are_generic_and_lock_after_five_attempts(client):
     unknown = _login(client, "nobody-here", PASSWORD)
     wrong = _login(client, "owner-one", "wrong-password-value")
     assert unknown.status_code == wrong.status_code == 401
-    assert unknown.json()["error"]["message"] == wrong.json()["error"]["message"] == "用户名或密码错误"
+    assert unknown.json()["error"]["message"] == wrong.json()["error"]["message"] == "邮箱或密码错误"
     for _ in range(4):
         _login(client, "owner-one", "wrong-password-value")
     locked = _login(client, "owner-one", PASSWORD)
@@ -110,11 +113,11 @@ def test_password_change_revokes_sessions_and_requires_current_password(client):
     _login(client, "owner-one")
     bad = client.post("/api/v1/auth/password", json={"current_password": "not-the-password", "new_password": "brand-new-password"}, headers=CSRF)
     assert bad.status_code == 401
-    ok = client.post("/api/v1/auth/password", json={"current_password": PASSWORD, "new_password": "brand-new-password"}, headers=CSRF)
+    ok = client.post("/api/v1/auth/change-password", json={"current_password": PASSWORD, "new_password": "brand-new-password"}, headers=CSRF)
     assert ok.status_code == 204, ok.text
     assert client.get("/api/v1/auth/me").status_code == 401
     assert _login(client, "owner-one", PASSWORD).status_code == 401
-    assert _login(client, "owner-one", "brand-new-password").status_code == 204
+    assert _login(client, "owner-one", "brand-new-password").status_code == 200
 
 
 def test_admin_creates_member_account_and_member_logs_in(client):
@@ -122,15 +125,23 @@ def test_admin_creates_member_account_and_member_logs_in(client):
     _login(client, "owner-one")
     tenant_id = client.get("/api/v1/tenants").json()[0]["id"]
     created = client.post(f"/api/v1/tenants/{tenant_id}/accounts", headers=CSRF,
-                          json={"username": "Staff.One", "display_name": "Staff", "password": "staff-password-1", "role": "contributor"})
+                          json={"username": "Staff.One", "email": "staff.one@example.com", "display_name": "Staff",
+                                "password": "staff-password-1", "role": "contributor"})
     assert created.status_code == 201, created.text
     assert created.json()["username"] == "staff.one"
     duplicate = client.post(f"/api/v1/tenants/{tenant_id}/accounts", headers=CSRF,
-                            json={"username": "staff.one", "password": "another-password-1"})
+                            json={"username": "staff.one", "email": "other@example.com", "password": "another-password-1"})
     assert duplicate.status_code == 409
     client.post("/api/v1/auth/logout", headers=CSRF)
-    assert _login(client, "staff.one", "staff-password-1").status_code == 204
+    signed_in = client.post("/api/v1/auth/login", json={"email": "staff.one@example.com", "password": "staff-password-1"})
+    assert signed_in.status_code == 200 and signed_in.json()["user"]["must_change_password"] is True
+    # Until the initial password is changed, only the password and session routes answer.
     assert client.get(f"/api/v1/tenants/{tenant_id}/roles").status_code == 403
+    assert client.get("/api/v1/auth/me").status_code == 200
+    changed = client.post("/api/v1/auth/change-password", headers=CSRF,
+                          json={"current_password": "staff-password-1", "new_password": "staff-password-2"})
+    assert changed.status_code == 204
+    assert _login(client, "staff.one", "staff-password-2").status_code == 200
 
 
 def test_wecom_login_requires_binding_and_reusing_state_fails(client):
@@ -161,7 +172,7 @@ def test_wecom_bind_then_login_by_qr(client):
     signed_in = client.get(f"/api/v1/auth/wecom/callback?code=code-zhang&state={login_state}")
     assert signed_in.status_code == 303 and signed_in.headers["location"] == "/chat"
     assert "nexus_session=" in signed_in.headers["set-cookie"]
-    assert client.get("/api/v1/auth/me").json()["providers"] == ["password", "wecom"]
+    assert client.get("/api/v1/auth/me").json()["data"]["user"]["providers"] == ["password", "wecom"]
 
 
 def test_wecom_identity_cannot_bind_to_two_users(client):
@@ -171,7 +182,7 @@ def test_wecom_identity_cannot_bind_to_two_users(client):
     client.get(f"/api/v1/auth/wecom/callback?code=code-zhang&state={state}")
     client.post("/api/v1/auth/logout", headers=CSRF)
     with client.factory() as db:
-        tenant_id = accounts.create_owner_account(db, tenant_name="Other", username="owner-two",
+        tenant_id = accounts.create_owner_account(db, tenant_name="Other", username="owner-two", email="owner-two@example.com",
                                                   display_name="Two", password=PASSWORD)
     _login(client, "owner-two")
     state = parse_qs(urlparse(client.post("/api/v1/auth/wecom/bind/start", headers=CSRF).json()["authorize_url"]).query)["state"][0]
@@ -193,16 +204,16 @@ def test_expired_session_is_rejected(client):
 
 def test_owner_bootstrap_rejects_duplicate_username(database):
     with database() as db:
-        accounts.create_owner_account(db, tenant_name="A", username="dup-user", display_name="", password=PASSWORD)
+        accounts.create_owner_account(db, tenant_name="A", username="dup-user", email="dup@example.com", display_name="", password=PASSWORD)
     with database() as db:
         with pytest.raises(Conflict):
-            accounts.create_owner_account(db, tenant_name="B", username="dup-user", display_name="", password=PASSWORD)
+            accounts.create_owner_account(db, tenant_name="B", username="dup-user", email="dup2@example.com", display_name="", password=PASSWORD)
 
 
 def test_short_password_rejected_without_storing_anything(database):
     with database() as db:
         with pytest.raises(ValueError):
-            accounts.create_owner_account(db, tenant_name="C", username="short-pass", display_name="", password="short")
+            accounts.create_owner_account(db, tenant_name="C", username="short-pass", email="short@example.com", display_name="", password="short")
 
 
 def test_password_hash_roundtrip_and_malformed_values():

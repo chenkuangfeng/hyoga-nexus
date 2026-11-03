@@ -57,6 +57,12 @@ const router = createRouter({
     },
     // Embed chat is a separate entry (embed.html + embed-main.ts), not this SPA.
     {
+      path: "/auth/change-password",
+      name: "changePassword",
+      component: () => import("../views/auth/ChangePassword.vue"),
+      meta: { requiresAuth: true, requiresInit: false }
+    },
+    {
       path: "/register",
       name: "registerByInvite",
       // Share-link landing page reuses the Login form: the same Vue

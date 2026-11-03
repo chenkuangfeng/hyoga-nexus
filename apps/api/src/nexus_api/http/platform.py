@@ -15,6 +15,7 @@ from nexus_core.platform import Principal, TenantRole
 from nexus_platform.agents import service as agents
 from nexus_platform.memory import snapshots
 from nexus_platform.agents.access import require_agent_permission, set_agent_grants, visible_agent_ids
+from nexus_platform.errors import NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models import service as models
 from nexus_platform.models.credentials import create_credential_reference
@@ -35,7 +36,7 @@ from nexus_platform.authz import resources as authz
 from nexus_platform.authz.audit import audit
 from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.permissions import require_api_permission
-from nexus_api.dependencies.platform import get_database_session, get_principal
+from nexus_api.dependencies.platform import get_database_session, get_principal, get_tenant_header
 from nexus_api.schemas.platform import (
     InputResponse,
     AgentDraftInput,
@@ -60,6 +61,7 @@ from nexus_api.schemas.platform import (
     MemorySnapshotView,
     SessionView,
     TenantCreate,
+    TenantUpdate,
     TenantView,
 )
 
@@ -74,6 +76,33 @@ def create_tenant(
 ):
     row = tenants.create_tenant(db, principal, body.name)
     return tenant_view(row, "owner")
+
+
+@router.get("/tenants/current", response_model=TenantView)
+def get_current_tenant(
+    tenant_id: UUID | None = Depends(get_tenant_header),
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """The space named by `X-Tenant-ID`. Membership is required; a missing header is a 404."""
+    if tenant_id is None:
+        raise NotFound("No current space was selected")
+    row, role = tenants.current_space(db, principal, tenant_id)
+    return tenant_view(row, role)
+
+
+@router.patch("/tenants/current", response_model=TenantView)
+def update_current_tenant(
+    body: TenantUpdate,
+    tenant_id: UUID | None = Depends(get_tenant_header),
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    if tenant_id is None:
+        raise NotFound("No current space was selected")
+    row = tenants.update_space(db, principal, tenant_id, name=body.name)
+    _, role = tenants.current_space(db, principal, tenant_id)
+    return tenant_view(row, role)
 
 
 @router.get("/tenants", response_model=list[TenantView])
@@ -542,7 +571,7 @@ def list_audit_records(
 
 
 def tenant_view(row, role: str) -> TenantView:
-    return TenantView(id=row.id, name=row.name, role=role, status=row.status, created_at=row.created_at)
+    return TenantView(id=row.id, name=row.name, kind=row.kind, role=role, status=row.status, created_at=row.created_at)
 
 
 def model_profile_view(profile, version) -> ModelProfileView:

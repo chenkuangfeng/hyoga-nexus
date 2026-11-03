@@ -547,6 +547,13 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
   // identical — `active_tenant` is the tenant whose ID is encoded in the
   // JWT, defaulting to the user's home tenant on a fresh login.
   const activeTenant = response.active_tenant || response.tenant
+  if (response.user && response.token && response.user.must_change_password) {
+    // Temporary password: keep the token only long enough to change the password, then sign in again.
+    authStore.setUser(userInfoFromApi(response.user, ''))
+    authStore.setToken(response.token)
+    router.replace('/auth/change-password')
+    return
+  }
   if (response.user && response.token) {
     // user.tenant_id must be the user's HOME tenant (the immutable row
     // on the users table); useHomeTenant() and the home-badge logic both

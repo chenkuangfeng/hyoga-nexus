@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, TenantRole, new_id, utc_now
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.authz.audit import audit
-from nexus_platform.orgs.access import membership_is_active
+from nexus_platform.orgs.access import is_space_manager, membership_is_active
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.persistence.models import MembershipRecord, TenantRecord
@@ -67,6 +67,35 @@ def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRec
             .order_by(TenantRecord.created_at)
         ).all()
         return [(tenant, membership.role) for tenant, membership in rows if membership_is_active(session, membership)]
+
+
+def current_space(session: Session, principal: Principal, tenant_id: UUID) -> tuple[TenantRecord, str]:
+    """The space and the caller's role in it. Non-members get NotFound, so a space id is not disclosed."""
+    with session.begin():
+        actor = resolve_user(session, principal)
+        tenant = require_tenant(session, tenant_id)
+        membership = require_membership(session, tenant_id, actor.id)
+        return tenant, membership.role
+
+
+def update_space(session: Session, principal: Principal, tenant_id: UUID, *, name: str) -> TenantRecord:
+    """Rename a space. Owners and admins only; the name is 1-160 characters after trimming."""
+    name = name.strip()
+    if not name or len(name) > 160:
+        raise ValueError("Space name must be 1-160 characters")
+    now = utc_now()
+    with session.begin():
+        actor = resolve_user(session, principal)
+        tenant = lock_tenant(session, tenant_id)
+        require_membership(session, tenant_id, actor.id)
+        if not is_space_manager(session, tenant_id, actor.id):
+            raise Forbidden("Only a space owner or admin can change the space")
+        previous = tenant.name
+        tenant.name = name
+        tenant.updated_at = now
+        audit(session, tenant_id, actor.id, "tenant.updated", "tenant", str(tenant_id),
+              {"name": {"from": previous, "to": name}})
+    return tenant
 
 
 def add_member(

@@ -51,6 +51,8 @@ class AuthFileSettings:
     mode: str | None = None
     dev_user_id: str | None = None
     cookie_secure: bool = True
+    # `[auth].registration_enabled`: when false, self-service sign-up is refused (invitations still work).
+    registration_enabled: bool = True
 
 
 def auth_settings(path: Path | None = None) -> AuthFileSettings:
@@ -74,7 +76,11 @@ def auth_settings(path: Path | None = None) -> AuthFileSettings:
     cookie_secure = values.get("cookie_secure", True)
     if not isinstance(cookie_secure, bool):
         raise DatabaseConfigurationError(f"{_FILE} [auth].cookie_secure must be true or false")
-    return AuthFileSettings(mode=mode, dev_user_id=dev_user_id, cookie_secure=cookie_secure)
+    registration_enabled = values.get("registration_enabled", True)
+    if not isinstance(registration_enabled, bool):
+        raise DatabaseConfigurationError(f"{_FILE} [auth].registration_enabled must be true or false")
+    return AuthFileSettings(mode=mode, dev_user_id=dev_user_id, cookie_secure=cookie_secure,
+                            registration_enabled=registration_enabled)
 
 
 #: Default log level when ``[logging].level`` is absent.

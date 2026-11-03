@@ -1,4 +1,15 @@
 export default {
+  changePassword: {
+    title: 'Change your initial password',
+    description: 'The password you signed in with is temporary. Change it before you continue. You will sign in again afterwards.',
+    current: 'Current password',
+    next: 'New password (at least 10 characters)',
+    confirm: 'Confirm new password',
+    mismatch: 'The two new passwords do not match',
+    submit: 'Save and sign in again',
+    success: 'Password changed. Please sign in again.',
+    failed: 'Failed to change the password',
+  },
   planned: {
     title: 'Not available yet',
     body: 'This page belongs to a later phase. Only the menu entry exists in this version and it is not connected to the Nexus API yet.',

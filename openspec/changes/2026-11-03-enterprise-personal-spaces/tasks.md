@@ -31,12 +31,17 @@
 
 ## 2. 注册、登录与空间（WeKnora `auth.go`、`tenant.go`）
 
-- [ ] `POST /auth/register`：用户名、邮箱、密码，`space_kind` 决定创建个人空间或企业空间。企业注册需要企业名称与企业编码（唯一）。注册开关由配置控制。
-- [ ] `POST /auth/login`：邮箱与密码；返回用户与可选空间列表；统一失败信息。
-- [ ] `POST /auth/switch-tenant`：切换空间。
-- [ ] `GET /auth/me`、`PUT /auth/me/preferences`、`POST /auth/change-password`；首次登录改密时只允许改密与退出。
-- [ ] `GET /tenants`、`POST /tenants`、`GET /tenants/current`、`PATCH /tenants/current`（差异见 `design.md` 9.5）。
-- [ ] 前端：登录页、注册页（个人 / 企业 Tab）、空间选择页（`/onboarding/workspace`）、邀请落地页（`/join`）、首次改密页。
+- [x] `POST /api/v1/auth/register`：用户名、邮箱、密码，`space_kind`（默认 `personal`）决定创建个人空间或企业空间。企业注册需要企业名称与企业编码（唯一，`tenants.code`）。注册开关为 `[auth].registration_enabled`，关闭时返回 403。
+- [x] `POST /api/v1/auth/login`：邮箱与密码；返回 `user`、`memberships`、默认空间 `tenant`（个人空间优先）与 `token`；失败信息统一，连续 5 次锁定 15 分钟。
+- [x] `POST /api/v1/auth/switch-tenant`：校验成员身份后返回空间。与设计稿 9.2 的差异见 `design.md` 9.5：令牌不变，空间由请求头 `X-Tenant-ID` 逐次指定并校验成员身份。
+- [x] `GET /api/v1/auth/me`、`POST /api/v1/auth/change-password`（`/auth/password` 作为别名保留）。`must_change_password` 为真时，除 `/auth/me`、退出与改密外的接口返回 403。
+- [ ] `PUT /api/v1/auth/me/preferences` 未实现（需要偏好存储，留到后续）。
+- [x] `GET /api/v1/tenants/current`、`PATCH /api/v1/tenants/current`（仅 owner、admin 可改名）；`GET /api/v1/tenants`、`POST /api/v1/tenants` 沿用。
+- [x] Bearer 令牌：`Authorization: Bearer <token>`，无需 CSRF 头；Cookie 登录仍保留（企业微信回调使用）。
+- [x] 前端：改初始密码页（`/auth/change-password`），登录后若需改密则跳转。
+- [ ] 前端：注册页的个人 / 企业 Tab、空间选择页（`/onboarding/workspace`）、邀请落地页（`/join`）仍是 WeKnora 复制版的原样，尚未按 Nexus 接口调整。
+- [ ] 前端：`/auth/config`、`/auth/oidc/*`、`/auth/auto-setup` 等 WeKnora 启动接口在本仓库尚未实现，启动时会返回 404。
+- 实施说明（2026-11-03）：测试 `tests/test_auth.py`（改为邮箱登录，覆盖改密门禁）与 `tests/test_registration_spaces.py`（注册两类空间、编码唯一、注册开关、Bearer、空间选择与改名）。全量 pytest 通过。前端仅做语法检查（本机构建内存不足，以 CI 为准）。
 
 ## 3. 成员、邀请与角色（WeKnora `tenant_member.go`、`tenant_invitation`）
 

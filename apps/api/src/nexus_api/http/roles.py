@@ -104,7 +104,7 @@ def create_account(tenant_id: UUID, body: AccountCreate, principal: Principal = 
                    db=Depends(get_database_session)):
     """Create a password account for a member of this tenant (members:manage). Password is write-only."""
     user = accounts.create_password_account(
-        db, principal, tenant_id, username=body.username, display_name=body.display_name,
+        db, principal, tenant_id, username=body.username, email=body.email, display_name=body.display_name,
         password=body.password, role=TenantRole(body.role),
     )
     return AccountView(user_id=user.id, username=body.username.strip().lower(), role=body.role)

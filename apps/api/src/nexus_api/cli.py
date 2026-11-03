@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     owner = commands.add_parser("create-owner", help="create a tenant and its first owner account")
     owner.add_argument("--tenant", required=True)
     owner.add_argument("--username", required=True)
+    owner.add_argument("--email", required=True, help="sign-in email address of the owner")
     owner.add_argument("--display-name", default="")
     admin = commands.add_parser("set-platform-admin", help="grant or revoke the platform admin flag")
     admin.add_argument("--username", required=True)
@@ -48,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with session_factory(engine)() as db:
             tenant_id = create_owner_account(db, tenant_name=args.tenant, username=args.username,
-                                             display_name=args.display_name, password=password)
+                                             email=args.email, display_name=args.display_name, password=password)
     except ValueError as exc:
         print(f"Invalid input: {exc}", file=sys.stderr)
         return 2

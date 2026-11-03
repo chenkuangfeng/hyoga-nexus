@@ -61,7 +61,7 @@
    - 在 `configs/nexus.toml` 的 `[auth]` 中设置 `mode = "development"`（仅用于本机，API 绑定 `127.0.0.1`）。
    - 在 `[security]` 中设置 `credential_encryption_key`：保存模型 Key 时需要，API 与 worker 必须使用同一个值（Fernet 格式）。
 4. **升级数据库到最新版本**：`uv run alembic -c alembic.ini upgrade head`（每次拉取到新迁移后都要执行一次）
-5. **创建首个 owner 账号（只需一次）**：`uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice --display-name "Alice"`，密码以隐藏输入方式输入。
+5. **创建首个 owner 账号（只需一次）**：`uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice --email alice@example.com --display-name "Alice"`，密码以隐藏输入方式输入。
 6. **启动 API**（终端 1）：`uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1`
 7. **启动 worker**（终端 2，同样设置第 3 步的环境变量）：`uv run python -m nexus_worker`
 8. **启动前端**（终端 3）：`corepack enable`（一次性），然后 `cd apps/web`、`pnpm install --frozen-lockfile`、`pnpm dev`，访问 Vite 输出的地址。

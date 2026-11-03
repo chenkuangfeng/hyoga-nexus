@@ -1,4 +1,15 @@
 export default {
+  changePassword: {
+    title: '修改初始密码',
+    description: '首次登录或管理员设置的密码为临时密码，请先修改后再使用。修改后需要重新登录。',
+    current: '当前密码',
+    next: '新密码（至少 10 位）',
+    confirm: '确认新密码',
+    mismatch: '两次输入的新密码不一致',
+    submit: '保存并重新登录',
+    success: '密码已修改，请重新登录',
+    failed: '密码修改失败',
+  },
   planned: {
     title: '该功能尚未接入',
     body: '此页面属于后续阶段，当前版本只保留菜单入口，尚未对接 Nexus 接口。',

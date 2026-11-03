@@ -11,9 +11,14 @@ class TenantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
 
 
+class TenantUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+
+
 class TenantView(BaseModel):
     id: UUID
     name: str
+    kind: str = "enterprise"
     role: str
     status: str
     created_at: datetime
@@ -271,6 +276,7 @@ class AgentGrantRowView(BaseModel):
 
 class AccountCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64)
+    email: str = Field(min_length=3, max_length=255)
     display_name: str = Field(default="", max_length=160)
     password: str = Field(min_length=10, max_length=256)
     role: Literal["admin", "contributor", "viewer"] = "contributor"

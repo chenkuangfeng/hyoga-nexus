@@ -9,7 +9,7 @@ FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型�
 - 首个 owner 账号通过运维命令创建，密码以隐藏输入方式读取，不接受命令行参数或环境变量：
 
   ```bash
-  uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice --display-name "Alice"
+  uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice --email alice@example.com --display-name "Alice"
   ```
 
   该命令当前未注册为 pyproject 脚本入口，需通过 `python -m` 调用。之后的成员账号由管理员在“角色与权限”页面创建。

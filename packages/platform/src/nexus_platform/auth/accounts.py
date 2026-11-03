@@ -1,8 +1,10 @@
-"""Password accounts: admin-created accounts, password login with lockout, and self-service password change.
+"""Password accounts: self-service registration, email login with lockout, password change and admin-created accounts.
 
-A password account is a user with an identity `(provider='password', scope='', external_id=username)`
-and a `local_credentials` row. Creating an account is a tenant administration action and also
-adds the new user to that tenant with the chosen role.
+A password account is a user with an identity `(provider='password', scope='', external_id=username)`,
+a unique `users.email` and a `local_credentials` row. Registration creates the account together with its
+first space: a personal space (one member) or an enterprise space (owner, enterprise code required).
+Creating an account for someone else is a tenant administration action and adds the new user to that
+tenant with the chosen role.
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from nexus_platform.identity.service import require_membership, require_tenant, 
 from nexus_platform.persistence.models import (
     LocalCredentialRecord,
     MembershipRecord,
+    TenantRecord,
     UserIdentityRecord,
     UserRecord,
 )
@@ -31,7 +34,10 @@ PASSWORD_PROVIDER = "password"
 MAX_FAILED_ATTEMPTS = 5
 LOCK_DURATION = timedelta(minutes=15)
 _USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
-GENERIC_FAILURE = "用户名或密码错误"
+_EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
+_COMPANY_CODE = re.compile(r"^[a-z0-9][a-z0-9_-]{2,31}$")
+SPACE_KINDS = frozenset({"personal", "enterprise"})
+GENERIC_FAILURE = "邮箱或密码错误"
 
 
 def normalize_username(value: str) -> str:
@@ -41,14 +47,97 @@ def normalize_username(value: str) -> str:
     return username
 
 
+def normalize_email(value: str) -> str:
+    address = (value or "").strip().lower()
+    if len(address) > 255 or not _EMAIL.fullmatch(address):
+        raise ValueError("Email address is not valid")
+    return address
+
+
+def normalize_company_code(value: str) -> str:
+    code = (value or "").strip().lower()
+    if not _COMPANY_CODE.fullmatch(code):
+        raise ValueError("Company code must be 3-32 characters: lowercase letters, digits, dash or underscore")
+    return code
+
+
+def _password_identity_taken(session: Session, username: str) -> bool:
+    return session.scalar(select(UserIdentityRecord.id).where(
+        UserIdentityRecord.provider == PASSWORD_PROVIDER,
+        UserIdentityRecord.scope == "",
+        UserIdentityRecord.external_id == username,
+    )) is not None
+
+
+def register(
+    session: Session, *, username: str, email: str, password: str, space_kind: str,
+    space_name: str = "", company_code: str = "", display_name: str = "", allow_registration: bool = True,
+) -> tuple[UserRecord, TenantRecord]:
+    """Self-service sign-up. Creates the account and its first space; returns (user, space).
+
+    `space_kind` `personal` creates a one-member space named after the account. `enterprise` needs a
+    space name and a company code that no other space uses; the registrant becomes its owner. When
+    `allow_registration` is false (`[auth].registration_enabled`), the call is refused before any write.
+    """
+    if not allow_registration:
+        raise Forbidden("注册已关闭，请联系管理员")
+    username = normalize_username(username)
+    address = normalize_email(email)
+    validate_new_password(password)
+    if space_kind not in SPACE_KINDS:
+        raise ValueError("Space kind must be personal or enterprise")
+    code: str | None = None
+    if space_kind == "enterprise":
+        if not space_name.strip():
+            raise ValueError("Enterprise name must not be empty")
+        code = normalize_company_code(company_code)
+    now = utc_now()
+    with session.begin():
+        if _password_identity_taken(session, username):
+            raise Conflict("用户名已被占用")
+        if session.scalar(select(UserRecord.id).where(UserRecord.email == address)) is not None:
+            raise Conflict("邮箱已被注册")
+        if code is not None and session.scalar(select(TenantRecord.id).where(TenantRecord.code == code)) is not None:
+            raise Conflict("企业编码已被占用")
+        user = UserRecord(id=new_id(), display_name=display_name.strip() or username, email=address,
+                          status="active", must_change_password=False, created_at=now)
+        session.add(user)
+        session.flush()
+        session.add(UserIdentityRecord(
+            id=new_id(), user_id=user.id, provider=PASSWORD_PROVIDER, scope="", external_id=username,
+            verified_at=now, created_at=now,
+        ))
+        session.add(LocalCredentialRecord(
+            user_id=user.id, password_hash=hash_password(password), failed_attempts=0, updated_at=now,
+        ))
+        if space_kind == "personal":
+            name = f"{user.display_name}的个人空间"
+        else:
+            name = space_name.strip()
+        space = TenantRecord(id=new_id(), name=name[:160], kind=space_kind, code=code, status="active",
+                             created_by=user.id, created_at=now, updated_at=now)
+        session.add(space)
+        session.flush()
+        session.add(MembershipRecord(
+            tenant_id=space.id, user_id=user.id, role=TenantRole.OWNER.value, status="active", joined_at=now,
+        ))
+        audit(session, space.id, user.id, "tenant.created", "tenant", str(space.id), {"kind": space_kind})
+    return user, space
+
+
 def create_password_account(
     session: Session, principal: Principal, tenant_id: UUID, *,
-    username: str, display_name: str, password: str, role: TenantRole,
+    username: str, email: str, display_name: str, password: str, role: TenantRole,
 ) -> UserRecord:
-    """Create a password account and add it to the tenant. The caller needs `members:manage`."""
+    """Create a password account for someone else and add it to the tenant. The caller needs `members:manage`.
+
+    The account signs in with `email`, which must not be registered yet. The initial password is
+    temporary: `must_change_password` is set, so the user changes it on first sign-in.
+    """
     if role == TenantRole.OWNER:
         raise Forbidden("Owner accounts cannot be created this way")
     username = normalize_username(username)
+    address = normalize_email(email)
     validate_new_password(password)
     display = display_name.strip() or username
     now = utc_now()
@@ -57,13 +146,12 @@ def create_password_account(
         require_tenant(session, tenant_id)
         require_membership(session, tenant_id, actor.id)
         require_api_permission(session, tenant_id, actor.id, "members:manage")
-        if session.scalar(select(UserIdentityRecord.id).where(
-            UserIdentityRecord.provider == PASSWORD_PROVIDER,
-            UserIdentityRecord.scope == "",
-            UserIdentityRecord.external_id == username,
-        )) is not None:
+        if _password_identity_taken(session, username):
             raise Conflict("Username is already taken")
-        user = UserRecord(id=new_id(), display_name=display, status="active", created_at=now)
+        if session.scalar(select(UserRecord.id).where(UserRecord.email == address)) is not None:
+            raise Conflict("Email is already registered")
+        user = UserRecord(id=new_id(), display_name=display, email=address, status="active",
+                          must_change_password=True, created_at=now)
         session.add(user)
         session.flush()
         session.add(UserIdentityRecord(
@@ -81,29 +169,29 @@ def create_password_account(
     return user
 
 
-def authenticate_password(session: Session, username: str, password: str) -> tuple[str, object, UUID]:
-    """Verify a password and open a session. Returns (raw token, expiry, user id).
+def authenticate_email(session: Session, email: str, password: str) -> tuple[str, object, UUID]:
+    """Sign in with email and password. Returns (raw token, expiry, user id).
 
-    Unknown users, wrong passwords and disabled accounts share one generic message; a lock says
-    the account is temporarily locked. Failure counters are committed before the error is raised,
-    so the lock survives the failed request.
+    Unknown emails, wrong passwords and disabled accounts share one generic message; a lock says the
+    account is temporarily locked. Failure counters are committed before the error is raised, so the
+    lock survives the failed request.
     """
     try:
-        name = normalize_username(username)
+        address = normalize_email(email)
     except ValueError:
         verify_password(password[:256], DUMMY_HASH)
         raise Unauthenticated(GENERIC_FAILURE) from None
     now = utc_now()
     error: str | None = None
     with session.begin():
+        user = session.scalar(select(UserRecord).where(UserRecord.email == address))
         identity = session.scalar(select(UserIdentityRecord).where(
+            UserIdentityRecord.user_id == user.id,
             UserIdentityRecord.provider == PASSWORD_PROVIDER,
             UserIdentityRecord.scope == "",
-            UserIdentityRecord.external_id == name,
-        ))
-        credential = session.get(LocalCredentialRecord, identity.user_id) if identity else None
-        user = session.get(UserRecord, identity.user_id) if identity else None
-        if identity is None or credential is None or user is None or user.status != "active":
+        )) if user is not None else None
+        credential = session.get(LocalCredentialRecord, user.id) if user is not None else None
+        if user is None or identity is None or credential is None or user.status != "active":
             verify_password(password[:256], DUMMY_HASH)
             error = GENERIC_FAILURE
         elif credential.locked_until and aware(credential.locked_until) > now:
@@ -135,30 +223,32 @@ def change_password(session: Session, principal: Principal, current: str, new: s
         credential.failed_attempts = 0
         credential.locked_until = None
         credential.updated_at = utc_now()
+        user.must_change_password = False
         revoke_user_sessions(session, user.id)
 
 
-def create_owner_account(session: Session, *, tenant_name: str, username: str, display_name: str,
+def create_owner_account(session: Session, *, tenant_name: str, username: str, email: str, display_name: str,
                          password: str) -> UUID:
-    """Operator bootstrap: create a tenant and its first owner with a password account.
+    """Operator bootstrap: create an enterprise space and its first owner with a password account.
 
-    Only the operator CLI calls this; there is no HTTP path to create owners. Returns the tenant id.
+    Only the operator CLI calls this; there is no HTTP path to create owners. The email is required
+    because sign-in uses it. Returns the space id.
     """
     from nexus_platform.tenants.service import create_tenant
 
     username = normalize_username(username)
+    address = normalize_email(email)
     validate_new_password(password)
     if not tenant_name.strip():
         raise ValueError("Tenant name must not be empty")
     now = utc_now()
     with session.begin():
-        if session.scalar(select(UserIdentityRecord.id).where(
-            UserIdentityRecord.provider == PASSWORD_PROVIDER,
-            UserIdentityRecord.scope == "",
-            UserIdentityRecord.external_id == username,
-        )) is not None:
+        if _password_identity_taken(session, username):
             raise Conflict("Username is already taken")
-        user = UserRecord(id=new_id(), display_name=display_name.strip() or username, status="active", created_at=now)
+        if session.scalar(select(UserRecord.id).where(UserRecord.email == address)) is not None:
+            raise Conflict("Email is already registered")
+        user = UserRecord(id=new_id(), display_name=display_name.strip() or username, email=address,
+                          status="active", must_change_password=False, created_at=now)
         session.add(user)
         session.flush()
         identity = UserIdentityRecord(
