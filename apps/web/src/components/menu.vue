@@ -3,7 +3,8 @@
         <!-- 展开时：Logo + 搜索/折叠按钮同行 -->
         <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
             <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
-                <img class="logo" src="@/assets/img/weknora.png" alt="">
+                <!-- 项目名字标：文字而非图片，便于跟随主题色；class 不用 .logo，避免套用深色模式的反色滤镜 -->
+                <span class="logo-wordmark" aria-label="Nexus">Nexus</span>
                 <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
             </div>
             <div class="logo_actions">
@@ -1411,9 +1412,14 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
         min-width: 0;
         overflow: hidden;
 
-        .logo {
-            width: 108px;
-            height: auto;
+        .logo-wordmark {
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            color: var(--td-brand-color);
+            white-space: nowrap;
+            user-select: none;
         }
 
         .lite-badge {
