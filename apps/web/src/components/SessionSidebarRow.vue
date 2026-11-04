@@ -33,7 +33,7 @@
       <span v-else-if="item.parent_session_id" class="session-row-badge session-fork-indicator" role="img" aria-label="由其他会话分叉而来">
         <t-icon name="git-branch" class="submenu_fork_icon" />
       </span>
-      <t-popup v-if="!batchMode" v-model:visible="menuOpen" :overlay-class-name="menuOverlayClass" trigger="click" destroy-on-close
+      <t-popup v-if="!batchMode && menuOptions.length > 0" v-model:visible="menuOpen" :overlay-class-name="menuOverlayClass" trigger="click" destroy-on-close
         placement="bottom-right" @visible-change="onMenuVisibleChange">
         <button type="button" class="menu-more-wrap" :aria-label="t('chatHeader.moreActions')" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop>
           <t-icon name="ellipsis" class="menu-more" />

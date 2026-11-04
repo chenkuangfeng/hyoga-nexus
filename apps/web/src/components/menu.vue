@@ -141,7 +141,7 @@
                      (instead of embedding it in the first date group, which
                      appears/disappears while a bucket loads) prevents the
                      top-right control from jumping when switching session type. -->
-                <div v-if="showSessionSourceFilter && !batchMode" class="session-list-scope-header">
+                <div v-if="showSessionSourceFilter" class="session-list-scope-header">
                     <SessionSourceFilter inline :emphasized="sessionScopeFilterPinned" :sources="sessionSourceOptions"
                         :current="activeSessionBucketKey" @select="switchSessionBucket" />
                 </div>
@@ -176,21 +176,18 @@
                             </div>
                             <div v-for="subitem in group.items" :key="subitem.id"
                                 class="submenu_item_p session-chat-row" :data-session-id="subitem.id" :class="{
-                                    'session-chat-row--active': !batchMode && subitem.path === currentSecondpath,
-                                    'session-chat-row--selected': batchMode && batchSelectedIds.includes(subitem.id),
+                                    'session-chat-row--active': subitem.path === currentSecondpath,
                                     'session-chat-row--revealed': revealedSessionId === subitem.id,
                                 }">
                                 <div class="session-list-row session-list-row--flat">
                                     <div class="session-list-row__body">
-                                        <SessionSidebarRow :item="subitem" :batch-mode="batchMode"
+                                        <!-- Nexus 侧栏暂无会话改名/置顶/删除接口，不提供菜单项（menu-options 为空则隐藏更多按钮） -->
+                                        <SessionSidebarRow :item="subitem" :batch-mode="false"
                                             :running="Boolean(sessionActivityEntries[subitem.id])"
                                             :unread="Boolean(sessionUnread[subitem.id])"
-                                            :active-path="currentSecondpath" :selected-ids="batchSelectedIds"
-                                            :menu-options="buildSessionMenuOptions(subitem)"
+                                            :active-path="currentSecondpath" :selected-ids="[]"
+                                            :menu-options="[]"
                                             @navigate="gotopage(subitem.path)"
-                                            @toggle-select="toggleBatchSelect(subitem.id)"
-                                            @menu-click="handleSessionMenuClick($event, subitem)"
-                                            @rename-submit="renameSessionTitle(subitem, $event.title)"
                                             @hover-in="mouseenteBotDownr(subitem.id)" @hover-out="mouseleaveBotDown" />
                                     </div>
                                 </div>
@@ -207,25 +204,6 @@
             </div>
         </div>
 
-        <!-- 批量管理底部操作条：固定在侧栏底部、用户头像上方 -->
-        <div v-if="batchMode && !uiStore.sidebarCollapsed" class="batch-inline-footer">
-            <div class="batch-footer-left">
-                <t-checkbox :checked="isAllBatchSelected" :indeterminate="isBatchIndeterminate"
-                    @change="toggleBatchSelectAll">
-                    {{ t('batchManage.selectAll') }}
-                </t-checkbox>
-            </div>
-            <div class="batch-footer-right">
-                <t-button size="small" variant="text" @click="exitBatchMode">
-                    {{ t('batchManage.cancel') }}
-                </t-button>
-                <t-button size="small" theme="danger" variant="base" :disabled="batchSelectedIds.length === 0"
-                    :loading="batchDeleting" @click="handleInlineBatchDelete">
-                    {{ t('batchManage.delete') }}{{ batchSelectedIds.length > 0 ? `(${batchDisplayCount})` : '' }}
-                </t-button>
-            </div>
-        </div>
-
         <!-- 下半部分：用户菜单 -->
         <div class="menu_bottom">
             <UserMenu />
@@ -236,46 +214,32 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
-import { onMounted, onUnmounted, watch, computed, ref, h, nextTick } from 'vue';
+import { onMounted, onUnmounted, watch, computed, ref, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getSessionsList, batchDelSessions, deleteAllSessions, getSession } from "@/api/chat/index";
+import { listSessions } from '@/api/native-runs';
 import { useChatResourcesStore } from '@/stores/chatResources';
-import { listAllIMChannels } from '@/api/agent/index';
 import SessionSidebarRow from './SessionSidebarRow.vue';
 import PanelResizeHandle from './PanelResizeHandle.vue';
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '@/utils/sidebarWidth';
 import {
-    clearSession,
-    removeSession,
-    renameSession,
     SESSION_MUTATION_EVENT,
-    setSessionPinned,
     type SessionMutationDetail,
 } from './sessionMutations';
 import SessionSourceFilter from './SessionSourceFilter.vue';
 import {
-    SIDEBAR_BUCKET_PAGE_SIZE,
-    applyBucketCountProbe,
     buildBucketDefinitions,
     bucketHasMore,
     bucketVisible,
     createEmptyBucket,
     flattenBucketItems,
     isChannelBucket,
-    isChannelBucketKey,
     mergeBucketPage,
-    prependSessionToWebBucket,
     removeSessionFromBuckets,
     type SidebarSessionBucket,
 } from './sessionSidebarBuckets';
-import type { SessionForGrouping } from './sessionGrouping';
-import { listAllEmbedChannels } from '@/api/embed/index';
 import {
     classifyDateBucket,
-    configuredPlatforms,
     groupSessionsByDate,
-    originGroupKey,
-    resolveSessionOrigin,
     type DateBucketKey,
 } from './sessionGrouping';
 import {
@@ -296,7 +260,7 @@ import { useOrganizationStore } from '@/stores/organization';
 import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { useAssistantStore } from '@/stores/assistant';
-import { MessagePlugin, DialogPlugin, Icon as TIcon } from "tdesign-vue-next";
+import { MessagePlugin } from "tdesign-vue-next";
 import UserMenu from '@/components/UserMenu.vue';
 import TenantSelector from '@/components/TenantSelector.vue';
 import { useI18n } from 'vue-i18n';
@@ -373,8 +337,6 @@ let bucketRequestToken = 0;
 const sessionListBooting = ref(false);
 const currentSecondpath = ref('');
 const scrollContainer = ref<HTMLElement | null>(null);
-const imPlatforms = ref<string[]>([]);
-const embedChannelNames = ref<Record<string, string>>({});
 const activeSessionBucketKey = ref(DEFAULT_SESSION_BUCKET_KEY);
 const sessionListCanScroll = ref(false);
 const visibleChannelBuckets = computed(() =>
@@ -407,29 +369,6 @@ type MenuItem = { title: string; icon: string; path: string; childrenPath?: stri
 const { menuArr, visibleMenuArr } = storeToRefs(usemenuStore);
 let activeSubmenu = ref<string>('');
 const isLiteEdition = ref(false);
-
-// 批量管理状态
-const batchMode = ref(false)
-const batchSelectedIds = ref<string[]>([])
-const batchDeleting = ref(false)
-
-const allSessionIds = computed(() => {
-    const chatMenu = (menuArr.value as unknown as MenuItem[]).find((item: MenuItem) => item.path === 'creatChat');
-    if (!chatMenu?.children) return [];
-    return (chatMenu.children as any[]).map((s: any) => s.id);
-})
-
-const isAllBatchSelected = computed(() =>
-    allSessionIds.value.length > 0 && batchSelectedIds.value.length === allSessionIds.value.length
-)
-
-const isBatchIndeterminate = computed(() =>
-    batchSelectedIds.value.length > 0 && batchSelectedIds.value.length < allSessionIds.value.length
-)
-
-const batchDisplayCount = computed(() =>
-    isAllBatchSelected.value ? total.value : batchSelectedIds.value.length
-)
 
 // 是否可以访问所有空间
 const canAccessAllTenants = computed(() => authStore.canAccessAllTenants);
@@ -518,9 +457,6 @@ const bottomMenuItems = computed<MenuItem[]>(() => {
 // 当前知识库信息
 const currentKbName = ref<string>('')
 const currentKbInfo = ref<any>(null)
-
-// 进行中的置顶/取消置顶请求，避免重复点击
-const pinningIds = ref<Set<string>>(new Set())
 
 // 「聊天」区内按日期分组（当前筛选来源）
 const dateBucketLabels = computed<Record<DateBucketKey, string>>(() => ({
@@ -618,120 +554,6 @@ const mouseleaveBotDown = () => {
     activeSubmenu.value = '';
 }
 
-const enterBatchMode = () => {
-    batchMode.value = true
-    batchSelectedIds.value = []
-}
-
-const exitBatchMode = () => {
-    batchMode.value = false
-    batchSelectedIds.value = []
-}
-
-const toggleBatchSelect = (id: string) => {
-    const idx = batchSelectedIds.value.indexOf(id)
-    if (idx > -1) {
-        batchSelectedIds.value.splice(idx, 1)
-    } else {
-        batchSelectedIds.value.push(id)
-    }
-}
-
-const toggleBatchSelectAll = (checked: boolean) => {
-    batchSelectedIds.value = checked ? [...allSessionIds.value] : []
-}
-
-const handleInlineBatchDelete = () => {
-    if (batchSelectedIds.value.length === 0) return
-    const isDeleteAll = isAllBatchSelected.value
-    const displayCount = batchDisplayCount.value
-    const confirmDialog = DialogPlugin.confirm({
-        header: t('batchManage.deleteConfirmTitle'),
-        body: isDeleteAll
-            ? t('batchManage.deleteAllConfirmBody') || t('batchManage.deleteConfirmBody', { count: displayCount })
-            : t('batchManage.deleteConfirmBody', { count: displayCount }),
-        confirmBtn: { content: t('batchManage.delete'), theme: 'danger' as const },
-        cancelBtn: t('batchManage.cancel'),
-        theme: 'warning',
-        onConfirm: async () => {
-            batchDeleting.value = true
-            try {
-                let res: any
-                if (isDeleteAll) {
-                    res = await deleteAllSessions()
-                } else {
-                    res = await batchDelSessions([...batchSelectedIds.value])
-                }
-                if (res && res.success === true) {
-                    if (isDeleteAll) {
-                        usemenuStore.clearMenuArr();
-                        total.value = 0;
-                        await getMessageList();
-                    } else {
-                        let next = sessionBuckets.value;
-                        for (const id of batchSelectedIds.value) {
-                            next = removeSessionFromBuckets(next, id);
-                        }
-                        sessionBuckets.value = next;
-                        syncMenuStoreFromBuckets();
-                    }
-                    const currentChatId = route.params.chatid as string;
-                    if (currentChatId && (isDeleteAll || batchSelectedIds.value.includes(currentChatId))) {
-                        router.push('/platform/creatChat');
-                    }
-                    batchSelectedIds.value = []
-                    MessagePlugin.success(t('batchManage.deleteSuccess'))
-                    exitBatchMode()
-                } else {
-                    MessagePlugin.error(t('batchManage.deleteFailed'))
-                }
-            } catch {
-                MessagePlugin.error(t('batchManage.deleteFailed'))
-            }
-            batchDeleting.value = false
-            confirmDialog.destroy()
-        },
-    })
-}
-
-const handleSessionMenuClick = (data: { value: string }, item: any) => {
-    if (data?.value === 'delete') {
-        delCard(item);
-    } else if (data?.value === 'clearMessages') {
-        clearMessages(item);
-    } else if (data?.value === 'batchManage') {
-        enterBatchMode()
-    } else if (data?.value === 'pin' || data?.value === 'unpin') {
-        togglePin(item, data.value === 'pin');
-    }
-};
-
-// 基于会话来源推导展示用的短标签已经被 platformLogo(<img>) 取代，Web 会话没有图标。
-
-const buildSessionMenuOptions = (item: any) => {
-    const options: any[] = [];
-    if (item.is_pinned) {
-        options.push({
-            content: t('menu.unpin'),
-            value: 'unpin',
-            prefixIcon: () => h(TIcon, { name: 'pin-filled' }),
-        });
-    } else {
-        options.push({
-            content: t('menu.pin'),
-            value: 'pin',
-            prefixIcon: () => h(TIcon, { name: 'pin' }),
-        });
-    }
-    options.push(
-        { content: t('menu.renameSession'), value: 'rename', prefixIcon: () => h(TIcon, { name: 'edit-1' }) },
-        { content: t('menu.clearMessages'), value: 'clearMessages', prefixIcon: () => h(TIcon, { name: 'clear' }) },
-        { content: t('menu.batchManage'), value: 'batchManage', prefixIcon: () => h(TIcon, { name: 'queue' }) },
-        { content: t('upload.deleteRecord'), value: 'delete', theme: 'error', prefixIcon: () => h(TIcon, { name: 'delete' }) },
-    );
-    return options;
-};
-
 const updateSessionInBuckets = (
     sessionId: string,
     patch: Partial<{ is_pinned: boolean; pinned_at: string | null; title: string; isNoTitle?: boolean }>,
@@ -746,39 +568,6 @@ const updateSessionInBuckets = (
     sessionBuckets.value = next;
     syncMenuStoreFromBuckets();
 };
-
-const renameSessionTitle = async (item: any, title: string) => {
-    try {
-        await renameSession(item.id, title, item.description || '');
-        MessagePlugin.success(t('menu.renameSessionSuccess'));
-    } catch {
-        MessagePlugin.error(t('menu.renameSessionFailed'));
-    }
-};
-
-const togglePin = (item: any, pin: boolean) => {
-    if (pinningIds.value.has(item.id)) return;
-    pinningIds.value.add(item.id);
-
-    setSessionPinned(item.id, pin).catch(() => {
-        MessagePlugin.error(pin ? t('menu.pinFailed') : t('menu.unpinFailed'));
-    }).finally(() => {
-        pinningIds.value.delete(item.id);
-    });
-};
-
-const clearMessages = (item: any) => {
-    clearSession(item.id).then(() => {
-        MessagePlugin.success(t('menu.clearMessagesSuccess'));
-    }).catch(() => {
-        MessagePlugin.error(t('menu.clearMessagesFailed'));
-    });
-};
-
-const delCard = (item: any) => {
-    removeSession(item.id).catch(() => MessagePlugin.error(t('chat.deleteSessionFailed')))
-}
-
 
 const debounce = (fn: (...args: any[]) => void, delay: number) => {
     let timer: ReturnType<typeof setTimeout>
@@ -810,79 +599,36 @@ const syncMenuStoreFromBuckets = () => {
     total.value = flat.length;
 };
 
-const menuChildToSessionRow = (item: Record<string, unknown>): SessionForGrouping & { path: string } => {
-    const id = String(item.id);
-    return {
-        id,
-        path: typeof item.path === 'string' ? item.path : `chat/${id}`,
-        title: typeof item.title === 'string' ? item.title : undefined,
-        is_pinned: !!item.is_pinned,
-        created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
-        updated_at: typeof item.updated_at === 'string' ? item.updated_at : undefined,
-        im_platform: typeof item.im_platform === 'string' ? item.im_platform : '',
-        description: typeof item.description === 'string' ? item.description : '',
-        user_id: typeof item.user_id === 'string' ? item.user_id : '',
-        parent_session_id: typeof item.parent_session_id === 'string' ? item.parent_session_id : '',
-    };
-};
-
 const sessionExistsInBuckets = (sessionId: string) =>
     Object.values(sessionBuckets.value).some((bucket) => bucket.items.some((row) => row.id === sessionId));
 
-/** 创建会话后 menuStore 已乐观写入，但列表实际渲染自 sessionBuckets，需补齐。 */
+/** 新建会话后 listSessions 结果可能尚未包含它：缺失时重新拉取 web 列表。 */
 const ensureSessionInSidebar = (sessionId: string) => {
     if (!sessionId || sessionExistsInBuckets(sessionId)) return;
-
-    const web = sessionBuckets.value.web;
-    if (!web) return;
-
-    const chatMenu = (menuArr.value as unknown as MenuItem[]).find((item) => item.path === 'creatChat');
-    const fromStore = (chatMenu?.children as Record<string, unknown>[] | undefined)
-        ?.find((item) => item.id === sessionId);
-    if (!fromStore) return;
-
-    sessionBuckets.value = {
-        ...sessionBuckets.value,
-        web: prependSessionToWebBucket(web, menuChildToSessionRow(fromStore)),
-    };
-    total.value = flattenBucketItems(sessionBuckets.value, bucketOrder.value).length;
+    void loadBucketPage('web', 1);
 };
 
+// Nexus 侧栏只保留「我的会话」：IM / 嵌入渠道 / API 文件夹尚未迁移，因此不生成这些分组。
 const rebuildBucketDefinitions = () => buildBucketDefinitions(
-    imPlatforms.value,
-    embedChannelNames.value,
+    [],
+    {},
     {
         web: t('menu.myChats'),
         imPlatform: (platform) => t(`agentEditor.im.${platform}`),
         embedChannel: (name) => name,
         api: t('menu.apiChats'),
     },
-    { includeAdminChannelBuckets: authStore.hasRole('admin') },
+    { includeAdminChannelBuckets: false },
 );
 
-/** 首屏轻量探测各渠道是否有会话（page_size=1 只取 total），避免展示空文件夹 */
-const probeChannelBucketCounts = async (keys: string[], token: number) => {
-    const targets = keys.filter((key) => isChannelBucketKey(key));
-    await Promise.all(
-        targets.map(async (key) => {
-            const bucket = sessionBuckets.value[key];
-            if (!bucket) return;
-            try {
-                const res: any = await getSessionsList(1, 1, bucket.apiSource);
-                if (token !== bucketRequestToken) return;
-                sessionBuckets.value = {
-                    ...sessionBuckets.value,
-                    [key]: applyBucketCountProbe(bucket, res?.total ?? 0),
-                };
-            } catch {
-                if (token !== bucketRequestToken) return;
-                sessionBuckets.value = {
-                    ...sessionBuckets.value,
-                    [key]: applyBucketCountProbe(bucket, 0),
-                };
-            }
-        }),
-    );
+/**
+ * 拉取侧栏会话。listSessions 不分页、一次返回全部会话，因此只在第一页请求，total 取实际条数。
+ */
+const fetchSidebarSessions = async (apiSource: string, page: number) => {
+    const tenantId = authStore.effectiveTenantId;
+    if (apiSource !== 'web' || page > 1 || !tenantId) return { data: [], total: 0 };
+    const rows = await listSessions(tenantId);
+    return { data: rows, total: rows.length };
 };
 
 const loadBucketPage = async (key: string, page?: number, token?: number) => {
@@ -897,7 +643,7 @@ const loadBucketPage = async (key: string, page?: number, token?: number) => {
     };
 
     try {
-        const res: any = await getSessionsList(nextPage, SIDEBAR_BUCKET_PAGE_SIZE, bucket.apiSource);
+        const res: any = await fetchSidebarSessions(bucket.apiSource, nextPage);
         if (activeToken !== bucketRequestToken) return;
         const rows = (res?.data || []).map((item: any) => mapSessionRow(item));
         const current = sessionBuckets.value[key];
@@ -931,36 +677,7 @@ const switchSessionBucket = async (key: string) => {
 const syncActiveBucketFromChat = async (sessionId: string | undefined) => {
     if (!sessionId) return;
 
-    let bucketKey = findSessionBucketKey(sessionBuckets.value, sessionId);
-    if (!bucketKey) {
-        const chatMenu = (menuArr.value as unknown as MenuItem[]).find((item) => item.path === 'creatChat');
-        const fromStore = (chatMenu?.children as Record<string, unknown>[] | undefined)
-            ?.find((item) => item.id === sessionId);
-        if (fromStore) {
-            bucketKey = originGroupKey(resolveSessionOrigin(menuChildToSessionRow(fromStore)));
-        }
-    }
-    // On a hard refresh only the web bucket is loaded, so a session opened from
-    // any other folder (IM, embed, or the admin-only API folder) isn't in any
-    // bucket or the menu store. Fetch its detail and classify its origin folder
-    // so the sidebar stays in sync with the chat pane instead of snapping back
-    // to "my chats". Only switch when that folder is actually present.
-    if (!bucketKey) {
-        try {
-            const res: any = await getSession(sessionId);
-            const candidate = originGroupKey(resolveSessionOrigin({
-                id: sessionId,
-                im_platform: res?.data?.im_platform || '',
-                description: res?.data?.description || '',
-                user_id: res?.data?.user_id || '',
-            }));
-            if (sessionBuckets.value[candidate]) {
-                bucketKey = candidate;
-            }
-        } catch {
-            // Fall through: leave the default bucket active on lookup failure.
-        }
-    }
+    const bucketKey = findSessionBucketKey(sessionBuckets.value, sessionId);
     if (!bucketKey || bucketKey === activeSessionBucketKey.value) return;
 
     activeSessionBucketKey.value = bucketKey;
@@ -982,12 +699,8 @@ const initSessionBuckets = async () => {
     }
     sessionBuckets.value = buckets;
 
-    // 首屏：拉 web 会话 + 轻量探测各渠道 count（不拉完整列表）；有会话的渠道才展示文件夹
-    const channelKeys = defs.map((def) => def.key).filter((key) => isChannelBucketKey(key));
-    await Promise.all([
-        loadBucketPage('web', 1, token),
-        probeChannelBucketCounts(channelKeys, token),
-    ]);
+    // Nexus 侧栏只有 web 会话一个来源，首屏直接拉取。
+    await loadBucketPage('web', 1, token);
 
     if (token === bucketRequestToken) {
         sessionListBooting.value = false;
@@ -1038,25 +751,6 @@ async function loadCurrentKbInfo(kbId: string) {
     }
 }
 
-const loadSessionOriginMeta = async () => {
-    try {
-        const res: any = await listAllIMChannels();
-        imPlatforms.value = configuredPlatforms(res?.data || []);
-    } catch {
-        imPlatforms.value = [];
-    }
-    try {
-        const res: any = await listAllEmbedChannels();
-        const names: Record<string, string> = {};
-        for (const ch of res?.data || []) {
-            if (ch?.id && ch?.name) names[ch.id] = ch.name;
-        }
-        embedChannelNames.value = names;
-    } catch {
-        embedChannelNames.value = {};
-    }
-};
-
 const handleSessionMutation = (event: Event) => {
     const detail = (event as CustomEvent<SessionMutationDetail>).detail;
     if (!detail?.sessionId) return;
@@ -1098,7 +792,6 @@ onMounted(async () => {
 
     await loadCurrentKbInfo((route.params as any)?.kbId as string)
 
-    await loadSessionOriginMeta();
     await getMessageList();
     const initialChatId = route.params.chatid as string | undefined;
     if (initialChatId) {

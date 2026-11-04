@@ -17,8 +17,8 @@
 ## 3. 页面
 
 - [x] 3.1 路由替换：`/platform/creatChat`、`/platform/chat/:chatid`，以及旧路径的重定向。
-- [ ] 3.2 侧栏会话列表（未完成：侧栏仍调用 WeKnora `getSessionsList`，需迁移到平台会话并处理分组、重命名、删除）（分组、重命名、删除按能力显示）。
-- [ ] 3.3 消息区（部分完成：气泡、Markdown 与工具过程条已实现，但未直接复用 WeKnora 的 `botmsg.vue` / `AgentStreamDisplay.vue`，样式与交互为简化实现）：气泡、Markdown 渲染、过程时间线、工具卡片，对齐参考实现。
+- [x] 3.2 侧栏会话列表（已完成：改用平台 `listSessions`，只保留「我的会话」分组；平台暂无改名、置顶、清空、删除接口，会话菜单不提供这些操作，IM/嵌入/API 文件夹待迁移后再加回）。
+- [ ] 3.3 消息区（部分完成：实时运行过程复用 `AgentStreamDisplay.vue`，输入区复用 `Input-field.vue`；已持久化消息仍使用本页的气泡与 Markdown 渲染，未复用 WeKnora 的 `botmsg.vue`，工具卡片样式未对齐）。
 - [x] 3.4 输入区：发送、停止、排队提示、忙时 steer。
 - [x] 3.5 运行监督告警条与等待输入卡片。
 - [x] 3.6 按 proposal 第 4 项隐藏或禁用不支持的功能。
@@ -26,7 +26,7 @@
 
 ## 4. 清理与合并
 
-- [ ] 4.1 助手面板（未完成：面板仍使用 WeKnora `views/chat` 组件与接口）改用同一套对话组件，移除对 WeKnora `api/chat` 的调用。
+- [ ] 4.1 助手面板（未完成：面板仍使用 WeKnora `views/chat` 组件与接口；切换前需确认页面上下文、选区、子智能体标签页等功能在平台中的去留）改用同一套对话组件，移除对 WeKnora `api/chat` 的调用。
 - [x] 4.2 `/platform/native` 页面合并进新会话页，删除无用组件。
 - [x] 4.3 将 `2026-11-04-native-run-workbench` 标记为已被替代，并更新其 tasks.md。
 
