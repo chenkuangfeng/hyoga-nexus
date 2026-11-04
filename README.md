@@ -26,6 +26,37 @@ Python 3.11+ / FastAPI / 多包 uv workspace；Vue 3 / TypeScript / Element Plus
 
 ## 本地开发
 
+### 快速启动（前后端）
+
+首次在一台机器上运行，按顺序执行（均在仓库根目录，除非注明）：
+
+1. 安装后端依赖：`uv sync --locked --extra dev`
+2. 生成本地配置（已有 `configs/nexus.toml` 时不要覆盖）：`cp configs/nexus.example.toml configs/nexus.toml`，再编辑 `[database].url` 为实际连接串。
+3. 在 `configs/nexus.toml` 中设置：`[auth] mode = "development"`（仅本机）；`[security] credential_encryption_key`（Fernet 格式，保存模型 Key 时需要，API 与 worker 必须相同）。
+4. 升级数据库：`uv run alembic -c alembic.ini upgrade head`（每次拉取到新迁移后都要执行）。
+5. 创建首个 owner 账号（只需一次）：`uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice --email alice@example.com --display-name "Alice"`，密码以隐藏输入方式输入。
+6. 安装前端依赖：`corepack enable`（一次性），然后 `cd apps/web`、`pnpm install --frozen-lockfile`。
+
+之后日常启动需要三个终端：
+
+```bash
+# 终端 1：API（仓库根目录）
+uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
+
+# 终端 2：worker（仓库根目录，需与 API 使用同一份 configs/nexus.toml）
+uv run python -m nexus_worker
+
+# 终端 3：前端
+cd apps/web
+pnpm dev
+```
+
+启动后访问 Vite 输出的地址（通常为 `http://localhost:5173`）。API 文档为 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。
+
+本地 HTTP 调试登录时需在 `[auth]` 中设置 `cookie_secure = false`。更多细节见 [API 说明](apps/api/README.md)、[worker 说明](apps/worker/README.md)、[Web 说明](apps/web/README.md)。
+
+### 分步说明
+
 推荐安装 uv 后执行：
 
 ```bash
