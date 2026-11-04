@@ -102,8 +102,12 @@
                         :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
                         <div class="menu_item-box">
                             <div class="menu_icon" :class="`menu_icon--${item.icon}`">
-                                <img class="icon"
-                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'artifact' ? artifactIcon : item.icon == 'automation' ? automationIcon : item.icon == 'toolbox' ? toolboxIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
+                                <!-- 绿色（激活态）图标文件内的颜色是写死的，<img> 无法跟随主题色，故用 mask 渲染 -->
+                                <span v-if="isBrandIconName(getMenuIconName(item.icon))" class="icon icon--brand"
+                                    aria-hidden="true"
+                                    :style="{ '--icon-url': `url(&quot;${getImgSrc(getMenuIconName(item.icon))}&quot;)` }"></span>
+                                <img v-else class="icon"
+                                    :src="getImgSrc(getMenuIconName(item.icon))"
                                     alt="">
                             </div>
                             <template v-if="!uiStore.sidebarCollapsed">
@@ -1254,6 +1258,21 @@ const getImgSrc = (url: string) => {
     return new URL(`/src/assets/img/${url}`, import.meta.url).href;
 }
 
+// 侧栏图标名 -> 当前应显示的 svg 文件名（激活态会切换为 *-green.svg）
+const menuIconRefs: Record<string, typeof knowledgeIcon> = {
+    zhishiku: knowledgeIcon,
+    agent: agentIcon,
+    artifact: artifactIcon,
+    automation: automationIcon,
+    toolbox: toolboxIcon,
+    organization: organizationIcon,
+    logout: logoutIcon,
+    setting: settingIcon,
+};
+const getMenuIconName = (icon: string): string => (menuIconRefs[icon] ?? prefixIcon).value;
+// 绿色图标使用品牌色（随全局主题色变化），不能直接 <img> 加载
+const isBrandIconName = (name: string) => name.endsWith('-green.svg');
+
 const mouseenteMenu = (path: string) => {
 }
 const mouseleaveMenu = (path: string) => {
@@ -1538,6 +1557,14 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
             width: 18px;
             height: 18px;
             overflow: hidden;
+        }
+
+        // 品牌色图标：SVG 只作为蒙版，颜色取全局品牌色，深色模式下保持不反色
+        .icon--brand {
+            display: inline-block;
+            background-color: var(--td-brand-color);
+            -webkit-mask: var(--icon-url) no-repeat center / contain;
+            mask: var(--icon-url) no-repeat center / contain;
         }
 
         // 图形几乎占满画布的图标缩小显示，否则会比其他图标大一圈
