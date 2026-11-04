@@ -9020,7 +9020,6 @@ export default {
     }
   },
   nexusChat: {
-    welcome: '有什麼可以幫你？',
     placeholder: '輸入訊息，按 Enter 傳送，Shift+Enter 換行',
     needAgent: '請先選擇智能體'
   },

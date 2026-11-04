@@ -85,7 +85,7 @@ async function fixture(options: {
 
   const chat: Fixture['chat'] = { props: {}, sends: [], created: () => undefined }
   const NexusChatPageStub = vue.defineComponent({
-    props: { embedded: Boolean, sessionId: { type: String, default: '' } },
+    props: { compact: Boolean, sessionId: { type: String, default: '' } },
     emits: ['session-created'],
     setup(props, { emit, expose }) {
       chat.props = props
@@ -183,13 +183,13 @@ async function fixture(options: {
   }
 }
 
-test('the conversation area embeds the Nexus chat page bound to the assistant session', async () => {
+test('the conversation area uses the Nexus chat page bound to the assistant session', async () => {
   const f = await fixture({
     storedSession: 'session-a',
     sessions: [{ id: 'session-a', title: 'A', created_at: '2026-11-01', updated_at: '2026-11-01' }],
   })
   try {
-    assert.equal(f.chat.props.embedded, true)
+    assert.equal(f.chat.props.compact, true)
     assert.equal(f.chat.props.sessionId, 'session-a')
     assert.deepEqual(f.listCalls, [1])
   } finally { f.close() }

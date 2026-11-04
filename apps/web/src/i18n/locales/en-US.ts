@@ -9013,7 +9013,6 @@ export default {
     }
   },
   nexusChat: {
-    welcome: 'What can I help you with?',
     placeholder: 'Type a message. Enter to send, Shift+Enter for a new line',
     needAgent: 'Choose an agent first'
   },

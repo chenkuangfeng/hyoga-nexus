@@ -52,9 +52,9 @@
         </t-button>
         <t-loading v-else-if="historyLoading" size="small" />
       </div>
-      <!-- 对话区复用主对话页的嵌入模式：会话由 assistant.sessionId 决定，空值即欢迎态。 -->
+      <!-- 对话区复用主对话页：会话由 assistant.sessionId 决定，空值即欢迎态。 -->
       <div v-show="!showHistory" class="assistant-panel__conversation">
-        <NexusChatPage ref="chatRef" embedded :session-id="assistant.sessionId"
+        <NexusChatPage ref="chatRef" compact :session-id="assistant.sessionId"
           @session-created="onSessionCreated" />
       </div>
     </div>

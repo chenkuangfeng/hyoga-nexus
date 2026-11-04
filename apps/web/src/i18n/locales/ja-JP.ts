@@ -9024,7 +9024,6 @@ export default {
     }
   },
   nexusChat: {
-    welcome: '何をお手伝いしましょうか？',
     placeholder: 'メッセージを入力（Enter で送信、Shift+Enter で改行）',
     needAgent: '先にエージェントを選択してください'
   },

@@ -9024,7 +9024,6 @@ export default {
     }
   },
   nexusChat: {
-    welcome: '무엇을 도와드릴까요?',
     placeholder: '메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)',
     needAgent: '먼저 에이전트를 선택하세요'
   },

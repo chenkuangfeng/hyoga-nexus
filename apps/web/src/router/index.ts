@@ -11,7 +11,7 @@ import { normalizeSettingsSection } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 // 主对话页：WeKnora 风格布局 + 平台 Native API（会话、Run、事件）。
-const NexusChatPage = () => import('@/views/chat/NexusChatPage.vue')
+const NexusChatRoutePage = () => import('@/views/chat/NexusChatRoutePage.vue')
 
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
 const LITE_LAST_PATH_KEY = 'weknora_lite_last_path'
@@ -194,7 +194,7 @@ const router = createRouter({
         {
           path: "creatChat",
           name: "globalCreatChat",
-          component: NexusChatPage,
+          component: NexusChatRoutePage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -205,7 +205,7 @@ const router = createRouter({
         {
           path: "chat/:chatid",
           name: "chat",
-          component: NexusChatPage,
+          component: NexusChatRoutePage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {

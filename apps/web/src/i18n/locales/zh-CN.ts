@@ -9006,7 +9006,6 @@ export default {
     }
   },
   nexusChat: {
-    welcome: '有什么可以帮你？',
     placeholder: '输入消息，按 Enter 发送，Shift+Enter 换行',
     needAgent: '请先选择智能体'
   },

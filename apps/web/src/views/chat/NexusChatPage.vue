@@ -5,7 +5,7 @@
     用户消息为右侧气泡，助手消息为左侧 Markdown 正文，工具调用以过程条展示。
     数据全部来自平台 Native API（会话、Run、事件），见 openspec/changes/2026-11-04-weknora-chat-dialog。
   -->
-  <div class="nexus-chat" :class="{ 'is-welcome': isWelcome }">
+  <div class="nexus-chat" :class="{ 'is-welcome': isWelcome, 'is-compact': compact }">
     <header v-if="!isWelcome" class="nexus-chat__header">
       <t-tag v-if="run" :theme="statusTheme" variant="light" data-testid="chat-run-status">{{ statusLabel }}</t-tag>
     </header>
@@ -70,17 +70,18 @@
     </div>
 
     <div class="nexus-chat__composer-wrap">
-      <h1 v-if="isWelcome" class="nexus-chat__welcome">{{ $t('nexusChat.welcome') }}</h1>
       <!-- 输入区复用 WeKnora 的 Input-field，nexus-mode 下只保留文本、发送、追加指令与停止。 -->
-      <InputField nexus-mode class="nexus-chat__input" data-testid="chat-composer" :auto-focus="isWelcome"
-        :is-replying="isReplying" :can-steer="canSteer(run)"
-        @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
-        <template #controls>
-          <t-select v-if="isWelcome && !embedded" v-model="selectedAgent" size="small" class="nexus-chat__agent"
-            :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
-            :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
-        </template>
-      </InputField>
+      <div class="input-container" :class="{ 'is-compact': compact }">
+        <InputField nexus-mode class="nexus-chat__input" data-testid="chat-composer" :auto-focus="isWelcome"
+          :is-replying="isReplying" :can-steer="canSteer(run)"
+          @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
+          <template #controls>
+            <t-select v-if="isWelcome && allowAgentSelect" v-model="selectedAgent" size="small" class="nexus-chat__agent"
+              :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
+              :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
+          </template>
+        </InputField>
+      </div>
     </div>
   </div>
 </template>
@@ -88,7 +89,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -116,22 +116,24 @@ import { toAgentEventStream } from '@/utils/nexusAgentEvents'
 import { safeMarkdownToHTML, sanitizeMarkdownHTML } from '@/utils/security'
 import { deriveSessionTitle } from '@/utils/nexusChatTitle'
 
-const route = useRoute()
-const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 
 /**
- * 独立页面（/platform/creatChat、/platform/chat/:chatid）从路由取会话；
- * 嵌入模式（助手面板）由父组件通过 sessionId 传入，不改写路由。
+ * 对话页核心。会话由父组件通过 sessionId 传入，空值即欢迎态；欢迎态发送时先创建会话，
+ * 并通过 session-created 通知父组件（路由页据此改写地址，面板据此记录会话）。
  */
 const props = withDefaults(defineProps<{
-  embedded?: boolean
+  /** 当前会话；为空时显示欢迎态（尚未创建会话）。 */
   sessionId?: string
-}>(), { embedded: false, sessionId: '' })
+  /** 窄容器布局（如侧边面板）：输入区使用紧凑留白。 */
+  compact?: boolean
+  /** 欢迎态下允许选择智能体（独立对话页）；嵌入场景固定使用默认智能体。 */
+  allowAgentSelect?: boolean
+}>(), { sessionId: '', compact: false, allowAgentSelect: false })
 const emit = defineEmits<{ (e: 'session-created', id: string): void }>()
 
-const activeSessionId = computed(() => (props.embedded ? props.sessionId : String(route.params.chatid ?? '')))
+const activeSessionId = computed(() => props.sessionId)
 const isWelcome = computed(() => !activeSessionId.value)
 const tenantId = computed(() => authStore.effectiveTenantId)
 const native = useNativeRun(() => tenantId.value)
@@ -273,8 +275,7 @@ async function sendText(text: string) {
       createdSessionId = session.id
       pendingUsers.value = [text]
       await native.send(session.id, text)
-      if (props.embedded) emit('session-created', session.id)
-      else await router.replace(`/platform/chat/${session.id}`)
+      emit('session-created', session.id)
     } else {
       pendingUsers.value = [...pendingUsers.value, text]
       await native.send(activeSessionId.value, text)
@@ -358,48 +359,68 @@ onMounted(() => {
 })
 onBeforeUnmount(() => native.dispose())
 
-// 助手面板通过此方法发送消息（例如「询问助手」请求或示例问题）。
+// 父组件（如侧边面板）通过此方法发送消息：有会话则发到该会话，欢迎态则新建会话。
 defineExpose({ sendText })
 </script>
 
 <style lang="less" scoped>
+@import '../../components/css/chat-scrollbar.less';
 .nexus-chat {
+  /* 与 WeKnora 对话页 .chat 一致：整列居中，最窄 400px，由父级控制宽度 */
+  --chat-content-inset: 20px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  flex: 1;
   height: 100%;
   min-height: 0;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
+  position: relative;
   background: var(--td-bg-color-container);
 }
 
+
 .nexus-chat__header {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  padding: 12px 24px 0;
+  flex: 0 0 var(--app-chat-header-height);
+  width: 100%;
+  min-width: 0;
+  padding: 0 12px 0 var(--chat-content-inset, 20px);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--td-component-stroke);
+  background: var(--td-bg-color-container);
 }
+
 
 .nexus-chat__scroll {
   flex: 1;
   min-height: 0;
+  width: 100%;
+  padding: 8px 0 0;
+  box-sizing: border-box;
   overflow-y: auto;
-  padding: 24px 16px 8px;
+  overscroll-behavior-y: contain;
+  .chat-scrollbar();
 }
 
-.nexus-chat.is-welcome .nexus-chat__scroll {
-  flex: 0;
-  padding: 0;
-}
+
 
 .nexus-chat__column {
-  max-width: 800px;
-  margin: 0 auto;
-  width: 100%;
+  /* 与 WeKnora .msg_list 一致：最宽 960px，左右各留 --chat-content-inset */
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--chat-content-inset, 20px);
+  box-sizing: border-box;
 }
+
 
 .nexus-chat__transcript {
   display: flex;
@@ -420,15 +441,21 @@ defineExpose({ sendText })
 }
 
 .nexus-chat__bubble {
-  max-width: 80%;
-  padding: 10px 16px;
-  border-radius: 16px 16px 4px 16px;
-  background: var(--td-brand-color-light);
+  /* 与 WeKnora usermsg 的 .user_msg 一致 */
+  width: max-content;
+  max-width: min(76%, 820px);
+  padding: 8px 12px;
+  border-radius: var(--app-radius-md);
+  background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-primary);
+  font-size: var(--app-text-xl);
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.7;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
 }
+
 
 .nexus-chat__markdown {
   width: 100%;
@@ -503,33 +530,36 @@ defineExpose({ sendText })
 }
 
 .nexus-chat__composer-wrap {
+  /* 与 WeKnora .chat_composer / .input-container（非嵌入）一致：底部固定在列内 */
   flex-shrink: 0;
   width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 12px 16px 20px;
+  padding: 16px 0 max(8px, env(safe-area-inset-bottom));
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: stretch;
+  background: var(--td-bg-color-container);
 }
 
-.nexus-chat.is-welcome {
-  justify-content: center;
-
-  .nexus-chat__composer-wrap {
-    padding-bottom: 0;
-  }
+.input-container {
+  /* 与 WeKnora .input-container（非嵌入）一致 */
+  position: relative;
+  min-height: 0;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
+  margin: 0 auto;
+  padding: 0 var(--chat-content-inset, 20px);
+  box-sizing: border-box;
 }
 
-.nexus-chat__welcome {
-  margin: 0 0 8px;
-  text-align: center;
-  font-size: var(--app-text-3xl);
-  font-weight: 600;
-  color: var(--td-text-color-primary);
+.nexus-chat.is-compact .nexus-chat__composer-wrap {
+  padding: 0;
 }
+
+.input-container.is-compact {
+  max-width: 100%;
+  margin: 0;
+  padding: 12px 16px 16px;
+}
+
 
 /* 子组件根节点需要占满列宽：Input-field 与流式展示都以 scoped 根类接入。 */
 .nexus-chat__input,
@@ -544,8 +574,8 @@ defineExpose({ sendText })
 
 
 @media (max-width: 720px) {
-  .nexus-chat__scroll {
-    padding: 16px 12px 8px;
+  .nexus-chat__column {
+    padding: 0 12px;
   }
 
   .nexus-chat__agent {
