@@ -2,7 +2,10 @@
 # configuration: environment variables and .env files are not read. configs/nexus.toml is git-ignored.
 
 [database]
-url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
+# Local SQLite file, relative to the working directory (repository root).
+url = "sqlite:///./nexus.db"
+# PostgreSQL for shared or production-like deployments; replace the SQLite line above with this when needed.
+# url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
 
 [auth]
 # Sign-in model for the API: "development", "session" or "external". Leave unset for production-like runs.
