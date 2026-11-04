@@ -2,8 +2,8 @@
 /**
  * Placeholder for pages outside the current implementation phase.
  *
- * The sidebar and routes keep WeKnora's entries so the menu is complete, but the copied pages call
- * WeKnora's backend contracts. Until a phase implements the page against the Nexus API, the route
+ * The sidebar and routes keep Nexus's entries so the menu is complete, but the copied pages call
+ * Nexus's backend contracts. Until a phase implements the page against the Nexus API, the route
  * renders this notice instead of issuing requests.
  */
 import { useI18n } from 'vue-i18n'

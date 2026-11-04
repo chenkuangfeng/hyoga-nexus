@@ -102,7 +102,7 @@
       :output="output" :data="toolData" :success="success"
     />
 
-    <WeKnoraDocResult
+    <NexusDocResult
       v-else-if="displayType === 'search_weknora_docs' || displayType === 'read_weknora_doc'"
       :mode="displayType === 'read_weknora_doc' ? 'read' : 'search'"
       :output="output" :data="toolData" :success="success"
@@ -175,7 +175,7 @@ import ReadSkillResult from './tool-results/ReadSkillResult.vue';
 import McpToolResult from './tool-results/McpToolResult.vue';
 import ImageViewResult from './tool-results/ImageViewResult.vue';
 import OperationsResult from './tool-results/OperationsResult.vue';
-import WeKnoraDocResult from './tool-results/WeKnoraDocResult.vue';
+import NexusDocResult from './tool-results/NexusDocResult.vue';
 
 interface Props {
   success?: boolean;

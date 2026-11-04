@@ -3,17 +3,14 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const source = readFileSync(new URL('./Login.vue', import.meta.url), 'utf8')
-const tabletStyles = source.slice(
-  source.indexOf('@media (max-width: 768px)'),
-  source.indexOf('@media (max-width: 480px)'),
-)
-const phoneStyles = source.slice(source.indexOf('@media (max-width: 480px)'))
 
-test('phone login puts the form before the showcase and reserves room for the header', () => {
-  assert.match(tabletStyles, /\.login-layout\s*\{[\s\S]*?flex-direction:\s*column;[\s\S]*?padding-top:\s*64px;/)
-  assert.match(tabletStyles, /\.form-section\s*\{[\s\S]*?order:\s*-1;/)
+test('login is a single centered card without the showcase carousel', () => {
+  assert.match(source, /\.login-main\s*\{[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;/)
+  assert.doesNotMatch(source, /swiper/i)
+  assert.doesNotMatch(source, /showcase/i)
+  assert.doesNotMatch(source, /login-features/)
 })
 
-test('narrow login headers use icon-only links to avoid overlapping the logo', () => {
-  assert.match(phoneStyles, /\.header-links\s*\{[\s\S]*?\.link-text\s*\{\s*display:\s*none;/)
+test('narrow screens keep the card inside the viewport', () => {
+  assert.match(source, /@media \(max-width: 480px\)\s*\{\s*\.form-card\s*\{/)
 })

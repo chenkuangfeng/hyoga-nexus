@@ -1035,7 +1035,7 @@ const entries = ref<FAQEntry[]>([])
 
 // 问答视图偏好独立保存，首次访问沿用卡片视图。
 type FAQViewMode = 'grid' | 'list'
-const FAQ_VIEW_MODE_KEY = 'weknora.kb.faq.viewMode'
+const FAQ_VIEW_MODE_KEY = 'nexus.kb.faq.viewMode'
 const initViewMode = (): FAQViewMode => {
   try {
     return localStorage.getItem(FAQ_VIEW_MODE_KEY) === 'list' ? 'list' : 'grid'
@@ -2349,10 +2349,10 @@ const downloadExampleOptions = computed(() => [
 // 示例数据
 const exampleData: FAQEntryPayload[] = [
   {
-    standard_question: '什么是 WeKnora？',
-    answers: ['WeKnora 是一个智能知识库管理系统', '它支持多种知识库类型和导入方式'],
-    similar_questions: ['WeKnora 是什么？', '介绍一下 WeKnora'],
-    negative_questions: ['这不是 WeKnora', '与 WeKnora 无关'],
+    standard_question: '什么是 Nexus？',
+    answers: ['Nexus 是一个智能知识库管理系统', '它支持多种知识库类型和导入方式'],
+    similar_questions: ['Nexus 是什么？', '介绍一下 Nexus'],
+    negative_questions: ['这不是 Nexus', '与 Nexus 无关'],
     tag_name: '产品介绍',
   },
   {

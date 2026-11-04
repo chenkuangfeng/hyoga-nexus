@@ -214,14 +214,14 @@
 
       <section v-if="currentStepKey === 'connection' && !isRemoteBackend" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('settings.sandbox.sectionRuntimeEnvironment') }}</h4>
-        <div class="weknora-template-card is-active">
+        <div class="nexus-template-card is-active">
           <SandboxBackendBadge type="docker" />
-          <div class="weknora-template-card__content">
-            <div class="weknora-template-card__title-row">
-              <span class="weknora-template-card__title">{{ $t('settings.sandbox.weknoraDockerImage') }}</span>
+          <div class="nexus-template-card__content">
+            <div class="nexus-template-card__title-row">
+              <span class="nexus-template-card__title">{{ $t('settings.sandbox.nexusDockerImage') }}</span>
               <t-tag theme="primary" variant="light" size="small">{{ $t('settings.sandbox.recommendedTag') }}</t-tag>
             </div>
-            <p>{{ $t('settings.sandbox.weknoraDockerImageHint') }}</p>
+            <p>{{ $t('settings.sandbox.nexusDockerImageHint') }}</p>
           </div>
         </div>
         <t-form-item :label="requiredLabel('dockerImage')" :status="fieldStatus('image')"
@@ -277,7 +277,7 @@
           <div v-if="canCreateStandard" class="template-row template-row--offer">
             <div class="template-row__main">
               <div class="template-row__head">
-                <span class="template-row__title">{{ $t('settings.sandbox.weknoraStandardTemplate') }}</span>
+                <span class="template-row__title">{{ $t('settings.sandbox.nexusStandardTemplate') }}</span>
                 <t-tag theme="primary" variant="outline" size="small">
                   {{ $t('settings.sandbox.recommendedTag') }}
                 </t-tag>
@@ -293,7 +293,7 @@
           <div v-if="canCreateDesktop" class="template-row template-row--offer">
             <div class="template-row__main">
               <div class="template-row__head">
-                <span class="template-row__title">{{ $t('settings.sandbox.weknoraDesktopTemplate') }}</span>
+                <span class="template-row__title">{{ $t('settings.sandbox.nexusDesktopTemplate') }}</span>
                 <t-tag theme="warning" variant="outline" size="small">
                   {{ $t('settings.sandbox.desktopTemplateTag') }}
                 </t-tag>
@@ -412,7 +412,7 @@
             </template>
             <!--
               Docker has no provider-side timeout at all: an abandoned container
-              keeps its memory and CPU share on the daemon host until WeKnora
+              keeps its memory and CPU share on the daemon host until Nexus
               reclaims it, so the idle TTL and the resource caps are the only
               things bounding what one workspace can hold.
             -->
@@ -1339,7 +1339,7 @@ function canRebuildTemplate(item: SandboxTemplate): boolean {
 }
 
 function templateDisplayName(item: SandboxTemplate): string {
-  if (item.standard) return t('settings.sandbox.weknoraStandardTemplate')
+  if (item.standard) return t('settings.sandbox.nexusStandardTemplate')
   const name = item.name?.trim() || ''
   const id = item.id?.trim() || ''
   if (!name || name === id) return t('settings.sandbox.templateUnnamed')
@@ -2055,7 +2055,7 @@ onUnmounted(stopTemplatePolling)
   }
 }
 
-.weknora-template-card {
+.nexus-template-card {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2070,7 +2070,7 @@ onUnmounted(stopTemplatePolling)
   }
 }
 
-.weknora-template-card__content {
+.nexus-template-card__content {
   flex: 1;
   min-width: 0;
 
@@ -2082,13 +2082,13 @@ onUnmounted(stopTemplatePolling)
   }
 }
 
-.weknora-template-card__title-row {
+.nexus-template-card__title-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.weknora-template-card__title {
+.nexus-template-card__title {
   font-size: var(--app-text-md);
   font-weight: 600;
 }
@@ -2592,7 +2592,7 @@ onUnmounted(stopTemplatePolling)
 
 @media (max-width: 720px) {
   .form-grid--two,
-  .weknora-template-card {
+  .nexus-template-card {
     align-items: flex-start;
     flex-wrap: wrap;
   }

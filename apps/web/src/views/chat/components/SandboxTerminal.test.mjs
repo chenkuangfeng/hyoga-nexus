@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const terminal = readFileSync(new URL('./SandboxTerminal.vue', import.meta.url), 'utf8')
 const theme = readFileSync(new URL('../../../assets/theme/theme.css', import.meta.url), 'utf8')
 const promptUrl = new URL('../../../../../docker/sandbox-pty-prompt.sh', import.meta.url)
-// 沙箱提示符脚本位于 WeKnora 的 apps/docker，本仓库暂无；缺失时只跳过依赖它的用例。
+// 沙箱提示符脚本位于 Nexus 的 apps/docker，本仓库暂无；缺失时只跳过依赖它的用例。
 const promptMissing = existsSync(promptUrl) ? false : 'apps/docker/sandbox-pty-prompt.sh is not in this repository'
 const prompt = promptMissing ? '' : readFileSync(promptUrl, 'utf8')
 const promptPath = fileURLToPath(promptUrl)

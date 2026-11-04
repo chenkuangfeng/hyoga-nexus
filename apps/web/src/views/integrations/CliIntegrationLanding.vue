@@ -82,21 +82,21 @@ const { apiBaseUrlDisplay } = useApiBaseUrlDisplay()
 const steps = computed(() => [
   {
     key: 'install',
-    command: 'git clone https://github.com/Tencent/WeKnora.git\ncd WeKnora/cli\ngo build -o weknora .\nexport PATH="$PWD:$PATH"',
+    command: 'git clone https://github.com/Tencent/WeKnora.git\ncd Nexus/cli\ngo build -o nexus .\nexport PATH="$PWD:$PATH"',
   },
   { key: 'connect', command: buildCLIConnectCommand(apiBaseUrlDisplay.value, window.location.origin) },
-  { key: 'verify', command: 'weknora doctor\nweknora kb list' },
+  { key: 'verify', command: 'nexus doctor\nnexus kb list' },
 ])
 const examples = [
   {
     key: 'commands',
-    command: 'weknora doc upload ./document.pdf --kb "KB_ID"\nweknora search chunks "query" --kb "KB_ID"\nweknora chat "question" --kb "KB_ID" --format text\nweknora agent list',
+    command: 'nexus doc upload ./document.pdf --kb "KB_ID"\nnexus search chunks "query" --kb "KB_ID"\nnexus chat "question" --kb "KB_ID" --format text\nnexus agent list',
   },
   {
     key: 'mcp',
     command: JSON.stringify({
       mcpServers: {
-        weknora: { command: 'weknora', args: ['--profile', 'weknora', 'mcp', 'serve'] },
+        nexus: { command: 'nexus', args: ['--profile', 'nexus', 'mcp', 'serve'] },
       },
     }, null, 2),
   },

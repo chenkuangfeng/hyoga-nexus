@@ -42,7 +42,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       id: 'open-assistant',
       label: t('commandPalette.quick.assistant', { name: assistantName(t) }),
       icon: 'compass',
-      keywords: ['assistant', 'help', 'weknora', 'kora', '助手', '帮助', 'ассистент', useAssistantStore().displayName].filter(Boolean),
+      keywords: ['assistant', 'help', 'nexus', 'kora', '助手', '帮助', 'ассистент', useAssistantStore().displayName].filter(Boolean),
       run: () => {
         close()
         useAssistantStore().open()

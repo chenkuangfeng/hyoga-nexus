@@ -97,14 +97,14 @@ export interface AssistantOpenRequest {
   focus?: Pick<AssistantPageContext, 'wikiIssueIds'>
 }
 
-const SESSION_KEY_PREFIX = 'weknora:assistant-session'
-const VISIBLE_KEY_PREFIX = 'weknora:assistant-visible'
-const MODEL_KEY_PREFIX = 'weknora:assistant-model'
-const ACCESS_KEY_PREFIX = 'weknora:assistant-access'
-const PAGE_ACCESS_KEY_PREFIX = 'weknora:assistant-page-access'
-const LAYOUT_KEY = 'weknora:assistant-layout'
-const WIDTH_KEY = 'weknora:assistant-width'
-const ENTRY_KEY = 'weknora:assistant-entry'
+const SESSION_KEY_PREFIX = 'nexus:assistant-session'
+const VISIBLE_KEY_PREFIX = 'nexus:assistant-visible'
+const MODEL_KEY_PREFIX = 'nexus:assistant-model'
+const ACCESS_KEY_PREFIX = 'nexus:assistant-access'
+const PAGE_ACCESS_KEY_PREFIX = 'nexus:assistant-page-access'
+const LAYOUT_KEY = 'nexus:assistant-layout'
+const WIDTH_KEY = 'nexus:assistant-width'
+const ENTRY_KEY = 'nexus:assistant-entry'
 
 /** Docked pushes the page aside; floating hovers over it. Neither blocks it. */
 export type AssistantLayout = 'docked' | 'floating'
@@ -179,7 +179,7 @@ function hasPageContext(context: Partial<AssistantPageContext>): boolean {
 }
 
 /**
- * Pinia store behind the global WeKnora assistant panel (rendered once in
+ * Pinia store behind the global Nexus assistant panel (rendered once in
  * platform/index.vue). Pages publish what is open through
  * useAssistantPageContext; anything can open the panel with open().
  */

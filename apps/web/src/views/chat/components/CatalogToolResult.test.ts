@@ -12,7 +12,7 @@ import zh from '../../../i18n/locales/zh-CN'
 const REAL_COMPONENTS = [
   'ToolResultRenderer.vue',
   'OperationsResult.vue',
-  'WeKnoraDocResult.vue',
+  'NexusDocResult.vue',
   'CatalogValue.vue',
   'DocMarkdown.vue',
 ]

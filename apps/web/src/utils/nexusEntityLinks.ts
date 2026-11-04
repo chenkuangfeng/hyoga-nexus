@@ -1,13 +1,13 @@
-export type WeKnoraEntityKind = 'kb' | 'doc' | 'chunk'
+export type NexusEntityKind = 'kb' | 'doc' | 'chunk'
 
-export interface WeKnoraEntityRef {
-  kind: WeKnoraEntityKind
+export interface NexusEntityRef {
+  kind: NexusEntityKind
   id: string
 }
 
-export type WeKnoraEntityLinkLabels = Record<WeKnoraEntityKind, string>
+export type NexusEntityLinkLabels = Record<NexusEntityKind, string>
 
-export const WEKNORA_ENTITY_LINK_CLASS = 'weknora-entity-link'
+export const NEXUS_ENTITY_LINK_CLASS = 'nexus-entity-link'
 
 const URI_BODY = '(kb|doc|chunk)/([0-9A-Za-z][0-9A-Za-z_-]*)'
 const URI_EXACT_RE = new RegExp(`^weknora://${URI_BODY}$`, 'i')
@@ -16,18 +16,18 @@ const HREF_RE = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i
 const SKIPPED_TAGS = new Set(['code', 'pre', 'a', 'button', 'svg', 'math'])
 
 /** Parses a `weknora://kb|doc|chunk/<id>` durable URI emitted by the model-context codec. */
-export function parseWeKnoraEntityURI(value: string | null | undefined): WeKnoraEntityRef | null {
+export function parseNexusEntityURI(value: string | null | undefined): NexusEntityRef | null {
   const match = URI_EXACT_RE.exec((value || '').trim())
   if (!match) return null
-  return { kind: match[1].toLowerCase() as WeKnoraEntityKind, id: match[2] }
+  return { kind: match[1].toLowerCase() as NexusEntityKind, id: match[2] }
 }
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function entityOpenTag(ref: WeKnoraEntityRef, labels: WeKnoraEntityLinkLabels): string {
-  return `<span class="${WEKNORA_ENTITY_LINK_CLASS}" role="link" tabindex="0" ` +
+function entityOpenTag(ref: NexusEntityRef, labels: NexusEntityLinkLabels): string {
+  return `<span class="${NEXUS_ENTITY_LINK_CLASS}" role="link" tabindex="0" ` +
     `title="${escapeHtml(labels[ref.kind])}" data-entity-kind="${ref.kind}" data-entity-id="${ref.id}">`
 }
 
@@ -38,7 +38,7 @@ function entityOpenTag(ref: WeKnoraEntityRef, labels: WeKnoraEntityLinkLabels): 
  * Text inside code, pre and ordinary links is left alone. Must run before
  * DOMPurify, whose URI allowlist would otherwise strip the `weknora:` scheme.
  */
-export function renderWeKnoraEntityLinks(html: string, labels: WeKnoraEntityLinkLabels): string {
+export function renderNexusEntityLinks(html: string, labels: NexusEntityLinkLabels): string {
   if (!html || !/weknora:\/\//i.test(html)) return html
   const parts = html.split(/(<[^>]*>)/)
   const skipDepth = new Map<string, number>()
@@ -60,7 +60,7 @@ export function renderWeKnoraEntityLinks(html: string, labels: WeKnoraEntityLink
       }
       if (name === 'a' && !closing && skipping === 0) {
         const hrefMatch = HREF_RE.exec(part)
-        const ref = parseWeKnoraEntityURI(hrefMatch?.[1] ?? hrefMatch?.[2])
+        const ref = parseNexusEntityURI(hrefMatch?.[1] ?? hrefMatch?.[2])
         if (ref) {
           parts[i] = entityOpenTag(ref, labels)
           entityAnchorOpen = true
@@ -82,7 +82,7 @@ export function renderWeKnoraEntityLinks(html: string, labels: WeKnoraEntityLink
     }
     if (skipping > 0 || entityAnchorOpen) continue
     parts[i] = part.replace(URI_IN_TEXT_RE, (_m, kind: string, id: string) => {
-      const ref = { kind: kind.toLowerCase() as WeKnoraEntityKind, id }
+      const ref = { kind: kind.toLowerCase() as NexusEntityKind, id }
       return `${entityOpenTag(ref, labels)}${id}</span>`
     })
   }
