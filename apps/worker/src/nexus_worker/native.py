@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
+import time
 from contextlib import suppress
 from datetime import timedelta
 from dataclasses import fields
 
 from nexus_core.platform import utc_now
+
+logger = logging.getLogger("nexus_worker")
 from nexus_core.native import NativePolicy
 from nexus_core.runtime import ExecutionBudget, RuntimeFault, RuntimeOutcome, ToolDefinition, ToolDisposition, ToolResult
 from nexus_platform.configuration import DatabaseConfigurationError, model_credentials
@@ -108,7 +112,8 @@ def admit_or_defer(factory, epoch: int, task_id, worker_id: str) -> bool:
 
 
 async def execute_native(factory, task_id, worker_id, *, model_factory=None, registry_factory=None,
-                         resolver=None, hooks=(), stopped=None, ledger_epoch=None, compaction_model_factory=None):
+                         resolver=None, hooks=(), stopped=None, ledger_epoch=None, compaction_model_factory=None,
+                         watchdog=None):
     if ledger_epoch is not None and not admit_or_defer(factory, ledger_epoch, task_id, worker_id):
         return
     context = prepare_execution(factory, task_id, worker_id)
@@ -117,8 +122,11 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
     store = DurableRuntimeStore(factory, context, worker_id, task_id)
     token = CancellationToken()
     monitor_error = None
+    # Watchdog state lives for this Run only; a worker restart forgets it, so an open stall may be re-reported once.
+    watch_alerted: set[str] = set()
     async def monitor():
         nonlocal monitor_error
+        next_watch = 0.0
         while True:
             try:
                 if (stopped and stopped.is_set()) or store.heartbeat():
@@ -128,6 +136,13 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
                 monitor_error = 'interrupted'
                 token.cancel()
                 return
+            if watchdog is not None and time.monotonic() >= next_watch:
+                next_watch = time.monotonic() + watchdog.interval_seconds
+                try:
+                    store.watch(watchdog, watch_alerted)
+                except Exception:
+                    # Observation failures must never stop or fail the Run it observes.
+                    logger.warning("Run watchdog check failed", extra={"task_id": str(task_id)}, exc_info=True)
             await asyncio.sleep(0.2)
     monitor_task = asyncio.create_task(monitor())
     model = None

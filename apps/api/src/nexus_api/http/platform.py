@@ -33,6 +33,7 @@ from nexus_platform.persistence.models import (
     UserRecord,
 )
 from nexus_platform.runs import service as runs
+from nexus_platform.runs.watchdog_service import acknowledge_watchdog, attention_required
 from nexus_platform.sessions import service as sessions
 from nexus_platform.tenants import service as tenants
 from nexus_platform.authz import resources as authz
@@ -522,7 +523,10 @@ def get_run(
     principal: Principal = Depends(get_principal),
     db: Session = Depends(get_database_session),
 ):
-    return RunView.model_validate(runs.get_run(db, principal, tenant_id, run_id), from_attributes=True)
+    run = runs.get_run(db, principal, tenant_id, run_id)
+    view = RunView.model_validate(run, from_attributes=True)
+    view.attention_required = attention_required(db, run.id)
+    return view
 
 
 @router.get("/tenants/{tenant_id}/runs/{run_id}/events", response_model=list[RunEventView])
@@ -570,6 +574,20 @@ def list_run_events(
 def event_view(row):
     return RunEventView(event_id=row.id, run_id=row.run_id, sequence=row.sequence, event_type=row.event_type,
         schema_version=row.schema_version, payload=row.payload, occurred_at=row.occurred_at)
+
+
+@router.post("/tenants/{tenant_id}/runs/{run_id}/watchdog/acknowledge", response_model=RunView, status_code=202)
+def acknowledge_run_watchdog(
+    tenant_id: UUID,
+    run_id: UUID,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Record that the user saw a watchdog alert and keeps waiting. Does not change the Run's execution."""
+    run = acknowledge_watchdog(db, principal, tenant_id, run_id)
+    view = RunView.model_validate(run, from_attributes=True)
+    view.attention_required = attention_required(db, run.id)
+    return view
 
 
 @router.post("/tenants/{tenant_id}/runs/{run_id}/cancel", response_model=RunView, status_code=202)

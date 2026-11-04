@@ -23,7 +23,9 @@ from nexus_platform.persistence.models import (
     ContextSummaryRecord,
     ToolOutputRecord,
 )
+from nexus_platform.persistence.models.event import RunEventRecord
 from nexus_platform.runs.service import append_event, authorize_run_resource
+from .watchdog import ALERT_EVENT, TOOL_STARTED_EVENT, Observation, WatchdogSettings, evaluate, tool_signature
 from nexus_platform.authz.audit import audit
 from .context import ExecutionContext
 from .summaries import append_summary
@@ -125,6 +127,38 @@ class DurableRuntimeStore:
                 return True
             return run.cancel_requested_at is not None
 
+    def watch(self, settings: WatchdogSettings, alerted: set[str]) -> None:
+        """Report stalls as ``run.watchdog_alert`` events. The watchdog never changes the Run.
+
+        ``alerted`` is the caller's record of rules already reported in the current episode. A rule
+        that stops holding is forgotten, so a Run that recovers and stalls again is reported again.
+        Alerts are recorded only after the transaction commits, so a rolled-back write is retried.
+        A lost lease or a Run that is no longer running is not an error here: the heartbeat handles it.
+        """
+        fired: list[str] = []
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            try:
+                run = self._run(db)
+            except RuntimeFault:
+                alerted.clear()
+                return
+            last = db.scalar(select(RunEventRecord.occurred_at).where(RunEventRecord.run_id == run.id)
+                             .order_by(RunEventRecord.sequence.desc()).limit(1))
+            recent = db.execute(select(RunEventRecord.id, RunEventRecord.payload).where(
+                RunEventRecord.run_id == run.id, RunEventRecord.event_type == TOOL_STARTED_EVENT)
+                .order_by(RunEventRecord.sequence.desc()).limit(settings.repeat_threshold)).all()
+            # Events written before signatures existed get a unique value, so they never count as repeats.
+            signatures = [payload.get('signature') or f'unsigned:{event_id}' for event_id, payload in reversed(recent)]
+            alerts = evaluate(Observation(status=run.status, now=utc_now(), last_event_at=last,
+                                          tool_signatures=signatures), settings)
+            for alert in alerts:
+                if alert.rule not in alerted:
+                    append_event(db, run.id, ALERT_EVENT, alert.payload())
+                    fired.append(alert.rule)
+        alerted.intersection_update({alert.rule for alert in alerts})
+        alerted.update(fired)
+
     def finish(self, outcome: RuntimeOutcome) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
@@ -165,7 +199,8 @@ class DurableRuntimeStore:
                 resource_binding_id=UUID(binding_id) if binding_id else None,
                 operation_id=call.id, status='running', input_summary={'tool_name': call.name},
                 output_summary={}, started_at=utc_now()))
-            append_event(db, run.id, 'tool.started', {'invocation_id': str(invocation_id), 'name': call.name})
+            append_event(db, run.id, 'tool.started', {'invocation_id': str(invocation_id), 'name': call.name,
+                'signature': tool_signature(call.name, call.arguments)})
             return str(invocation_id)
 
     async def approval(self, call: ToolCall):

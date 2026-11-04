@@ -8,7 +8,7 @@ import signal
 import socket
 import threading
 
-from nexus_platform.configuration import DatabaseConfigurationError, logging_level, model_connection_pool, resolve_database_url
+from nexus_platform.configuration import DatabaseConfigurationError, logging_level, model_connection_pool, resolve_database_url, watchdog_settings
 from nexus_runtimes.native.models.network import configure_connection_pool
 from nexus_platform.persistence.database import create_database_engine, session_factory
 from nexus_core.platform import utc_now
@@ -62,6 +62,8 @@ def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> b
 
 def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = False) -> None:
     pool = model_connection_pool()
+    # Read before any Run starts: an invalid [watchdog] section stops the worker instead of silently changing behaviour.
+    watchdog = watchdog_settings()
     configure_connection_pool(max_connections=pool.max_connections,
                               max_keepalive_connections=pool.max_keepalive_connections,
                               keepalive_expiry=pool.keepalive_expiry_seconds)
@@ -81,7 +83,7 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     try:
         while not stopped.is_set():
             try:
-                processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch)
+                processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch, watchdog=watchdog)
                 if not processed:
                     # Memory capture runs only while no Run is waiting (stage 3); it is off unless an owner opted in.
                     processed = capture_tick(factory, worker_id)

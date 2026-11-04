@@ -1,31 +1,33 @@
 # 任务：运行监督 Watchdog
 
-> 状态：草案，待确认。以下任务全部未开始，不得提前勾选。
+> 状态：后端与 API 已实施并通过测试；工作台提示与操作待办。`[x]` 表示已完成并验证，`[ ]` 表示未完成。
 
 ## 1. 前置
 
-- [ ] 1.1 确认 proposal.md 中的四项决定（检测方式、动作上限、运行位置、默认阈值）。
-- [ ] 1.2 完成或确认 3.15 的回合计数，或在本变更内限定为"空闲"与"重复调用"两条规则。
-- [ ] 1.3 确认 3.13 中"等待用户输入"与"等待审批"的状态查询方式。
+- [x] 1.1 确认 proposal.md 中的决定（按推荐方案，见 proposal.md 第 6 条）。
+- [x] 1.2 回合数规则依赖 3.15，本次不实现；只实现"空闲"与"重复调用"两条规则。
+- [x] 1.3 等待状态通过 Run 状态判断：只检查 `running`，等待输入与等待审批自动排除。
 
 ## 2. 实施
 
-- [ ] 2.1 在 `packages/platform` 或 `packages/runtimes` 中定义监督规则的纯函数（输入为 Run 观测快照，输出为告警或空）。规则不依赖模型，可单独测试。
-- [ ] 2.2 worker 内定时扫描协程：按间隔读取 `running` 的 Run，调用规则，产生 `run.watchdog_alert` 事件。扫描失败只记录日志，不影响 Run 执行。
-- [ ] 2.3 持久化 `attention_required`，并增加迁移。清除条件：用户选择"继续等待"或 Run 终态。
-- [ ] 2.4 API：Run 响应增加 `attention_required`；事件类型加入 `run_events` 的 payload 约定。
-- [ ] 2.5 配置：`[watchdog]` 段加入 `configs/nexus.toml` 解析与 `configs/nexus.example.toml` 模板，缺省值与提案一致。
-- [ ] 2.6 Web 工作台：展示告警，提供"继续等待 / 取消 / 发送提示"三个操作；"发送提示"复用现有输入等待机制。
+- [x] 2.1 规则为纯函数，位于 `packages/platform/src/nexus_platform/runs/watchdog.py`，不依赖数据库与模型。
+- [x] 2.2 执行监控协程按间隔调用 `DurableRuntimeStore.watch`（`apps/worker/src/nexus_worker/native.py`）；检测异常只记日志。
+- [x] 2.3 不新增持久化字段。`attention_required` 由事件派生（最新告警晚于所有非 Watchdog 事件与确认事件），因此无迁移。（原任务为"持久化字段并迁移"，已在实施中调整。）
+- [x] 2.4 API：Run 视图增加 `attention_required`；新增 `POST .../runs/{run_id}/watchdog/acknowledge`。
+- [x] 2.5 配置：`[watchdog]` 读取与校验（`watchdog_settings`），worker 启动时读取，无效值直接拒绝启动；`configs/nexus.example.toml` 与 `configs/README.md` 已同步。
+- [ ] 2.6 Web 工作台：展示告警，提供"继续等待 / 取消 / 发送提示"。**未实施**：需要在前端接入 `attention_required` 与确认接口，并通过 `pnpm build` 验证（本机构建因内存不足被终止，需在有足够内存的环境验证）。
 
 ## 3. 测试
 
-- [ ] 3.1 规则单元测试：空闲超时、等待输入时不触发、重复调用计数与参数不同时不计入、阈值边界。
-- [ ] 3.2 worker 集成测试：扫描协程异常不中断 Run；同一告警不会重复写入（幂等）。
-- [ ] 3.3 迁移往返与 SQLite 验证；PostgreSQL 验证随路线图 2.9。
-- [ ] 3.4 前端：告警展示与三个操作的可见状态；窄屏布局。
+- [x] 3.1 规则单元测试：空闲超时、非运行状态不触发、重复调用需连续相同、签名只取决于工具名与参数、配置校验（`tests/test_run_watchdog.py`）。
+- [x] 3.2 存储层测试：同一规则在一次停滞期内只告警一次；规则恢复后再次停滞会重新告警；告警不改变 Run 状态。
+- [x] 3.2a 监控协程的检测异常不中断 Run（测试：`test_watchdog_check_failure_does_not_fail_the_run`）。
+- [x] 3.3 SQLite 验证（无迁移）。PostgreSQL 验证随路线图 2.9。
+- [x] 3.4 API 测试：`attention_required` 在告警后为 true，确认后为 false。
+- [ ] 3.5 前端：告警展示与三个操作的可见状态；窄屏布局。（随 2.6）
 
 ## 4. 文档与收尾
 
-- [ ] 4.1 更新 `docs/architecture.md` 2.2、2.12，以及 `configs/README.md` 中的配置说明。
-- [ ] 4.2 路线图 3.23 勾选，并在 `docs/roadmap.md` 中注明实际覆盖的规则范围。
-- [ ] 4.3 OpenSpec 规格同步与归档，按工作流执行。
+- [x] 4.1 `docs/architecture.md` 2.2 与 2.12 已更新；`configs/README.md` 已更新。
+- [ ] 4.2 路线图 3.23 勾选：尚未勾选，因为 2.6 工作台未完成。
+- [ ] 4.3 OpenSpec 规格同步与归档：待工作台完成后执行。

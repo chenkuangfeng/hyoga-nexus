@@ -51,3 +51,12 @@ max_concurrent_sessions = 8
 max_connections = 100
 max_keepalive_connections = 20
 keepalive_expiry_seconds = 5.0
+
+[watchdog]
+# Run watchdog: reports stalled running Runs as run.watchdog_alert events; it never cancels them.
+# A Run idle this many seconds (no new events) is reported. Minimum 30.
+idle_seconds = 300
+# A Run whose newest tool calls repeat the same name and arguments this many times is reported. Minimum 2.
+repeat_threshold = 3
+# How often the worker checks each running Run, in seconds. Minimum 5. Read when the worker starts.
+interval_seconds = 30

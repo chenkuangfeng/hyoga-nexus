@@ -157,6 +157,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **工具结果视图**：超过 `tool_result_window_rounds` 次模型调用之前的工具结果，在发给模型的视图中替换为单行索引（工具名与首行）；源消息不变。超过 `tool_output_inline_limit` 的输出外置，见 2.5。
 - **工具顺序**：同一回合内按模型声明顺序执行，每个调用独立记录 invocation；有副作用的工具之间不并发。工具声明为只读且幂等（`read_only`、`idempotent`，且无副作用、无需审批）时，可在 `parallel_reads` 开启下与相邻只读调用并行；结果仍按模型声明顺序返回。只读声明与副作用冲突时注册即拒绝。
 - **取消与等待**：取消信号在模型流、工具和沙箱调用的每个等待点检查；`ask_user` 类工具产生 `wait_input`，释放 worker，回答后在同一 Run 中幂等继续。
+- **运行监督（Watchdog）**：执行期间的监控协程按 `[watchdog].interval_seconds` 调用 `DurableRuntimeStore.watch`，只检查 `running` 的 Run：长时间无新事件（`idle`），或最近 `repeat_threshold` 次 `tool.started` 的工具名与参数摘要相同（`repeat`）。命中时追加 `run.watchdog_alert`，同一规则在一次停滞期内只报告一次；Watchdog 不取消、不重试、不修改 Run 状态。检测失败只记日志，不影响 Run。回合数规则依赖预算计数（路线图 3.15），尚未实现。
 - **执行模型**：每个 Run 新建执行对象（引擎、工具网关、运行上下文），Run 结束即释放；不按会话缓存执行对象。工具注册表是进程级共享对象（定义不含 Run 状态，存储经 `ToolContext.services` 按调用传入）。模型客户端每 Run 构建，凭据每 Run 解析并只用于该次调用；进程内按来源共享 HTTP 连接池（不含凭据），地址校验仍逐请求执行；池的上限由 `configs/nexus.toml [model_connection_pool]` 配置（`max_connections`、`max_keepalive_connections`、`keepalive_expiry_seconds`，缺省与 httpx 默认值相同），worker 启动时生效。worker 使用单一事件循环，连接池只在创建它的循环中使用。参考 deer-flow 与 dify-agent。
 - **会话状态**：会话状态是版本化的 JSON 快照（v2，只含数据，不含配置、客户端、租约句柄、令牌或模型对象）。Run 结束时（成功、失败、取消均要）在 `finally` 中保存终态快照；未执行的工具调用标记为 `interrupted`，使下一轮历史合法。快照读取失败、版本未知或状态损坏时拒绝该 Run，不静默丢弃历史。
 - **恢复**：恢复前校验快照版本、会话/空间/主体、Agent/模型版本、资源授权、审批消费状态与已完成的 invocation，再从挂起点继续。不依赖进程内锁、回调、SDK 句柄或临时资源。进程崩溃后，上一代际未完成的执行转为 `unknown`，会话阻塞，需显式解除（见 2.12）。
@@ -333,6 +334,8 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 | `sessions`、`messages`、`session_checkpoints` | 会话、消息（assistant/tool 消息带内部 Runtime 元数据）、工作检查点。历史 Run 只回放 user 与最终 assistant 行，tool 行仅属于其所在 Run |
 | `runtime_session_bindings` | 平台会话与外部 Runtime 会话 ID 的映射 |
 | `runs`、`run_events`、`outbox_records` | 运行、事件（sequence 游标）、Outbox 队列（多租户派发载体） |
+
+**Watchdog 事件**：`run.watchdog_alert`（payload：`rule`、`observed`、`threshold`）与 `run.watchdog_ack`（用户选择继续等待）。`tool.started` 的 payload 含 `signature`（工具名加参数摘要，不含原始参数）。Run 响应的 `attention_required` 由事件派生：最新的告警晚于所有非 Watchdog 事件与确认事件时为 true，因此不需要额外列或迁移。确认接口为 `POST /tenants/{tenant_id}/runs/{run_id}/watchdog/acknowledge`（202，返回 Run 视图），终态 Run 上不写入确认。
 | `runtime_epoch`、`session_admissions` | 派发账本：进程代际、会话入队记录（queued、started、unknown、terminal） |
 | `session_snapshots`（或会话表快照列） | 版本化的会话状态快照（JSON，v2）与水位 |
 | `native_run_states`、`run_directives` | Native 预算累计与运行指令 |

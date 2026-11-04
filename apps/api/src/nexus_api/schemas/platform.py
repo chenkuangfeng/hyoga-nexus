@@ -198,6 +198,8 @@ class RunView(BaseModel):
     ended_at: datetime | None
     # 1-based place in the session queue while queued; None otherwise.
     queue_position: int | None = None
+    # True while the newest run.watchdog_alert has no acknowledgement or later progress.
+    attention_required: bool = False
 
 
 class RunEventView(BaseModel):

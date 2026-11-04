@@ -234,5 +234,29 @@ __all__ = [
     "model_connection_pool",
     "model_credentials",
     "resolve_database_url",
+    "watchdog_settings",
     "wecom_settings",
 ]
+
+
+def watchdog_settings(path: Path | None = None):
+    """Read ``[watchdog]``; absent file or keys mean the run-watchdog defaults.
+
+    Invalid values raise DatabaseConfigurationError so that a typo cannot silently disable or
+    over-trigger the watchdog. The interval has a floor so a bad value cannot poll the database in a tight loop.
+    """
+    from .runs.watchdog import (DEFAULT_IDLE_SECONDS, DEFAULT_INTERVAL_SECONDS, DEFAULT_REPEAT_THRESHOLD,
+                                WatchdogSettings)
+    values = section("watchdog", path)
+
+    def integer(key: str, default: int, minimum: int) -> int:
+        value = values.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise DatabaseConfigurationError(f"{_FILE} [watchdog].{key} must be an integer >= {minimum}")
+        return value
+
+    return WatchdogSettings(
+        idle_seconds=integer("idle_seconds", DEFAULT_IDLE_SECONDS, 30),
+        repeat_threshold=integer("repeat_threshold", DEFAULT_REPEAT_THRESHOLD, 2),
+        interval_seconds=integer("interval_seconds", DEFAULT_INTERVAL_SECONDS, 5),
+    )
