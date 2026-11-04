@@ -10,4 +10,12 @@ Vue 3、TypeScript、Element Plus、vue-router（history 模式）。外壳位�
 
 浏览器用例位于 `tests/web/model-settings.mjs`，运行在 API 夹具上；不能代替真实部署端到端验收。
 
-Native 接口统一封装在 `api/native.ts`，设置页位于 `views/settings/NativeSettingsView.vue`，运行控制和模型分支分别由 `RuntimeControls.vue`、`ModelBranchControls.vue` 负责。异步加载清理、错误反馈和禁用状态由组件管理；服务端仍是授权与运行状态的事实来源。候选项仅填写回答框，由用户显式提交；追加指令携带幂等键，不新建 Run。
+Native 运行工作台（`/platform/native`，会话列表与新建；`/platform/native/sessions/:sessionId`，对话与运行）只调用平台 Run API，不使用 WeKnora 对话接口。
+
+- `api/native-run-types.ts`：Run、事件、会话等类型与运行时校验，不依赖网络或 i18n，便于测试。
+- `api/native-runs.ts`：类型化的请求封装；事件流使用 `@microsoft/fetch-event-source`，携带与 axios 相同的认证头，并从 `Last-Event-ID` 续读。
+- `composables/useNativeRun.ts`：提交（每次提交生成幂等键）、跟随事件流、刷新 Run 视图、告警确认、取消、追加提示、回答等待输入。断线后从已持有的序号续读，不重新提交 Run。
+- `views/native/nativeRunState.ts`：纯状态规则（按序号去重、助手文本按轮拼接、工具调用汇总、各状态下允许的操作）。服务端仍是状态的事实来源，页面不保存权限或终态。
+- `views/native/NativeWatchdogBanner.vue`：运行监督告警条，仅在服务端返回 `attention_required` 且 Run 未结束时显示；三个操作（继续等待、发送提示、取消）都由父组件调用接口后刷新。
+
+模型输出目前按纯文本显示（保留换行，不解析 Markdown），因此不存在未净化 HTML 的注入路径。需要 Markdown 时应使用现有安全渲染组件。

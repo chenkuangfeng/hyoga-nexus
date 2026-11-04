@@ -8708,6 +8708,7 @@ export default {
     }
   },
   menu: {
+    native: 'Native 실행',
     sessionInProgress: '대화 진행 중',
     sessionUnread: '새 답변',
     knowledgeBase: '지식베이스',
@@ -9003,5 +9004,60 @@ export default {
       appliedAt: "신청 일시",
       operation: "作業"
     }
+  },
+  nativeRuns: {
+    title: 'Native 실행',
+    subtitle: '게시된 Native 에이전트를 실행하고 진행 상황을 확인합니다.',
+    newSession: '새 세션',
+    agent: '에이전트',
+    agentPlaceholder: '게시된 에이전트 선택',
+    noPublishedAgents: '이 공간에 게시된 에이전트가 없습니다',
+    sessionTitle: '세션 제목',
+    sessionTitlePlaceholder: '제목 없는 세션',
+    create: '만들기',
+    empty: '아직 세션이 없습니다',
+    untitled: '제목 없는 세션',
+    back: '세션 목록으로 돌아가기',
+    composerPlaceholder: '메시지를 입력하세요 (Ctrl+Enter로 전송)',
+    send: '전송',
+    queued: '대기 중 (앞에 {count}개)',
+    user: '나',
+    assistant: '어시스턴트',
+    system: '시스템',
+    toolRunning: '{name} 호출 중',
+    toolCompleted: '{name} 완료',
+    toolFailed: '{name} 실패',
+    failure: '실행 실패: {code}',
+    cancelled: '실행이 취소되었습니다',
+    status: {
+      queued: '대기 중',
+      running: '실행 중',
+      waiting_input: '답변 대기',
+      waiting_approval: '승인 대기',
+      completed: '완료',
+      failed: '실패',
+      cancelled: '취소됨',
+      interrupted: '중단됨'
+    },
+    watchdog: {
+      title: '실행이 멈춘 것 같습니다',
+      body: '한동안 새로운 진행이 없거나 같은 도구를 반복해서 호출하고 있습니다. 계속 기다리거나, 힌트를 보내거나, 실행을 취소할 수 있습니다.',
+      continue: '계속 기다리기',
+      hint: '힌트 보내기',
+      cancel: '실행 취소'
+    },
+    hintPlaceholder: '실행에 대한 수정 사항을 입력하세요 (다음 라운드에 반영)',
+    hintSent: '힌트를 보냈습니다 (다음 라운드에 반영)',
+    input: {
+      title: '에이전트가 답변을 기다리고 있습니다',
+      placeholder: '답변 입력',
+      submit: '답변 제출'
+    },
+    cancel: '실행 취소',
+    streamError: '이벤트 스트림이 중단되었습니다: {message}',
+    loadError: '불러오지 못했습니다',
+    noSpace: '먼저 공간을 선택하세요',
+    notFound: '세션이 없거나 접근할 수 없습니다',
+    sendError: '전송하지 못했습니다'
   }
 }

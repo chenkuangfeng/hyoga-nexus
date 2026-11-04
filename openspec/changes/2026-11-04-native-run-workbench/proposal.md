@@ -2,7 +2,7 @@
 
 ## 状态
 
-草案，待用户确认。确认前不编码。实施状态见 tasks.md。
+已确认（UI 使用 TDesign，入口为独立导航项，v1 范围如提案所列，测试按提案执行）。实施状态见 tasks.md。
 
 ## 原因
 
@@ -36,19 +36,19 @@
 - 状态以服务端为准：页面不保存权限或 Run 终态，每次进入页面都从 `GET .../runs/{run_id}` 读取。
 - 事件按 `sequence` 去重并顺序渲染；断线后用 `Last-Event-ID` 续读，不重新提交 Run。
 - 告警条与 `attention_required` 同步：确认后立即刷新 Run 视图，不等待下一次事件。
-- 所有模型输出按不可信内容渲染，使用现有安全 Markdown 组件，不直接注入 HTML。
+- 模型输出在 v1 中以纯文本显示（保留换行，不解析 Markdown），因此没有 HTML 注入路径。需要 Markdown 时另行使用现有安全渲染组件。
 - 视觉与交互参照 `.codex/rules/frontend.md`，设计阶段使用 `ui-ux-pro-max` 技能。
 
-## 需要确认的决定
+## 已确认的决定
 
-1. **UI 组件库**：`.codex/rules/frontend.md` 记录的是 TDesign（2026-11-03 确认，与 WeKnora 一致）；根目录 AGENTS.md 写的是 Element Plus。两份规则不一致。推荐按 frontend.md 使用 TDesign，因为现有 `apps/web` 已经是 TDesign。请确认。
-2. **入口位置**：推荐新增独立导航项"Native 运行"，放在平台导航中。备选：放在现有智能体页面里。
-3. **v1 范围**：推荐按上面的范围执行，审批与记忆草稿留到后续提案。请确认是否接受这一划分。
-4. **测试方式**：推荐新增组件测试（事件去重、续读、告警条状态），并在有足够内存的环境中执行 `pnpm build`（本机因 OOM 无法完成构建）。
+1. **UI 组件库**：TDesign。`.codex/rules/frontend.md` 记录的是 TDesign（2026-11-03 确认，与 WeKnora 一致），根目录 AGENTS.md 写的是 Element Plus，两者不一致，按 frontend.md 执行。
+2. **入口位置**：独立导航项"Native 运行"（`stores/menu.ts`），路由为 `/platform/native`。
+3. **v1 范围**：按上面的范围执行；审批与记忆草稿留到后续提案。
+4. **测试方式**：组件与状态的单元测试；`pnpm build` 与浏览器用例需要在内存充足的环境执行。
 
 ## 影响
 
-- 新增路由和页面，修改平台导航（`router/navigation.ts`）。
-- 新增 `api/native-runs.ts`（类型化封装）和若干组件，不修改 WeKnora 对话相关代码。
+- 新增路由（`router/index.ts`）与导航项（`stores/menu.ts`）、页面与组件（`views/native/`）、组合式函数（`composables/useNativeRun.ts`）。
+- 新增 `api/native-run-types.ts`（纯类型与校验）和 `api/native-runs.ts`（请求封装），不修改 WeKnora 对话相关代码。
 - 文档：`apps/web/docs/design.md` 需要同步，删除其中已不存在的 `RuntimeControls.vue`、`api/native.ts` 描述，并补充新页面。
 - 无后端改动，接口全部已存在。

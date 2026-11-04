@@ -8709,6 +8709,7 @@ export default {
     }
   },
   menu: {
+    native: 'Native 執行',
     sessionInProgress: '會話進行中',
     sessionUnread: '有新回覆',
     knowledgeBase: '知識庫',
@@ -9000,4 +9001,59 @@ export default {
       operation: "操作"
     }
   },
+  nativeRuns: {
+    title: 'Native 執行',
+    subtitle: '執行已發布的 Native 智慧代理，並查看執行過程。',
+    newSession: '新增會話',
+    agent: '智慧代理',
+    agentPlaceholder: '選擇已發布的智慧代理',
+    noPublishedAgents: '目前空間沒有已發布的智慧代理',
+    sessionTitle: '會話標題',
+    sessionTitlePlaceholder: '未命名會話',
+    create: '建立',
+    empty: '還沒有會話',
+    untitled: '未命名會話',
+    back: '返回會話列表',
+    composerPlaceholder: '輸入訊息，按 Ctrl+Enter 傳送',
+    send: '傳送',
+    queued: '排隊中，前面還有 {count} 則',
+    user: '我',
+    assistant: '助理',
+    system: '系統',
+    toolRunning: '正在呼叫 {name}',
+    toolCompleted: '{name} 已完成',
+    toolFailed: '{name} 失敗',
+    failure: '執行失敗：{code}',
+    cancelled: '執行已取消',
+    status: {
+      queued: '排隊中',
+      running: '執行中',
+      waiting_input: '等待回答',
+      waiting_approval: '等待審批',
+      completed: '已完成',
+      failed: '失敗',
+      cancelled: '已取消',
+      interrupted: '已中斷'
+    },
+    watchdog: {
+      title: '執行可能停滯',
+      body: '此執行長時間沒有新進展，或在重複呼叫同一工具。你可以繼續等待、傳送提示，或取消執行。',
+      continue: '繼續等待',
+      hint: '傳送提示',
+      cancel: '取消執行'
+    },
+    hintPlaceholder: '寫下對執行的修正，將在下一輪生效',
+    hintSent: '提示已傳送，將在下一輪生效',
+    input: {
+      title: '需要你的回答',
+      placeholder: '輸入回答',
+      submit: '提交回答'
+    },
+    cancel: '取消執行',
+    streamError: '事件流中斷：{message}',
+    loadError: '載入失敗',
+    noSpace: '請先選擇空間',
+    notFound: '會話不存在或無權存取',
+    sendError: '傳送失敗'
+  }
 }

@@ -151,6 +151,19 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          // Native runs of published agents; uses the platform Run API only (see docs/design.md).
+          path: "native",
+          name: "nativeRuns",
+          component: () => import("../views/native/NativeSessionsView.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "native/sessions/:sessionId",
+          name: "nativeSession",
+          component: () => import("../views/native/NativeSessionView.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
           path: "agents",
           name: "agentList",
           component: PlannedPage,

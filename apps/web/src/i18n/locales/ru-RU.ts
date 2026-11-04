@@ -8708,6 +8708,7 @@ export default {
     }
   },
   menu: {
+    native: 'Native-запуски',
     sessionInProgress: 'Диалог выполняется',
     sessionUnread: 'Новый ответ',
     knowledgeBase: 'База знаний',
@@ -9003,5 +9004,60 @@ export default {
       appliedAt: "Дата заявки",
       operation: "Действия"
     }
+  },
+  nativeRuns: {
+    title: 'Native-запуски',
+    subtitle: 'Запускайте опубликованного Native-агента и следите за его работой.',
+    newSession: 'Новая сессия',
+    agent: 'Агент',
+    agentPlaceholder: 'Выберите опубликованного агента',
+    noPublishedAgents: 'В этом пространстве нет опубликованных агентов',
+    sessionTitle: 'Название сессии',
+    sessionTitlePlaceholder: 'Сессия без названия',
+    create: 'Создать',
+    empty: 'Сессий пока нет',
+    untitled: 'Сессия без названия',
+    back: 'Назад к сессиям',
+    composerPlaceholder: 'Введите сообщение, Ctrl+Enter — отправить',
+    send: 'Отправить',
+    queued: 'В очереди, перед ним запусков: {count}',
+    user: 'Вы',
+    assistant: 'Ассистент',
+    system: 'Система',
+    toolRunning: 'Вызов {name}',
+    toolCompleted: '{name} выполнен',
+    toolFailed: '{name}: ошибка',
+    failure: 'Запуск завершился ошибкой: {code}',
+    cancelled: 'Запуск отменён',
+    status: {
+      queued: 'В очереди',
+      running: 'Выполняется',
+      waiting_input: 'Ждёт ответа',
+      waiting_approval: 'Ждёт одобрения',
+      completed: 'Завершён',
+      failed: 'Ошибка',
+      cancelled: 'Отменён',
+      interrupted: 'Прерван'
+    },
+    watchdog: {
+      title: 'Запуск, возможно, завис',
+      body: 'Запуск долго не показывает прогресса или повторно вызывает один и тот же инструмент. Можно продолжить ожидание, отправить подсказку или отменить запуск.',
+      continue: 'Продолжить ожидание',
+      hint: 'Отправить подсказку',
+      cancel: 'Отменить запуск'
+    },
+    hintPlaceholder: 'Напишите поправку — она применится на следующем шаге',
+    hintSent: 'Подсказка отправлена — применится на следующем шаге',
+    input: {
+      title: 'Агенту нужен ваш ответ',
+      placeholder: 'Введите ответ',
+      submit: 'Отправить ответ'
+    },
+    cancel: 'Отменить запуск',
+    streamError: 'Поток событий прерван: {message}',
+    loadError: 'Не удалось загрузить',
+    noSpace: 'Сначала выберите пространство',
+    notFound: 'Сессия не найдена или недоступна',
+    sendError: 'Не удалось отправить'
   }
 }

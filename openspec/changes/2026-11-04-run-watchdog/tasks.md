@@ -15,7 +15,7 @@
 - [x] 2.3 不新增持久化字段。`attention_required` 由事件派生（最新告警晚于所有非 Watchdog 事件与确认事件），因此无迁移。（原任务为"持久化字段并迁移"，已在实施中调整。）
 - [x] 2.4 API：Run 视图增加 `attention_required`；新增 `POST .../runs/{run_id}/watchdog/acknowledge`。
 - [x] 2.5 配置：`[watchdog]` 读取与校验（`watchdog_settings`），worker 启动时读取，无效值直接拒绝启动；`configs/nexus.example.toml` 与 `configs/README.md` 已同步。
-- [ ] 2.6 Web 工作台：展示告警，提供"继续等待 / 取消 / 发送提示"。**未实施**：需要在前端接入 `attention_required` 与确认接口，并通过 `pnpm build` 验证（本机构建因内存不足被终止，需在有足够内存的环境验证）。
+- [x] 2.6 Web 工作台：告警条（`apps/web/src/views/native/NativeWatchdogBanner.vue`）提供"继续等待 / 发送提示 / 取消运行"，接入新增的 Native 运行页（见 2026-11-04-native-run-workbench）。`pnpm build` 尚未在本机通过（内存不足）。
 
 ## 3. 测试
 
@@ -24,10 +24,10 @@
 - [x] 3.2a 监控协程的检测异常不中断 Run（测试：`test_watchdog_check_failure_does_not_fail_the_run`）。
 - [x] 3.3 SQLite 验证（无迁移）。PostgreSQL 验证随路线图 2.9。
 - [x] 3.4 API 测试：`attention_required` 在告警后为 true，确认后为 false。
-- [ ] 3.5 前端：告警展示与三个操作的可见状态；窄屏布局。（随 2.6）
+- [ ] 3.5 前端：告警显隐与操作权限的规则已测试；组件交互测试与窄屏人工验证未做。
 
 ## 4. 文档与收尾
 
 - [x] 4.1 `docs/architecture.md` 2.2 与 2.12 已更新；`configs/README.md` 已更新。
-- [ ] 4.2 路线图 3.23 勾选：尚未勾选，因为 2.6 工作台未完成。
+- [ ] 4.2 路线图 3.23 勾选：仍未勾选。工作台告警已完成，但 3.23 原文包含"偏离目标"的判断，本次未纳入。
 - [ ] 4.3 OpenSpec 规格同步与归档：待工作台完成后执行。

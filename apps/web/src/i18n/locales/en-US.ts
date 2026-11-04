@@ -629,6 +629,7 @@ export default {
     nameDescending: 'Z–A',
   },
   menu: {
+    native: 'Native runs',
     sessionInProgress: 'Conversation in progress',
     sessionUnread: 'New reply',
     knowledgeBase: 'Knowledge Base',
@@ -8992,5 +8993,60 @@ export default {
       description:
         'Observe the image attributes and describe the image first, then decide from the attributes whether to run OCR, saving model calls and speeding up parsing. When the image is recognised as a photograph of a correctable page or label, it is straightened and cropped before recognition to improve OCR accuracy; if that fails, the original image is used.'
     }
+  },
+  nativeRuns: {
+    title: 'Native runs',
+    subtitle: 'Run a published Native agent and follow what it does.',
+    newSession: 'New session',
+    agent: 'Agent',
+    agentPlaceholder: 'Choose a published agent',
+    noPublishedAgents: 'No published agents in this space',
+    sessionTitle: 'Session title',
+    sessionTitlePlaceholder: 'Untitled session',
+    create: 'Create',
+    empty: 'No sessions yet',
+    untitled: 'Untitled session',
+    back: 'Back to sessions',
+    composerPlaceholder: 'Type a message, press Ctrl+Enter to send',
+    send: 'Send',
+    queued: 'Queued behind {count} other run(s)',
+    user: 'You',
+    assistant: 'Assistant',
+    system: 'System',
+    toolRunning: 'Calling {name}',
+    toolCompleted: '{name} completed',
+    toolFailed: '{name} failed',
+    failure: 'Run failed: {code}',
+    cancelled: 'Run cancelled',
+    status: {
+      queued: 'Queued',
+      running: 'Running',
+      waiting_input: 'Waiting for answer',
+      waiting_approval: 'Waiting for approval',
+      completed: 'Completed',
+      failed: 'Failed',
+      cancelled: 'Cancelled',
+      interrupted: 'Interrupted'
+    },
+    watchdog: {
+      title: 'This run may be stalled',
+      body: 'The run has made no progress for a while, or keeps calling the same tool. You can keep waiting, send a hint, or cancel it.',
+      continue: 'Keep waiting',
+      hint: 'Send a hint',
+      cancel: 'Cancel run'
+    },
+    hintPlaceholder: 'Write a correction; it applies at the next round',
+    hintSent: 'Hint sent; it applies at the next round',
+    input: {
+      title: 'The agent needs your answer',
+      placeholder: 'Type your answer',
+      submit: 'Submit answer'
+    },
+    cancel: 'Cancel run',
+    streamError: 'Event stream interrupted: {message}',
+    loadError: 'Failed to load',
+    noSpace: 'Select a space first',
+    notFound: 'Session not found or not accessible',
+    sendError: 'Failed to send'
   }
 }

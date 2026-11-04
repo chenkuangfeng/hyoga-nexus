@@ -8839,6 +8839,7 @@ export default {
     }
   },
   menu: {
+    native: 'Native 运行',
     sessionInProgress: '会话进行中',
     sessionUnread: '有新回复',
     knowledgeBase: '知识库',
@@ -8985,5 +8986,60 @@ export default {
       },
       description: '先观察图片特征并进行图片描述，再根据图片特征决定是否调用OCR对图片进行识别，以节省模型调用次数并提升解析速度。当识别到图片为可校正的文档或标签页照片时，会在识别前自动摆正并裁剪页面，以提升 OCR 准确率；若校正失败则直接使用原图。'
     }
+  },
+  nativeRuns: {
+    title: 'Native 运行',
+    subtitle: '运行已发布的 Native 智能体，并查看执行过程。',
+    newSession: '新建会话',
+    agent: '智能体',
+    agentPlaceholder: '选择已发布的智能体',
+    noPublishedAgents: '当前空间没有已发布的智能体',
+    sessionTitle: '会话标题',
+    sessionTitlePlaceholder: '未命名会话',
+    create: '创建',
+    empty: '还没有会话',
+    untitled: '未命名会话',
+    back: '返回会话列表',
+    composerPlaceholder: '输入消息，按 Ctrl+Enter 发送',
+    send: '发送',
+    queued: '排队中，前面还有 {count} 条',
+    user: '我',
+    assistant: '助手',
+    system: '系统',
+    toolRunning: '正在调用 {name}',
+    toolCompleted: '{name} 已完成',
+    toolFailed: '{name} 失败',
+    failure: '运行失败：{code}',
+    cancelled: '运行已取消',
+    status: {
+      queued: '排队中',
+      running: '运行中',
+      waiting_input: '等待回答',
+      waiting_approval: '等待审批',
+      completed: '已完成',
+      failed: '失败',
+      cancelled: '已取消',
+      interrupted: '已中断'
+    },
+    watchdog: {
+      title: '运行可能停滞',
+      body: '该运行长时间没有新进展，或在重复调用同一工具。你可以继续等待、发送提示，或取消运行。',
+      continue: '继续等待',
+      hint: '发送提示',
+      cancel: '取消运行'
+    },
+    hintPlaceholder: '写下对运行的修正，将在下一轮生效',
+    hintSent: '提示已发送，将在下一轮生效',
+    input: {
+      title: '需要你的回答',
+      placeholder: '输入回答',
+      submit: '提交回答'
+    },
+    cancel: '取消运行',
+    streamError: '事件流中断：{message}',
+    loadError: '加载失败',
+    noSpace: '请先选择空间',
+    notFound: '会话不存在或无权访问',
+    sendError: '发送失败'
   }
 }

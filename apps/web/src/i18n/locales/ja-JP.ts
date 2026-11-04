@@ -562,6 +562,7 @@ export default {
     }
   },
   menu: {
+    native: 'Native 実行',
     sessionInProgress: '会話中',
     sessionUnread: '新しい回答',
     knowledgeBase: 'ナレッジベース',
@@ -9003,5 +9004,60 @@ export default {
       appliedAt: "申請日時",
       operation: "操作"
     }
+  },
+  nativeRuns: {
+    title: 'Native 実行',
+    subtitle: '公開済みの Native エージェントを実行し、処理の進み具合を確認します。',
+    newSession: '新しいセッション',
+    agent: 'エージェント',
+    agentPlaceholder: '公開済みのエージェントを選択',
+    noPublishedAgents: 'このスペースに公開済みのエージェントがありません',
+    sessionTitle: 'セッション名',
+    sessionTitlePlaceholder: '無題のセッション',
+    create: '作成',
+    empty: 'セッションはまだありません',
+    untitled: '無題のセッション',
+    back: 'セッション一覧に戻る',
+    composerPlaceholder: 'メッセージを入力（Ctrl+Enter で送信）',
+    send: '送信',
+    queued: '待機中（前に {count} 件）',
+    user: 'あなた',
+    assistant: 'アシスタント',
+    system: 'システム',
+    toolRunning: '{name} を呼び出し中',
+    toolCompleted: '{name} が完了',
+    toolFailed: '{name} が失敗',
+    failure: '実行に失敗しました：{code}',
+    cancelled: '実行をキャンセルしました',
+    status: {
+      queued: '待機中',
+      running: '実行中',
+      waiting_input: '回答待ち',
+      waiting_approval: '承認待ち',
+      completed: '完了',
+      failed: '失敗',
+      cancelled: 'キャンセル済み',
+      interrupted: '中断'
+    },
+    watchdog: {
+      title: '実行が停滞している可能性があります',
+      body: 'しばらく新しい進捗がないか、同じツールを繰り返し呼び出しています。待つ、ヒントを送る、または実行をキャンセルできます。',
+      continue: '待機を続ける',
+      hint: 'ヒントを送る',
+      cancel: '実行をキャンセル'
+    },
+    hintPlaceholder: '実行への修正を入力（次のラウンドで反映）',
+    hintSent: 'ヒントを送信しました（次のラウンドで反映）',
+    input: {
+      title: 'エージェントが回答を待っています',
+      placeholder: '回答を入力',
+      submit: '回答を送信'
+    },
+    cancel: '実行をキャンセル',
+    streamError: 'イベントストリームが中断されました：{message}',
+    loadError: '読み込みに失敗しました',
+    noSpace: '先にスペースを選択してください',
+    notFound: 'セッションが存在しないか、アクセスできません',
+    sendError: '送信に失敗しました'
   }
 }
