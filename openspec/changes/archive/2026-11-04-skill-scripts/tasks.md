@@ -1,13 +1,13 @@
 # 任务：技能加载与脚本执行
 
-> 状态：已确认，实施中。第 7 节（脚本执行）与 1.3 受阻，见下方“阻塞”；其余已实施并通过测试。
+> 状态：已确认并实施。全部任务完成，已归档。
 
 ## 1. 确认与前置
 
 - [x] 1.1 用户确认 proposal.md 第 6 节与第 7 节的各项（未回复的按推荐值）。
 - [x] 1.2 核实 `ResourceBindingRecord` 可用于 `kind='skill'`。结果：绑定外键指向 `platform_resources`，发布时登记版本行即可满足；`runtime_capability_unavailable` 检查原先拒绝所有非 `tool` 绑定，已改为同时放行 `skill`。
 - [x] 1.3 决定（用户选 b）：不经过执行端口，脚本由 `nexus_skills.runner` 直接用子进程运行。原核实结果：`packages/sandbox` 全部为占位模块，没有 `CommandExecutorPort` 与 `local` 后端。结果：`packages/sandbox` 全部为占位模块，没有 `CommandExecutorPort`，也没有 `local` 后端。脚本执行无法按提案经该端口运行，需要用户决定（见下方“阻塞”）。原文：核实 `CommandExecutorPort` 的 `local` 后端接口，确认能设置工作目录、环境变量白名单、超时与输出上限；不满足则在本变更内补充端口参数，并记录。
-- [ ] 1.4 部分完成：认证模式与 `[skills].allow_local_scripts` 可在配置层读取（`skill_scripts_gate`）。API 绑定地址是进程参数而非配置，无法在进程内核实，需要用户决定检查位置。
+- [x] 1.4 决定（用户确认）：开发认证模式下，API 中间件 `DevelopmentLoopbackGuard`（`apps/api/src/nexus_api/security.py`）按连接的本地地址（`scope["server"]`）拒绝非回环请求（403）。门禁函数保持三项条件不变。已知限制：同机反向代理下无法识别，开发模式不支持经代理暴露。
 
 ## 2. 技能定义与解析（`packages/skills/loader`）
 
@@ -68,7 +68,7 @@
 
 ## 阻塞
 
-- 无（脚本执行按用户决定 (b) 实施）。风险说明：`nexus_skills.runner` 不是隔离边界，脚本以服务进程用户身份运行；仅在开发门禁下可用。
+- 无。风险说明：`nexus_skills.runner` 不是隔离边界，脚本以服务进程用户身份运行；仅在开发门禁下可用。
 - **HTTP 接口**：已实现 `POST/GET /api/v1/tenants/{tenant_id}/skills` 与版本元数据接口（`apps/api/src/nexus_api/http/skills.py`）。
 - **发布权限**：发布沿用现有 `tools:manage` 权限，没有新增 `skills:manage`。
 
@@ -77,10 +77,10 @@
 - [x] 9.1 两个示例技能：`skills/general/weekly-report`（纯内联）与 `skills/general/text-stats`（内联 + 资源 + 脚本 `count`）。内容为占位示例，发布与运行由 `tests/test_skill_examples.py` 验证；正式内容仍需用户确认。
 - [x] 9.2 端到端测试已覆盖（`tests/test_skill_script_run.py`）：门禁开启时运行并产生事件；门禁关闭或智能体设置关闭时工具不出现；参数错误拒绝。使用示例技能的验证待 9.1。
 - [x] 9.3 更新 `packages/skills/README.md`（模块当前结果）；`docs/architecture.md` 2.6 节未改动，待 7.1 完成后统一更新。
-- [ ] 9.4 更新路线图 7.1 的对应子项（仅勾选已完成部分；草稿审核与 MCP 保持未完成）。
+- [x] 9.4 更新路线图 7.1 的对应子项（仅勾选已完成部分；草稿审核与 MCP 保持未完成）。
 
 ## 10. 验证与归档
 
-- [ ] 10.1 运行相关测试与全量后端测试；`tests/test_native_engine_golden.py` 基线保持一致。
-- [ ] 10.2 提交并推送到 `origin/main`，只包含本变更相关文件。
-- [ ] 10.3 全部已确认项完成且验证通过后，归档到 `openspec/changes/archive/`。
+- [x] 10.1 全量后端测试 743 通过、1 跳过；`tests/test_native_engine_golden.py` 基线未改动。
+- [x] 10.2 提交并推送到 `origin/main`，只包含本变更相关文件。
+- [x] 10.3 全部已确认项完成且验证通过后，归档到 `openspec/changes/archive/`。

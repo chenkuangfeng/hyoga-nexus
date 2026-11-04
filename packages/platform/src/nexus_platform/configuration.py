@@ -278,7 +278,8 @@ def skill_scripts_allowed(path: Path | None = None) -> bool:
 def skill_scripts_gate(*, auth_mode: str | None, backend: str | None, config_enabled: bool) -> bool:
     """Return True only when all proposal conditions hold: config flag, development auth mode, local backend.
 
-    The API bind address is not part of this check: it is a process argument, not configuration, so
-    it is verified by the startup entry point instead (open question in the proposal's tasks 1.4).
+    The API bind address is not part of this check. Development-mode requests are refused unless they
+    arrive on loopback by the API middleware (``nexus_api.security``), which covers the same risk at the
+    entry point where it occurs.
     """
     return bool(config_enabled) and auth_mode == "development" and backend == "local"

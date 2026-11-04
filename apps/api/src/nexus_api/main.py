@@ -49,6 +49,9 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Hyoga Nexus", version="0.1.0", lifespan=lifespan)
+
+from nexus_api.security import DevelopmentLoopbackGuard  # noqa: E402
+app.add_middleware(DevelopmentLoopbackGuard)
 app.include_router(platform_router)
 app.include_router(skills_router)
 app.include_router(orgs_router)
