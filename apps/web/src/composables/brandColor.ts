@@ -3,6 +3,9 @@ import {
   loadPreference,
   savePreference,
   migratePreferencesIntoUser,
+  readUserId,
+  safeGetItem,
+  safeSetItem,
 } from './preferenceStorage'
 
 /**
@@ -39,8 +42,13 @@ const STORAGE_SUFFIX = 'brand_color'
 const isBrandColorKey = (v: string | null): v is BrandColorKey =>
   !!v && Object.prototype.hasOwnProperty.call(BRAND_COLORS, v)
 
+// 设备级记录最近一次的选择。偏好本身按用户保存，而登录页（未登录，userId 为 anon）
+// 没有用户命名空间，所以登录页读取的就是这个值，保证登录页与上次选择的颜色一致。
+const DEVICE_BRAND_KEY = 'WeKnora_device_brand_color'
+
 function loadBrand(): BrandColorKey {
-  const v = loadPreference(STORAGE_SUFFIX)
+  const v =
+    readUserId() === 'anon' ? safeGetItem(DEVICE_BRAND_KEY) : loadPreference(STORAGE_SUFFIX)
   return isBrandColorKey(v) ? v : DEFAULT_BRAND
 }
 
@@ -145,6 +153,7 @@ export function useBrandColor() {
     if (!isBrandColorKey(key)) return false
     currentBrand.value = key
     savePreference(STORAGE_SUFFIX, key)
+    safeSetItem(DEVICE_BRAND_KEY, key)
     applyBrandColor()
     return true
   }

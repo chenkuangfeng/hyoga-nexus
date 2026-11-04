@@ -667,7 +667,7 @@
                 <span class="shared-detail-label">{{ currentSharedKbForDetail.source_from_agent ?
                   $t('knowledgeList.detail.sourceFromAgent') : $t('knowledgeList.detail.sourceOrg') }}</span>
                 <span class="shared-detail-value shared-detail-org">
-                  <img src="@/assets/img/organization-green.svg" class="shared-detail-org-icon" alt=""
+                  <BrandMaskIcon name="organization-green.svg" class="shared-detail-org-icon"
                     aria-hidden="true" />
                   {{ currentSharedKbForDetail.source_from_agent ? currentSharedKbForDetail.source_from_agent.agent_name
                     :
@@ -711,6 +711,7 @@
 </template>
 
 <script setup lang="ts">
+import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { useAssistantDataChange } from '@/utils/assistantDataChange'
 import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'

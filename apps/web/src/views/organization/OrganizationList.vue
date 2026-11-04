@@ -20,7 +20,7 @@
               <t-tooltip :content="canManageOrg ? $t('organization.createOrg') : noPermissionTip" placement="bottom">
                 <t-button variant="text" theme="default" size="small" class="header-action-btn"
                   style="--wails-draggable: no-drag" :disabled="!canManageOrg" @click="handleCreateOrganization">
-                  <template #icon><img src="@/assets/img/organization-green.svg" class="org-create-icon" alt=""
+                  <template #icon><BrandMaskIcon name="organization-green.svg" class="org-create-icon"
                       aria-hidden="true" /></template>
                 {{ $t('organization.createOrg') }}
                 </t-button>
@@ -180,7 +180,7 @@
           </t-tooltip>
           <t-tooltip :content="noPermissionTip" placement="top" :disabled="canManageOrg">
             <t-button theme="primary" class="org-create-btn" :disabled="!canManageOrg" @click="handleCreateOrganization">
-              <template #icon><img src="@/assets/img/organization-green.svg" class="org-create-icon" alt=""
+              <template #icon><BrandMaskIcon name="organization-green.svg" class="org-create-icon"
                   aria-hidden="true" /></template>
               {{ $t('organization.createOrg') }}
             </t-button>
@@ -355,7 +355,7 @@
                       </t-tooltip>
                       <t-tooltip :content="$t('organization.invite.agents')" placement="top">
                         <div class="feature-badge stat-agent">
-                          <img src="@/assets/img/agent-green.svg" class="stat-agent-icon" alt="" aria-hidden="true" />
+                          <BrandMaskIcon name="agent-green.svg" class="stat-agent-icon" aria-hidden="true" />
                           <span class="badge-count">{{ invitePreviewData.agent_share_count ?? 0 }}</span>
                         </div>
                       </t-tooltip>
@@ -428,6 +428,7 @@
 </template>
 
 <script setup lang="ts">
+import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'

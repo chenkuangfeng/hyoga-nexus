@@ -145,7 +145,7 @@
                           {{ $t('mentionDetail.kbCount', { count: detailCache[item.id].data.knowledge_count ?? detailCache[item.id].data.count ?? 0 }) }}
                         </span>
                         <span v-if="detailCache[item.id].data.org_name || item.orgName" class="detail-org">
-                          <img src="@/assets/img/organization-green.svg" class="detail-icon-img" alt="" aria-hidden="true" />
+                          <BrandMaskIcon name="organization-green.svg" class="detail-icon-img" aria-hidden="true" />
                           <span class="detail-label">{{ $t('mentionDetail.belongsToOrg') }}</span>
                           <span
                             class="detail-value clickable"
@@ -186,7 +186,7 @@
                           </span>
                         </span>
                         <span v-if="item.orgName" class="detail-org">
-                          <img src="@/assets/img/organization-green.svg" class="detail-icon-img" alt="" aria-hidden="true" />
+                          <BrandMaskIcon name="organization-green.svg" class="detail-icon-img" aria-hidden="true" />
                           <span class="detail-label">{{ $t('mentionDetail.belongsToOrg') }}</span>
                           <span
                             class="detail-value clickable"
@@ -255,6 +255,7 @@
 </template>
 
 <script setup lang="ts">
+import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { computed, watch, ref, nextTick, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';

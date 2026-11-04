@@ -666,7 +666,7 @@
             <div class="shared-detail-row">
               <span class="shared-detail-label">{{ $t('knowledgeList.detail.sourceOrg') }}</span>
               <span class="shared-detail-value shared-detail-org">
-                <img src="@/assets/img/organization-green.svg" class="shared-detail-org-icon" alt=""
+                <BrandMaskIcon name="organization-green.svg" class="shared-detail-org-icon"
                   aria-hidden="true" />
                 <span>{{ currentSharedAgent.org_name }}</span>
               </span>
@@ -725,6 +725,7 @@
 </template>
 
 <script setup lang="ts">
+import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { useAssistantDataChange } from '@/utils/assistantDataChange'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

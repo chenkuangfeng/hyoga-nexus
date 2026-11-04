@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { ref, onMounted, onBeforeUnmount, onUnmounted, computed, watch, nextTick, h, type PropType } from "vue";
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
@@ -2831,8 +2832,9 @@ defineExpose({
               <t-icon v-else :name="getMentionIcon(item)" />
             </span>
             <span v-if="item.org_name" class="mention-chip__org-badge">
-              <img :src="getImgSrc(item.type === 'file' ? 'organization-grey.svg' : 'organization-green.svg')"
+              <img v-if="item.type === 'file'" :src="getImgSrc('organization-grey.svg')"
                 class="mention-chip__org-img" alt="" aria-hidden="true" />
+              <BrandMaskIcon v-else name="organization-green.svg" class="mention-chip__org-img" />
             </span>
           </span>
           <span class="mention-chip__name" :title="item.name">{{ item.name }}</span>

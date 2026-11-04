@@ -3,7 +3,9 @@
     :overlay-class="isCreateMode ? 'organization-create-overlay' : ''"
     :z-index="2000" @close="modalShell.requestClose">
     <template #nav-icon="{ item, active }">
-      <img v-if="item.key === 'sharedAgents'" :src="active ? agentIconActiveSrc : agentIconSrc"
+      <BrandMaskIcon v-if="item.key === 'sharedAgents' && active" name="agent-green.svg"
+        class="nav-icon nav-icon-img" />
+      <img v-else-if="item.key === 'sharedAgents'" :src="agentIconSrc"
         class="nav-icon nav-icon-img" alt="" aria-hidden="true" />
       <t-icon v-else :name="item.icon" class="nav-icon" />
     </template>
@@ -749,6 +751,7 @@
 </template>
 
 <script setup lang="ts">
+import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -772,7 +775,6 @@ import { useOrganizationStore } from '@/stores/organization'
 import { useAuthStore } from '@/stores/auth'
 import SpaceAvatar from '@/components/SpaceAvatar.vue'
 import agentIconSrc from '@/assets/img/agent.svg'
-import agentIconActiveSrc from '@/assets/img/agent-green.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
