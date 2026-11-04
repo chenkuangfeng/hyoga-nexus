@@ -1,4 +1,28 @@
 export default {
+  permissionCatalog: {
+    menus: {
+      chat: '會話',
+      agents: '智能體',
+      models: '模型',
+      audit: '審計',
+      members: '成員',
+      roles: '角色',
+    },
+    apis: {
+      'agents:read': '查看智能體',
+      'agents:write': '編輯智能體',
+      'agents:publish': '發布智能體',
+      'sessions:write': '發起會話',
+      'runs:write': '運行任務',
+      'models:read': '查看模型',
+      'models:manage': '管理模型',
+      'audit:read': '查看審計日誌',
+      'members:manage': '管理成員',
+      'roles:manage': '管理角色',
+      'org:manage': '管理組織',
+      'tools:manage': '管理工具',
+    },
+  },
   modelCatalog: {
     "title": "模型目錄",
     "description": "模型目錄決定新增模型時可選的模型清單，以及脈絡視窗、是否支持思考等預設參數。在這裡修改後，所有空間立即生效。",

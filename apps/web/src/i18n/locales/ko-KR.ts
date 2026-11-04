@@ -1,4 +1,28 @@
 export default {
+  permissionCatalog: {
+    menus: {
+      chat: '채팅',
+      agents: '에이전트',
+      models: '모델',
+      audit: '감사',
+      members: '멤버',
+      roles: '역할',
+    },
+    apis: {
+      'agents:read': '에이전트 보기',
+      'agents:write': '에이전트 편집',
+      'agents:publish': '에이전트 게시',
+      'sessions:write': '세션 시작',
+      'runs:write': '작업 실행',
+      'models:read': '모델 보기',
+      'models:manage': '모델 관리',
+      'audit:read': '감사 로그 보기',
+      'members:manage': '멤버 관리',
+      'roles:manage': '역할 관리',
+      'org:manage': '조직 관리',
+      'tools:manage': '도구 관리',
+    },
+  },
   modelCatalog: {
     "title": "모델 카탈로그",
     "description": "모델 카탈로그는 모델 추가 시 선택할 수 있는 모델 목록과 컨텍스트 창, 추론 지원 여부 같은 기본값을 정의합니다. 여기서 변경하면 모든 워크스페이스에 즉시 적용됩니다.",

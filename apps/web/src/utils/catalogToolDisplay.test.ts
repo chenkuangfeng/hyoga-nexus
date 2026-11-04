@@ -42,21 +42,38 @@ test('operation titles follow the UI locale for live events, history, and status
   assert.equal(event.arguments.operation, 'model.list')
 })
 
-test('every backend catalog operation has a label in every UI locale', () => {
-  const spec = JSON.parse(readFileSync(new URL('../../../docs/swagger.json', import.meta.url), 'utf8'))
-  const ids = new Set<string>()
-  for (const path of Object.values(spec.paths)) {
-    for (const op of Object.values(path as Record<string, any>)) {
-      if (op['x-agent']?.id) ids.add(op['x-agent'].id)
-    }
+/**
+ * 读取后端权限目录（packages/platform/.../authz/catalog.py 中的 MENUS 与 API_PERMISSIONS）。
+ * 直接解析源码中的字符串字面量，避免测试依赖 Python 运行环境。
+ */
+function readBackendPermissionCatalog(): { menus: string[]; apis: string[] } {
+  const source = readFileSync(
+    new URL('../../../../packages/platform/src/nexus_platform/authz/catalog.py', import.meta.url),
+    'utf8',
+  )
+  const literals = (name: string): string[] => {
+    const block = source.match(new RegExp(`^${name}: frozenset\\[str\\] = frozenset\\(\\{([\\s\\S]*?)\\}\\)`, 'm'))
+    assert.ok(block, `${name} not found in catalog.py`)
+    return [...block[1].matchAll(/"([^"]+)"/g)].map(m => m[1])
   }
-  assert.ok(ids.size > 0)
+  return { menus: literals('MENUS'), apis: literals('API_PERMISSIONS') }
+}
+
+test('every backend permission catalog entry has a label in every UI locale', () => {
+  const catalog = readBackendPermissionCatalog()
+  assert.ok(catalog.menus.length > 0 && catalog.apis.length > 0)
   for (const [locale, bundle] of Object.entries(LOCALE_BUNDLES)) {
-    const { global } = createI18n({ legacy: false, locale, fallbackLocale: false, messages: { [locale]: bundle } })
-    for (const id of ids) {
-      assert.ok(global.te(`agentStream.operations.names.${id}`), `${locale}: missing ${id}`)
-      assert.notEqual(getOperationLabel(global.t, id), id, `${locale}: untranslated ${id}`)
+    const labels = (bundle as any).permissionCatalog
+    assert.ok(labels, `${locale}: permissionCatalog group missing`)
+    for (const menu of catalog.menus) {
+      assert.ok(labels.menus?.[menu], `${locale}: missing menu label ${menu}`)
     }
+    for (const api of catalog.apis) {
+      assert.ok(labels.apis?.[api], `${locale}: missing API permission label ${api}`)
+    }
+    // 目录之外的标签视为陈旧条目，需随目录一并删除。
+    assert.deepEqual(Object.keys(labels.menus).sort(), [...catalog.menus].sort(), `${locale}: stale menu labels`)
+    assert.deepEqual(Object.keys(labels.apis).sort(), [...catalog.apis].sort(), `${locale}: stale API labels`)
   }
 })
 

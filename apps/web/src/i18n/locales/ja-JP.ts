@@ -1,4 +1,28 @@
 export default {
+  permissionCatalog: {
+    menus: {
+      chat: 'チャット',
+      agents: 'エージェント',
+      models: 'モデル',
+      audit: '監査',
+      members: 'メンバー',
+      roles: 'ロール',
+    },
+    apis: {
+      'agents:read': 'エージェントの閲覧',
+      'agents:write': 'エージェントの編集',
+      'agents:publish': 'エージェントの公開',
+      'sessions:write': 'セッションの開始',
+      'runs:write': 'タスクの実行',
+      'models:read': 'モデルの閲覧',
+      'models:manage': 'モデルの管理',
+      'audit:read': '監査ログの閲覧',
+      'members:manage': 'メンバーの管理',
+      'roles:manage': 'ロールの管理',
+      'org:manage': '組織の管理',
+      'tools:manage': 'ツールの管理',
+    },
+  },
   modelCatalog: {
     "title": "モデルカタログ",
     "description": "モデルカタログは、モデル追加時に選べるモデル一覧と、コンテキスト長や思考対応などの既定値を定義します。ここでの変更はすべてのワークスペースに即時反映されます。",

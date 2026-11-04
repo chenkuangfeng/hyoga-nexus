@@ -1,4 +1,28 @@
 export default {
+  permissionCatalog: {
+    menus: {
+      chat: 'Chat',
+      agents: 'Agents',
+      models: 'Models',
+      audit: 'Audit',
+      members: 'Members',
+      roles: 'Roles',
+    },
+    apis: {
+      'agents:read': 'View agents',
+      'agents:write': 'Edit agents',
+      'agents:publish': 'Publish agents',
+      'sessions:write': 'Start sessions',
+      'runs:write': 'Run tasks',
+      'models:read': 'View models',
+      'models:manage': 'Manage models',
+      'audit:read': 'View audit logs',
+      'members:manage': 'Manage members',
+      'roles:manage': 'Manage roles',
+      'org:manage': 'Manage organization',
+      'tools:manage': 'Manage tools',
+    },
+  },
   changePassword: {
     title: 'Change your initial password',
     description: 'The password you signed in with is temporary. Change it before you continue. You will sign in again afterwards.',

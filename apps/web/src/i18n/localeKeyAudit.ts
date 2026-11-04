@@ -68,6 +68,9 @@ const TM_KEY_PATTERNS = [
 ] as const
 
 const EXTRA_PREFIXES = [
+  // Permission labels mirror the backend permission catalog (authz/catalog.py); the
+  // catalog test checks them directly, so pruning must keep the whole group.
+  'permissionCatalog.',
   // Operation labels use IDs supplied by the backend catalog at runtime.
   'agentStream.operations.names.',
   'system.globalSettings.listConfirm.',

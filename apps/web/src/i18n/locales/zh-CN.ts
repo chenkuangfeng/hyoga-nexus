@@ -1,4 +1,28 @@
 export default {
+  permissionCatalog: {
+    menus: {
+      chat: '会话',
+      agents: '智能体',
+      models: '模型',
+      audit: '审计',
+      members: '成员',
+      roles: '角色',
+    },
+    apis: {
+      'agents:read': '查看智能体',
+      'agents:write': '编辑智能体',
+      'agents:publish': '发布智能体',
+      'sessions:write': '发起会话',
+      'runs:write': '运行任务',
+      'models:read': '查看模型',
+      'models:manage': '管理模型',
+      'audit:read': '查看审计日志',
+      'members:manage': '管理成员',
+      'roles:manage': '管理角色',
+      'org:manage': '管理组织',
+      'tools:manage': '管理工具',
+    },
+  },
   changePassword: {
     title: '修改初始密码',
     description: '首次登录或管理员设置的密码为临时密码，请先修改后再使用。修改后需要重新登录。',
