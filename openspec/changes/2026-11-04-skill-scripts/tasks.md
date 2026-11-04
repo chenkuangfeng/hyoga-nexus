@@ -22,7 +22,7 @@
 - [x] 3.1 `skills`、`skill_versions`、`skill_version_files` 模型与 Alembic 迁移（需确认后执行）。
 - [x] 3.2 版本生成：内容哈希稳定，发布生成新版本，已发布版本不可修改。
 - [x] 3.3 单文件与总大小上限。
-- [ ] 3.4 未完成：内置技能导入。`skills/` 中的内容尚未决定，导入逻辑留待 9.1 一起做。
+- [x] 3.4 内置技能导入：`import_builtin(db, principal, tenant, root)` 以 `builtin` 来源发布目录下的技能；已存在且内容相同的报告为 `unchanged`；同名的已安装技能拒绝替换（`skill_source_conflict`）。未提供命令行入口，需要管理员身份的调用方。
 - [x] 3.5 测试：哈希稳定、不可修改、迁移往返（SQLite）。
 
 ## 4. 智能体配置与绑定

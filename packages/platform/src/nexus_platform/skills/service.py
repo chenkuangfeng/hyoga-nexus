@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable
 from uuid import UUID
 
@@ -53,7 +54,8 @@ def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 @_translate
-def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, files: dict[str, str]) -> dict[str, Any]:
+def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, files: dict[str, str],
+            *, source: str = 'installed') -> dict[str, Any]:
     """Publish a new immutable version of an installed skill; creates the skill on first publish.
 
     Checks, in order: administrator permission, SKILL.md rules, resource rules, declared scripts
@@ -75,13 +77,13 @@ def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, f
         now = utc_now()
         skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name))
         if skill is None:
-            skill = SkillRecord(id=new_id(), tenant_id=tenant_id, name=parsed.name, source='installed',
+            skill = SkillRecord(id=new_id(), tenant_id=tenant_id, name=parsed.name, source=source,
                                 created_by=user.id, created_at=now)
             db.add(skill)
             db.flush()
             number = 1
         else:
-            if skill.source != 'installed':
+            if skill.source != source:
                 raise InvalidConfiguration('skill_source_conflict')
             latest = db.scalar(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
                                .order_by(SkillVersionRecord.version.desc()).limit(1))
@@ -256,3 +258,45 @@ def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str
     return [{'version': v.version, 'version_id': str(v.id), 'content_hash': v.content_hash, 'description': v.description,
              'tools': list(v.tools), 'scripts': [s['name'] for s in v.scripts], 'scan_hints': list(v.scan_hints),
              'created_at': v.created_at.isoformat()} for v in versions]
+
+
+#: Source label for skills imported from the repository's ``skills/`` directory.
+BUILTIN_SOURCE = 'builtin'
+#: Files that belong to the repository layout, not to a skill version.
+_SKIP_NAMES = frozenset({'README.md'})
+
+
+def read_skill_folder(folder: Path) -> tuple[str, dict[str, str]]:
+    """Read SKILL.md and every other file under one skill folder as UTF-8 text, keyed by relative path."""
+    skill_md = (folder / 'SKILL.md').read_text(encoding='utf-8')
+    files: dict[str, str] = {}
+    for path in sorted(folder.rglob('*')):
+        if not path.is_file() or path.name == 'SKILL.md' or path.name.startswith('.'):
+            continue
+        files[path.relative_to(folder).as_posix()] = path.read_text(encoding='utf-8')
+    return skill_md, files
+
+
+def import_builtin(db: Session, principal: Principal, tenant_id: UUID, root: Path) -> list[dict[str, Any]]:
+    """Publish every skill folder under ``root`` (a folder holding SKILL.md) with the builtin source.
+
+    Folders whose content matches the current version are reported as ``unchanged`` instead of failing,
+    so the import can be run again after each repository update. Each folder is published in its own
+    transaction, so one bad folder does not roll back the others; its error code is reported.
+    """
+    results: list[dict[str, Any]] = []
+    for skill_file in sorted(root.rglob('SKILL.md')):
+        folder = skill_file.parent
+        if folder.name in _SKIP_NAMES:
+            continue
+        try:
+            skill_md, files = read_skill_folder(folder)
+            outcome = publish(db, principal, tenant_id, skill_md, files, source=BUILTIN_SOURCE)
+            results.append({'folder': folder.relative_to(root).as_posix(), 'status': 'published', **outcome})
+        except Conflict as exc:
+            db.rollback()
+            results.append({'folder': folder.relative_to(root).as_posix(), 'status': 'unchanged', 'error': str(exc)})
+        except (PlatformError, UnicodeDecodeError, OSError) as exc:
+            db.rollback()
+            results.append({'folder': folder.relative_to(root).as_posix(), 'status': 'failed', 'error': str(exc)})
+    return results
