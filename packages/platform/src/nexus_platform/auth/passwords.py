@@ -33,6 +33,15 @@ def validate_new_password(password: str) -> None:
 
 def hash_password(password: str) -> str:
     validate_new_password(password)
+    return hash_password_unchecked(password)
+
+
+def hash_password_unchecked(password: str) -> str:
+    """Hash a password without the length policy.
+
+    Only the operator bootstrap that seeds the default space account may call this (see
+    nexus_platform.bootstrap). Every user-facing path must use hash_password.
+    """
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=_N, r=_R, p=_P, dklen=_DKLEN)
     return f"scrypt${_N}${_R}${_P}${_b64(salt)}${_b64(digest)}"

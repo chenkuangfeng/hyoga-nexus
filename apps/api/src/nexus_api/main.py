@@ -1,3 +1,5 @@
+import logging
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -13,9 +15,40 @@ from nexus_api.http.shared_spaces import router as shared_spaces_router
 from nexus_api.http.agent_shares import router as agent_shares_router
 from nexus_platform.errors import PlatformError
 from nexus_platform.configuration import DatabaseConfigurationError
+from nexus_platform.bootstrap import ensure_default_enterprise
 from nexus_platform.persistence.database import create_database_engine, session_factory
 
-app = FastAPI(title="Hyoga Nexus", version="0.1.0")
+logger = logging.getLogger("nexus_api.startup")
+
+
+def ensure_default_space() -> None:
+    """Create the default enterprise space and owner account if missing. Never stops the API from starting."""
+    try:
+        engine = create_database_engine()
+    except DatabaseConfigurationError as exc:
+        logger.warning("Default space bootstrap skipped: %s", exc)
+        return
+    try:
+        with session_factory(engine)() as db:
+            result = ensure_default_enterprise(db)
+        logger.info("Default space bootstrap: space=%s owner=%s created_space=%s created_owner=%s granted_membership=%s",
+                    result.space_id, result.owner_id, result.created_space, result.created_owner,
+                    result.granted_membership)
+    except SQLAlchemyError as exc:
+        logger.warning("Default space bootstrap skipped; apply migrations first: %s", exc)
+    except Exception:
+        logger.exception("Default space bootstrap failed")
+    finally:
+        engine.dispose()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_default_space()
+    yield
+
+
+app = FastAPI(title="Hyoga Nexus", version="0.1.0", lifespan=lifespan)
 app.include_router(platform_router)
 app.include_router(skills_router)
 app.include_router(orgs_router)
