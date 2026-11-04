@@ -35,17 +35,10 @@
               <div class="nexus-chat__bubble">{{ text }}</div>
             </div>
 
-            <div v-for="segment in liveSegments" :key="`live-${segment.turn}`" class="nexus-chat__turn is-assistant is-live">
-              <div class="nexus-chat__markdown" v-html="renderMarkdown(segment.text, true)" />
+            <!-- 当前运行：WeKnora 的智能体时间线组件，输入由 toAgentEventStream 从 Run 事件映射而来。 -->
+            <div v-if="liveSession" class="nexus-chat__turn is-assistant is-live" data-testid="chat-live-stream">
+              <AgentStreamDisplay class="nexus-chat__stream" :session="liveSession" />
             </div>
-
-            <ul v-if="calls.length > 0" class="nexus-chat__process" data-testid="chat-tool-calls">
-              <li v-for="call in calls" :key="call.invocationId" :class="`is-${call.status}`">
-                <t-icon :name="toolIcon(call)" class="nexus-chat__process-icon" />
-                <span>{{ toolLabel(call) }}</span>
-                <span v-if="call.errorCode" class="nexus-chat__process-code">({{ call.errorCode }})</span>
-              </li>
-            </ul>
 
             <p v-if="failureText" class="nexus-chat__status-line is-failure" role="status" data-testid="chat-failure">
               {{ failureText }}
@@ -78,25 +71,16 @@
 
     <div class="nexus-chat__composer-wrap">
       <h1 v-if="isWelcome" class="nexus-chat__welcome">{{ $t('nexusChat.welcome') }}</h1>
-      <form class="nexus-chat__composer" @submit.prevent="send">
-        <t-textarea v-model="draft" class="nexus-chat__textarea" :autosize="{ minRows: 2, maxRows: 8 }"
-          :maxlength="100000" :placeholder="$t('nexusChat.placeholder')" :disabled="submitting"
-          data-testid="chat-composer" @keydown="onComposerKeydown" />
-        <div class="nexus-chat__composer-bar">
+      <!-- 输入区复用 WeKnora 的 Input-field，nexus-mode 下只保留文本、发送、追加指令与停止。 -->
+      <InputField nexus-mode class="nexus-chat__input" data-testid="chat-composer" :auto-focus="isWelcome"
+        :is-replying="isReplying" :can-steer="canSteer(run)"
+        @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
+        <template #controls>
           <t-select v-if="isWelcome" v-model="selectedAgent" size="small" class="nexus-chat__agent"
             :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
             :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
-          <span class="nexus-chat__spacer" />
-          <t-button v-if="canCancel(run)" shape="circle" theme="danger" variant="outline" :disabled="busy"
-            :aria-label="$t('nativeRuns.cancel')" data-testid="chat-cancel" @click="cancelRun">
-            <t-icon name="stop-circle" />
-          </t-button>
-          <t-button v-else type="submit" shape="circle" theme="primary" :disabled="submitting || !draft.trim()"
-            :loading="submitting" :aria-label="$t('nativeRuns.send')" data-testid="chat-send">
-            <t-icon name="arrow-up" />
-          </t-button>
-        </div>
-      </form>
+        </template>
+      </InputField>
     </div>
   </div>
 </template>
@@ -117,19 +101,19 @@ import {
 import { useNativeRun } from '@/composables/useNativeRun'
 import NativeWatchdogBanner from '@/views/native/NativeWatchdogBanner.vue'
 import {
-  assistantSegments,
   canCancel,
   canSteer,
   failureCode,
+  isActive,
   isTerminal,
   needsInput,
   showWatchdogBanner,
-  toolCalls,
-  type ToolCallItem,
 } from '@/views/native/nativeRunState'
 import { configureMarkedForChatMarkdown, createChatMarkdownRenderer, renderChatMarkdown } from '@/utils/chatMarkdownRenderer'
+import AgentStreamDisplay from '@/views/chat/components/AgentStreamDisplay.vue'
+import InputField from '@/components/Input-field.vue'
+import { toAgentEventStream } from '@/utils/nexusAgentEvents'
 import { safeMarkdownToHTML, sanitizeMarkdownHTML } from '@/utils/security'
-import { chatSubmitShortcut } from '@/utils/chatSubmitShortcut'
 import { deriveSessionTitle } from '@/utils/nexusChatTitle'
 
 const route = useRoute()
@@ -145,9 +129,7 @@ const native = useNativeRun(() => tenantId.value)
 const messages = ref<ConversationMessage[]>([])
 const loading = ref(false)
 const loadingAgents = ref(false)
-const submitting = ref(false)
 const busy = ref(false)
-const draft = ref('')
 const answerText = ref('')
 const errorText = ref('')
 const agents = ref<AgentView[]>([])
@@ -160,8 +142,25 @@ let createdSessionId = ''
 const run = computed(() => native.state.value.run)
 const streamError = computed(() => native.streamError.value)
 const pendingInput = computed(() => native.pendingInput.value)
-const calls = computed<ToolCallItem[]>(() => toolCalls(native.state.value.events))
-const liveSegments = computed(() => (run.value && !isTerminal(run.value) ? assistantSegments(native.state.value.events) : []))
+/**
+ * 当前运行的时间线数据。运行结束后，只要还有待显示的用户输入（即持久化消息尚未重新加载），
+ * 时间线继续保留，直到消息重新加载，避免同一回答同时以流式和持久化两种形式出现。
+ */
+const liveSession = computed(() => {
+  const current = run.value
+  if (!current) return null
+  if (isTerminal(current) && pendingUsers.value.length === 0) return null
+  const events = native.state.value.events
+  if (events.length === 0 && !isActive(current)) return null
+  return {
+    id: current.id,
+    assistant_message_id: current.id,
+    request_id: current.id,
+    isAgentMode: true,
+    agentEventStream: toAgentEventStream(events, current.status),
+    knowledge_references: [],
+  }
+})
 
 const agentOptions = computed(() => agents.value.map(agent => ({
   label: agent.name,
@@ -178,6 +177,7 @@ const STATUS_THEME: Record<string, 'default' | 'primary' | 'success' | 'warning'
   cancelled: 'default',
   interrupted: 'danger',
 }
+const isReplying = computed(() => isActive(run.value))
 const statusTheme = computed(() => (run.value ? STATUS_THEME[run.value.status] ?? 'default' : 'default'))
 const statusLabel = computed(() => (run.value ? t(`nativeRuns.status.${run.value.status}`) : ''))
 const failureText = computed(() => {
@@ -207,17 +207,7 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback
 }
 
-function toolLabel(call: ToolCallItem): string {
-  if (call.status === 'completed') return t('nativeRuns.toolCompleted', { name: call.name })
-  if (call.status === 'failed') return t('nativeRuns.toolFailed', { name: call.name })
-  return t('nativeRuns.toolRunning', { name: call.name })
-}
 
-function toolIcon(call: ToolCallItem): string {
-  if (call.status === 'completed') return 'check-circle'
-  if (call.status === 'failed') return 'error-circle'
-  return 'loading'
-}
 
 async function loadAgents() {
   const tenant = tenantId.value
@@ -259,10 +249,9 @@ async function reloadMessages() {
   messages.value = page.messages
 }
 
-async function send() {
-  const text = draft.value.trim()
-  if (!text || !tenantId.value || submitting.value) return
-  submitting.value = true
+/** 发送一条消息：欢迎页先创建会话，会话页直接提交新的 Run（服务端排队，忙时不阻止）。 */
+async function sendText(text: string) {
+  if (!tenantId.value) return
   errorText.value = ''
   try {
     if (isWelcome.value) {
@@ -272,28 +261,24 @@ async function send() {
       }
       const session = await createSessionApi(tenantId.value, selectedAgent.value, deriveSessionTitle(text))
       createdSessionId = session.id
-      draft.value = ''
       pendingUsers.value = [text]
       await native.send(session.id, text)
       await router.replace(`/platform/chat/${session.id}`)
     } else {
       pendingUsers.value = [...pendingUsers.value, text]
       await native.send(sessionId.value, text)
-      draft.value = ''
     }
   } catch (error) {
     MessagePlugin.error(messageOf(error, t('nativeRuns.sendError')))
-  } finally {
-    submitting.value = false
   }
 }
 
-/** 与 WeKnora 一致：Enter 发送，Shift+Enter 换行；输入法组合中的 Enter 不发送。 */
-function onComposerKeydown(event: KeyboardEvent) {
-  if (chatSubmitShortcut(event, false) === 'inject') {
-    event.preventDefault()
-    void send()
-  }
+const onSendMsg = (text: string) => { void sendText(text) }
+
+/** 运行中发送的追加指令：作为 steer 注入当前 Run，并显示为待显示的用户消息。 */
+const onSteerMsg = (text: string) => {
+  pendingUsers.value = [...pendingUsers.value, text]
+  void sendHint(text)
 }
 
 /** 对当前 Run 执行操作；失败只提示，不改变本地 Run 视图。 */
@@ -329,7 +314,7 @@ watch(() => run.value?.status, (status, previous) => {
 
 // 新消息或流式文本增长时保持滚动到底部。
 watch(
-  () => [messages.value.length, liveSegments.value.map(segment => segment.text.length).join(',')],
+  () => [messages.value.length, pendingUsers.value.length, native.state.value.events.length],
   async () => {
     await nextTick()
     const el = scrollRef.value
@@ -345,7 +330,6 @@ watch(() => route.params.chatid, (id) => {
   if (!id) {
     messages.value = []
     errorText.value = ''
-    draft.value = ''
     void loadAgents()
     return
   }
@@ -462,30 +446,7 @@ onBeforeUnmount(() => native.dispose())
   }
 }
 
-.nexus-chat__process {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--app-text-sm);
-  color: var(--td-text-color-secondary);
 
-  li {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .is-failed {
-    color: var(--td-error-color);
-  }
-}
-
-.nexus-chat__process-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
 
 .nexus-chat__status-line {
   margin: 0;
@@ -556,41 +517,17 @@ onBeforeUnmount(() => native.dispose())
   color: var(--td-text-color-primary);
 }
 
-.nexus-chat__composer {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px 10px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 16px;
-  background: var(--td-bg-color-container);
-  box-shadow: var(--td-shadow-1);
-
-  &:focus-within {
-    border-color: var(--td-brand-color);
-  }
-}
-
-.nexus-chat__textarea :deep(textarea) {
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  resize: none;
-}
-
-.nexus-chat__composer-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 子组件根节点需要占满列宽：Input-field 与流式展示都以 scoped 根类接入。 */
+.nexus-chat__input,
+.nexus-chat__stream {
+  width: 100%;
+  min-width: 0;
 }
 
 .nexus-chat__agent {
   width: 220px;
 }
 
-.nexus-chat__spacer {
-  flex: 1;
-}
 
 @media (max-width: 720px) {
   .nexus-chat__scroll {

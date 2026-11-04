@@ -118,6 +118,7 @@ const handleDroppedFiles = (files: File[]) => {
 };
 
 const handleChatFileDrop = (event: Event) => {
+  if (props.nexusMode) return;
   const customEvent = event as CustomEvent<{ files?: File[] }>;
   const files = customEvent.detail?.files;
   if (!files || files.length === 0) return;
@@ -269,7 +270,7 @@ watch([selectedAgentId, agentKnowledgeBases, agentKBSelectionMode], ([newAgentId
 
 // 共享智能体时预取该智能体知识库列表，使已选标签在未打开 @ 时也能显示共享空间角标
 watch([selectedAgentId, () => settingsStore.selectedAgentSourceTenantId], async ([agentId, sourceTenantId]) => {
-  if (sourceTenantId && agentId) {
+  if (!props.nexusMode && sourceTenantId && agentId) {
     try {
       const list = await chatResources.ensureAgentKnowledgeBases(agentId, sourceTenantId);
       sharedAgentKbList.value = list.map((kb: any) => ({
@@ -566,6 +567,12 @@ const props = defineProps({
   canSteer: {
     type: Boolean,
     default: false
+  },
+  // Nexus 对话页：输入框只负责文本、发送、追加指令与停止。知识库、MCP、附件、模型、
+  // 推理强度、网络搜索等 WeKnora 专属能力全部隐藏，且不调用 WeKnora 接口。
+  nexusMode: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -751,6 +758,7 @@ const remainingCount = computed(() => Math.max(0, selectedKbs.value.length - 2))
 
 // 加载知识库列表（自己的 + 共享的，用于 @ 提及等）
 const loadKnowledgeBases = async (force = false) => {
+  if (props.nexusMode) return;
   try {
     await chatResources.ensureKnowledgeBases(force);
     const validKbs = knowledgeBases.value;
@@ -847,6 +855,10 @@ const agentScopeKey = (scope?: { agentId: string; sourceTenantId: string | numbe
 let mcpServicesRequestKey = '';
 
 const loadMCPServices = async () => {
+  if (props.nexusMode) {
+    mcpServices.value = [];
+    return;
+  }
   const scope = currentAgentScope.value;
   const requestKey = agentScopeKey(scope);
   mcpServicesRequestKey = requestKey;
@@ -905,6 +917,7 @@ const toggleBrowserSource = () => {
 };
 
 const loadWebSearchConfig = async (force = false) => {
+  if (props.nexusMode) return;
   try {
     await chatResources.ensureWebSearchProviders(force);
 
@@ -922,6 +935,7 @@ const loadWebSearchConfig = async (force = false) => {
 
 // 加载智能体列表（我的 + 共享，供选中态与就绪检查用）
 const loadAgents = async (force = false) => {
+  if (props.nexusMode) return;
   try {
     await chatResources.ensureAgents(force);
     ensureSelectedAgentNotDisabled();
@@ -1002,6 +1016,7 @@ const writeLastChatModelID = (id: string) => {
 // into the dropdown, but those fields were removed: per-user last pick
 // belongs in localStorage, agent-level model belongs on the agent.
 const initChatModelSelection = () => {
+  if (props.nexusMode) return;
   const lastPick = readLastChatModelID();
   const currentSelectedModel = settingsStore.conversationModels.selectedChatModelId;
   const initialSelection = lastPick || currentSelectedModel || '';
@@ -1017,6 +1032,7 @@ const initChatModelSelection = () => {
 };
 
 const loadChatModels = async (force = false) => {
+  if (props.nexusMode) return;
   if (modelsLoading.value) return;
   modelsLoading.value = true;
   try {
@@ -1956,6 +1972,7 @@ let scrollHandler: (() => void) | null = null;
 
 onMounted(() => {
   if (props.autoFocus) void focusInput();
+  if (props.nexusMode) return;
   // 嵌入时 agent/KB 由宿主注入，只需模型列表供宿主选择
   if (props.embeddedMode) {
     void loadChatModels();
@@ -2098,6 +2115,17 @@ const createSession = async (
   }
   if (!val.trim()) {
     MessagePlugin.info(t('input.messages.enterContent'));
+    return;
+  }
+  if (props.nexusMode) {
+    // 运行中且可追加指令时作为 steer 发送；其余情况作为新的一轮提交，排队由服务端 FIFO 处理。
+    if (props.isReplying && props.canSteer) {
+      emit('steer-msg', val.trim(), [], delivery);
+    } else {
+      emit('send-msg', val.trim(), '', [], [], [], options);
+    }
+    clearvalue();
+    void focusInput();
     return;
   }
   if (props.isReplying) {
@@ -2517,6 +2545,7 @@ const onKeydown = (val: string, event: { e: KeyboardEvent }) => {
 }
 
 const onPaste = (e: ClipboardEvent) => {
+  if (props.nexusMode) return;
   const items = e.clipboardData?.items;
   if (!items) return;
   const imageFiles: File[] = [];
@@ -2534,6 +2563,7 @@ const onPaste = (e: ClipboardEvent) => {
 
 const onDrop = (e: DragEvent) => {
   e.preventDefault();
+  if (props.nexusMode) return;
   const files = e.dataTransfer?.files;
   if (!files || files.length === 0) return;
   handleDroppedFiles(Array.from(files));
@@ -2719,6 +2749,10 @@ const removeKb = (kbId: string) => {
 }
 
 const handleStop = async () => {
+  if (props.nexusMode) {
+    emit('stop-generation');
+    return;
+  }
   if (!props.sessionId) {
     MessagePlugin.warning(t('input.messages.sessionMissing'));
     return;
@@ -2814,13 +2848,13 @@ defineExpose({
       </div>
 
       <!-- 附件列表区域 (由 AttachmentUpload 组件渲染) -->
-      <AttachmentUpload ref="attachmentUploadRef" :max-files="5"
+      <AttachmentUpload v-if="!nexusMode" ref="attachmentUploadRef" :max-files="5"
         :session-id="sessionId" :agent-id="selectedAgentId"
         :agent-source-tenant-id="settingsStore.selectedAgentSourceTenantId ?? undefined"
         @update:files="uploadedAttachments = $event" />
 
       <!-- 选中的知识库和文件标签（显示在输入框内顶部） -->
-      <div v-if="$slots.chips || (!embeddedMode && allSelectedItems.length > 0)" class="selected-tags-inline">
+      <div v-if="!nexusMode && ($slots.chips || (!embeddedMode && allSelectedItems.length > 0))" class="selected-tags-inline">
         <slot name="chips" />
         <span v-for="item in (embeddedMode ? [] : allSelectedItems)" :key="`${item.type}:${item.id}`" class="mention-chip" :class="[
           getMentionChipClass(item),
@@ -2853,7 +2887,7 @@ defineExpose({
         <!-- 左侧控制按钮 -->
         <div class="control-left">
           <!-- 嵌入时宿主已定好 agent/KB，只保留模型选择 -->
-          <template v-if="!embeddedMode">
+          <template v-if="!embeddedMode && !nexusMode">
           <!-- Agent 模式切换按钮 -->
           <div ref="agentModeButtonRef" class="control-btn agent-mode-btn" :class="{
             'is-normal': !isCustomAgent && !isAgentEnabled,
@@ -2999,7 +3033,7 @@ defineExpose({
           <slot name="controls" />
 
           <!-- 模型显示 -->
-          <t-tooltip :content="modelTriggerTooltip" :disabled="!modelTriggerTooltip">
+          <t-tooltip v-if="!nexusMode" :content="modelTriggerTooltip" :disabled="!modelTriggerTooltip">
             <div class="model-display" :class="{ 'agent-controlled': isModelLockedByAgent }">
               <div ref="modelButtonRef" class="model-selector-trigger" @click.stop="toggleModelSelector">
                 <span class="model-selector-name">
@@ -3021,7 +3055,7 @@ defineExpose({
               </div>
             </div>
           </t-tooltip>
-          <t-popup v-if="!embeddedMode && reasoningLevels.length > 0" v-model:visible="showReasoningSelector"
+          <t-popup v-if="!embeddedMode && !nexusMode && reasoningLevels.length > 0" v-model:visible="showReasoningSelector"
             trigger="click" placement="top-right" :disabled="composerLocked"
             :overlay-inner-style="{ padding: '4px', borderRadius: 'var(--app-radius-lg)' }"
             @visible-change="handleReasoningVisibleChange">
@@ -3120,7 +3154,7 @@ defineExpose({
     </div>
 
     <!-- Mention Selector -->
-    <Teleport to="body">
+    <Teleport v-if="!nexusMode" to="body">
       <MentionSelector ref="mentionSelectorRef" :visible="showMention" :style="mentionStyle" :items="mentionItems" :hasMore="mentionHasMore"
         :loading="mentionLoading" :emptyHint="mentionEmptyHint" :query="mentionQuery" :searchable="isMentionTriggeredByButton"
         :group-counts="mentionGroupCounts" v-model:activeIndex="mentionActiveIndex"
@@ -3129,7 +3163,7 @@ defineExpose({
     </Teleport>
 
     <!-- 知识库选择下拉（使用 Teleport 传送到 body，避免父容器定位影响） -->
-    <Teleport to="body">
+    <Teleport v-if="!nexusMode" to="body">
       <KnowledgeBaseSelector v-model:visible="showKbSelector" :anchorEl="atButtonRef" @close="showKbSelector = false" />
     </Teleport>
   </div>
