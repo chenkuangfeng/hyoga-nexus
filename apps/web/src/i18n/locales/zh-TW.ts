@@ -6258,7 +6258,7 @@ export default {
     firstTime: '首次使用 Nexus？',
     registerSuccess: '註冊成功，請登入',
     registerFailed: '註冊失敗',
-    subtitle: 'RAG 問答、ReAct 智慧代理與 Wiki 知識庫，大型語言模型驅動的企業級知識框架',
+    subtitle: '歡迎回來，請登入你的 Nexus 帳戶',
     registerSubtitle: '建立帳戶並開始使用 Nexus',
     emailPlaceholder: '輸入電子信箱地址',
     passwordPlaceholder: '輸入密碼',

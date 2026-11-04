@@ -6257,7 +6257,7 @@ export default {
     firstTime: 'Впервые в Nexus?',
     registerSuccess: 'Регистрация завершена. Войдите в систему',
     registerFailed: 'Ошибка регистрации',
-    subtitle: 'RAG, ReAct-агент и Wiki — корпоративный фреймворк знаний на основе больших моделей',
+    subtitle: 'Добро пожаловать! Войдите в свою учётную запись Nexus.',
     registerSubtitle: 'Создайте аккаунт и начните работу с Nexus',
     emailPlaceholder: 'Введите адрес электронной почты',
     passwordPlaceholder: 'Введите пароль',

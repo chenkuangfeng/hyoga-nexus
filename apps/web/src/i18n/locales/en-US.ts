@@ -3046,7 +3046,7 @@ export default {
     firstTime: 'New to Nexus?',
     registerSuccess: 'Registration successful. Please sign in',
     registerFailed: 'Registration failed',
-    subtitle: 'RAG Q&A, ReAct Agent and Wiki — an LLM-powered enterprise knowledge framework',
+    subtitle: 'Welcome back. Sign in to your Nexus account.',
     registerSubtitle: 'Create your account and start using Nexus',
     emailPlaceholder: 'Enter email address',
     passwordPlaceholder: 'Enter password',

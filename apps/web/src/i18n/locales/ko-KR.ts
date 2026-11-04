@@ -6257,7 +6257,7 @@ export default {
     firstTime: 'Nexus가 처음이신가요?',
     registerSuccess: '가입이 완료되었습니다. 로그인해주세요',
     registerFailed: '가입 실패',
-    subtitle: 'RAG Q&A, ReAct 에이전트, Wiki 지식베이스 — 대규모 언어 모델 기반 엔터프라이즈 지식 프레임워크',
+    subtitle: '다시 오신 것을 환영합니다. Nexus 계정으로 로그인하세요.',
     registerSubtitle: '계정을 만들고 Nexus를 시작하세요',
     emailPlaceholder: '이메일 주소 입력',
     passwordPlaceholder: '비밀번호 입력',

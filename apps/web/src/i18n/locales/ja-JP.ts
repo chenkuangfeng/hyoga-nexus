@@ -2968,7 +2968,7 @@ export default {
     firstTime: 'Nexusは初めてですか？',
     registerSuccess: '登録が完了しました。ログインしてください',
     registerFailed: '登録に失敗しました',
-    subtitle: 'RAG質問応答、ReActエージェント、Wiki。LLMが支える企業向けナレッジフレームワーク',
+    subtitle: 'おかえりなさい。Nexus アカウントにログインしてください。',
     registerSubtitle: 'アカウントを作成してNexusを使い始めましょう',
     emailPlaceholder: 'メールアドレスを入力',
     passwordPlaceholder: 'パスワードを入力',
