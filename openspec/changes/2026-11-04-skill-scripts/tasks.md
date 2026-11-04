@@ -74,7 +74,7 @@
 
 ## 9. 示例与文档
 
-- [ ] 9.1 两个示例技能（内容待用户确认）：一个纯内联，一个含脚本（内容由用户另行确认）。
+- [x] 9.1 两个示例技能：`skills/general/weekly-report`（纯内联）与 `skills/general/text-stats`（内联 + 资源 + 脚本 `count`）。内容为占位示例，发布与运行由 `tests/test_skill_examples.py` 验证；正式内容仍需用户确认。
 - [~] 9.2 端到端测试已覆盖（`tests/test_skill_script_run.py`）：门禁开启时运行并产生事件；门禁关闭或智能体设置关闭时工具不出现；参数错误拒绝。使用示例技能的验证待 9.1。
 - [ ] 9.3 更新 `packages/skills/docs/` 与 `docs/architecture.md` 2.6 节（只写当前结果，不写过程）。
 - [ ] 9.4 更新路线图 7.1 的对应子项（仅勾选已完成部分；草稿审核与 MCP 保持未完成）。
