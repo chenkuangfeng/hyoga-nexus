@@ -9019,6 +9019,11 @@ export default {
       operation: "操作"
     }
   },
+  nexusChat: {
+    welcome: '有什麼可以幫你？',
+    placeholder: '輸入訊息，按 Enter 傳送，Shift+Enter 換行',
+    needAgent: '請先選擇智能體'
+  },
   nativeRuns: {
     title: 'Native 執行',
     subtitle: '執行已發布的 Native 智慧代理，並查看執行過程。',

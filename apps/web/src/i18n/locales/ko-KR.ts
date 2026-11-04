@@ -9023,6 +9023,11 @@ export default {
       operation: "作業"
     }
   },
+  nexusChat: {
+    welcome: '무엇을 도와드릴까요?',
+    placeholder: '메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)',
+    needAgent: '먼저 에이전트를 선택하세요'
+  },
   nativeRuns: {
     title: 'Native 실행',
     subtitle: '게시된 Native 에이전트를 실행하고 진행 상황을 확인합니다.',

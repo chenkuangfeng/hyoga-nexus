@@ -9023,6 +9023,11 @@ export default {
       operation: "Действия"
     }
   },
+  nexusChat: {
+    welcome: 'Чем могу помочь?',
+    placeholder: 'Введите сообщение. Enter — отправить, Shift+Enter — новая строка',
+    needAgent: 'Сначала выберите агента'
+  },
   nativeRuns: {
     title: 'Native-запуски',
     subtitle: 'Запускайте опубликованного Native-агента и следите за его работой.',

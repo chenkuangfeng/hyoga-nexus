@@ -1,6 +1,6 @@
 # 设计：WeKnora 风格对话页接入 Nexus 会话与 Run
 
-> 状态：待确认（与 proposal.md 一并确认）。
+> 状态：已确认（与 proposal.md 一并确认）。
 
 ## 1. 参考映射
 

@@ -9005,6 +9005,11 @@ export default {
       description: '先观察图片特征并进行图片描述，再根据图片特征决定是否调用OCR对图片进行识别，以节省模型调用次数并提升解析速度。当识别到图片为可校正的文档或标签页照片时，会在识别前自动摆正并裁剪页面，以提升 OCR 准确率；若校正失败则直接使用原图。'
     }
   },
+  nexusChat: {
+    welcome: '有什么可以帮你？',
+    placeholder: '输入消息，按 Enter 发送，Shift+Enter 换行',
+    needAgent: '请先选择智能体'
+  },
   nativeRuns: {
     title: 'Native 运行',
     subtitle: '运行已发布的 Native 智能体，并查看执行过程。',

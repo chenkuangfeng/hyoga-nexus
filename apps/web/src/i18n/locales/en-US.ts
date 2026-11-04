@@ -9012,6 +9012,11 @@ export default {
         'Observe the image attributes and describe the image first, then decide from the attributes whether to run OCR, saving model calls and speeding up parsing. When the image is recognised as a photograph of a correctable page or label, it is straightened and cropped before recognition to improve OCR accuracy; if that fails, the original image is used.'
     }
   },
+  nexusChat: {
+    welcome: 'What can I help you with?',
+    placeholder: 'Type a message. Enter to send, Shift+Enter for a new line',
+    needAgent: 'Choose an agent first'
+  },
   nativeRuns: {
     title: 'Native runs',
     subtitle: 'Run a published Native agent and follow what it does.',

@@ -10,6 +10,8 @@ import i18n from '@/i18n'
 import { normalizeSettingsSection } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import PlannedPage from '@/views/placeholder/PlannedPage.vue'
+// 主对话页：WeKnora 风格布局 + 平台 Native API（会话、Run、事件）。
+const NexusChatPage = () => import('@/views/chat/NexusChatPage.vue')
 
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
 const LITE_LAST_PATH_KEY = 'weknora_lite_last_path'
@@ -158,17 +160,13 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
-          // Native runs of published agents; uses the platform Run API only (see docs/design.md).
+          // 旧的 Native 运行页已并入主对话页（views/chat/NexusChatPage.vue）；旧地址保留为重定向。
           path: "native",
-          name: "nativeRuns",
-          component: () => import("../views/native/NativeSessionsView.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          redirect: "/platform/creatChat"
         },
         {
           path: "native/sessions/:sessionId",
-          name: "nativeSession",
-          component: () => import("../views/native/NativeSessionView.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
+          redirect: (to) => `/platform/chat/${String(to.params.sessionId)}`
         },
         {
           path: "agents",
@@ -196,19 +194,18 @@ const router = createRouter({
         {
           path: "creatChat",
           name: "globalCreatChat",
-          component: PlannedPage,
+          component: NexusChatPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          // 会话不挂载知识库（见 openspec/changes/2026-11-04-weknora-chat-dialog 决定 3），直接进入普通新建对话页。
           path: "knowledge-bases/:kbId/creatChat",
-          name: "kbCreatChat",
-          component: PlannedPage,
-          meta: { requiresInit: true, requiresAuth: true }
+          redirect: "/platform/creatChat"
         },
         {
           path: "chat/:chatid",
           name: "chat",
-          component: PlannedPage,
+          component: NexusChatPage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
