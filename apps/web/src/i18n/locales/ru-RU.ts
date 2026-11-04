@@ -3742,7 +3742,23 @@ export default {
     light: 'Светлая',
     dark: 'Тёмная',
     system: 'Системная',
-    selectTheme: 'Выбрать тему'
+    selectTheme: 'Выбрать тему',
+    brandColor: 'Цвет бренда',
+    brandColorDescription: 'Выберите глобальный цвет бренда для кнопок, ссылок и выделенных состояний',
+    brandColors: {
+      green: 'Зелёный',
+      blue: 'Синий',
+      indigo: 'Индиго',
+      purple: 'Фиолетовый',
+      pink: 'Розовый',
+      red: 'Красный',
+      orange: 'Оранжевый',
+      gold: 'Золотой',
+      cyan: 'Бирюзовый',
+      sky: 'Голубой',
+      brown: 'Коричневый',
+      graphite: 'Графитовый'
+    }
   },
   general: {
     title: 'Общие настройки',

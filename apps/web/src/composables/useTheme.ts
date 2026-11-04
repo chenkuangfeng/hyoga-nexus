@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { applyBrandColor } from './brandColor'
 import {
   loadPreference,
   savePreference,
@@ -65,6 +66,8 @@ function applyTheme(mode: ThemeMode) {
   if (lastEffective === effective) return
   lastEffective = effective
   document.documentElement.setAttribute('theme-mode', effective)
+  // 品牌色的覆盖变量依赖模式（浅色/深色取不同级别），模式变化时需重新写入
+  applyBrandColor(effective)
   syncWailsNativeChrome(effective)
 }
 

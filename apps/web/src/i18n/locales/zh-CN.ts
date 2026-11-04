@@ -3874,7 +3874,23 @@ export default {
     light: '浅色',
     dark: '深色',
     system: '跟随系统',
-    selectTheme: '选择主题'
+    selectTheme: '选择主题',
+    brandColor: '主题色',
+    brandColorDescription: '选择全局品牌色，影响按钮、链接和选中状态等',
+    brandColors: {
+      green: '绿色',
+      blue: '蓝色',
+      indigo: '靛蓝',
+      purple: '紫色',
+      pink: '粉色',
+      red: '红色',
+      orange: '橙色',
+      gold: '金色',
+      cyan: '青色',
+      sky: '天蓝',
+      brown: '棕色',
+      graphite: '石墨灰'
+    }
   },
   general: {
     title: '常规设置',

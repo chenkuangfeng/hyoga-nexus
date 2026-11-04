@@ -5582,7 +5582,23 @@ export default {
       light: 'Light',
       dark: 'Dark',
       system: 'Follow System',
-      selectTheme: 'Select theme'
+      selectTheme: 'Select theme',
+      brandColor: 'Brand color',
+      brandColorDescription: 'Choose the global brand color used by buttons, links and selected states',
+      brandColors: {
+        green: 'Green',
+        blue: 'Blue',
+        indigo: 'Indigo',
+        purple: 'Purple',
+        pink: 'Pink',
+        red: 'Red',
+        orange: 'Orange',
+        gold: 'Gold',
+        cyan: 'Cyan',
+        sky: 'Sky',
+        brown: 'Brown',
+        graphite: 'Graphite'
+      }
     },
     font: {
       uiFont: 'Interface Font',

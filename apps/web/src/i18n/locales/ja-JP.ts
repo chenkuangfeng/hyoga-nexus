@@ -5515,7 +5515,23 @@ export default {
       light: 'ライト',
       dark: 'ダーク',
       system: 'システムに従う',
-      selectTheme: 'テーマを選択'
+      selectTheme: 'テーマを選択',
+      brandColor: 'ブランドカラー',
+      brandColorDescription: 'ボタン・リンク・選択状態などに使うグローバルのブランドカラーを選択します',
+      brandColors: {
+        green: '緑',
+        blue: '青',
+        indigo: 'インディゴ',
+        purple: '紫',
+        pink: 'ピンク',
+        red: '赤',
+        orange: 'オレンジ',
+        gold: 'ゴールド',
+        cyan: 'シアン',
+        sky: 'スカイブルー',
+        brown: 'ブラウン',
+        graphite: 'グラファイト'
+      }
     },
     font: {
       uiFont: 'インターフェースフォント',

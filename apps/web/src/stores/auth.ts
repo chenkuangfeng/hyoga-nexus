@@ -6,6 +6,7 @@ import type { TenantInfo as TenantInfoFromAPI } from '@/api/tenant'
 import i18n from '@/i18n'
 import { reloadFontFromStorage } from '@/composables/useFont'
 import { reloadThemeFromStorage } from '@/composables/useTheme'
+import { reloadBrandColorFromStorage } from '@/composables/brandColor'
 import { resetMigrationLatch } from '@/composables/preferenceStorage'
 import { BUILTIN_QUICK_ANSWER_ID } from '@/api/agent'
 import { useChatResourcesStore } from '@/stores/chatResources'
@@ -27,6 +28,7 @@ function reloadUserPreferences() {
   resetMigrationLatch()
   reloadFontFromStorage()
   reloadThemeFromStorage()
+  reloadBrandColorFromStorage()
 }
 
 export const useAuthStore = defineStore('auth', () => {

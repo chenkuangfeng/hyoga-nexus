@@ -3744,7 +3744,23 @@ export default {
     light: '淺色',
     dark: '深色',
     system: '跟隨系統',
-    selectTheme: '選擇主題'
+    selectTheme: '選擇主題',
+    brandColor: '主題色',
+    brandColorDescription: '選擇全域品牌色，影響按鈕、連結和選取狀態等',
+    brandColors: {
+      green: '綠色',
+      blue: '藍色',
+      indigo: '靛藍',
+      purple: '紫色',
+      pink: '粉色',
+      red: '紅色',
+      orange: '橘色',
+      gold: '金色',
+      cyan: '青色',
+      sky: '天藍',
+      brown: '棕色',
+      graphite: '石墨灰'
+    }
   },
   general: {
     title: '常規設定',

@@ -3742,7 +3742,23 @@ export default {
     light: '라이트',
     dark: '다크',
     system: '시스템 설정',
-    selectTheme: '테마 선택'
+    selectTheme: '테마 선택',
+    brandColor: '브랜드 색상',
+    brandColorDescription: '버튼, 링크, 선택 상태 등에 사용되는 전역 브랜드 색상을 선택합니다',
+    brandColors: {
+      green: '녹색',
+      blue: '파란색',
+      indigo: '남색',
+      purple: '보라색',
+      pink: '분홍색',
+      red: '빨간색',
+      orange: '주황색',
+      gold: '금색',
+      cyan: '청록색',
+      sky: '하늘색',
+      brown: '갈색',
+      graphite: '흑연색'
+    }
   },
   general: {
     title: '일반 설정',

@@ -49,6 +49,31 @@
         </div>
       </div>
 
+      <!-- 主题色（全局品牌色） -->
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>{{ $t('theme.brandColor') }}</label>
+          <p class="desc">{{ $t('theme.brandColorDescription') }}</p>
+        </div>
+        <div class="setting-control">
+          <div class="brand-swatches" role="radiogroup" :aria-label="$t('theme.brandColor')">
+            <button
+              v-for="key in BRAND_COLOR_KEYS"
+              :key="key"
+              type="button"
+              role="radio"
+              class="brand-swatch"
+              :class="{ 'is-active': key === currentBrand }"
+              :style="{ backgroundColor: BRAND_COLORS[key] }"
+              :aria-checked="key === currentBrand"
+              :aria-label="$t(`theme.brandColors.${key}`)"
+              :title="$t(`theme.brandColors.${key}`)"
+              @click="handleBrandColorChange(key)"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- 界面字体 -->
       <div class="setting-row">
         <div class="setting-info">
@@ -147,6 +172,12 @@ import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import {
+  useBrandColor,
+  BRAND_COLORS,
+  BRAND_COLOR_KEYS,
+  type BrandColorKey,
+} from '@/composables/brandColor'
+import {
   useFont,
   SANS_STACKS,
   MONO_STACKS,
@@ -161,6 +192,7 @@ const { t, locale } = useI18n()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const { currentTheme, setTheme } = useTheme()
+const { currentBrand, setBrandColor } = useBrandColor()
 const {
   currentSans,
   currentMono,
@@ -249,6 +281,11 @@ const handleThemeChange = (val: ThemeMode) => {
   }
 }
 
+// 处理主题色变化：非法值时保持当前颜色不变
+const handleBrandColorChange = (key: BrandColorKey) => {
+  setBrandColor(key)
+}
+
 // 处理字体变化
 const handleSansFontChange = (val: FontKey) => {
   if (!setSansFont(val)) {
@@ -299,6 +336,53 @@ const handleFontSizeChange = (val: FontSizeKey) => {
 
 .setting-control {
   .setting-control();
+}
+
+// 主题色色块：12 个圆形色块网格排列，宽度与同行下拉框对齐
+.brand-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 28px);
+  gap: 10px 8px;
+  width: 280px;
+  justify-content: end;
+}
+
+.brand-swatch {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: scale(1.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: 2px;
+  }
+
+  // 选中态：白色内圈 + 外圈描边，并在中央画一个白色对勾
+  &.is-active {
+    box-shadow: 0 0 0 2px var(--td-bg-color-container), 0 0 0 4px var(--td-brand-color);
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 6px;
+      width: 5px;
+      height: 10px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+  }
 }
 
 // When a font picker is rendered, stack the select on top of a live
