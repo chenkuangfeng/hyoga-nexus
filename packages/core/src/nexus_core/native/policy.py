@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
-                      'read_tool_output', 'todo')
+                      'read_tool_output', 'todo', 'load_skill', 'read_skill_file')
 #: Builtin that pages through externalized tool output (P2). Its presence in a Run's bindings enables spilling.
 TOOL_OUTPUT_READER = 'read_tool_output'
 #: Hard cap on one externalized output; anything beyond it is not stored (keeps rows bounded).
@@ -26,6 +26,9 @@ class NativePolicy:
     repeated_limit: int = 3
     clarify_code: bool = True
     working_memory: bool = True
+    #: Whether skills may run declared scripts. Effective only when the platform gate is open
+    #: (development auth mode, local backend and [skills].allow_local_scripts); see proposal 2026-11-04-skill-scripts.
+    skill_scripts: bool = True
     model_retries: int = 2
     # Continuation prompts sent after a length-truncated final answer (3.7). 0 accepts the truncated answer.
     max_continuations: int = 2
@@ -81,7 +84,7 @@ class NativePolicy:
                      'durable_checkpoint_interval', 'user_direction_interval'):
             if type(getattr(self, name)) is not int or not 1 <= getattr(self, name) <= 1000:
                 raise ValueError('Native intervals must be integers between 1 and 1000')
-        for name in ('clarify_code', 'working_memory', 'parallel_reads', 'summarize_context', 'working_memory_tail'):
+        for name in ('clarify_code', 'working_memory', 'skill_scripts', 'parallel_reads', 'summarize_context', 'working_memory_tail'):
             if type(getattr(self, name)) is not bool:
                 raise ValueError('Native switches must be boolean')
         _check_int(self.tool_output_inline_limit, 200, 100000, 'tool_output_inline_limit')

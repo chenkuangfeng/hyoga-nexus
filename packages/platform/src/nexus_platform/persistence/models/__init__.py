@@ -33,6 +33,7 @@ from .memory import (
     MemoryTombstoneRecord,
     ContextSummaryRecord,
 )
+from .skill import SkillRecord, SkillVersionRecord, SkillVersionFileRecord, SessionSkillSnapshotRecord
 from .approval import InputRequestRecord, ActionApprovalRecord
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord

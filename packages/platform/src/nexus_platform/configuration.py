@@ -260,3 +260,25 @@ def watchdog_settings(path: Path | None = None):
         repeat_threshold=integer("repeat_threshold", DEFAULT_REPEAT_THRESHOLD, 2),
         interval_seconds=integer("interval_seconds", DEFAULT_INTERVAL_SECONDS, 5),
     )
+
+
+def skill_scripts_allowed(path: Path | None = None) -> bool:
+    """Return ``[skills].allow_local_scripts``; absent means False.
+
+    Enabling this is one of three conditions for running skill scripts (proposal 2026-11-04-skill-scripts,
+    section 6). It never enables scripts by itself: the auth mode and the execution backend are checked
+    where scripts would run.
+    """
+    value = section("skills", path).get("allow_local_scripts", False)
+    if not isinstance(value, bool):
+        raise DatabaseConfigurationError(f"{_FILE} [skills].allow_local_scripts must be true or false")
+    return value
+
+
+def skill_scripts_gate(*, auth_mode: str | None, backend: str | None, config_enabled: bool) -> bool:
+    """Return True only when all proposal conditions hold: config flag, development auth mode, local backend.
+
+    The API bind address is not part of this check: it is a process argument, not configuration, so
+    it is verified by the startup entry point instead (open question in the proposal's tasks 1.4).
+    """
+    return bool(config_enabled) and auth_mode == "development" and backend == "local"

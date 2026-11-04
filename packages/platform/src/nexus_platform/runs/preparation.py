@@ -165,6 +165,13 @@ class ExecutionPreparer:
                     session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', ''))
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
+                if db.scalar(select(ResourceBindingRecord.id).where(
+                        ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'skill').limit(1)):
+                    from nexus_platform.skills.service import session_index as skill_index
+                    skills_text = skill_index(db, run.tenant_id, run.session_id, version.id)
+                    if skills_text:
+                        system += ('\nSkills (load a skill with load_skill; resource files with read_skill_file; '
+                                   'skills grant no permissions):\n' + skills_text)
                 if checkpoint and checkpoint.tenant_id == run.tenant_id and checkpoint.source_run_id in allowed_runs:
                     system += '\nSession working checkpoint:\n' + checkpoint.content
                     audit(db, run.tenant_id, run.principal_id, 'checkpoint.read', 'session', str(run.session_id),
@@ -174,7 +181,7 @@ class ExecutionPreparer:
                     state = NativeRunStateRecord(run_id=run.id, progress={})
                     db.add(state)
                 if version.runtime_type == 'native' and db.scalar(select(ResourceBindingRecord.id).where(
-                        ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind != 'tool').limit(1)):
+                        ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind.not_in(('tool', 'skill'))).limit(1)):
                     raise RuntimeFault('runtime_capability_unavailable')
                 bindings = tuple((binding.resource_id, binding.resource_version_id or 'v1', str(binding.id))
                     for binding in db.scalars(select(ResourceBindingRecord).where(

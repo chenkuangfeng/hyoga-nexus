@@ -436,6 +436,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "hyoga-nexus-core" },
     { name = "hyoga-nexus-memory" },
+    { name = "hyoga-nexus-skills" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlalchemy" },
 ]
@@ -446,6 +447,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=46,<48" },
     { name = "hyoga-nexus-core", editable = "packages/core" },
     { name = "hyoga-nexus-memory", editable = "packages/memory" },
+    { name = "hyoga-nexus-skills", editable = "packages/skills" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
 ]

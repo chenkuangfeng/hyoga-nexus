@@ -16,7 +16,7 @@ LABELS = {
     'enabled_tools': '新智能体绑定的工具',
     'fallback_models': '故障转移模型', 'routing_spring_seconds': '回归主模型冷却（秒）',
     'empty_retries': '空响应恢复次数', 'repeated_limit': '重复或截断上限',
-    'clarify_code': '仅代码回复时确认后续动作', 'working_memory': '每回合工作记忆',
+    'clarify_code': '仅代码回复时确认后续动作', 'working_memory': '每回合工作记忆', 'skill_scripts': '允许技能脚本（仅开发模式生效）',
     'model_retries': '模型传输重试次数', 'retry_delay_seconds': '重试初始间隔（秒）',
     'max_retry_delay_seconds': '重试间隔上限（秒）', 'parallel_reads': '允许已声明的安全只读并发',
     'summarize_context': '使用模型生成历史摘要', 'reminder_interval': '工作检查点提醒间隔',

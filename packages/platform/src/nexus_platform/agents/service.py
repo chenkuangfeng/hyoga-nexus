@@ -12,6 +12,7 @@ from nexus_platform.identity.service import require_membership, require_tenant, 
 from nexus_platform.models.service import clean_public_options, content_hash
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.persistence.models import (
+    SkillVersionRecord,
     AgentDraftBindingRecord,
     AgentRecord,
     AgentVersionRecord,
@@ -162,6 +163,7 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
                 source_tenant_id=binding.source_tenant_id,
                 resource_version_id=binding.resource_version_id, permission="use"
             )
+        check_skill_dependencies(session, tenant_id, draft_bindings)
         version_number = agent.version_counter + 1
         snapshot = {
             "agent_id": str(agent.id), "version": version_number, "name": agent.name,
@@ -263,6 +265,31 @@ def replace_draft_bindings(session: Session, agent: AgentRecord, bindings: list[
                 binding_config=clean_public_options(raw.get("config", {}), "binding_config"),
             )
         )
+
+
+def check_skill_dependencies(session: Session, tenant_id: UUID, bindings: list[AgentDraftBindingRecord]) -> None:
+    """Refuse to publish when a bound skill needs a tool this agent does not bind (proposal 4.3).
+
+    Skills that load and read skill files need ``load_skill`` and ``read_skill_file``; each skill's
+    declared ``tools`` must also be bound. Missing dependencies are reported by name.
+    """
+    skill_rows = [binding for binding in bindings if binding.kind == "skill"]
+    if not skill_rows:
+        return
+    bound_tools = {binding.resource_id for binding in bindings if binding.kind == "tool"}
+    for needed in ("load_skill", "read_skill_file"):
+        if needed not in bound_tools:
+            raise InvalidConfiguration(f"skill_dependency_missing:{needed}")
+    for binding in skill_rows:
+        try:
+            version = session.get(SkillVersionRecord, UUID(binding.resource_version_id))
+        except ValueError:
+            version = None
+        if version is None or version.tenant_id != binding.source_tenant_id:
+            raise InvalidConfiguration("skill_unavailable")
+        for tool in version.tools:
+            if tool not in bound_tools:
+                raise InvalidConfiguration(f"skill_dependency_missing:{tool}")
 
 
 def binding_snapshot(binding: AgentDraftBindingRecord | ResourceBindingRecord) -> dict[str, Any]:

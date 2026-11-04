@@ -115,7 +115,7 @@ def test_split_modules_preserve_public_type_identity_and_metadata():
     from nexus_platform.persistence.models.identity import UserRecord as User
     assert (ModelMessage, ToolCall, NativePolicy, UserRecord) == (Message, Call, Policy, User)
     assert all(mapper.local_table.metadata is Base.metadata for mapper in Base.registry.mappers)
-    assert len(Base.metadata.tables) == 60  # includes agent_shares, space_invite_links, tool_outputs (P2), org_units and user_org_units, the space tables (space_join_requests, shared_spaces, shared_space_*), memory_tombstones, session_memory_snapshots and the three memory_capture tables
+    assert len(Base.metadata.tables) == 64  # includes the four skill tables (skills, skill_versions, skill_version_files, session_skill_snapshots), agent_shares, space_invite_links, tool_outputs (P2), org_units and user_org_units, the space tables (space_join_requests, shared_spaces, shared_space_*), memory_tombstones, session_memory_snapshots and the three memory_capture tables
     # Resolve every cross-module string foreign key, rather than just count the tables.
     assert all(foreign_key.column is not None for table in Base.metadata.tables.values()
                for foreign_key in table.foreign_keys)

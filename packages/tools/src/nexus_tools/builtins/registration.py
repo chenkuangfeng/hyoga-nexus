@@ -5,6 +5,7 @@ from nexus_tools.registry import ToolRegistry
 from .ask_user import ask_user_tool
 from .checkpoint import checkpoint_tool
 from .memory import memory_tools
+from .skills import skills_tools
 from .tool_output import tool_output_tools
 from .todo import todo_tool
 
@@ -18,6 +19,6 @@ def builtins() -> ToolRegistry:
     Callers must not mutate the returned registry.
     """
     registry = ToolRegistry()
-    for tool in (ask_user_tool(), checkpoint_tool(), todo_tool(), *memory_tools(), *tool_output_tools()):
+    for tool in (ask_user_tool(), checkpoint_tool(), todo_tool(), *memory_tools(), *skills_tools(), *tool_output_tools()):
         registry.register(tool)
     return registry

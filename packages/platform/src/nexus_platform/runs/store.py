@@ -305,6 +305,30 @@ class DurableRuntimeStore:
             audit(db, run.tenant_id, run.principal_id, 'memory.index_read', 'run', str(run.id))
             return result
 
+    async def load_skill(self, name: str) -> str:
+        """Return the body of a skill this Run's agent version binds (Level 2, inline mode)."""
+        from nexus_platform.skills.service import read_for_run as read_skill
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            require_membership(db, run.tenant_id, run.principal_id)
+            result = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name)
+            audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
+        await self.emit('skill.loaded', {'skill': name[:64]})
+        return result
+
+    async def read_skill_file(self, name: str, path: str) -> str:
+        """Return one resource file of a bound skill version (Level 3); the path is checked inside the version."""
+        from nexus_platform.skills.service import read_for_run as read_skill
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            require_membership(db, run.tenant_id, run.principal_id)
+            result = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, path)
+            audit(db, run.tenant_id, run.principal_id, 'skill.file_read', 'run', str(run.id),
+                  {'skill': name[:64], 'path': path[:200]})
+            return result
+
     async def read_memory(self, entry_id: str) -> str:
         """Authorize each model memory read at execution time, independently of old indexes."""
         from nexus_platform.memory.service import read_for_run
