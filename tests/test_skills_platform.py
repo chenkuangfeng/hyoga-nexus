@@ -26,7 +26,7 @@ def _tenant(factory):
         tenant = create_tenant(db, PRINCIPAL, 'Skills')
         _, model_version = create_model_profile(db, PRINCIPAL, tenant.id, name='M', provider='openai',
                                                 model_name='test', options={'base_url': 'https://model.example/v1'})
-        for name in ('load_skill', 'read_skill_file', 'read_memory'):
+        for name in ('load_skill', 'read_skill_file', 'read_memory', 'run_skill_script'):
             register_resource(db, tenant_id=tenant.id, kind='tool', resource_id=name, version_id='v1')
         db.commit()
     return tenant, model_version
@@ -37,14 +37,14 @@ def _publish(factory, tenant, text=SKILL, files=None):
         return publish(db, PRINCIPAL, tenant.id, text, files or {})
 
 
-def _agent(factory, tenant, model_version, skills, tools=('load_skill', 'read_skill_file', 'read_memory')):
+def _agent(factory, tenant, model_version, skills, tools=('load_skill', 'read_skill_file', 'read_memory'), budgets=None):
     bindings = [{'kind': 'skill', 'resource_id': s['skill'], 'resource_version_id': s['version_id'],
                  'source_tenant_id': str(tenant.id), 'config': {}} for s in skills]
     bindings += [{'kind': 'tool', 'resource_id': t, 'resource_version_id': 'v1',
                   'source_tenant_id': str(tenant.id), 'config': {}} for t in tools]
     with factory() as db:
         agent = create_agent(db, PRINCIPAL, tenant.id, name='Writer', description='', runtime_type='native',
-                             instructions='', model_profile_version_id=model_version.id, budgets={},
+                             instructions='', model_profile_version_id=model_version.id, budgets=budgets or {},
                              bindings=bindings)
         return agent.id
 

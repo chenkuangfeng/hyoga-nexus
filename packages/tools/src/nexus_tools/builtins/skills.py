@@ -22,6 +22,9 @@ def skills_tools():
         'Load the full instructions of a skill bound to this agent. Use a name from the skills list.',
         {'type': 'object', 'properties': {'name': _NAME}, 'required': ['name'], 'additionalProperties': False},
         read_only=True, idempotent=True), load, lambda r: r.data)
+    async def run_script(arguments, context):
+        return ToolResult(await _store(context).run_skill_script(arguments['name'], arguments['script'],
+                                                                arguments.get('args', {})))
     yield RegisteredTool(ToolDefinition('read_skill_file',
         'Read one resource file of a skill loaded with load_skill. The path is relative to the skill directory.',
         {'type': 'object', 'properties': {
@@ -29,3 +32,11 @@ def skills_tools():
             'path': {'type': 'string', 'minLength': 1, 'maxLength': 200}},
          'required': ['name', 'path'], 'additionalProperties': False},
         read_only=True, idempotent=True), read_file, lambda r: r.data)
+    yield RegisteredTool(ToolDefinition('run_skill_script',
+        'Run a script declared by a skill bound to this agent. Each call needs approval. Arguments are passed as JSON on stdin.',
+        {'type': 'object', 'properties': {
+            'name': _NAME,
+            'script': {'type': 'string', 'pattern': r'^[a-z][a-z0-9_-]{0,63}$'},
+            'args': {'type': 'object'}},
+         'required': ['name', 'script'], 'additionalProperties': False},
+        requires_approval=True, risk_level='high', side_effects=True, timeout_seconds=320), run_script, lambda r: r.data)

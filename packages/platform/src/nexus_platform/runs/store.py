@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
 from nexus_core.native.policy import NativePolicy, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
-from nexus_platform.errors import PlatformError
+from nexus_platform.errors import NotFound, PlatformError
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.identity.service import require_membership, require_tenant
 from nexus_platform.persistence.models import (
@@ -316,6 +316,43 @@ class DurableRuntimeStore:
             audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
         await self.emit('skill.loaded', {'skill': name[:64]})
         return result
+
+    async def run_skill_script(self, name: str, script: str, args: dict) -> str:
+        """Run a declared script of a bound skill in a local working copy (proposal section 7).
+
+        The database is not held open while the script runs: the spec and files are read in one short
+        transaction, the process runs outside it, and the outcome is audited in another.
+        """
+        import hashlib
+        from nexus_platform.skills.service import prepare_script, scripts_available
+        from nexus_skills.runner import ScriptError, render_result, run_script
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            require_membership(db, run.tenant_id, run.principal_id)
+            if not scripts_available(_behavior(self.context).skill_scripts):
+                raise NotFound('skill_script_unavailable')
+            prepared = prepare_script(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script)
+        script_hash = hashlib.sha256(prepared.files[prepared.spec.path].encode('utf-8')).hexdigest()
+        detail = {'skill': name, 'version': prepared.version, 'script': script, 'script_hash': script_hash}
+        await self.emit('skill.script.started', detail)
+        try:
+            result = await run_script(prepared.spec, skill_md=prepared.skill_md, files=prepared.files,
+                                      expected_hash=prepared.content_hash, args=args)
+        except ScriptError as exc:
+            await self._audit_script(run.tenant_id, run.principal_id, run.id, detail | {'refused': str(exc)})
+            await self.emit('skill.script.completed', detail | {'refused': str(exc)})
+            return f'Script not run: {exc}'
+        summary = detail | {'exit_code': result.exit_code, 'timed_out': result.timed_out,
+                            'duration_ms': result.duration_ms, 'stdout_truncated': result.stdout_truncated,
+                            'stderr_truncated': result.stderr_truncated}
+        await self._audit_script(run.tenant_id, run.principal_id, run.id, summary)
+        await self.emit('skill.script.completed', summary)
+        return render_result(name, script, prepared.version, result)
+
+    async def _audit_script(self, tenant_id, principal_id, run_id, detail) -> None:
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            audit(work.session, tenant_id, principal_id, 'skill.script', 'run', str(run_id), detail)
 
     async def read_skill_file(self, name: str, path: str) -> str:
         """Return one resource file of a bound skill version (Level 3); the path is checked inside the version."""

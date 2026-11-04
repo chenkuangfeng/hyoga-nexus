@@ -486,10 +486,14 @@ version = "0.1.0"
 source = { editable = "packages/skills" }
 dependencies = [
     { name = "hyoga-nexus-core" },
+    { name = "jsonschema" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "hyoga-nexus-core", editable = "packages/core" },
+    { name = "jsonschema", specifier = "==4.26.0" },
+]
 
 [[package]]
 name = "hyoga-nexus-tools"

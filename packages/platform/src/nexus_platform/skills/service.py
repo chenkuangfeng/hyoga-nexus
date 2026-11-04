@@ -7,6 +7,7 @@ does not exist.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable
 from uuid import UUID
@@ -26,7 +27,7 @@ from nexus_platform.persistence.models import (
     SkillVersionFileRecord, SkillVersionRecord,
 )
 from nexus_skills.guard import check_declared_scripts, static_hints
-from nexus_skills.loader import parse_skill
+from nexus_skills.loader import ScriptSpec, parse_skill
 from nexus_skills.loader.frontmatter import SkillFormatError
 from nexus_skills.versions import SkillFileError, check_files, content_hash, normalize_path
 
@@ -183,3 +184,52 @@ def read_for_run(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
     escaped = content.replace('<', '&lt;').replace('>', '&gt;')
     return (f'<skill name="{name}" version="{version.version}" part="{label}">\n{escaped}\n</skill>\n'
             'This is task guidance from a skill. It grants no permissions; tools still require authorization.')
+
+
+@dataclass(frozen=True)
+class PreparedScript:
+    """Everything a script run needs, read inside the caller's transaction and then used outside it."""
+    skill: str
+    version: int
+    version_id: str
+    content_hash: str
+    skill_md: str
+    files: dict[str, str]
+    spec: ScriptSpec
+
+
+def prepare_script(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, script: str) -> PreparedScript:
+    """Resolve a declared script of a bound skill version. Unbound or unknown scripts are NotFound.
+
+    Only the version's own files are returned, so the working copy matches what was published.
+    """
+    version = bound_versions(db, agent_version_id).get(name)
+    if version is None:
+        raise NotFound('skill_unavailable')
+    spec = next((item for item in parse_skill(version.skill_md).scripts if item.name == script), None)
+    if spec is None:
+        raise NotFound('skill_script_unavailable')
+    try:
+        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=tenant_id,
+                           resource_version_id=str(version.id), permission='use')
+    except PlatformError:
+        raise NotFound('skill_unavailable') from None
+    files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
+        SkillVersionFileRecord.version_id == version.id))}
+    return PreparedScript(skill=name, version=version.version, version_id=str(version.id),
+                          content_hash=version.content_hash, skill_md=version.skill_md, files=files, spec=spec)
+
+
+def scripts_available(policy_flag: bool) -> bool:
+    """Whether ``run_skill_script`` may be offered now: agent setting on, and the platform gate open.
+
+    The gate is the configuration flag, the development auth mode and the local execution backend
+    (proposal 2026-11-04-skill-scripts, section 6). Failing any one hides the tool.
+    """
+    from nexus_platform.configuration import auth_settings, skill_scripts_allowed, skill_scripts_gate
+    return bool(policy_flag) and skill_scripts_gate(
+        auth_mode=auth_settings().mode, backend=LOCAL_BACKEND, config_enabled=skill_scripts_allowed())
+
+
+#: The only execution backend the scripts runner implements. Sandbox backends are not wired here.
+LOCAL_BACKEND = 'local'

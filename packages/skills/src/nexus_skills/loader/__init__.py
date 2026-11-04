@@ -13,6 +13,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
 from . import frontmatter
 from .frontmatter import SkillFormatError
 from ..versions import normalize_path
@@ -128,6 +131,11 @@ def _scripts(raw: Any) -> tuple[ScriptSpec, ...]:
         args = item.get('args', {})
         if not isinstance(args, dict):
             raise SkillFormatError('skill_script_args_invalid')
+        if args:
+            try:
+                Draft202012Validator.check_schema(args)
+            except SchemaError:
+                raise SkillFormatError('skill_script_args_invalid') from None
         if item.get('risk_level', 'high') != 'high':
             raise SkillFormatError('skill_script_risk_invalid')
         specs.append(ScriptSpec(name=name, path=normalized, interpreter=interpreter, timeout=timeout, args=args))
