@@ -1,5 +1,6 @@
 <template>
-  <SettingsModalShell :visible="visible" :title="$t('general.settings')" overlay-class="all-settings-overlay"
+  <SettingsModalShell :visible="visible" :title="$t('general.settings')"
+    :overlay-class="isFullPage ? '' : 'all-settings-overlay'" :full-page="isFullPage"
     @close="modalShell.requestClose">
     <template #nav>
       <template v-for="group in navGroups" :key="group.key">
@@ -501,6 +502,9 @@ const handleSubMenuClick = (parentKey: string, childKey: string) => {
 const visible = computed(() => {
   return route.path === '/platform/settings' || uiStore.showSettingsModal
 })
+// 设置路由（/platform/settings）整页展示，替换主界面，左上角返回；
+// 其他页面内通过 uiStore.openSettings 唤起的仍是遮罩弹窗。
+const isFullPage = computed(() => route.path === '/platform/settings')
 
 // 关闭弹窗
 const handleClose = () => {

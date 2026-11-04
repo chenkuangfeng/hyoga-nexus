@@ -1,14 +1,14 @@
 <template>
   <Teleport to="body">
     <Transition name="settings-modal-shell">
-      <div v-if="visible" class="settings-modal-shell settings-overlay" :class="overlayClass" :style="{ zIndex }"
-        @click.self="emit('close')">
+      <div v-if="visible" class="settings-modal-shell settings-overlay" :class="[overlayClass, { 'settings-page': fullPage }]"
+        :style="{ zIndex }" @click.self="!fullPage && emit('close')">
         <div class="settings-modal" role="dialog" aria-modal="true" :aria-label="title">
           <div v-if="loading" class="editor-initializing" role="status" :aria-label="$t('common.loading')">
             <t-loading size="medium" :text="$t('common.loading')" />
           </div>
 
-          <button class="close-btn" type="button" @click="emit('close')" :aria-label="$t('common.close')">
+          <button v-if="!fullPage" class="close-btn" type="button" @click="emit('close')" :aria-label="$t('common.close')">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
             </svg>
@@ -17,6 +17,11 @@
           <div class="settings-container">
             <aside class="settings-sidebar">
               <div class="sidebar-header">
+                <!-- 整页模式（fullPage）下没有弹窗关闭按钮，改为返回主界面 -->
+                <button v-if="fullPage" type="button" class="settings-back" @click="emit('close')">
+                  <t-icon name="chevron-left" />
+                  <span>{{ $t('general.backToMain') }}</span>
+                </button>
                 <h2 class="sidebar-title">{{ title }}</h2>
                 <slot name="sidebar-header-extra" />
               </div>
@@ -95,6 +100,8 @@ withDefaults(
     overlayClass?: string
     navGuide?: string
     navItemGuidePrefix?: string
+    /** 整页模式：不以遮罩弹窗形式展示，铺满整个视口，关闭动作改为返回主界面。 */
+    fullPage?: boolean
   }>(),
   {
     modelValue: '',
@@ -104,6 +111,7 @@ withDefaults(
     overlayClass: '',
     navGuide: '',
     navItemGuidePrefix: '',
+    fullPage: false,
   },
 )
 
@@ -131,6 +139,53 @@ function showBadge(item: SettingsModalNavItem): boolean {
   padding: 20px;
   backdrop-filter: blur(4px);
   overscroll-behavior: none;
+}
+
+/* 整页模式：覆盖遮罩定位，铺满视口（仍 teleport 到 body，不受布局祖先的 transform 影响）。 */
+.settings-modal-shell.settings-overlay.settings-page {
+  inset: 0;
+  padding: 0;
+  background: var(--td-bg-color-container);
+  backdrop-filter: none;
+
+  .settings-modal {
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .sidebar-header {
+    padding-top: 12px;
+  }
+
+  .settings-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    margin: 0 0 8px -6px;
+    padding: 0 8px 0 4px;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: transparent;
+    color: var(--td-text-color-secondary);
+    font: inherit;
+    font-size: var(--app-text-md);
+    cursor: pointer;
+    transition: background var(--app-motion-base) ease, color var(--app-motion-base) ease;
+
+    &:hover {
+      background: var(--td-bg-color-container-hover);
+      color: var(--td-text-color-primary);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--td-brand-color) 25%, transparent);
+    }
+  }
 }
 
 .settings-modal-shell {

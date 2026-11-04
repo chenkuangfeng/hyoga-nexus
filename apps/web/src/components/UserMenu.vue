@@ -94,7 +94,7 @@
         <!-- 菜单只保留：用户信息（上方）、切换空间（上方）、设置、平台管理（仅系统管理员）、退出。 -->
         <div class="menu-item" @click="handleSettings">
           <t-icon name="setting" class="menu-icon" />
-          <span>{{ $t('general.allSettings') }}</span>
+          <span>{{ $t('general.settings') }}</span>
         </div>
         <!--
           平台管理：整页替换主界面（独立路由 /platform-admin，见 router/index.ts）。
@@ -252,14 +252,12 @@ const toggleMenu = () => {
 // 快捷导航到设置的特定部分
 const handleQuickNav = (section: string) => {
   menuVisible.value = false
-  uiStore.openSettings()
   router.push({ path: '/platform/settings', query: { section } })
 }
 
-// 打开设置
+// 打开设置：整页替换主界面（/platform/settings 由 Settings.vue 以整页模式渲染），左上角可返回。
 const handleSettings = () => {
   menuVisible.value = false
-  uiStore.openSettings()
   router.push('/platform/settings')
 }
 
