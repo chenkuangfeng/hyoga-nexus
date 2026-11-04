@@ -5503,6 +5503,8 @@ export default {
     general: {
       title: '一般設定',
       allSettings: 'すべての設定',
+      backToMain: 'メイン画面に戻る',
+      platformAdmin: 'プラットフォーム管理',
       personalSettings: '個人設定',
       helpAndDocs: 'ヘルプとドキュメント',
       description: '言語や外観などの基本オプションを設定します',

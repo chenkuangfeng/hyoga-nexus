@@ -136,7 +136,7 @@
     </template>
 
     <!-- 编辑单个模型：保存即发布 -->
-    <SettingDrawer :visible="editVisible" :title="selected ? (selected.model.id || selected.model.match || '') : ''"
+    <SettingDrawer placement="center" :visible="editVisible" :title="selected ? (selected.model.id || selected.model.match || '') : ''"
       :description="selected ? t('modelCatalog.editDescription', { provider: providerLabel(selected.provider), type: typeLabel(selected.model.type) }) : ''"
       icon="layers" width="560px" storage-key="setting-drawer:width:model-catalog-edit"
       :hide-footer="!selected?.model.id" :confirm-text="t('modelCatalog.save')" :confirm-loading="saving"
@@ -220,7 +220,7 @@
     </SettingDrawer>
 
     <!-- 添加目录模型 -->
-    <SettingDrawer :visible="addVisible" :title="t('modelCatalog.add')" :description="t('modelCatalog.addDescription')"
+    <SettingDrawer placement="center" :visible="addVisible" :title="t('modelCatalog.add')" :description="t('modelCatalog.addDescription')"
       icon="add" width="520px" storage-key="setting-drawer:width:model-catalog-add" :close-on-overlay-click="false"
       :confirm-text="t('modelCatalog.save')" :confirm-loading="saving" @update:visible="addVisible = $event"
       @confirm="saveAdd">
@@ -254,7 +254,7 @@
     </SettingDrawer>
 
     <!-- 高级：直接编辑管理员修改（models.json 格式） -->
-    <SettingDrawer :visible="jsonVisible" :title="t('modelCatalog.jsonEditor')"
+    <SettingDrawer placement="center" :visible="jsonVisible" :title="t('modelCatalog.jsonEditor')"
       :description="t('modelCatalog.jsonDescription')" icon="code" width="720px" :max-width="1200" maximizable
       storage-key="setting-drawer:width:model-catalog-json" :close-on-overlay-click="false"
       :confirm-text="jsonPreview ? t('modelCatalog.jsonPublish', { count: jsonChanges.length }) : t('modelCatalog.jsonCheck')"
@@ -296,7 +296,7 @@
     </SettingDrawer>
 
     <!-- 版本历史：恢复即发布 -->
-    <SettingDrawer :visible="historyVisible" :title="t('modelCatalog.history')"
+    <SettingDrawer placement="center" :visible="historyVisible" :title="t('modelCatalog.history')"
       :description="t('modelCatalog.historyDescription')" icon="history" width="560px"
       storage-key="setting-drawer:width:model-catalog-history" hide-footer @update:visible="historyVisible = $event">
       <section v-if="state" class="setting-drawer__section">

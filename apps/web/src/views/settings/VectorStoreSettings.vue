@@ -106,7 +106,7 @@
     </template>
 
     <!-- Add/Edit Drawer — 与 ModelEditorDialog/Storage/Parser/WebSearch 同款 -->
-    <SettingDrawer
+    <SettingDrawer placement="center"
       v-model:visible="showDialog"
       :title="editingStore ? t('vectorStoreSettings.editStore') : t('vectorStoreSettings.addStore')"
       :class="drawerClass"

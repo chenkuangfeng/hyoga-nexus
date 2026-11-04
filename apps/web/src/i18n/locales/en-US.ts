@@ -5570,6 +5570,8 @@ export default {
     general: {
       title: 'General Settings',
       allSettings: 'All Settings',
+      backToMain: 'Back to main',
+      platformAdmin: 'Platform admin',
       personalSettings: 'Personal Settings',
       helpAndDocs: 'Help & Documentation',
       description: 'Configure language, appearance and other basic options',

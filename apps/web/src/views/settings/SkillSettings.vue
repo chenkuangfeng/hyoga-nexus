@@ -175,7 +175,7 @@
       </div>
     </template>
 
-    <SettingDrawer v-model:visible="showAdd" :title="$t('settings.skills.addSkill')" :description="addStepDescription"
+    <SettingDrawer placement="center" v-model:visible="showAdd" :title="$t('settings.skills.addSkill')" :description="addStepDescription"
       :icon="SKILL_ICON" width="680px" :min-width="560" :max-width="920"
       storage-key="setting-drawer:width:skill-catalog-add" :confirm-loading="addPrimaryLoading"
       :confirm-disabled="addPrimaryDisabled" :confirm-text="addPrimaryText" @confirm="handleAddPrimary">

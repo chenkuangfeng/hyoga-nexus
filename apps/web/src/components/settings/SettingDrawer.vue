@@ -1,14 +1,15 @@
 <template>
   <teleport to="body">
-    <div v-if="drawerVisible && resizable && !maximized" class="setting-drawer-resize-handle"
+    <div v-if="drawerVisible && resizable && !maximized && !isCenter" class="setting-drawer-resize-handle"
       :class="{ 'setting-drawer-resize-handle--active': drawerResizing }"
       :style="{ right: `${drawerWidthPx}px`, '--setting-drawer-travel': `${drawerWidthPx}px` }"
       role="separator" aria-orientation="vertical" @mousedown.prevent="onResizeStart">
       <div class="setting-drawer-resize-line" />
     </div>
   </teleport>
-  <t-drawer v-model:visible="drawerVisible" v-bind="drawerPassthroughAttrs" :size="effectiveWidth" :z-index="zIndex" placement="right"
-    attach="body" destroy-on-close :footer="!hideFooter"
+  <!-- placement="center" 时渲染为居中的 t-dialog（编辑类表单），否则为右侧 t-drawer。
+       两者的 header / body / footer 插槽同名，共用同一份内容。 -->
+  <component :is="popupTag" v-model:visible="drawerVisible" v-bind="popupProps"
     :class="drawerClass" @before-close="blurActiveElementBeforeClose">
     <!--
       Custom header. We replace TDesign's default header so we can put a leading
@@ -75,7 +76,7 @@
         </div>
       </div>
     </template>
-  </t-drawer>
+  </component>
 </template>
 
 <script lang="ts">
@@ -128,6 +129,12 @@ interface Props {
   cancelText?: string
   hideFooter?: boolean
   zIndex?: number
+  /**
+   * 'right'（默认）：右侧滑出抽屉，适合查看、日志、预览等连续操作。
+   * 'center'：屏幕中间弹出的对话框，适合编辑、新建等表单操作。
+   * 中间弹出不提供宽度拖拽，宽度取 `width`（受视口宽度限制），maximizable 仍可用。
+   */
+  placement?: 'right' | 'center'
 }
 
 defineOptions({ inheritAttrs: false })
@@ -148,6 +155,7 @@ const props = withDefaults(defineProps<Props>(), {
   cancelText: '',
   hideFooter: false,
   zIndex: 2500,
+  placement: 'right',
 })
 
 const emit = defineEmits<{
@@ -228,6 +236,31 @@ const effectiveWidth = computed(() =>
   maximized.value ? `${viewportWidth.value}px` : `${drawerWidthPx.value}px`,
 )
 
+// ---------- placement ----------
+// 中间弹出不参与宽度持久化：对话框宽度固定取 width 属性，只在视口不够宽时收缩，
+// 避免与右侧抽屉共用的 localStorage 宽度互相影响。
+const isCenter = computed(() => props.placement === 'center')
+const popupTag = computed(() => (isCenter.value ? 't-dialog' : 't-drawer'))
+const centerWidth = computed(() => {
+  const cap = Math.max(320, viewportWidth.value - 48)
+  if (maximized.value) return `${cap}px`
+  return `${Math.min(parseWidthToPx(props.width), cap)}px`
+})
+
+// 两种弹层的 props 名称不同（drawer 用 size/placement，dialog 用 width），
+// 这里统一生成，模板里只保留一套插槽内容。
+const popupProps = computed(() => {
+  const base = {
+    ...drawerPassthroughAttrs.value,
+    attach: 'body',
+    destroyOnClose: true,
+    footer: !props.hideFooter,
+    zIndex: props.zIndex,
+  }
+  if (isCenter.value) return { ...base, width: centerWidth.value }
+  return { ...base, size: effectiveWidth.value, placement: 'right' }
+})
+
 const persistWidth = (width: number) => {
   const next = clampWidth(width)
   userWidthPx.value = next
@@ -245,7 +278,7 @@ const drawerResizing = ref(false)
 const drawerClass = computed(() => [
   'setting-drawer',
   attrs.class,
-  { 'setting-drawer--resizing': drawerResizing.value },
+  { 'setting-drawer--resizing': drawerResizing.value, 'setting-drawer--center': props.placement === 'center' },
 ])
 
 let resizeStartX = 0
@@ -568,6 +601,40 @@ const handleCancel = () => {
   }
 
   .t-drawer__footer {
+    padding: 10px 18px;
+    border-top: 1px solid var(--td-component-stroke);
+    box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.04);
+  }
+}
+
+/* 中间弹出（placement="center"）：与右侧抽屉保持同款头、体、脚的留白，
+   正文超出视口高度时在对话框内部滚动，头尾保持可见。 */
+.setting-drawer.setting-drawer--center {
+  .t-dialog__header {
+    padding: 0;
+  }
+
+  .t-dialog__body {
+    padding: 0;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+
+  .t-dialog__footer {
+    padding: 0;
+  }
+
+  .setting-drawer__header-block {
+    width: 100%;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--td-component-stroke);
+  }
+
+  .setting-drawer__body {
+    padding: 16px 18px;
+  }
+
+  .setting-drawer__footer {
     padding: 10px 18px;
     border-top: 1px solid var(--td-component-stroke);
     box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.04);

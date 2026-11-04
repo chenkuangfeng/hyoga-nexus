@@ -67,7 +67,7 @@
       </t-loading>
     </div>
 
-    <SettingDrawer v-model:visible="showDrawer" class="embed-channel-drawer" :title="drawerTitle"
+    <SettingDrawer placement="center" v-model:visible="showDrawer" class="embed-channel-drawer" :title="drawerTitle"
       :description="drawerStepDescription" icon="code" storage-key="setting-drawer:embed-channel" width="560px"
       :confirm-loading="saving" :confirm-text="drawerConfirmText" :hide-footer="!isAdmin" @confirm="handleDrawerConfirm"
       @cancel="closeDrawer">

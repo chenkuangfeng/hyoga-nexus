@@ -3763,6 +3763,8 @@ export default {
   general: {
     title: '일반 설정',
     allSettings: '모든 설정',
+    backToMain: '메인 화면으로 돌아가기',
+    platformAdmin: '플랫폼 관리',
     personalSettings: '개인 설정',
     helpAndDocs: '도움말 및 문서',
     description: '언어, 외관 등 기본 옵션 설정',

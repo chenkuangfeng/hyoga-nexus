@@ -948,7 +948,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <SettingDrawer
+  <SettingDrawer placement="center"
     class="manual-editor-drawer"
     :visible="visible"
     :title="dialogTitle"

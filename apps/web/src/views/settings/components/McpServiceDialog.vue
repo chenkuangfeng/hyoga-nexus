@@ -1,5 +1,5 @@
 <template>
-  <SettingDrawer
+  <SettingDrawer placement="center"
     :visible="dialogVisible"
     :title="mode === 'add' ? t('mcpServiceDialog.addTitle') : t('mcpServiceDialog.editTitle')"
     class="mcp-drawer"

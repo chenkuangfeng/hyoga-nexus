@@ -84,7 +84,7 @@
       </div>
     </t-loading>
 
-    <SettingDrawer
+    <SettingDrawer placement="center"
       v-model:visible="visible"
       :title="editing ? t('settings.storageBackend.editTitle') : t('settings.storageBackend.createTitle')"
       :class="`storage-backend-drawer storage-backend-drawer--${form.provider}`"

@@ -3895,6 +3895,8 @@ export default {
   general: {
     title: '常规设置',
     allSettings: '全部设置',
+    backToMain: '返回主界面',
+    platformAdmin: '平台管理',
     personalSettings: '个人设置',
     helpAndDocs: '帮助与文档',
     description: '配置语言、外观等基础选项',

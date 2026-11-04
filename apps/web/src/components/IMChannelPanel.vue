@@ -69,7 +69,7 @@
       </t-loading>
     </div>
 
-    <SettingDrawer v-model:visible="showCreateDialog" class="im-channel-drawer" :title="drawerTitle"
+    <SettingDrawer placement="center" v-model:visible="showCreateDialog" class="im-channel-drawer" :title="drawerTitle"
       :description="drawerStepDescription" storage-key="setting-drawer:im-channel" width="560px"
       :confirm-loading="saving" :confirm-text="drawerConfirmText" :hide-footer="!authStore.hasRole('admin')"
       @confirm="handleDrawerConfirm" @cancel="resetForm">

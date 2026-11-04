@@ -3765,6 +3765,8 @@ export default {
   general: {
     title: '常規設定',
     allSettings: '全部設定',
+    backToMain: '返回主介面',
+    platformAdmin: '平台管理',
     personalSettings: '個人設定',
     helpAndDocs: '幫助與文件',
     description: '設定語言、外觀等基礎選項',

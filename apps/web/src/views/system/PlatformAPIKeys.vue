@@ -133,7 +133,7 @@
       </div>
     </section>
 
-    <SettingDrawer
+    <SettingDrawer placement="center"
       :visible="drawerVisible"
       class="api-key-create-drawer"
       :title="t('platformApiKeys.create')"

@@ -94,7 +94,7 @@
     </template>
 
     <!-- 配置抽屉 — 用 SettingDrawer 包装，保持与 ModelEditorDialog 同款视觉/交互 -->
-    <SettingDrawer
+    <SettingDrawer placement="center"
       v-model:visible="drawerVisible"
       :title="drawerTitle"
       :class="currentEngine ? `parser-engine-drawer parser-engine-drawer--${currentEngine.Name}` : 'parser-engine-drawer'"

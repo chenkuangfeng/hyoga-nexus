@@ -3763,6 +3763,8 @@ export default {
   general: {
     title: 'Общие настройки',
     allSettings: 'Все настройки',
+    backToMain: 'Назад к основному экрану',
+    platformAdmin: 'Администрирование платформы',
     personalSettings: 'Личные настройки',
     helpAndDocs: 'Справка и документация',
     description: 'Настройка языка, внешнего вида и других базовых параметров',

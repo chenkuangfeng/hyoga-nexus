@@ -92,6 +92,13 @@ const router = createRouter({
       component: PlannedPage,
       meta: { requiresInit: true, requiresAuth: true }
     },
+    // 平台管理：整页替换主界面（不在 /platform 布局之下，因此没有侧栏），由顶部「返回」回到主界面。
+    {
+      path: "/platform-admin",
+      name: "platformAdmin",
+      component: () => import("../views/system/PlatformAdmin.vue"),
+      meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
+    },
     {
       path: "/platform",
       name: "Platform",

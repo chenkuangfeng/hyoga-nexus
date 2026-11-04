@@ -459,7 +459,7 @@
       </section>
     </SettingDrawer>
 
-    <SettingDrawer
+    <SettingDrawer placement="center"
       :visible="apiKeyDialogVisible"
       class="api-key-create-drawer"
       :title="$t('integrations.api.createApiKey')"
@@ -563,7 +563,7 @@
       </div>
     </SettingDrawer>
 
-    <SettingDrawer
+    <SettingDrawer placement="center"
       :visible="apiKeyScopeDialogVisible"
       class="api-key-edit-drawer"
       :title="$t('integrations.api.editApiKeyScope')"

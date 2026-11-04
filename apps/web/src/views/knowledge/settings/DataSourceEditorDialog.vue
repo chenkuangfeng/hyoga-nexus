@@ -1424,7 +1424,7 @@ const drawerConfirmText = computed(() => {
 </script>
 
 <template>
-  <SettingDrawer
+  <SettingDrawer placement="center"
     v-model:visible="visible"
     :title="drawerTitle"
     :description="drawerDescription"

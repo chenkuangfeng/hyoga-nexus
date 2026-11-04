@@ -85,7 +85,7 @@
     </div>
 
     <!-- Add/Edit Drawer — 与 ModelEditorDialog / Parser / Storage 抽屉同款风格 -->
-    <SettingDrawer
+    <SettingDrawer placement="center"
       v-model:visible="showAddProviderDialog"
       :title="editingProvider ? t('webSearchSettings.editProvider') : t('webSearchSettings.addProvider')"
       :class="drawerClass"

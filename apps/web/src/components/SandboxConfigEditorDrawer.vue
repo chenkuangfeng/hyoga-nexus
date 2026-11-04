@@ -1,5 +1,5 @@
 <template>
-  <SettingDrawer
+  <SettingDrawer placement="center"
     class="sandbox-config-drawer"
     :visible="visible"
     :title="record ? $t('settings.sandbox.editTitle') : $t('settings.sandbox.createTitle')"
