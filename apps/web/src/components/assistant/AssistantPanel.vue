@@ -8,16 +8,10 @@
       @start="startResize" @resize="resize" @end="resizing = false" />
 
     <header class="assistant-panel__header">
-      <ChildAgentTabBar header-mode :tabs="childTabs.tabs.value"
-        :active-id="childTabs.activeId.value" :attention="childTabs.attention.value"
-        @select="selectConversationTab" @close="childTabs.close">
-        <template #parent>
-          <span class="assistant-panel__header-icon" aria-hidden="true"><t-icon name="compass" /></span>
-          <span class="assistant-panel__title">{{ assistantName }}</span>
-        </template>
-      </ChildAgentTabBar>
+      <span class="assistant-panel__header-icon" aria-hidden="true"><t-icon name="compass" /></span>
+      <span class="assistant-panel__title">{{ assistantName }}</span>
       <t-tooltip :content="t('assistant.newConversation')" placement="bottom">
-        <button type="button" class="assistant-panel__action" :disabled="!assistant.sessionId || starting"
+        <button type="button" class="assistant-panel__action" :disabled="!assistant.sessionId"
           :aria-label="t('assistant.newConversation')" @click="startNewConversation">
           <t-icon name="chat-add" size="16px" />
         </button>
@@ -50,111 +44,40 @@
             <span>{{ session.title || t('assistant.untitledConversation') }}</span>
             <small>{{ t(`time.${classifyDateBucket(session.updated_at || session.created_at)}`) }}</small>
           </button>
-          <t-tooltip :content="t('common.delete')">
-            <button type="button" class="assistant-panel__action" :aria-label="t('common.delete')"
-              :disabled="deleting === session.id" @click="confirmDelete(session.id)">
-              <t-icon name="delete" size="16px" />
-            </button>
-          </t-tooltip>
         </div>
         <p v-if="historyError" role="alert">{{ t('assistant.historyFailed') }}</p>
         <p v-else-if="!historyLoading && !history.length">{{ t('assistant.historyEmpty') }}</p>
-        <t-button v-if="historyError || history.length < historyTotal" variant="text" block
-          :loading="historyLoading" @click="loadHistory()">
-          {{ historyError ? t('common.retry') : t('assistant.loadMore') }}
+        <t-button v-if="historyError" variant="text" block :loading="historyLoading" @click="loadHistory">
+          {{ t('common.retry') }}
         </t-button>
         <t-loading v-else-if="historyLoading" size="small" />
       </div>
+      <!-- 对话区复用主对话页的嵌入模式：会话由 assistant.sessionId 决定，空值即欢迎态。 -->
       <div v-show="!showHistory" class="assistant-panel__conversation">
-        <ChatView v-if="assistant.sessionId && readySessionId === assistant.sessionId"
-          :key="assistant.sessionId" :session_id="assistant.sessionId"
-          :agent-id="BUILTIN_WEKNORA_ASSISTANT_ID" :embedded-mode="true" :initial-query="initialQuery"
-          :host-scope="hostScope" :model-id="assistant.modelId" :default-model-id="defaultModelId"
-          @update:model-id="assistant.setModel">
-          <template v-if="assistant.pageSelection" #composer-chips>
-            <div class="assistant-composer-context">
-              <AssistantSelectionChip />
-            </div>
-          </template>
-          <template #composer-controls>
-            <AssistantContextMenu />
-            <AssistantAccessPicker />
-          </template>
-        </ChatView>
-
-        <div v-else-if="assistant.sessionId" class="assistant-history">
-          <template v-if="sessionLoadError">
-            <p role="alert">{{ t('assistant.historyFailed') }}</p>
-            <t-button variant="text" @click="validateSession(assistant.sessionId)">{{ t('common.retry') }}</t-button>
-          </template>
-          <t-loading v-else size="small" />
-        </div>
-        <div v-else class="assistant-welcome">
-          <div class="assistant-welcome-body">
-            <div class="assistant-welcome-icon">
-              <t-icon name="compass" size="22px" />
-            </div>
-            <h3 class="assistant-welcome-title">{{ t('assistant.welcomeTitle') }}</h3>
-            <p class="assistant-welcome-desc">{{ welcomeDescription }}</p>
-            <div class="assistant-starters">
-              <button v-for="starter in starters" :key="starter" type="button" class="assistant-starter"
-                :disabled="starting" @click="startConversation(starter)">
-                {{ starter }}
-              </button>
-            </div>
-          </div>
-          <div class="assistant-welcome-composer">
-            <InputField ref="welcomeInput" :embedded-mode="true" compact :auto-focus="assistant.visible"
-              :model-id="assistant.modelId" :default-model-id="defaultModelId" @update:model-id="assistant.setModel"
-              @send-msg="(query) => startConversation(query)">
-              <template v-if="assistant.pageSelection" #chips>
-                <div class="assistant-composer-context">
-                  <AssistantSelectionChip />
-                </div>
-              </template>
-              <template #controls>
-                <AssistantContextMenu />
-                <AssistantAccessPicker />
-              </template>
-            </InputField>
-          </div>
-        </div>
+        <NexusChatPage ref="chatRef" embedded :session-id="assistant.sessionId"
+          @session-created="onSessionCreated" />
       </div>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import ChatView from '@/views/chat/index.vue'
-import ChildAgentTabBar from '@/views/chat/components/ChildAgentTabBar.vue'
-import { createChildAgentTabs, childAgentTabsKey } from '@/composables/useChildAgentTabs'
-import InputField from '@/components/Input-field.vue'
+import { MessagePlugin } from 'tdesign-vue-next'
+import NexusChatPage from '@/views/chat/NexusChatPage.vue'
 import PanelResizeHandle from '@/components/PanelResizeHandle.vue'
-import AssistantContextMenu from './AssistantContextMenu.vue'
-import AssistantSelectionChip from './AssistantSelectionChip.vue'
-import AssistantAccessPicker from './AssistantAccessPicker.vue'
-import { createSessions, getSessionsList, getSession, type SessionSummary } from '@/api/chat'
+import { listSessions, type SessionView } from '@/api/native-runs'
 import { classifyDateBucket } from '@/components/sessionGrouping'
-import { BUILTIN_WEKNORA_ASSISTANT_ID } from '@/api/agent'
-import { useAuthStore } from '@/stores/auth'
-import { useAssistantDataChange } from '@/utils/assistantDataChange'
 import {
   ASSISTANT_PANEL_MAX_WIDTH,
   ASSISTANT_PANEL_MIN_WIDTH,
-  toPageContextPayload,
-  toPageSelectionPayload,
   useAssistantStore,
-  type AssistantOpenRequest,
 } from '@/stores/assistant'
-import { removeSession, SESSION_MUTATION_EVENT, type SessionMutationDetail } from '@/components/sessionMutations'
-import type { PageContextPayload } from '@/api/chat/streame'
+import { useAuthStore } from '@/stores/auth'
+import { useAssistantDataChange } from '@/utils/assistantDataChange'
 
 const { t } = useI18n()
-const childTabs = createChildAgentTabs()
-provide(childAgentTabsKey, childTabs)
 const assistant = useAssistantStore()
 const auth = useAuthStore()
 useAssistantDataChange(() => { void auth.refreshFromAuthMe() }, { areas: ['workspace'] })
@@ -203,127 +126,52 @@ watch([docked, panelWidth], ([isDocked, width]) => {
   root.style.setProperty('--assistant-dock-width', isDocked ? `${width}px` : '0px')
 }, { immediate: true })
 
-const defaultModelId = computed(() =>
-  (assistant.contextAttached ? assistant.pageContext?.chatModelId : '') || '')
 
-const starting = ref(false)
-// A first message belongs to the session we created, never a restored one.
-const initialMessage = ref<{
-  sessionId: string
-  query: string
-  focus?: AssistantOpenRequest['focus']
-} | null>(null)
-const initialQuery = computed(() => initialMessage.value?.sessionId === assistant.sessionId
-  ? initialMessage.value.query : '')
+const chatRef = ref<{ sendText: (text: string) => Promise<void> } | null>(null)
 
-const welcomeDescription = computed(() => t(assistant.contextAttached && assistant.pageContext?.agentId
-  ? 'assistant.agentWelcomeDesc' : 'assistant.welcomeDesc'))
-
-const starters = computed(() => {
-  const c = assistant.contextAttached ? assistant.pageContext : null
-  if (c?.messageId) return [t('assistant.starters.messageSources'), t('assistant.starters.messageCheck')]
-  if (c?.modelId) return [t('assistant.starters.modelCheck'), t('assistant.starters.modelUsage')]
-  if (c?.mcpServiceId) return [t('assistant.starters.mcpTools'), t('assistant.starters.mcpCheck')]
-  if (c?.page === 'settings_models') return [t('assistant.starters.modelSetup'), t('assistant.starters.modelUsage')]
-  if (c?.page === 'mcp_services') return [t('assistant.starters.mcpSetup')]
-  if (c?.agentId) return [
-    t('assistant.starters.agentConfig'), t('assistant.starters.agentModel'), t('assistant.starters.agentKnowledge'),
-  ]
-  if (c?.wikiSlug) return [t('assistant.starters.wikiIssues'), t('assistant.starters.wikiSummary')]
-  if (c?.knowledgeId) return [t('assistant.starters.documentStatus'), t('assistant.starters.documentSummary')]
-  if (c) return [t('assistant.starters.failedDocuments'), t('assistant.starters.recentActivity')]
-  return [t('assistant.starters.agents'), t('assistant.starters.formats'), t('assistant.starters.createWiki')]
-})
-
-// Page context is a hint, not an explicit retrieval selection. The backend
-// validates it against the agent's scope; only user selections narrow that scope.
-const hostScope = () => {
-  const context = assistant.contextAttached ? assistant.pageContext : null
-  const title = assistant.contextAttached ? assistant.pageTitle : ''
-  const view = assistant.contextAttached ? assistant.pageView : ''
-  const selection = assistant.pageSelection
-  // A selection goes with one message; the next is about what is selected then.
-  if (selection) assistant.setPageSelection(null)
-  const focus = initialMessage.value?.sessionId === assistant.sessionId ? initialMessage.value.focus : undefined
-  initialMessage.value = null
-  const assistantAccess = assistant.effectiveAccessLevel
-  if (!context && !title && !view && !selection) return { knowledgeBaseIds: [], pageContext: null, assistantAccess }
-  const pageContext: PageContextPayload = context ? toPageContextPayload(focus ? { ...context, ...focus } : context) : {}
-  if (title) pageContext.title = title
-  if (view) pageContext.view = view
-  if (selection) pageContext.selection = toPageSelectionPayload(selection)
-  return {
-    knowledgeBaseIds: [],
-    pageContext,
-    assistantAccess,
-  }
-}
-
-const welcomeInput = ref<{ focusInput?: () => void } | null>(null)
-watch(() => assistant.focusRequest, () => {
-  if (!assistant.sessionId) welcomeInput.value?.focusInput?.()
-})
-
-async function startConversation(query: string, focus?: AssistantOpenRequest['focus']) {
-  const text = query.trim()
-  if (!text || starting.value) return
-  const owner = conversationOwner.value
-  starting.value = true
-  try {
-    const res: any = await createSessions({ kind: 'assistant' })
-    // A workspace switch can complete while session creation is in flight.
-    if (conversationOwner.value !== owner) return
-    const sessionId = res?.data?.id
-    if (!sessionId) throw new Error('missing session id')
-    initialMessage.value = { sessionId, query: text, focus }
-    showHistory.value = false
-    assistant.setSession(sessionId)
-  } catch (e) {
-    console.error('[Assistant] Failed to start a conversation', e)
-    MessagePlugin.error(t('assistant.startFailed'))
-  } finally {
-    starting.value = false
-  }
+/**
+ * 「询问助手」请求：有打开的会话就发送到该会话；没有则由欢迎态创建新会话。
+ * 请求可能在面板挂载前到达，因此挂载后也会消费一次。
+ */
+async function consumePendingRequest() {
+  const request = assistant.takePendingRequest()
+  assistant.restorePageContext()
+  const query = request?.query?.trim()
+  if (!query) return
+  await nextTick()
+  showHistory.value = false
+  await chatRef.value?.sendText(query)
 }
 
 watch(() => [assistant.visible, assistant.pendingRequest] as const, ([visible, request]) => {
-  if (!visible || !request) return
-  const { query, focus } = assistant.takePendingRequest() || {}
-  assistant.restorePageContext()
-  if (query) void startConversation(query, focus)
-}, { immediate: true })
+  if (visible && request) void consumePendingRequest()
+})
+
+function onSessionCreated(id: string) {
+  showHistory.value = false
+  assistant.setSession(id)
+}
 
 const showHistory = ref(false)
-const selectConversationTab = (id: string) => { showHistory.value = false; childTabs.select(id) }
-const history = ref<SessionSummary[]>([])
-const historyPage = ref(0)
-const historyTotal = ref(0)
+const history = ref<SessionView[]>([])
 const historyLoading = ref(false)
 const historyError = ref(false)
-const deleting = ref('')
-const readySessionId = ref('')
-const sessionLoadError = ref(false)
 let historyGeneration = 0
 
-async function loadHistory(reset = false) {
-  if (historyLoading.value && !reset) return
-  const generation = reset ? ++historyGeneration : historyGeneration
+async function loadHistory() {
+  const generation = ++historyGeneration
   const owner = conversationOwner.value
-  if (reset) {
+  const tenantId = auth.effectiveTenantId
+  if (!tenantId) {
     history.value = []
-    historyPage.value = 0
-    historyTotal.value = 0
+    return
   }
   historyLoading.value = true
   historyError.value = false
   try {
-    const res: any = await getSessionsList(historyPage.value + 1, 20, undefined, 'assistant')
+    const rows = await listSessions(tenantId)
     if (generation !== historyGeneration || owner !== conversationOwner.value) return
-    if (!res?.success) throw new Error('session list failed')
-    const seen = new Set(history.value.map(session => session.id))
-    history.value.push(...(res.data as SessionSummary[]).filter(session => !seen.has(session.id)))
-    historyTotal.value = res.total
-    historyPage.value++
+    history.value = [...rows].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
   } catch {
     if (generation === historyGeneration && owner === conversationOwner.value) historyError.value = true
   } finally {
@@ -333,7 +181,7 @@ async function loadHistory(reset = false) {
 
 function toggleHistory() {
   showHistory.value = !showHistory.value
-  if (showHistory.value) void loadHistory(true)
+  if (showHistory.value) void loadHistory()
 }
 
 function startNewConversation() {
@@ -346,85 +194,36 @@ function selectSession(id: string) {
   showHistory.value = false
 }
 
-function confirmDelete(id: string) {
-  const owner = conversationOwner.value
-  const dialog = DialogPlugin.confirm({
-    header: t('chatHeader.deleteConfirmTitle'),
-    body: t('chatHeader.deleteConfirmBody'),
-    confirmBtn: { content: t('common.delete'), theme: 'danger' },
-    cancelBtn: t('common.cancel'),
-    theme: 'warning',
-    onConfirm: async () => {
-      if (deleting.value || owner !== conversationOwner.value) return
-      deleting.value = id
-      try {
-        await removeSession(id)
-        if (owner !== conversationOwner.value) return
-        if (id === assistant.sessionId) startNewConversation()
-        if (showHistory.value) await loadHistory(true)
-        dialog.destroy()
-      } catch {
-        if (owner === conversationOwner.value) MessagePlugin.error(t('chat.deleteSessionFailed'))
-      } finally {
-        deleting.value = ''
-      }
-    },
-    onClose: () => dialog.destroy(),
-  })
-}
-
-async function validateSession(id: string) {
-  const owner = conversationOwner.value
-  readySessionId.value = ''
-  sessionLoadError.value = false
-  if (!id) return
-  if (id === initialMessage.value?.sessionId) {
-    readySessionId.value = id
-    return
-  }
+/**
+ * 面板保存的会话 ID 可能已经失效（例如旧的 WeKnora 会话），挂载时对照平台会话列表校正，
+ * 失效则回到欢迎态，避免对话区加载一个打不开的会话。
+ */
+async function validateStoredSession() {
+  const id = assistant.sessionId
+  const tenantId = auth.effectiveTenantId
+  if (!id || !tenantId) return
   try {
-    const res: any = await getSession(id)
-    if (owner !== conversationOwner.value || id !== assistant.sessionId) return
-    if (res?.data?.kind !== 'assistant') {
-      startNewConversation()
-      return
-    }
-    readySessionId.value = id
-  } catch (error: any) {
-    if (owner !== conversationOwner.value || id !== assistant.sessionId) return
-    const status = error?.$httpStatus ?? error?.response?.status ?? error?.status
-    if (status === 403 || status === 404) startNewConversation()
-    else sessionLoadError.value = true
+    const rows = await listSessions(tenantId)
+    if (id === assistant.sessionId && !rows.some(row => row.id === id)) assistant.setSession('')
+  } catch {
+    // 列表读取失败时保留会话，由对话区自行报告加载错误。
   }
 }
-
-watch(() => assistant.sessionId, (id) => {
-  childTabs.reset()
-  if (id !== initialMessage.value?.sessionId) initialMessage.value = null
-  void validateSession(id)
-}, { immediate: true })
 
 watch(conversationOwner, () => {
-  childTabs.reset()
   ++historyGeneration
   history.value = []
-  historyTotal.value = 0
-  historyPage.value = 0
   historyLoading.value = false
   historyError.value = false
   showHistory.value = false
 })
 
-const handleSessionMutation = (event: Event) => {
-  const detail = (event as CustomEvent<SessionMutationDetail>).detail
-  if (detail?.removed && detail.sessionId === assistant.sessionId) startNewConversation()
-}
 onMounted(() => {
-  window.addEventListener(SESSION_MUTATION_EVENT, handleSessionMutation)
   window.addEventListener('resize', onViewportResize)
+  void validateStoredSession()
+  if (assistant.visible && assistant.pendingRequest) void consumePendingRequest()
 })
 onUnmounted(() => {
-  window.removeEventListener(SESSION_MUTATION_EVENT, handleSessionMutation)
   window.removeEventListener('resize', onViewportResize)
   if (typeof document !== 'undefined') {
     document.documentElement.classList.remove('has-assistant-dock')

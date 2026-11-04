@@ -22,4 +22,5 @@ Vue 3、TypeScript、Element Plus、vue-router（history 模式）。外壳位�
 
 - 侧栏会话列表（`components/menu.vue`）只读取平台会话 `listSessions`，展示「我的会话」一个分组；IM、嵌入渠道与 API 文件夹尚未迁移，不生成对应分组。平台会话暂无改名、置顶、清空与删除接口，因此会话菜单不提供这些操作（`SessionSidebarRow` 在无菜单项时隐藏更多按钮）。
 - 对话页的运行过程与输入区复用 WeKnora 的 `AgentStreamDisplay.vue`（实时流，经 `utils/nexusAgentEvents.ts` 把 Run 事件适配为其事件流）与 `Input-field.vue`（`nexusMode`，屏蔽 WeKnora 专属加载与会话创建）；已持久化的消息仍用本页的气泡与 Markdown 渲染，未对齐 WeKnora 的 `botmsg.vue`。
-- 尚未完成（见 `openspec/changes/2026-11-04-weknora-chat-dialog/tasks.md`）：助手面板（`components/assistant/AssistantPanel.vue`）仍使用 WeKnora 对话组件与接口；完整 `vue-tsc` 与 `pnpm build` 未在受内存限制的环境中验证。
+- 助手面板（`components/assistant/AssistantPanel.vue`）的对话区嵌入 `NexusChatPage`（`embedded` 模式，会话由 `assistant.sessionId` 决定），历史列表读取平台会话，智能体取第一个已发布的智能体。页面上下文芯片、选区、访问级别选择与子智能体标签页已移除，平台 Run 接口不携带这些上下文；历史列表也不删除会话（平台暂无删除接口）。
+- 尚未完成（见 `openspec/changes/2026-11-04-weknora-chat-dialog/tasks.md`）：完整 `vue-tsc` 与 `pnpm build` 未在受内存限制的环境中验证；浏览器用例未执行。

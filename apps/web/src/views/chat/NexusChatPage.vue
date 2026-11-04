@@ -76,7 +76,7 @@
         :is-replying="isReplying" :can-steer="canSteer(run)"
         @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
         <template #controls>
-          <t-select v-if="isWelcome" v-model="selectedAgent" size="small" class="nexus-chat__agent"
+          <t-select v-if="isWelcome && !embedded" v-model="selectedAgent" size="small" class="nexus-chat__agent"
             :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
             :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
         </template>
@@ -121,8 +121,18 @@ const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 
-const sessionId = computed(() => String(route.params.chatid ?? ''))
-const isWelcome = computed(() => !sessionId.value)
+/**
+ * 独立页面（/platform/creatChat、/platform/chat/:chatid）从路由取会话；
+ * 嵌入模式（助手面板）由父组件通过 sessionId 传入，不改写路由。
+ */
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+  sessionId?: string
+}>(), { embedded: false, sessionId: '' })
+const emit = defineEmits<{ (e: 'session-created', id: string): void }>()
+
+const activeSessionId = computed(() => (props.embedded ? props.sessionId : String(route.params.chatid ?? '')))
+const isWelcome = computed(() => !activeSessionId.value)
 const tenantId = computed(() => authStore.effectiveTenantId)
 const native = useNativeRun(() => tenantId.value)
 
@@ -234,7 +244,7 @@ async function openSession() {
   }
   loading.value = true
   try {
-    messages.value = await native.loadSession(sessionId.value)
+    messages.value = await native.loadSession(activeSessionId.value)
   } catch (error) {
     errorText.value = messageOf(error, t('nativeRuns.loadError'))
   } finally {
@@ -244,8 +254,8 @@ async function openSession() {
 
 /** 运行结束后重新读取持久化的消息，使流式文本与已保存的回答不会同时出现。 */
 async function reloadMessages() {
-  if (!tenantId.value || !sessionId.value) return
-  const page = await getConversation(tenantId.value, sessionId.value)
+  if (!tenantId.value || !activeSessionId.value) return
+  const page = await getConversation(tenantId.value, activeSessionId.value)
   messages.value = page.messages
 }
 
@@ -263,10 +273,11 @@ async function sendText(text: string) {
       createdSessionId = session.id
       pendingUsers.value = [text]
       await native.send(session.id, text)
-      await router.replace(`/platform/chat/${session.id}`)
+      if (props.embedded) emit('session-created', session.id)
+      else await router.replace(`/platform/chat/${session.id}`)
     } else {
       pendingUsers.value = [...pendingUsers.value, text]
-      await native.send(sessionId.value, text)
+      await native.send(activeSessionId.value, text)
     }
   } catch (error) {
     MessagePlugin.error(messageOf(error, t('nativeRuns.sendError')))
@@ -322,7 +333,7 @@ watch(
   },
 )
 
-watch(() => route.params.chatid, (id) => {
+watch(activeSessionId, (id) => {
   // 欢迎页刚创建的会话：Run 已在进行中，保留其流式状态，不做 dispose 与重新加载。
   if (id && String(id) === createdSessionId) return
   native.dispose()
@@ -346,6 +357,9 @@ onMounted(() => {
   else void openSession()
 })
 onBeforeUnmount(() => native.dispose())
+
+// 助手面板通过此方法发送消息（例如「询问助手」请求或示例问题）。
+defineExpose({ sendText })
 </script>
 
 <style lang="less" scoped>
