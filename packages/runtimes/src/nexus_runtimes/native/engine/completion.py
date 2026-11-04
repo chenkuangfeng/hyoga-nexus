@@ -72,11 +72,13 @@ class CompletionPolicy:
 class JudgeDecision(StrEnum):
     """Closed set of per-response decisions. The engine dispatches on these and nothing else.
 
-    `ACCEPT_TRUNCATED` is a final answer that hit the output limit; the engine accepts it and records
-    `answer.truncated` (continuation is not implemented, so this is not a retry).
+    `CONTINUE_TRUNCATED` asks the model to resume a length-truncated answer (bounded by
+    `max_continuations`). `ACCEPT_TRUNCATED` is the answer kept once that bound is spent; the engine
+    records `answer.truncated` for it.
     """
     EXECUTE_TOOLS = 'execute_tools'
     ACCEPT = 'accept'
+    CONTINUE_TRUNCATED = 'continue_truncated'
     ACCEPT_TRUNCATED = 'accept_truncated'
     RETRY_EMPTY = 'retry_empty'
     INCOMPLETE_TOOL_CALL = 'incomplete_tool_call'
@@ -92,12 +94,15 @@ class Judgement:
     error_code: str | None = None
 
 
+#: Sent after a length-truncated final answer. The truncated text is already in the transcript.
+CONTINUE_PROMPT = 'Your previous reply was cut off. Continue exactly from where it stopped, without repeating earlier text.'
+
+
 class CompletionJudge:
     """Classify one model response into a JudgeDecision. Pure with respect to the store.
 
-    Mutates only the Run-local `state` counters (truncated calls, empty failures, repeats), which the
-    engine persists with its normal progress writes. Decisions are unchanged from the earlier inline
-    branches; this class names them.
+    Mutates only Run-local counters in `state` (truncated tool calls, empty failures, repeats,
+    continuations), which the engine persists with its normal progress writes.
     """
     TRUNCATED_FINISH = ('length', 'max_tokens')
 
@@ -114,6 +119,7 @@ class CompletionJudge:
             error = 'model_stuck' if count >= self.policy.repeated_limit else None
             return Judgement(JudgeDecision.INCOMPLETE_TOOL_CALL, error_code=error)
         if calls:
+            self.state['continuations'] = 0
             return Judgement(JudgeDecision.EXECUTE_TOOLS)
         verdict = self.text_guards.evaluate(text, finish_reason)
         if verdict.action == 'fail':
@@ -121,4 +127,11 @@ class CompletionJudge:
             return Judgement(JudgeDecision.STALLED if stuck else JudgeDecision.FAIL, error_code=verdict.error_code)
         if verdict.action == 'retry':
             return Judgement(JudgeDecision.RETRY_EMPTY, prompt=verdict.prompt)
-        return Judgement(JudgeDecision.ACCEPT_TRUNCATED if verdict.truncated else JudgeDecision.ACCEPT)
+        if verdict.truncated:
+            used = int(self.state.get('continuations', 0))
+            if used < self.policy.max_continuations:
+                self.state['continuations'] = used + 1
+                return Judgement(JudgeDecision.CONTINUE_TRUNCATED, prompt=CONTINUE_PROMPT)
+            return Judgement(JudgeDecision.ACCEPT_TRUNCATED)
+        self.state['continuations'] = 0
+        return Judgement(JudgeDecision.ACCEPT)

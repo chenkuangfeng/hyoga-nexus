@@ -95,10 +95,30 @@ def test_empty_response_is_retried_with_a_visible_prompt_then_fails_when_exhaust
     assert retry.prompt.startswith('[ERROR] Blank response')
 
 
-def test_natural_answer_is_accepted_and_truncated_text_is_marked():
+def test_natural_answer_is_accepted():
     judge, _ = _judge()
     assert judge.judge('Done.', 'stop', ()).decision == JudgeDecision.ACCEPT
+
+
+def test_truncated_text_is_continued_then_accepted_once_the_bound_is_spent():
+    judge, state = _judge(max_continuations=2)
+    first = judge.judge('Part one', 'length', ())
+    assert first.decision == JudgeDecision.CONTINUE_TRUNCATED and first.prompt
+    assert judge.judge('Part two', 'length', ()).decision == JudgeDecision.CONTINUE_TRUNCATED
+    assert judge.judge('Part three', 'length', ()).decision == JudgeDecision.ACCEPT_TRUNCATED
+    assert state['continuations'] == 2
+
+
+def test_zero_continuations_keeps_the_previous_accept_truncated_behaviour():
+    judge, _ = _judge(max_continuations=0)
     assert judge.judge('Partial answer', 'length', ()).decision == JudgeDecision.ACCEPT_TRUNCATED
+
+
+def test_a_complete_response_resets_the_continuation_count():
+    judge, state = _judge(max_continuations=1)
+    assert judge.judge('a', 'length', ()).decision == JudgeDecision.CONTINUE_TRUNCATED
+    assert judge.judge('b', 'stop', ()).decision == JudgeDecision.ACCEPT
+    assert judge.judge('c', 'length', ()).decision == JudgeDecision.CONTINUE_TRUNCATED
 
 
 def test_content_filter_fails_with_a_stable_code():

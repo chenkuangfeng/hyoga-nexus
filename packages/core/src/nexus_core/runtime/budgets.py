@@ -16,10 +16,14 @@ class ExecutionBudget:
     model_timeout_seconds: float = 60
     max_errors: int = 4
     max_context_chars: int = 100000
+    # Model requests including transport retries. 0 derives max_rounds * (model_retries + 1) at run time.
+    max_model_attempts: int = 0
 
     def __post_init__(self) -> None:
-        if any(not math.isfinite(value) or value <= 0 for value in vars(self).values()):
+        if any(not math.isfinite(value) or value <= 0 for name, value in vars(self).items() if name != 'max_model_attempts'):
             raise ValueError('Execution budgets must be positive')
+        if type(self.max_model_attempts) is not int or self.max_model_attempts < 0:
+            raise ValueError('max_model_attempts must be a non-negative integer (0 derives the cap)')
 
 
 @dataclass
@@ -29,4 +33,6 @@ class RuntimeProgress:
     tokens: int = 0
     errors: int = 0
     active_seconds: float = 0
+    # Model requests actually issued, including transport retries (3.15). Older rows read as 0.
+    model_attempts: int = 0
     state: dict[str, object] = field(default_factory=dict)

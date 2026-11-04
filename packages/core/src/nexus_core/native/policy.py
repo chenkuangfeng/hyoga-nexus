@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
-                      'read_tool_output')
+                      'read_tool_output', 'todo')
 #: Builtin that pages through externalized tool output (P2). Its presence in a Run's bindings enables spilling.
 TOOL_OUTPUT_READER = 'read_tool_output'
 #: Hard cap on one externalized output; anything beyond it is not stored (keeps rows bounded).
@@ -27,6 +27,8 @@ class NativePolicy:
     clarify_code: bool = True
     working_memory: bool = True
     model_retries: int = 2
+    # Continuation prompts sent after a length-truncated final answer (3.7). 0 accepts the truncated answer.
+    max_continuations: int = 2
     retry_delay_seconds: float = 1
     max_retry_delay_seconds: float = 60
     parallel_reads: bool = True
@@ -73,6 +75,8 @@ class NativePolicy:
             value = getattr(self, name)
             if type(value) is not int or not 0 <= value <= 5:
                 raise ValueError('Native retry counts must be integers between 0 and 5')
+        if type(self.max_continuations) is not int or not 0 <= self.max_continuations <= 5:
+            raise ValueError('Native continuation count must be an integer between 0 and 5')
         for name in ('repeated_limit', 'reminder_interval', 'memory_interval',
                      'durable_checkpoint_interval', 'user_direction_interval'):
             if type(getattr(self, name)) is not int or not 1 <= getattr(self, name) <= 1000:

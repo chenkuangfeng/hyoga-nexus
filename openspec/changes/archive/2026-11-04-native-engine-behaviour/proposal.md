@@ -2,7 +2,9 @@
 
 ## 状态
 
-草稿（待确认）。未确认前不编码。确认的决定见第 6 节。
+已实施，已归档。确认的决定见第 6 节；实施结果与偏差见 tasks.md。
+
+偏差说明：`max_model_attempts` 的 0 表示由 `max_rounds * (model_retries + 1)` 推导（与上文默认值等价，但保存为 0 以便随配置变化）；模型尝试计数通过 `RetryModel.bind_attempts` 的鸭子类型钩子注入；最后一轮若模型仍返回工具调用，一律记为 "Not executed" 而不执行。
 
 ## 原因
 

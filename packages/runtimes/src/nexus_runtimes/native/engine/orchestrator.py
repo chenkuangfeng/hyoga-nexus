@@ -21,6 +21,28 @@ from .turn import TurnExecutor
 from .dispatcher import ToolDispatcher
 
 
+#: Sent on the last allowed turn, where tools are withdrawn so the model must answer (3.7).
+FINAL_ANSWER_HINT = ('This is the last allowed turn and tools are disabled. '
+                     'Give the final answer from the information already gathered.')
+
+
+class AttemptCounter:
+    """Run-scoped count of real model requests (3.15). Stored in progress.model_attempts.
+
+    `begin_attempt` runs before each request, so a refused request is never sent. Retries count
+    as separate attempts because each one is a billable provider call.
+    """
+
+    def __init__(self, progress: RuntimeProgress, store, limit: int):
+        self.progress, self.store, self.limit = progress, store, limit
+
+    async def begin_attempt(self) -> None:
+        if self.progress.model_attempts >= self.limit:
+            raise RuntimeFault('budget_exhausted')
+        self.progress.model_attempts += 1
+        await self.store.emit('model.attempt', {'attempt': self.progress.model_attempts, 'turn': self.progress.turns})
+
+
 class RunOrchestrator:
     """Own one Run's lifecycle: budgets, cancellation, durable events and the turn loop (3.4).
 
@@ -72,6 +94,10 @@ class RunOrchestrator:
         """
         run_id, messages, budget = request.run_id, request.messages, request.budget
         token, progress = context.token, context.progress or RuntimeProgress()
+        attempt_limit = budget.max_model_attempts or budget.max_rounds * (self.policy.model_retries + 1)
+        bind_attempts = getattr(self.model, 'bind_attempts', None)
+        if callable(bind_attempts):
+            bind_attempts(AttemptCounter(progress, self.store, attempt_limit))
         started, previous_seconds = time.monotonic(), progress.active_seconds
         state = progress.state
         history = list(messages) if state.get('pending_calls') else list(resolve_incomplete_exchanges(messages))
@@ -139,6 +165,13 @@ class RunOrchestrator:
                     self.context.ensure_frozen(definitions)
                     view = self.context.view(history, working=working, turn=turn)
                     model_history, input_estimate = view.messages, view.input_estimate
+                    # Last allowed turn: withdraw tools and say so; any call the model still makes is refused below.
+                    last_turn = progress.turns >= budget.max_rounds
+                    turn_definitions = definitions
+                    if last_turn:
+                        turn_definitions = ()
+                        model_history = list(model_history) + [ModelMessage('user', FINAL_ANSWER_HINT)]
+                        await self.store.emit('turn.tools_disabled', {'turn': turn})
                     remaining = budget.max_tokens - progress.tokens - input_estimate
                     if remaining <= 0:
                         raise RuntimeFault('budget_exhausted')
@@ -146,7 +179,7 @@ class RunOrchestrator:
                     await self._hook(run_id, 'model.before', turn)
                     await self.store.emit('model.started', {'turn': turn})
                     try:
-                        response = await self.turn_executor.execute(model_history, definitions, remaining, token, turn, budget)
+                        response = await self.turn_executor.execute(model_history, turn_definitions, remaining, token, turn, budget)
                     finally:
                         await self._hook(run_id, 'model.after', turn)
                     progress.tokens += response.tokens or input_estimate + len(response.text.encode()) + sum(len(c.arguments.encode()) for c in response.calls)
@@ -170,6 +203,9 @@ class RunOrchestrator:
                         await self.store.emit('model.recovery', {'turn': turn, 'reason': 'unusable_response'})
                     elif judgement.decision in (JudgeDecision.STALLED, JudgeDecision.FAIL):
                         raise RuntimeFault(judgement.error_code)
+                    elif judgement.decision == JudgeDecision.CONTINUE_TRUNCATED:
+                        await append(ModelMessage('user', judgement.prompt))
+                        await self.store.emit('answer.continued', {'turn': turn, 'attempt': int(state.get('continuations', 0))})
                     elif judgement.decision in (JudgeDecision.ACCEPT, JudgeDecision.ACCEPT_TRUNCATED):
                         if done:
                             await append(ModelMessage('user', done.pop(0)))
@@ -177,6 +213,10 @@ class RunOrchestrator:
                             outcome, terminal = RuntimeOutcome('completed'), True
                             if judgement.decision == JudgeDecision.ACCEPT_TRUNCATED:
                                 await self.store.emit('answer.truncated', {'turn': turn})
+                    elif last_turn:
+                        # Tools are withdrawn on the final turn; a call the model still makes is refused, never run.
+                        for call in response.calls:
+                            await append(ModelMessage('tool', 'Not executed: tools are disabled on the final turn.', tool_call_id=call.id))
                     else:
                         dispatch = await self.dispatcher.dispatch(response.calls, definitions, token, hook, turn,
                             append=append, state=state, progress=progress, budget=budget, working=working)

@@ -29,3 +29,10 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 `usage.py` 接受缺失/null 为未知零值，计数必须是 0..2**53-1 的 JSON 整数，拒绝布尔、字符串、负数、分数和越界。Responses/Chat 缺 total 时用 input+output，Anthropic 用 input+cache_read+cache_creation+output；有效显式 total 包括零值予以保留。累计输出快照覆盖而非累加，Anthropic 输入/缓存计数不会被输出尾块清零。零/缺用量时 Native 仍按既有方式估算预算；不能由计数零推断真实免费调用，也不宣称已观测失败尝试的真实供应商消耗。
 
 已确认的上游行为差异原记录于已删除的 OpenSpec 批次设计（见提交 `2a9ee03`）。完整模型签名/历史、供应商兼容参数、多模态和 cache 状态治理不在此局部修复的完成声明内。
+
+## 行为补齐（native-engine-behaviour）
+
+- 截断的最终文本由 `CompletionJudge` 判定为 `CONTINUE_TRUNCATED`，编排器追加续写提示并发出 `answer.continued`；续写计数在任一完整响应或工具回合后清零，超过 `max_continuations` 后接受截断答案（`answer.truncated`）。
+- 最后一个允许回合（`progress.turns >= max_rounds`）：模型请求的工具定义为空，视图追加"工具已禁用"提示，发出 `turn.tools_disabled`；模型仍返回的工具调用不执行，记为未执行。
+- 模型请求计数：编排器在 Run 开始时把 `AttemptCounter` 绑定到 `RetryModel`（`bind_attempts`）。每次真实请求（含传输重试）先调用 `begin_attempt`，计数写入 `progress.model_attempts` 并发出 `model.attempt`；超过 `max_model_attempts`（0 时为 `max_rounds * (model_retries + 1)`）则不发送并以 `budget_exhausted` 结束。
+- 待办工具 `todo` 通过 `RunServices.run_state` 访问 `progress.state`（与进度同一对象）；工具权限仍由网关每次复核。

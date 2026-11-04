@@ -13,6 +13,7 @@ from nexus_core.platform import utc_now
 
 logger = logging.getLogger("nexus_worker")
 from nexus_core.native import NativePolicy
+from nexus_tools.builtins.services import RunServices
 from nexus_core.runtime import ExecutionBudget, RunContext, RunRequest, RuntimeFault, RuntimeOutcome, ToolDefinition, ToolDisposition, ToolResult
 from nexus_platform.configuration import DatabaseConfigurationError, model_credentials
 from nexus_platform.models.ports import CredentialLease
@@ -163,7 +164,8 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         spill = OutputSpill(policy.tool_output_inline_limit, policy.tool_preview_chars, policy.tool_output_page_chars)
         gateway = AuthorizedToolGateway(registry, ToolAccess(store),
             {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
-            session_id=str(context.session_id), tenant_id=str(context.tenant_id), services=store, spill=spill)
+            session_id=str(context.session_id), tenant_id=str(context.tenant_id),
+            services=RunServices(store, context.progress.state), spill=spill)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

@@ -12,6 +12,7 @@ LABELS = {
     'max_rounds': '最大回合数', 'max_tokens': '总 Token 预算', 'max_output_tokens': '每次输出上限',
     'max_seconds': '活跃执行时间（秒）', 'model_timeout_seconds': '模型超时（秒）',
     'max_errors': '工具错误上限', 'max_context_chars': '上下文字符预算',
+    'max_model_attempts': '模型请求上限（含重试，0 为自动）', 'max_continuations': '截断回答续写次数',
     'enabled_tools': '新智能体绑定的工具',
     'fallback_models': '故障转移模型', 'routing_spring_seconds': '回归主模型冷却（秒）',
     'empty_retries': '空响应恢复次数', 'repeated_limit': '重复或截断上限',
@@ -56,7 +57,7 @@ def validate(settings: dict) -> dict:
     for key, value in budgets.items():
         if type(value) not in (int, float) or (type(baseline['budgets'][key]) is int and type(value) is not int):
             raise ValueError('Invalid Native budget type')
-    if budgets['max_rounds'] > 1000 or budgets['max_tokens'] > 10000000 or budgets['max_output_tokens'] > 128000 or budgets['max_seconds'] > 86400:
+    if budgets['max_model_attempts'] > 100000 or budgets['max_rounds'] > 1000 or budgets['max_tokens'] > 10000000 or budgets['max_output_tokens'] > 128000 or budgets['max_seconds'] > 86400:
         raise ValueError('Native budget exceeds service limits')
     ExecutionBudget(**budgets)
     behavior = asdict(NativePolicy(**(baseline['behavior'] | settings['behavior'])))
