@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from fastapi.exceptions import RequestValidationError
 
 from nexus_api.http.platform import router as platform_router
+from nexus_api.http.skills import router as skills_router
 from nexus_api.http.orgs import router as orgs_router
 from nexus_api.http.memberships import router as memberships_router
 from nexus_api.http.shared_spaces import router as shared_spaces_router
@@ -16,6 +17,7 @@ from nexus_platform.persistence.database import create_database_engine, session_
 
 app = FastAPI(title="Hyoga Nexus", version="0.1.0")
 app.include_router(platform_router)
+app.include_router(skills_router)
 app.include_router(orgs_router)
 app.include_router(memberships_router)
 app.include_router(shared_spaces_router)

@@ -69,14 +69,14 @@
 ## 阻塞
 
 - 无（脚本执行按用户决定 (b) 实施）。风险说明：`nexus_skills.runner` 不是隔离边界，脚本以服务进程用户身份运行；仅在开发门禁下可用。
-- **HTTP 接口**：提案要求的管理员安装与只读列表接口尚未实现，目前只有服务层函数。
+- **HTTP 接口**：已实现 `POST/GET /api/v1/tenants/{tenant_id}/skills` 与版本元数据接口（`apps/api/src/nexus_api/http/skills.py`）。
 - **发布权限**：发布沿用现有 `tools:manage` 权限，没有新增 `skills:manage`。
 
 ## 9. 示例与文档
 
 - [x] 9.1 两个示例技能：`skills/general/weekly-report`（纯内联）与 `skills/general/text-stats`（内联 + 资源 + 脚本 `count`）。内容为占位示例，发布与运行由 `tests/test_skill_examples.py` 验证；正式内容仍需用户确认。
-- [~] 9.2 端到端测试已覆盖（`tests/test_skill_script_run.py`）：门禁开启时运行并产生事件；门禁关闭或智能体设置关闭时工具不出现；参数错误拒绝。使用示例技能的验证待 9.1。
-- [ ] 9.3 更新 `packages/skills/docs/` 与 `docs/architecture.md` 2.6 节（只写当前结果，不写过程）。
+- [x] 9.2 端到端测试已覆盖（`tests/test_skill_script_run.py`）：门禁开启时运行并产生事件；门禁关闭或智能体设置关闭时工具不出现；参数错误拒绝。使用示例技能的验证待 9.1。
+- [x] 9.3 更新 `packages/skills/README.md`（模块当前结果）；`docs/architecture.md` 2.6 节未改动，待 7.1 完成后统一更新。
 - [ ] 9.4 更新路线图 7.1 的对应子项（仅勾选已完成部分；草稿审核与 MCP 保持未完成）。
 
 ## 10. 验证与归档

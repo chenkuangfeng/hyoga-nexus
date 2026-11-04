@@ -233,3 +233,26 @@ def scripts_available(policy_flag: bool) -> bool:
 
 #: The only execution backend the scripts runner implements. Sandbox backends are not wired here.
 LOCAL_BACKEND = 'local'
+
+
+def list_skills(db: Session, principal: Principal, tenant_id: UUID) -> list[dict[str, Any]]:
+    """Skills of the Tenant with their newest version number. Any active member may read the list."""
+    context(db, principal, tenant_id)
+    rows = db.execute(select(SkillRecord, SkillVersionRecord).outerjoin(
+        SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
+        .where(SkillRecord.tenant_id == tenant_id).order_by(SkillRecord.name)).all()
+    return [{'name': skill.name, 'source': skill.source, 'version': version.version if version else None,
+             'description': version.description if version else ''} for skill, version in rows]
+
+
+def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str) -> list[dict[str, Any]]:
+    """Version history of one skill: metadata, hashes and advisory hints. Bodies and files are not returned."""
+    context(db, principal, tenant_id)
+    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+    if skill is None:
+        raise NotFound('skill_not_found')
+    versions = db.scalars(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
+                          .order_by(SkillVersionRecord.version)).all()
+    return [{'version': v.version, 'version_id': str(v.id), 'content_hash': v.content_hash, 'description': v.description,
+             'tools': list(v.tools), 'scripts': [s['name'] for s in v.scripts], 'scan_hints': list(v.scan_hints),
+             'created_at': v.created_at.isoformat()} for v in versions]
