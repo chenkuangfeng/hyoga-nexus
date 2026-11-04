@@ -9,6 +9,7 @@ from .store import RuntimeStorePort
 from .memory import MemoryDraftPort
 from .sandbox import SandboxRequest, SandboxResult, SandboxPort
 from .outcomes import RuntimeOutcome
+from .port import AgentRuntime, RunContext, RunRequest, RuntimeCapabilities
 
 __all__ = [
     'RuntimeFault',
@@ -32,4 +33,8 @@ __all__ = [
     'SandboxResult',
     'SandboxPort',
     'RuntimeOutcome',
+    'AgentRuntime',
+    'RunContext',
+    'RunRequest',
+    'RuntimeCapabilities',
 ]

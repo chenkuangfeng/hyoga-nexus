@@ -31,12 +31,18 @@ class ToolDefinition:
     read_only: bool = False
     idempotent: bool = False
     requires_approval: bool = False
+    # Coarse impact class shown to reviewers and used by the gateway; it never widens access.
+    risk_level: Literal['low', 'medium', 'high'] = 'medium'
+    # Capabilities the executing backend must provide (for example 'sandbox'); empty means none.
+    required_capabilities: tuple[str, ...] = ()
 
     def __post_init__(self):
         # A read-only declaration is a scheduling promise (P9): such a tool may run in parallel,
         # so it must not carry side effects or require approval.
         if self.read_only and (self.side_effects or self.requires_approval):
             raise ValueError(f'Read-only tool {self.name!r} must not declare side effects or approval')
+        if self.risk_level not in ('low', 'medium', 'high'):
+            raise ValueError(f'Tool {self.name!r} has unknown risk level {self.risk_level!r}')
 
 
 class ToolDisposition(StrEnum):

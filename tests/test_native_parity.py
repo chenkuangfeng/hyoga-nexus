@@ -13,7 +13,7 @@ from test_model_settings import settings_client, add_provider, add_model
 from test_native_runtime import stack, FakeModel, call, run_row
 from nexus_core.native import NativePolicy, HookTransform
 from nexus_core.runtime import ModelChunk, ModelMessage, RuntimeFault, ToolDefinition, ToolResult, RuntimeProgress
-from nexus_runtimes.native.engine import NativeEngine, CancellationToken
+from nexus_runtimes.native.engine import RunOrchestrator, CancellationToken
 from nexus_runtimes.native.hooks import HookRegistry
 from nexus_runtimes.native.models.retry import RetryModel
 from nexus_runtimes.native.models.routing import RoutedModel
@@ -49,8 +49,10 @@ def test_empty_and_code_recovery_and_completion_hooks(database):
         memory = Store()
         model = FakeModel([[ModelChunk('text', text='first')], [ModelChunk('text', text='final evidence')]])
         from nexus_core.runtime import ExecutionBudget
-        result = await NativeEngine(model, Tools(), memory, transforms=hooks).run('run',
-            (ModelMessage('system', 'Help'), ModelMessage('user', 'Task')), CancellationToken(), ExecutionBudget(max_tokens=100000))
+        from nexus_core.runtime import RunContext, RunRequest
+        result = await RunOrchestrator(model, Tools(), memory, transforms=hooks).run(
+            RunRequest('run', (ModelMessage('system', 'Help'), ModelMessage('user', 'Task')), ExecutionBudget(max_tokens=100000)),
+            RunContext(CancellationToken()))
         assert result.status == 'completed'
         assert len(model.requests) == 2
         assert any(m.content == 'Authorized project context' for m in model.requests[0].messages)

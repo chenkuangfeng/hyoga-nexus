@@ -13,7 +13,7 @@ from nexus_core.platform import utc_now
 
 logger = logging.getLogger("nexus_worker")
 from nexus_core.native import NativePolicy
-from nexus_core.runtime import ExecutionBudget, RuntimeFault, RuntimeOutcome, ToolDefinition, ToolDisposition, ToolResult
+from nexus_core.runtime import ExecutionBudget, RunContext, RunRequest, RuntimeFault, RuntimeOutcome, ToolDefinition, ToolDisposition, ToolResult
 from nexus_platform.configuration import DatabaseConfigurationError, model_credentials
 from nexus_platform.models.ports import CredentialLease
 from nexus_platform.models.provider_settings import StoredCredentialResolver
@@ -21,7 +21,7 @@ from nexus_platform.errors import PlatformError
 from nexus_runtimes.native.models.network import provider_client
 from nexus_runtimes.native.models.factory import create_model
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
-from nexus_runtimes.native.engine import CancellationToken, NativeEngine
+from nexus_runtimes.native.engine import CancellationToken, RunOrchestrator
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
 from nexus_tools.builtins import builtins
@@ -181,9 +181,11 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             version_id = policy.compaction_model_profile_version_id
             compaction_resolver = resolver or StoredCredentialResolver(factory, DeploymentCredentialResolver())
             compaction_model_factory = lambda: compaction_model(context, factory, compaction_resolver, version_id)
-        outcome = await NativeEngine(model, gateway, store, hooks=hooks, policy=policy,
-                                     compaction_model_factory=compaction_model_factory).run(
-            str(context.run_id), context.messages, token, budget, context.progress)
+        runtime = RunOrchestrator(model, gateway, store, hooks=hooks, policy=policy,
+                                  compaction_model_factory=compaction_model_factory)
+        outcome = await runtime.run(
+            RunRequest(run_id=str(context.run_id), messages=tuple(context.messages), budget=budget),
+            RunContext(token=token, progress=context.progress))
     except RuntimeFault as exc:
         outcome = RuntimeOutcome('interrupted' if exc.code == 'interrupted' else 'failed', exc.code)
     except Exception:

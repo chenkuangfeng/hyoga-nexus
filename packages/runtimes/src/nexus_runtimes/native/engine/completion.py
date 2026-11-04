@@ -4,6 +4,7 @@ Derived from GenericAgent ga.py do_no_tool/_retry_or_exit (a9a36b4, MIT) and
 WeKnora observe.go/length_truncation tests (e1f9a6166, MIT).
 """
 from dataclasses import dataclass
+from enum import StrEnum
 import re
 
 from nexus_core.native import NativePolicy
@@ -66,3 +67,58 @@ class CompletionPolicy:
         if repeats >= self.policy.repeated_limit:
             return CompletionVerdict('fail', error_code='model_stuck')
         return CompletionVerdict('answer')
+
+
+class JudgeDecision(StrEnum):
+    """Closed set of per-response decisions. The engine dispatches on these and nothing else.
+
+    `ACCEPT_TRUNCATED` is a final answer that hit the output limit; the engine accepts it and records
+    `answer.truncated` (continuation is not implemented, so this is not a retry).
+    """
+    EXECUTE_TOOLS = 'execute_tools'
+    ACCEPT = 'accept'
+    ACCEPT_TRUNCATED = 'accept_truncated'
+    RETRY_EMPTY = 'retry_empty'
+    INCOMPLETE_TOOL_CALL = 'incomplete_tool_call'
+    STALLED = 'stalled'
+    FAIL = 'fail'
+
+
+@dataclass(frozen=True)
+class Judgement:
+    """A decision plus the data the engine needs to act on it (a visible prompt or a stable error code)."""
+    decision: JudgeDecision
+    prompt: str = ''
+    error_code: str | None = None
+
+
+class CompletionJudge:
+    """Classify one model response into a JudgeDecision. Pure with respect to the store.
+
+    Mutates only the Run-local `state` counters (truncated calls, empty failures, repeats), which the
+    engine persists with its normal progress writes. Decisions are unchanged from the earlier inline
+    branches; this class names them.
+    """
+    TRUNCATED_FINISH = ('length', 'max_tokens')
+
+    def __init__(self, policy: NativePolicy, state: dict[str, object]):
+        self.policy, self.state = policy, state
+        self.text_guards = CompletionPolicy(policy, state)
+
+    def judge(self, text: str, finish_reason: str, calls) -> Judgement:
+        """Decide what the engine does next for this response. `calls` are the model-issued tool calls."""
+        if calls and finish_reason in self.TRUNCATED_FINISH:
+            # Arguments were cut off, so nothing may run; the engine reports this and asks for smaller calls.
+            count = int(self.state.get('truncated_calls', 0)) + 1
+            self.state['truncated_calls'] = count
+            error = 'model_stuck' if count >= self.policy.repeated_limit else None
+            return Judgement(JudgeDecision.INCOMPLETE_TOOL_CALL, error_code=error)
+        if calls:
+            return Judgement(JudgeDecision.EXECUTE_TOOLS)
+        verdict = self.text_guards.evaluate(text, finish_reason)
+        if verdict.action == 'fail':
+            stuck = verdict.error_code == 'model_stuck'
+            return Judgement(JudgeDecision.STALLED if stuck else JudgeDecision.FAIL, error_code=verdict.error_code)
+        if verdict.action == 'retry':
+            return Judgement(JudgeDecision.RETRY_EMPTY, prompt=verdict.prompt)
+        return Judgement(JudgeDecision.ACCEPT_TRUNCATED if verdict.truncated else JudgeDecision.ACCEPT)

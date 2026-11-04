@@ -150,3 +150,20 @@ async def collect_response(model, request: ModelRequest, token, store, turn: int
     if response.finish_reason == 'content_filter':
         raise RuntimeFault('model_content_filtered')
     return response
+
+
+class TurnExecutor:
+    """Build one model request for a turn, stream it and return the collected response (3.5).
+
+    The caller owns budget accounting and the model.before/after hooks, so the engine keeps the
+    lifecycle order it had before this class existed.
+    """
+
+    def __init__(self, model, store, policy):
+        self.model, self.store, self.policy = model, store, policy
+
+    async def execute(self, messages, definitions, remaining: int, token, turn: int, budget):
+        """Send `messages` with `definitions`, capped by the Run's remaining token budget."""
+        request = ModelRequest(tuple(messages), definitions, min(budget.max_output_tokens, remaining))
+        return await collect_response(self.model, request, token, self.store, turn, budget.model_timeout_seconds,
+                                      flush_ms=self.policy.delta_flush_ms, flush_chars=self.policy.delta_flush_chars)

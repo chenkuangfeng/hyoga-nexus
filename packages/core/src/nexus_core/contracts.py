@@ -1,18 +1,5 @@
 from dataclasses import dataclass
-from typing import AsyncIterator, Protocol
-
-@dataclass(frozen=True)
-class AgentRequest:
-    session_id: str
-    prompt: str
-
-@dataclass(frozen=True)
-class AgentEvent:
-    kind: str
-    content: str
-
-class AgentRuntime(Protocol):
-    def stream(self, request: AgentRequest) -> AsyncIterator[AgentEvent]: ...
+from typing import Protocol
 
 @dataclass(frozen=True)
 class InboundMessage:

@@ -10,7 +10,7 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 ## Native 迁移批次
 
-`engine/runner.py` 统一组织预算、回合、结束判断与恢复；`turn.py` 校验模型流，`completion.py` 处理空响应、重复与代码澄清，`tools.py` 提供默认顺序执行和显式只读并发屏障，`recovery.py` 消费挂起调用并更新错误预算与工作检查点。`__init__.py` 保留原导入入口。
+`engine/orchestrator.py` 的 `RunOrchestrator` 实现 `nexus_core.runtime.AgentRuntime` 端口（`capabilities()` 与 `run(RunRequest, RunContext)`），负责运行生命周期、预算、取消、事件持久化与回合循环；它把单回合工作委托给以下组件：`turn.py` 的 `TurnExecutor` 组装请求并收集模型流；`context/assembler.py` 的 `ContextAssembler` 负责压缩（在 turn.before 钩子之前）、回合视图（之后），并在 Run 开始时冻结工具定义；`completion.py` 的 `CompletionJudge` 把每个响应判定为 `JudgeDecision` 之一（执行工具、接受、接受截断、空响应重试、不完整工具调用、停滞、失败）；`dispatcher.py` 的 `ToolDispatcher` 处理一批工具结果：审批挂起、错误计数、工作检查点、终态与续写提示；`tools.py` 的 `execute_batch` 提供顺序执行与只读并发屏障；`recovery.py` 的 `resume_tools` 保留独立的恢复路径（结果映射与普通回合不同，合并会改变行为）。参数校验由工具网关完成，调度器不重复校验。`__init__.py` 导出 `CancellationToken`、`cancellable` 与 `RunOrchestrator`。
 
 `context/working.py` 管理工作锚点和周期提醒，`compaction.py` 在配置启用时生成摘要并保留源记录；失败降级为有界历史片段。`hooks/` 提供可信注册与追加上下文/完成提示，不能扩大资源授权。模型模块按协议、文本工具解析、重试和路由分离，支持 Chat Completions、Responses、Anthropic Messages；流已输出后不重新拼接重试结果。协议测试目前使用 HTTP 夹具，尚未证明真实供应商兼容性。
 
@@ -22,7 +22,7 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 `protocols/state.py` 管理单响应调用身份、参数、块闭合与终态，`structured.py` 只组织 HTTP、可见文本与结果交付。Responses 使用 item_id/回退 output_index 聚合，并以 call_id 关联工具结果；Anthropic 保留初始 input、要求工具块闭合，允许有效 stop reason 后 EOF。Chat 保持严格 finish_reason；DONE 哨兵不足以独立证明完成。结构化显式 failed/error、未知状态、缺终态、坏 JSON 均不得变成正常完成。
 
-`engine/turn.py` 在模型结果收集后拒绝 content_filter，包括同时携带工具的响应；length 工具沿既有 runner 恢复路径不执行。文本工具包装器在过滤/截断时保留该原因，不从标签恢复调用；上游已经输出但尚在缓冲的失败也会阻止外层重试/切换。调用方通过 aclosing 及时关闭异步流。
+`engine/turn.py` 在模型结果收集后拒绝 content_filter，包括同时携带工具的响应；length 工具沿既有编排恢复路径不执行。文本工具包装器在过滤/截断时保留该原因，不从标签恢复调用；上游已经输出但尚在缓冲的失败也会阻止外层重试/切换。调用方通过 aclosing 及时关闭异步流。
 
 `retry.py` 与 `routing.py` 仅恢复 timeout、rate_limited、provider_unavailable，HTTP 暂时集合为 408/429/500/502/503/504。认证、参数、额度、context 和未知显式失败不做传输重试。Retry-After 支持秒和 HTTP 日期；超过已有最大延迟直接禁止本次恢复，不提前重试。模型 timeout/Run 活跃预算包住整个请求与等待，取消可打断等待。部分流失败不会拼接另一个供应商，后续请求才可能使用备用节点。
 

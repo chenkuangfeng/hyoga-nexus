@@ -60,13 +60,13 @@
 - **子计划**：
   - [x] 3.1 基础闭环：流式模型、授权工具、取消、等待输入、检查点、SSE、对话工作台。
   - [ ] 3.2 真实 OpenAI-compatible 供应商在线验收（用户在设置页配置后）。
-  - [ ] 3.3 运行时契约：`AgentRuntime` 端口、`RunEvent` 类型、`RuntimeCapabilities`、`RunRequest` 与 `RunContext`，与现有 Native 契约对齐。
-  - [ ] 3.4 运行编排 `RunOrchestrator`：生命周期、取消、预算、事件持久化、租约检查；拆出 `NativeEngine` 中的编排职责。
-  - [ ] 3.5 单回合执行 `TurnExecutor`：组装上下文、调用模型、收集流式响应并解析结果。
-  - [ ] 3.6 上下文装配 `ContextAssembler`：冻结系统前缀与工具 schema（Run 内不变）、历史视图、工作检查点、证据句柄；压缩结果作为事件写入。
-  - [ ] 3.7 完成判断 `CompletionJudge`：截断续写、空响应有限次重试、重复内容停滞判定、不完整工具调用不执行、最后一轮禁用工具。
-  - [ ] 3.8 工具调度 `ToolDispatcher`：schema 校验、授权网关复核、执行、结果投影；大输出 Spill 到 run 级工件存储，只保留摘要与引用句柄；同一回合按声明顺序执行，有副作用的工具不并发。
-  - [ ] 3.9 工具定义与网关：`ToolDefinition`（名称、版本、Schema、风险等级、副作用与幂等标记、超时、所需能力）；`ToolGateway` 每次调用复核授权，只收紧权限；处理器可协作取消。
+  - [x] 3.3 运行时契约：`AgentRuntime` 端口、`RuntimeCapabilities`、`RunRequest` 与 `RunContext`（`nexus_core.runtime.port`）；删除未使用的旧 `contracts.AgentRuntime`。`RunEvent` 未引入：事件仍以 `(kind, payload)` 经存储端口传递，改动需另行提案。
+  - [x] 3.4 运行编排 `RunOrchestrator`：生命周期、取消、预算、事件持久化、租约检查；由 `NativeEngine` 改名而来，实现 `AgentRuntime`，不保留兼容门面（worker 与测试已同步）。
+  - [x] 3.5 单回合执行 `TurnExecutor`：组装请求、调用模型、收集流式响应并解析结果（预算计数与 model.before/after 钩子仍由编排器负责）。
+  - [x] 3.6 上下文装配 `ContextAssembler`：Run 开始时冻结工具定义（摘要校验，变化则 `context_prefix_changed`）、回合视图、压缩结果作为 `context.compacted` 事件写入；证据句柄沿用既有外置机制。
+  - [ ] 3.7 完成判断 `CompletionJudge`：已完成判定枚举（接受、接受截断、空响应重试、停滞、失败、不完整工具调用不执行）。未完成：截断续写（当前为接受截断答案）、最后一轮禁用工具。
+  - [x] 3.8 工具调度 `ToolDispatcher`：结果投影、审批挂起、错误预算、终态与续写。参数 schema 校验与授权网关复核由工具网关完成；大输出 Spill 沿用既有 P2 机制；同一回合按声明顺序，有副作用的工具不并发。
+  - [x] 3.9 工具定义与网关：`ToolDefinition` 新增 `risk_level`（low/medium/high）与 `required_capabilities`（已声明，执行前的能力检查随沙箱接入实现）；网关每次调用复核授权；处理器可协作取消。
   - [ ] 3.10 内置平台工具：工作检查点更新（仅由成功的工具结果驱动）、待办、询问用户（`wait_input`）；知识检索与记忆读取以接口形式预留，实现随第 6 步完成。
   - [ ] 3.11 记忆接入：会话开始时冻结已发布的用户事实快照进入提示；模型写入只产生草稿，草稿在审核前不进入提示；所有写入携带来源与作用域，并保留 Run、Session 等引用 ID，为后续链式召回预留。
   - [ ] 3.12 技能指令加载：按绑定读取已发布技能的名称与简介，正文与资源按需加载（渐进披露）。技能管理、来源检疫与发布审核见第 7 步。

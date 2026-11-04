@@ -5,35 +5,29 @@ into async execution; platform code does not wrap this in a second model/tool lo
 """
 from __future__ import annotations
 import asyncio
-import json
 import time
 from dataclasses import replace
 from nexus_core.native import HookContext, NativePolicy
 from nexus_core.runtime import (
-    ExecutionBudget, LifecycleEvent, ModelMessage, ModelRequest, RuntimeFault,
-    RuntimeOutcome, RuntimeProgress, ToolDisposition,
+    LifecycleEvent, ModelMessage, RunContext, RunRequest, RuntimeCapabilities, RuntimeFault,
+    RuntimeOutcome, RuntimeProgress,
 )
 from nexus_runtimes.native.context import resolve_incomplete_exchanges
-from nexus_runtimes.native.context.assembly import append_context, trim_tool_results
+from nexus_runtimes.native.context.assembler import ContextAssembler
 from nexus_runtimes.native.context.working import WorkingMemory
 from nexus_runtimes.native.hooks import HookRegistry
-from .completion import CompletionPolicy
-from .turn import collect_response
-from .tools import execute_batch
+from .completion import CompletionJudge, JudgeDecision
+from .turn import TurnExecutor
+from .dispatcher import ToolDispatcher
 
 
-def _message_bytes(messages) -> int:
-    """Estimate encoded input size from content and tool-call arguments, one message at a time."""
-    total = 0
-    for message in messages:
-        total += len(message.content.encode())
-        for call in message.tool_calls:
-            total += len(call.arguments.encode()) + len(call.name.encode())
-    return total
+class RunOrchestrator:
+    """Own one Run's lifecycle: budgets, cancellation, durable events and the turn loop (3.4).
 
-
-class NativeEngine:
-    """Compose one cancellable Run from independently tested services.
+    Model, context, completion and tool work are delegated to TurnExecutor, ContextAssembler,
+    CompletionJudge and ToolDispatcher. One orchestrator serves exactly one Run; the worker builds
+    a new instance per Run and never reuses it.
+    
 
     Existing lifecycle callbacks remain supported. Typed context hooks may append context
     or done prompts, but neither hooks nor behavior settings alter registered tool grants.
@@ -46,6 +40,9 @@ class NativeEngine:
         self.transforms = transforms or HookRegistry()
         # Builds the configured compaction model per summary call (P3); None means the Run's own model.
         self.compaction_model_factory = compaction_model_factory
+        self.dispatcher = ToolDispatcher(tools, parallel=self.policy.parallel_reads)
+        self.turn_executor = TurnExecutor(self.model, self.store, self.policy)
+        self.context = ContextAssembler(self.model, self.store, self.policy, compaction_model_factory=compaction_model_factory)
 
     async def _hook(self, run_id, phase, turn=0, tool_name=None):
         for hook in tuple(self.hooks):
@@ -63,17 +60,22 @@ class NativeEngine:
         if len(done) > 20:
             raise RuntimeFault('hook_done_queue_exceeded')
 
-    async def run(self, run_id, messages, token, budget: ExecutionBudget, progress: RuntimeProgress | None = None):
+    def capabilities(self) -> RuntimeCapabilities:
+        """The Native backend supports every optional capability in the runtime contract."""
+        return RuntimeCapabilities()
+
+    async def run(self, request: RunRequest, context: RunContext) -> RuntimeOutcome:
         """Execute until a real answer, durable wait, explicit exit or bounded failure.
 
         All model calls remain within Run budgets. Pending tools are resolved without replay
         after a wait/exit. Cleanup occurs even for cancellation and unexpected adapter faults.
         """
-        progress = progress or RuntimeProgress()
+        run_id, messages, budget = request.run_id, request.messages, request.budget
+        token, progress = context.token, context.progress or RuntimeProgress()
         started, previous_seconds = time.monotonic(), progress.active_seconds
         state = progress.state
         history = list(messages) if state.get('pending_calls') else list(resolve_incomplete_exchanges(messages))
-        completion = CompletionPolicy(self.policy, state)
+        judge = CompletionJudge(self.policy, state)
         working = WorkingMemory(state, self.policy)
         done = list(state.get('done_prompts', []))
         active_turn = 0
@@ -107,7 +109,7 @@ class NativeEngine:
                 # Tool definitions are fixed for the Run (P4). Execution-time authorization still
                 # runs per call, so a revoked tool is refused even if it is still listed here.
                 definitions = await self.tools.definitions()
-                definitions_chars = len(str(definitions).encode())
+                self.context.freeze(definitions)
                 await self._hook(run_id, 'agent.before')
                 await self._transform(run_id, 'agent.before', progress.turns, history, done)
                 if self.policy.project_name and not state.get('project_injected'):
@@ -128,29 +130,15 @@ class NativeEngine:
                     if hasattr(self.store, 'drain_steer'):
                         for message in await self.store.drain_steer():
                             history.append(message)
-                    limit = budget.max_context_chars
-                    high = int(limit * self.policy.compact_high_ratio)
-                    low = int(limit * self.policy.compact_low_ratio)
-                    if self.policy.summarize_context:
-                        from nexus_runtimes.native.context.compaction import compact
-                        compacted, removed = await compact(self.model, tuple(history), limit, token, budget, progress, self.store,
-                            high=high, low=low, summary_max=self.policy.summary_max_chars,
-                            summarizer_factory=self.compaction_model_factory)
-                    else:
-                        from nexus_runtimes.native.context.compaction import compact_within
-                        compacted, removed = compact_within(tuple(history), high, low, limit)
-                    if removed:
-                        history = list(compacted)
-                        await self.store.emit('context.compacted', {'omitted_messages': removed, 'strategy': 'summary_or_archive' if self.policy.summarize_context else 'bounded_excerpts'})
+                    history, removed = await self.context.compact(history, token=token, budget=budget, progress=progress)
                     progress.turns += 1
                     turn = active_turn = progress.turns
                     await self._hook(run_id, 'turn.before', turn)
                     await self._transform(run_id, 'turn.before', turn, history, done)
                     await self.store.emit('turn.started', {'turn': turn})
-                    model_history = append_context(trim_tool_results(history, self.policy.tool_result_window_rounds),
-                                                   working.anchor(turn), tail=self.policy.working_memory_tail)
-                    # Per-message accounting (P5): avoids repr() of the whole history on every turn.
-                    input_estimate = _message_bytes(model_history) + definitions_chars
+                    self.context.ensure_frozen(definitions)
+                    view = self.context.view(history, working=working, turn=turn)
+                    model_history, input_estimate = view.messages, view.input_estimate
                     remaining = budget.max_tokens - progress.tokens - input_estimate
                     if remaining <= 0:
                         raise RuntimeFault('budget_exhausted')
@@ -158,9 +146,7 @@ class NativeEngine:
                     await self._hook(run_id, 'model.before', turn)
                     await self.store.emit('model.started', {'turn': turn})
                     try:
-                        response = await collect_response(self.model, ModelRequest(tuple(model_history), definitions,
-                            min(budget.max_output_tokens, remaining)), token, self.store, turn, budget.model_timeout_seconds,
-                            flush_ms=self.policy.delta_flush_ms, flush_chars=self.policy.delta_flush_chars)
+                        response = await self.turn_executor.execute(model_history, definitions, remaining, token, turn, budget)
                     finally:
                         await self._hook(run_id, 'model.after', turn)
                     progress.tokens += response.tokens or input_estimate + len(response.text.encode()) + sum(len(c.arguments.encode()) for c in response.calls)
@@ -172,60 +158,32 @@ class NativeEngine:
                     # The completion event and the assistant message are adjacent writes (P7).
                     await commit_group(events=[completed], message=ModelMessage('assistant', response.text, tuple(response.calls)))
                     terminal = False
-                    if response.calls and response.finish_reason in ('length', 'max_tokens'):
+                    judgement = judge.judge(response.text, response.finish_reason, response.calls)
+                    if judgement.decision == JudgeDecision.INCOMPLETE_TOOL_CALL:
                         for call in response.calls:
                             await append(ModelMessage('tool', 'Not executed: model truncated tool arguments.', tool_call_id=call.id))
                         await append(ModelMessage('user', 'Tool arguments were truncated. Use smaller valid tool calls; no operation was executed.'))
-                        state['truncated_calls'] = int(state.get('truncated_calls', 0)) + 1
-                        if state['truncated_calls'] >= self.policy.repeated_limit:
-                            raise RuntimeFault('model_stuck')
-                    elif not response.calls:
-                        verdict = completion.evaluate(response.text, response.finish_reason)
-                        if verdict.action == 'fail':
-                            raise RuntimeFault(verdict.error_code)
-                        if verdict.action == 'retry':
-                            await append(ModelMessage('user', verdict.prompt))
-                            await self.store.emit('model.recovery', {'turn': turn, 'reason': 'unusable_response'})
-                        elif done:
+                        if judgement.error_code:
+                            raise RuntimeFault(judgement.error_code)
+                    elif judgement.decision == JudgeDecision.RETRY_EMPTY:
+                        await append(ModelMessage('user', judgement.prompt))
+                        await self.store.emit('model.recovery', {'turn': turn, 'reason': 'unusable_response'})
+                    elif judgement.decision in (JudgeDecision.STALLED, JudgeDecision.FAIL):
+                        raise RuntimeFault(judgement.error_code)
+                    elif judgement.decision in (JudgeDecision.ACCEPT, JudgeDecision.ACCEPT_TRUNCATED):
+                        if done:
                             await append(ModelMessage('user', done.pop(0)))
                         else:
                             outcome, terminal = RuntimeOutcome('completed'), True
-                            if verdict.truncated:
+                            if judgement.decision == JudgeDecision.ACCEPT_TRUNCATED:
                                 await self.store.emit('answer.truncated', {'turn': turn})
                     else:
-                        continuations = []
-                        async for index, result in execute_batch(response.calls, definitions, self.tools, token, hook, turn, self.policy.parallel_reads):
-                            call = response.calls[index]
-                            if result.disposition == ToolDisposition.WAIT_APPROVAL:
-                                from dataclasses import asdict
-                                state['pending_calls'] = [asdict(call) for call in response.calls[index:]]
-                                outcome, terminal = RuntimeOutcome('waiting_approval'), True
-                                break
-                            progress.errors += bool(result.error_code)
-                            await append(ModelMessage('tool', result.data, tool_call_id=call.id))
-                            if call.name == 'update_working_checkpoint' and not result.error_code:
-                                args = json.loads(call.arguments)
-                                working.key_info = str(args.get('key_info', args.get('content', '')))
-                                state['key_info'] = working.key_info
-                            if result.disposition != ToolDisposition.CONTINUE:
-                                terminal = True
-                                for deferred in response.calls[index + 1:]:
-                                    await append(ModelMessage('tool', 'Not executed: previous tool ended this turn.', tool_call_id=deferred.id))
-                                if result.disposition == ToolDisposition.WAIT_INPUT:
-                                    outcome = RuntimeOutcome('waiting_input', question=result.data, candidates=result.candidates)
-                                elif result.disposition == ToolDisposition.COMPLETE:
-                                    outcome = RuntimeOutcome('failed' if result.error_code else 'completed', result.error_code)
-                                elif result.exit_status in ('completed', 'failed'):
-                                    outcome = RuntimeOutcome(result.exit_status, result.error_code)
-                                else:
-                                    raise RuntimeFault('tool_exit_invalid')
-                                break
-                            if result.continuation:
-                                continuations.append(result.continuation)
-                            if progress.errors >= budget.max_errors:
-                                raise RuntimeFault('budget_exhausted')
-                        if continuations and not terminal:
-                            await append(ModelMessage('user', '\n'.join(continuations)))
+                        dispatch = await self.dispatcher.dispatch(response.calls, definitions, token, hook, turn,
+                            append=append, state=state, progress=progress, budget=budget, working=working)
+                        if dispatch.terminal:
+                            terminal, outcome = True, dispatch.outcome
+                        elif dispatch.continuations:
+                            await append(ModelMessage('user', '\n'.join(dispatch.continuations)))
                     await self._transform(run_id, 'turn.after', turn, history, done)
                     state['done_prompts'] = done
                     await commit_group(events=[('turn.completed', {'turn': turn})], progress=progress)

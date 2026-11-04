@@ -2,7 +2,7 @@
 
 ## 状态
 
-已确认（按推荐方案，见第 6 节）。实施状态见 tasks.md。
+已确认并实施（按推荐方案，见第 6 节）。实施结果与偏差见 tasks.md 与第 7 节；已归档。
 
 **2026-11-04 实施前核对的更正**：第一版草稿中有三处与代码不符，已按实际情况修正，见第 7 节。
 
@@ -110,3 +110,7 @@
 3. **3.7 判定枚举**：草稿中的 `continue_truncated` 与 `final_without_tools` 与现有行为不一致。现有实现中，文本被截断（`finish_reason=length`）时是直接接受并发出 `answer.truncated`，并没有续写；"最后一轮禁用工具"也不存在。纯重构只能保留现有行为，因此枚举改为：`accept`、`accept_truncated`、`retry_empty`、`stalled`、`fail`、`incomplete_tool_call`（不执行，计入截断计数）。续写与最后一轮禁用工具属于新行为，另行提案，不在本次范围内。
 4. **运行时事件类型名**：`nexus_core.platform.RunEvent` 已被平台层占用。引擎内部的类型命名为 `RuntimeEvent`，只在契约层使用，不改变 `run_events` 的持久化结构。
 5. **行为基线**：`tests/test_native_engine_golden.py` 记录了六个场景（文本回答、多工具、无效参数后回答、截断工具调用后回答、空响应重试、等待输入）的事件类型序列、终态与工具状态，基线取自提交 `d32b48d`。
+6. **参数校验位置**：草稿把 schema 校验列在 `ToolDispatcher` 名下，实际由工具网关完成（`nexus_tools/gateway`）。调度器只调用网关，不重复校验。
+7. **兼容门面**：第 6 节第 2 条计划在切换前保留 `NativeEngine` 门面。实施时直接改名为 `RunOrchestrator`，worker 与测试同步修改，没有保留门面。生产代码中不再有旧名字，结果与计划一致。
+8. **RunEvent**：3.3 原计划包含 `RunEvent` 类型。未引入，因为事件仍以 `(kind, payload)` 经存储端口传递，改动存储端口超出本次范围。
+9. **恢复路径**：`recovery.resume_tools` 未与 `ToolDispatcher` 合并。两者的结果映射不同（例如 COMPLETE 的 exit_status 处理），合并会改变行为。

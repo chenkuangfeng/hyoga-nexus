@@ -59,12 +59,12 @@ def test_revoked_grant_stops_new_submissions_even_with_cached_history(database):
 
 def test_each_run_builds_its_own_engine_and_shares_builtin_definitions(database, monkeypatch):
     engines = []
-    original = native.NativeEngine
+    original = native.RunOrchestrator
     class Recording(original):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             engines.append(self)
-    monkeypatch.setattr(native, 'NativeEngine', Recording)
+    monkeypatch.setattr(native, 'RunOrchestrator', Recording)
     _, _, _, run_a, _ = stack(database)
     _, _, _, run_b, _ = stack(database)
     for run in (run_a, run_b):
