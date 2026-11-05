@@ -53,20 +53,7 @@
 
 ### 本地运行（换一台电脑时）
 
-首次在新机器上运行，按顺序执行（均在仓库根目录，除非注明）：
-
-1. **安装后端依赖**：`uv sync --locked --extra dev`
-2. **生成本地配置（已有文件时不要覆盖）**：`cp configs/nexus.example.toml configs/nexus.toml`（Windows PowerShell：`Copy-Item configs/nexus.example.toml configs/nexus.toml`），再编辑 `[database].url` 填入实际数据库连接串。真实配置已被 Git 忽略，不要提交。
-3. **设置开发认证与模型密钥加密主密钥**（写入同一个 `configs/nexus.toml`，无需每个终端设置）：
-   - 在 `configs/nexus.toml` 的 `[auth]` 中设置 `mode = "development"`（仅用于本机，API 绑定 `127.0.0.1`）。
-   - 在 `[security]` 中设置 `credential_encryption_key`：保存模型 Key 时需要，API 与 worker 必须使用同一个值（Fernet 格式）。
-4. **升级数据库到最新版本**：`uv run alembic -c alembic.ini upgrade head`（每次拉取到新迁移后都要执行一次）
-5. **创建首个 owner 账号（只需一次）**：`uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice --email alice@example.com --display-name "Alice"`，密码以隐藏输入方式输入。
-6. **启动 API**（终端 1）：`uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1`
-7. **启动 worker**（终端 2，同样设置第 3 步的环境变量）：`uv run python -m nexus_worker`
-8. **启动前端**（终端 3）：`corepack enable`（一次性），然后 `cd apps/web`、`pnpm install --frozen-lockfile`、`pnpm dev`，访问 Vite 输出的地址。
-
-说明：本地 HTTP 调试需在 `[auth]` 中设置 `cookie_secure = false`；API 文档为 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。更多细节见 [项目 README](README.md)、[API 说明](apps/api/README.md)、[worker 说明](apps/worker/README.md)。
+首次在新机器上运行的完整步骤（安装依赖、生成 `configs/nexus.toml`、开发认证与模型 Key 加密主密钥、数据库升级、创建 owner 账号、启动 API / worker / 前端）见 [项目 README](README.md) 的「本地开发 → 快速启动」，配置项说明见「分步说明」与 [configs 说明](configs/README.md)。
 
 ## 规则入口
 
