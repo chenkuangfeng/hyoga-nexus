@@ -194,7 +194,8 @@ async function testConnection() {
       options: modelOptionsFor(form, props.editing?.model.options), provider_id: provider?.id, api_key: form.api_key || undefined,
     })
     testOk.value = result.ok
-    testMessage.value = result.message
+    // The code identifies the cause precisely when reporting problems; the message stays human-readable.
+    testMessage.value = result.ok || !result.code ? result.message : `${result.message}（${result.code}）`
   } catch (error) {
     testOk.value = false
     testMessage.value = errorMessage(error, t('model.editor.connectionFailed'))

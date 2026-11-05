@@ -517,3 +517,19 @@ def test_cooperative_cancel_during_backoff_closes_and_stops_requests():
             assert fault.value.code=='cancelled' and len(requests)==1 and body.closed
         finally:await model.close()
     asyncio.run(scenario())
+
+
+def test_unauthorized_status_wins_over_generic_request_error_body():
+    """DeepSeek answers an invalid Key with 401 and ``invalid_request_error``; that is an auth failure."""
+    from nexus_runtimes.native.models.errors import failure
+    body = {'error': {'type': 'invalid_request_error', 'code': 'invalid_request_error'}}
+    assert failure(body, status=401).code == 'model_authentication_failed'
+    assert failure({'error': {'code': 'insufficient_quota'}}, status=403).code == 'model_quota_exhausted'
+    assert failure(body, status=400).code == 'model_request_rejected'
+
+
+def test_connection_test_explains_each_failure_code():
+    from nexus_api.http.model_settings import CONNECTION_FAILURE_MESSAGES
+    for code in ('model_authentication_failed', 'model_request_rejected', 'model_destination_denied',
+                 'model_provider_unavailable', 'model_timeout'):
+        assert CONNECTION_FAILURE_MESSAGES[code]

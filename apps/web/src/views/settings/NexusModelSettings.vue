@@ -218,7 +218,7 @@ async function testModel(card: ModelCard) {
   try {
     const result = await testSavedConnection(tenantId.value, card.provider.id, card.model.id)
     if (result.ok) MessagePlugin.success(result.message || t('model.editor.connectionSuccess'))
-    else MessagePlugin.error(result.message || t('model.editor.connectionFailed'))
+    else MessagePlugin.error(`${result.message || t('model.editor.connectionFailed')}${result.code ? `（${result.code}）` : ''}`)
   } catch (error) {
     MessagePlugin.error(errorMessage(error, t('model.editor.connectionFailed')))
   }

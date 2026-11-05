@@ -64,10 +64,12 @@ def failure(value=None, *, status=None, headers=None):
     # Permanent structured classifications take precedence over transient HTTP codes.
     classified = [mapping[c] for c in codes if isinstance(c, str) and c in mapping]
     permanent = next((c for c in classified if c not in RETRYABLE), None)
-    if permanent:
-        code = permanent
-    elif status in (401, 403):
+    # 401/403 mean the Key was refused even when the body only says ``invalid_request_error``
+    # (DeepSeek does this for an invalid Key); only an explicit quota code is more specific.
+    if status in (401, 403) and permanent != 'model_quota_exhausted':
         code = 'model_authentication_failed'
+    elif permanent:
+        code = permanent
     elif status is not None and status not in (408, 429, 500, 502, 503, 504):
         code = 'model_request_rejected'
     elif classified:

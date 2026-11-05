@@ -186,6 +186,21 @@ def create_native_agent(tenant_id: UUID, body: AgentInput, principal: Principal 
 
 
 UNSUPPORTED_TYPE_MESSAGE = '该模型类型的连接测试将在知识库阶段提供'
+DEFAULT_FAILURE_MESSAGE = '连接未通过，请检查地址、模型名称和 Key'
+#: Safe, fixed explanations per stable fault code; supplier text is never echoed.
+CONNECTION_FAILURE_MESSAGES = {
+    'model_authentication_failed': '服务商拒绝了 Key：请确认 API Key 正确、未过期，且有该模型的访问权限',
+    'model_request_rejected': '服务商拒绝了请求：请检查模型名称，以及接口地址是否完整（多数服务商以 /v1 结尾）',
+    'model_quota_exhausted': '账户额度不足，请在服务商控制台充值或更换 Key',
+    'model_rate_limited': '服务商限流，请稍后重试',
+    'model_timeout': '连接超时，请检查网络或稍后重试',
+    'model_provider_unavailable': '无法连接到服务商：请检查网络、域名是否可解析，或稍后重试',
+    'model_destination_denied': ('接口地址解析到了内网或保留地址，已被拦截。使用代理的 fake-ip 模式时请对该域名直连；'
+                                 '内网服务需在 configs/nexus.toml 的 [model_network].private_host_allowlist 中放行'),
+    'model_stream_invalid': '服务商的响应不符合所选接口协议，请检查接口协议与地址',
+    'model_response_failed': '服务商返回了无法识别的错误，请检查地址与模型名称',
+    'model_configuration_invalid': '模型配置无效，请检查接口地址与协议',
+}
 DRAFT_TEST_COOLDOWN = timedelta(seconds=10)
 # Draft tests have no provider row to rate-limit, so they are limited per user in this process.
 # Multi-process deployments get a looser bound; the per-provider limit above still applies to saved models.
@@ -212,7 +227,7 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
                 pass
         return {'ok': True, 'message': '连接成功，流式响应正常'}
     except RuntimeFault as exc:
-        return {'ok': False, 'code': exc.code, 'message': '连接未通过，请检查地址、模型名称和 Key'}
+        return {'ok': False, 'code': exc.code, 'message': CONNECTION_FAILURE_MESSAGES.get(exc.code, DEFAULT_FAILURE_MESSAGE)}
     except Exception:
         return {'ok': False, 'code': 'model_provider_unavailable', 'message': '连接未通过，请检查配置或稍后重试'}
     finally:
