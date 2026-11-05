@@ -502,6 +502,10 @@ const handleLogin = async () => {
 
     loading.value = true
 
+    // 登录前清掉上一次会话残留的租户、令牌与空间级缓存，避免沿用其他数据库里的
+    // 租户 ID 导致 "tenant not found"。logout 不会清除用户偏好（主题、设置等）。
+    authStore.logout()
+
     const response = await login({
       email: formData.email,
       password: formData.password,
