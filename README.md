@@ -82,7 +82,7 @@ uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
 
 显式传入的数据库连接串优先；否则读取 `[database].url`，缺失或格式错误会明确报错，不回退其他来源。认证模式按 `[auth].mode` 配置（`development`、`session` 或 `external`），开发认证的主体为 `[auth].dev_user_id`（缺省 `local-developer`），不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `mode = "external"` 并在 API 组合入口注册 provider。
 
-模型 Key 加密主密钥 `[security].credential_encryption_key`：在设置页保存模型 Key 前必须配置，Key 以该 Fernet 密钥加密后入库。未配置或格式错误时，保存会返回 `Credential encryption key is not configured correctly`（503）。生成并写入：
+模型 Key 加密主密钥 `[security].credential_encryption_key`：在设置页保存模型 Key 前必须配置（从示例复制的配置已带开发用值，可直接在本机使用），Key 以该 Fernet 密钥加密后入库。未配置或格式错误时，保存会返回 `Credential encryption key is not configured correctly`（503）。生成并写入：
 
 ```bash
 uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -95,7 +95,7 @@ credential_encryption_key = "<上一步输出的 44 位字符串>"
 
 - API 与 worker 必须使用同一个值（读取同一份 `configs/nexus.toml` 即可；worker 在其他机器时复制该行）。修改后重启 API 与 worker。
 - 已保存过模型 Key 后不要更换或删除该密钥，否则已存的 Key 无法解密，只能重新录入。
-- 不要提交该值；`configs/nexus.toml` 已被 Git 忽略，示例配置中保持注释状态。
+- 示例配置自带一个仅供本机开发的密钥：它随仓库公开，任何人都能解密用它加密的 Key。共享环境或生产部署必须用上面的命令生成自己的密钥，且不要提交；`configs/nexus.toml` 已被 Git 忽略。
 
 或者使用 Python 3.11+ 环境：
 

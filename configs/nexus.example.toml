@@ -26,7 +26,9 @@ level = "INFO"
 # Fernet key shared by API and worker for encrypting saved model keys. Required before saving keys.
 # Generate with: uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # Do not replace a key that already encrypted stored data.
-# credential_encryption_key = ""
+# The value below is a public development-only key: it is in the repository, so anyone can decrypt keys
+# stored with it. Generate your own for any shared or production deployment.
+credential_encryption_key = "HmvXsdL-PwdU0c6IqTPB3giNH_mdxuTqd1c_LjnnxGE="
 
 [model_credentials]
 # Named provider secrets used by Native Runs. Names must be upper-case identifiers and match the
