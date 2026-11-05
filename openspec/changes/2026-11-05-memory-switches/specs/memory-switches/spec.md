@@ -14,15 +14,15 @@
 - 系统提示不注入记忆索引，也不新建会话快照；已有快照保留。
 - 工具定义不包含 `memory` 分组的工具，即使智能体绑定了这些工具。
 - 记忆工具调用返回 `memory_disabled`，并写审计。
-- Run 完成时不排队自动抓取任务，抓取游标不前移；已排队的任务在领取时以 `memory_disabled` 失败。
+- Run 完成时不排队自动抓取任务，抓取游标不前移；已排队的任务在领取时不调用模型，直接以 `memory_disabled` 跳过并完成。
 - 已发布条目、草稿、版本与墓碑都不删除。
 
 ### R3 写入方式
 - `write_mode='explicit'` 时不排队自动抓取任务，模型仍可提议草稿；`auto` 时按成员的自动抓取设置执行。
 
 ### R4 接口
-- `GET/PUT /api/v1/tenants/{tenant_id}/memory-settings`：成员可读，owner 或 admin 可写；非成员返回 404，权限不足返回 403，参数非法返回 422；写入审计 `memory.space_settings`。
-- `GET/PUT /api/v1/tenants/{tenant_id}/memory-preferences`：只读写调用者本人的设置，返回 `memory_enabled`、`effective`、`reason`；写入审计 `memory.preferences`。
+- `GET/PUT /api/v1/tenants/{tenant_id}/native/memory-settings`：成员可读，owner 或 admin 可写；非成员返回 404，权限不足返回 403，参数非法返回 422；写入审计 `memory.space_settings`。
+- `GET/PUT /api/v1/tenants/{tenant_id}/native/memory-preferences`：只读写调用者本人的设置，返回 `memory_enabled`、`effective`、`reason`；写入审计 `memory.preferences`。
 - 智能体草稿的 `budgets.memory` 只接受 `enabled`（布尔值），否则返回 422。
 
 ### R5 界面

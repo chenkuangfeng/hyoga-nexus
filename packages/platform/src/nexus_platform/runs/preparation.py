@@ -165,8 +165,15 @@ class ExecutionPreparer:
                 checkpoint = db.get(WorkingCheckpointRecord, run.session_id)
                 system = version.instructions
                 from nexus_platform.memory.snapshots import session_index
+                from nexus_platform.memory.switches import memory_state
+                from nexus_memory.switches import MEMORY_TOOL_NAMES
+                # Memory switches (openspec 2026-11-05-memory-switches): when the space, the member or the
+                # agent turned memory off, no index is injected and no snapshot is created; an existing
+                # snapshot is kept so turning memory back on reuses it.
+                memory_on = memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                                         agent_budgets=version.budgets).available
                 published_index = session_index(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
-                    session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', ''))
+                    session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', '')) if memory_on else ''
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
                 if db.scalar(select(ResourceBindingRecord.id).where(
@@ -193,7 +200,8 @@ class ExecutionPreparer:
                 bindings = tuple((binding.resource_id, binding.resource_version_id or 'v1', str(binding.id))
                     for binding in db.scalars(select(ResourceBindingRecord).where(
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'tool'))
-                    if binding.resource_id != 'run_skill_script' or script_tool_on)
+                    if (binding.resource_id != 'run_skill_script' or script_tool_on)
+                    and (memory_on or binding.resource_id not in MEMORY_TOOL_NAMES))
                 if len({name for name, _, _ in bindings}) != len(bindings):
                     raise RuntimeFault('tool_configuration_invalid')
                 audit(db, run.tenant_id, run.principal_id, 'session.context_read', 'session', str(run.session_id),

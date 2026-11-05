@@ -12,6 +12,7 @@ from nexus_api.dependencies.platform import get_principal, get_database_session
 from nexus_platform.runs import settings, directives
 from nexus_platform.memory import capture as memory_capture
 from nexus_platform.memory import service as memory
+from nexus_platform.memory import switches as memory_switches
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/native', tags=['Native settings'])
 
@@ -91,6 +92,45 @@ def update_memory_capture(tenant_id: UUID, body: MemoryCaptureUpdate, principal:
                                           capacity_policy=body.capacity_policy)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class MemorySpaceSettingsUpdate(BaseModel):
+    """Space-wide long-term memory switch and write mode (`explicit` never queues automatic capture)."""
+    enabled: bool
+    write_mode: Literal['explicit', 'auto'] = 'auto'
+
+
+class MemoryPreferencesUpdate(BaseModel):
+    """The caller's own long-term memory switch in this space."""
+    memory_enabled: bool
+
+
+@router.get('/memory-settings')
+def get_memory_settings(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                        db: Session = Depends(get_database_session)):
+    """Space memory settings; any member may read, `can_edit` is true for owners and admins."""
+    return memory_switches.space_settings(db, principal, tenant_id)
+
+
+@router.put('/memory-settings')
+def update_memory_settings(tenant_id: UUID, body: MemorySpaceSettingsUpdate, principal: Principal = Depends(get_principal),
+                           db: Session = Depends(get_database_session)):
+    """Turn long-term memory on or off for the whole space and choose the write mode (owners and admins)."""
+    return memory_switches.set_space_settings(db, principal, tenant_id, enabled=body.enabled, write_mode=body.write_mode)
+
+
+@router.get('/memory-preferences')
+def get_memory_preferences(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                           db: Session = Depends(get_database_session)):
+    """The caller's own switch, whether memory is effective for them, and why not (`reason`)."""
+    return memory_switches.preferences(db, principal, tenant_id)
+
+
+@router.put('/memory-preferences')
+def update_memory_preferences(tenant_id: UUID, body: MemoryPreferencesUpdate, principal: Principal = Depends(get_principal),
+                              db: Session = Depends(get_database_session)):
+    """Turn the caller's own long-term memory on or off; existing entries and drafts are kept."""
+    return memory_switches.set_preferences(db, principal, tenant_id, memory_enabled=body.memory_enabled)
 
 
 @router.get('/memory')

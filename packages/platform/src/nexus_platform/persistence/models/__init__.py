@@ -24,6 +24,7 @@ from .audit import AuditRecord
 from .memory import (
     SessionMemorySnapshotRecord,
     MemoryCaptureSettingsRecord,
+    MemorySpaceSettingsRecord,
     MemoryCaptureCursorRecord,
     MemoryCaptureJobRecord,
     WorkingCheckpointRecord,
@@ -42,6 +43,7 @@ from .space import AgentShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestReco
 __all__ = [
     'SessionMemorySnapshotRecord',
     'MemoryCaptureSettingsRecord',
+    'MemorySpaceSettingsRecord',
     'MemoryCaptureCursorRecord',
     'MemoryCaptureJobRecord',
     'Base',

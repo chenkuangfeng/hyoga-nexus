@@ -2,7 +2,7 @@
 
 ## 状态
 
-草案（2026-11-05），待用户确认决定 1–4。父提案：`openspec/changes/2026-11-02-weknora-parity/`（`tasks.md` 第 51 行「记忆审核与快照……在对齐后的界面中体现」、能力对照表第 23 项「缺按空间的设置入口」）。记忆规则与存储沿用 `openspec/changes/2026-11-01-memory-optimization/`，本提案不改动其规则。
+已确认（2026-11-05）：决定 1–4 全部采用推荐方案。父提案：`openspec/changes/2026-11-02-weknora-parity/`（`tasks.md` 第 51 行「记忆审核与快照……在对齐后的界面中体现」、能力对照表第 23 项「缺按空间的设置入口」）。记忆规则与存储沿用 `openspec/changes/2026-11-01-memory-optimization/`，本提案不改动其规则。
 
 ## 原因
 
@@ -27,8 +27,8 @@
    - 智能体开关：`budgets.memory.enabled`。不设置表示继承，设为 `false` 表示该智能体不使用记忆；随版本发布冻结。
    - 生效规则：空间开 **且** 个人开 **且** 智能体未关闭，记忆才可用。只要有一级关闭，本次 Run 就按「记忆关闭」处理（见决定 2）。
 2. **接口**（需确认，属于 API 契约变化）
-   - `GET/PUT /api/v1/tenants/{tenant_id}/memory-settings`：空间设置。成员可读，owner 或 admin 可写，写入时记审计 `memory.space_settings`。
-   - `GET/PUT /api/v1/tenants/{tenant_id}/memory-preferences`：调用者的个人开关。返回值同时给出生效状态和关闭原因（`space_disabled`、`user_disabled`），供界面提示使用。
+   - `GET/PUT /api/v1/tenants/{tenant_id}/native/memory-settings`：空间设置。成员可读，owner 或 admin 可写，写入时记审计 `memory.space_settings`。
+   - `GET/PUT /api/v1/tenants/{tenant_id}/native/memory-preferences`：调用者的个人开关。返回值同时给出生效状态和关闭原因（`space_disabled`、`user_disabled`），供界面提示使用。
    - 智能体草稿的 `budgets.memory` 校验：只接受 `enabled`（布尔值）。
    - 现有 `memory-capture` 接口保持不变。空间写入方式为 `explicit` 时，即使个人打开了自动抓取也不会排队（见决定 3）。
 3. **Runtime 行为**（需确认）
@@ -51,7 +51,7 @@
 - WeKnora 中 Nexus 尚无后端的功能：话题、记忆文档、整理（consolidate）、导出、清空、手动添加、语义召回、Embedding 模型、记忆参与检索、挖掘延迟与间隔、长期关注阈值、自定义挖掘规则、每人条数上限（Nexus 按字符预算限制）。
 - 外部 Runtime（Codex、Claude Code、DeepSeek Harness）的记忆。
 
-## 待确认的决定
+## 已确认的决定（全部采用推荐方案）
 
 1. **空间开关的默认值**
    - 推荐：默认**开启**，写入方式默认 `auto`。现有空间升级后行为不变（记忆照常注入，已经开启自动抓取的成员继续抓取）。

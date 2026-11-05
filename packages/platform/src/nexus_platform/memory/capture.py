@@ -36,11 +36,13 @@ from nexus_platform.persistence.models import (
     MemoryDraftRecord,
     MemoryEntryRecord,
     MemoryVersionRecord,
+    AgentVersionRecord,
     MessageRecord,
     RunRecord,
 )
 
 from .repository import SqlMemoryRepository
+from .switches import memory_state
 
 #: Lease length for a claimed job. A job whose lease expired is taken over by the next claim.
 LEASE = timedelta(minutes=5)
@@ -122,6 +124,11 @@ def enqueue_for_run(db: Session, run: RunRecord, *, now: datetime | None = None)
     now = now or utc_now()
     settings = db.get(MemoryCaptureSettingsRecord, (run.tenant_id, run.principal_id))
     if settings is None or not settings.enabled or settings.model_profile_version_id is None:
+        return None
+    # Memory switches (openspec 2026-11-05-memory-switches): nothing is queued, and the cursor stays where
+    # it is, while memory is off for the space, the member or this Run's agent, or the space is `explicit`.
+    if not memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                        agent_budgets=_run_budgets(db, run)).capture_allowed:
         return None
     busy = db.scalar(select(MemoryCaptureJobRecord.id).where(
         MemoryCaptureJobRecord.tenant_id == run.tenant_id,
@@ -263,6 +270,11 @@ def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
     settings = db.get(MemoryCaptureSettingsRecord, (job.tenant_id, job.owner_user_id))
     if settings is None or not settings.enabled or settings.model_profile_version_id is None:
         return replace(empty, skip='capture_disabled')
+    # A job queued before a switch was turned off completes without a model call.
+    source_run = db.get(RunRecord, job.source_run_id)
+    if not memory_state(db, tenant_id=job.tenant_id, owner_id=job.owner_user_id,
+                        agent_budgets=_run_budgets(db, source_run) if source_run else None).capture_allowed:
+        return replace(empty, skip='memory_disabled')
     version_id = settings.model_profile_version_id
     try:
         authorize_model(db, job.tenant_id, job.owner_user_id, version_id)
@@ -458,3 +470,12 @@ def _serialize(action: dict[str, Any]) -> dict[str, Any]:
 
 def _uuid_or_none(value: Any) -> UUID | None:
     return UUID(value) if isinstance(value, str) else value
+
+
+def _run_budgets(db: Session, run: RunRecord) -> dict[str, Any] | None:
+    """Budgets of the agent version the Run used, for the agent's memory switch; None when unknown."""
+    version_id = (run.config_snapshot or {}).get('agent_version_id')
+    if not version_id:
+        return None
+    version = db.get(AgentVersionRecord, UUID(str(version_id)))
+    return version.budgets if version else None

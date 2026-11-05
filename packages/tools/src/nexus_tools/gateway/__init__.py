@@ -24,6 +24,10 @@ class ToolAccessPort(Protocol):
 DEFAULT_PUBLIC_LIMIT = 4000
 #: Slack for the model-facing markers added to a page or preview, so they are not cut off.
 MARKER_ALLOWANCE = 512
+#: Authorization refusals reported to the model with their own code. Any other `RuntimeFault` raised by
+#: `ToolAccess.authorize` becomes `tool_authorization_denied`. `memory_disabled`: long-term memory was
+#: turned off for this Run's owner, space or agent (openspec 2026-11-05-memory-switches).
+DENIAL_CODES = frozenset({'tool_authorization_denied', 'memory_disabled'})
 
 
 @dataclass(frozen=True)
@@ -99,8 +103,9 @@ class AuthorizedToolGateway:
         else:
             try:
                 binding_id = await self.access.authorize(call.name, version)
-            except RuntimeFault:
-                error = 'tool_authorization_denied'
+            except RuntimeFault as exc:
+                # Stable denial codes the model can act on pass through; anything else stays generic.
+                error = exc.code if exc.code in DENIAL_CODES else 'tool_authorization_denied'
         if error:
             await self.access.denied(call.name)
         if not error and tool.definition.requires_approval:

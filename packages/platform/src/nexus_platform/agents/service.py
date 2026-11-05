@@ -26,6 +26,7 @@ from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
 from nexus_platform.agents.generation import validate_generation
+from nexus_memory.switches import validate_agent_budget as validate_memory_budget
 
 
 #: Soft-deleted agents (proposal 2026-11-05 decision 2): hidden, not editable, cannot start Runs.
@@ -48,6 +49,7 @@ def create_agent(
     now = utc_now()
     clean_public_options(budgets, "budgets")
     validate_generation(budgets)
+    validate_memory_budget(budgets)
     clean_public_options(instructions, "instructions")
     clean_public_options(description, "description")
     name = name.strip()
@@ -90,6 +92,7 @@ def update_agent_draft(
     now = utc_now()
     clean_public_options(budgets, "budgets")
     validate_generation(budgets)
+    validate_memory_budget(budgets)
     clean_public_options(instructions, "instructions")
     clean_public_options(description, "description")
     name = name.strip()

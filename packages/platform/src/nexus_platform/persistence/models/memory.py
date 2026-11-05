@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DDL, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, event, text
+from sqlalchemy import JSON, Boolean, CheckConstraint, DDL, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, event, text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -165,6 +165,24 @@ class MemoryCaptureSettingsRecord(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text('0'))
     model_profile_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     capacity_policy: Mapped[str] = mapped_column(String(16), nullable=False, default='reject', server_default='reject')
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: The member's own long-term memory switch (openspec 2026-11-05-memory-switches). Independent of
+    #: `enabled`, which only controls automatic capture. A missing row means memory is on.
+    memory_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+
+
+class MemorySpaceSettingsRecord(Base):
+    """Space-wide long-term memory switch and write mode (openspec 2026-11-05-memory-switches).
+
+    A missing row means memory is on with `write_mode='auto'`, so spaces created before the switches keep
+    their behavior. `explicit` keeps model-proposed drafts but never queues automatic capture.
+    """
+    __tablename__ = 'memory_space_settings'
+    __table_args__ = (CheckConstraint("write_mode IN ('explicit','auto')", name='ck_memory_space_settings_write_mode'),)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    write_mode: Mapped[str] = mapped_column(String(16), nullable=False, default='auto', server_default='auto')
+    updated_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

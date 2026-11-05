@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
 from nexus_core.native.policy import NativePolicy, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
+from nexus_memory.switches import MEMORY_TOOL_NAMES
 from nexus_platform.errors import NotFound, PlatformError
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.identity.service import require_membership, require_tenant
@@ -177,7 +178,28 @@ class DurableRuntimeStore:
                                        self.context.run_id, UUID(binding_id))
         except PlatformError:
             raise RuntimeFault('tool_authorization_denied') from None
+        if name in MEMORY_TOOL_NAMES:
+            await self._require_memory(name)
         return binding_id
+
+    async def _require_memory(self, name: str) -> None:
+        """Re-check the memory switches before a memory tool runs (openspec 2026-11-05-memory-switches).
+
+        Preparation already removed memory tools when memory was off; this covers a switch turned off
+        while the Run is in progress. The check happens during authorization, before the call starts, so
+        a refused side-effecting tool never counts as interrupted.
+        """
+        from nexus_platform.memory.switches import memory_state
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            state = memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                                 agent_budgets=self.context.budgets)
+            if state.available:
+                return
+            audit(db, run.tenant_id, run.principal_id, 'memory.call_rejected', 'run', str(run.id),
+                  {'tool_name': name[:64], 'reason': state.reason}, result='denied')
+        raise RuntimeFault('memory_disabled')
 
     async def denied(self, name: str) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
