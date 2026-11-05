@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
-from nexus_platform.errors import Forbidden, NotFound
+from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.models.provider_settings import authorize_model
 from nexus_platform.agents.access import require_agent_permission
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
@@ -35,6 +35,8 @@ def create_session(
             raise NotFound("Published agent version not found")
         agent_version = row[1]
         require_agent_permission(session, tenant_id, user.id, row[0], "run")
+        if row[0].status == "archived":
+            raise Conflict("Agent is archived")
         authorize_model(session, tenant_id, user.id, agent_version.model_profile_version_id)
         created = SessionRecord(
             id=new_id(), tenant_id=tenant_id, owner_user_id=user.id,

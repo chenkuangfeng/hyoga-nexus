@@ -1,20 +1,20 @@
 # 实施任务
 
-状态：草案，待确认 proposal.md 的决定 1–4。确认前不编码。
+状态：已确认（2026-11-05），实施中。
 
 ## 0. 准备
 
 - [x] 0.1 阅读 WeKnora `AgentList.vue`、`AgentEditorModal.vue`（基本信息、提示词、模型配置、工具配置分区）、`ModelSettings.vue`、`ModelEditorDialog.vue`、`api/agent`、`api/model`。
 - [x] 0.2 核对 Nexus 智能体、模型设置、内置工具与 Native 预算的现有接口与字段。
-- [ ] 0.3 用户确认决定 1–4。
+- [x] 0.3 用户确认决定 1–4（全部采用推荐方案）。
 
 ## 1. 后端
 
-- [ ] 1.1 `packages/tools`：内置工具声明 `label`、`group`；目录查询函数。
-- [ ] 1.2 `GET /tenants/{tenant_id}/agent-tools`（授权、`enabled_in_tenant`、`default_tools`）。
-- [ ] 1.3 `budgets.generation` 校验；Native 运行准备阶段合并到模型选项（决定 1）。
-- [ ] 1.4 智能体归档（`DELETE`）与复制（`POST .../copy`），列表、建会话、提交 Run 的归档检查（决定 2）。
-- [ ] 1.5 pytest：授权（404/403）、校验（422）、审计、归档后行为、生成参数进入模型请求。
+- [x] 1.1 `packages/tools`：内置工具声明 `label`、`group`；目录查询函数。
+- [x] 1.2 `GET /tenants/{tenant_id}/agent-tools`（授权、`enabled_in_tenant`、`default_tools`）。
+- [x] 1.3 `budgets.generation` 校验；Native 运行准备阶段合并到模型选项（决定 1）。
+- [x] 1.4 智能体归档（`DELETE`）与复制（`POST .../copy`），列表、建会话、提交 Run 的归档检查（决定 2）。
+- [x] 1.5 pytest：授权（404/403）、校验（422）、审计、归档后行为、生成参数进入模型请求。
 
 ## 2. 前端：智能体
 

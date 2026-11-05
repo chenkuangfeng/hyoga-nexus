@@ -75,7 +75,7 @@ def _share_row_view(share: AgentShareRecord, shared: SharedSpaceRecord, owner: T
 
 def _owned_agent(session: Session, tenant_id: UUID, agent_id: UUID) -> AgentRecord:
     agent = session.scalar(select(AgentRecord).where(AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id))
-    if agent is None:
+    if agent is None or agent.status == "archived":
         raise NotFound("Agent not found")
     return agent
 
@@ -198,7 +198,7 @@ def list_shared_agents(session: Session, principal: Principal, caller_tenant_id:
         rows = session.execute(
             select(AgentRecord, TenantRecord)
             .join(TenantRecord, TenantRecord.id == AgentRecord.tenant_id)
-            .where(AgentRecord.id.in_(list(levels)))
+            .where(AgentRecord.id.in_(list(levels)), AgentRecord.status != "archived")
             .order_by(AgentRecord.name)
         ).all()
         return [_shared_agent_view(agent, owner, levels[agent.id]) for agent, owner in rows
@@ -216,7 +216,7 @@ def get_shared_agent(session: Session, principal: Principal, caller_tenant_id: U
             raise NotFound("Agent not found")
         row = session.execute(
             select(AgentRecord, TenantRecord).join(TenantRecord, TenantRecord.id == AgentRecord.tenant_id)
-            .where(AgentRecord.id == agent_id)
+            .where(AgentRecord.id == agent_id, AgentRecord.status != "archived")
         ).first()
         if row is None:
             raise NotFound("Agent not found")

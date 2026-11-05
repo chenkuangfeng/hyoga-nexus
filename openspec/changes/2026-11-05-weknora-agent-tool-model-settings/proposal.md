@@ -2,7 +2,7 @@
 
 ## 状态
 
-草案（2026-11-05），待用户确认「需要你决定的项」后再编码。父提案：`openspec/changes/2026-11-02-weknora-parity/`（第 5 阶段「智能体编辑器」与第 2 阶段「设置 · 模型管理」的子提案）。
+已确认（2026-11-05）：四项决定全部采用推荐方案。父提案：`openspec/changes/2026-11-02-weknora-parity/`（第 5 阶段「智能体编辑器」与第 2 阶段「设置 · 模型管理」的子提案）。
 
 ## 原因
 
@@ -44,7 +44,7 @@
 - 非 `chat` 类型模型的实际调用（随路线图第 6 步）。
 - 外部 Runtime（Codex、Claude Code、DeepSeek Harness）的智能体配置。
 
-## 需要你决定的项
+## 已确认的决定（全部采用推荐方案）
 
 1. **智能体级生成参数**：WeKnora 把温度与思考强度放在智能体上；Nexus 目前只在模型档案的 `options` 中读取（`openai_compatible.py`）。
    推荐：智能体 `budgets.generation` 保存 `temperature` 与 `reasoning_effort`，Native 运行时优先使用智能体值，未设置时回退模型档案选项。随版本发布冻结，已发布版本与已有会话不受影响。

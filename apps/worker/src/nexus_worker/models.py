@@ -10,11 +10,13 @@ from nexus_runtimes.native.models.retry import RetryModel
 from nexus_runtimes.native.models.routing import RoutedModel
 
 
-def routed_context(context, factory, identifier: str):
+def routed_context(context, factory, identifier: str, *, agent_generation: bool = True):
     """Authorize a model version now and return the Run context rebuilt for that version.
 
     Called at construction time, so a grant revoked mid-Run stops the next use of the version.
     Raises PlatformError when the version, its credential, or the caller's membership is unavailable.
+    ``agent_generation`` applies the agent's temperature and reasoning settings (fallback models);
+    the compaction summarizer passes False and keeps the model profile's own options.
     """
     with factory() as db, db.begin():
         require_tenant(db, context.tenant_id)
@@ -23,13 +25,17 @@ def routed_context(context, factory, identifier: str):
         profile = db.get(ModelProfileRecord, version.profile_id)
         ref = db.get(CredentialReferenceRecord, version.credential_reference_id) if version.credential_reference_id else None
         credential = CredentialRef(ref.id, ref.backend, ref.handle, str(context.tenant_id)) if ref else None
-        return replace(context, options=version.options, model_name=version.model_name, provider=profile.provider, credential=credential)
+        # Agent generation settings apply to fallback models too, so a failover keeps the agent's temperature.
+        from nexus_platform.agents.generation import merged_model_options
+        options = merged_model_options(version.options, context.budgets) if agent_generation else version.options
+        return replace(context, options=options,
+                       model_name=version.model_name, provider=profile.provider, credential=credential)
 
 
 def compaction_model(context, factory, resolver, identifier: str):
     """Build the configured summarizer for context compaction through the same authorized path (P3)."""
     from .native import configured_model
-    return configured_model(routed_context(context, factory, identifier), resolver)
+    return configured_model(routed_context(context, factory, identifier, agent_generation=False), resolver)
 
 
 def configured_routing(context, factory, resolver):

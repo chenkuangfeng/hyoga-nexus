@@ -31,6 +31,7 @@ from nexus_platform.runs.service import append_event, transition_run
 from nexus_platform.sessions.projection_cache import ProjectionCache
 from nexus_platform.authz.audit import audit
 from nexus_platform.agents.access import require_agent_permission
+from nexus_platform.agents.generation import merged_model_options
 from .context import ExecutionContext
 from .summaries import effective_summary
 from .messages import histories_allowed
@@ -105,6 +106,9 @@ class ExecutionPreparer:
                 version = db.get(AgentVersionRecord, UUID(run.config_snapshot['agent_version_id']))
                 agent_row = db.get(AgentRecord, version.agent_id)
                 require_agent_permission(db, run.tenant_id, run.principal_id, agent_row, 'run')
+                if agent_row.status == 'archived':
+                    # Runs queued before archiving do not start (proposal 2026-11-05 decision 2).
+                    raise RuntimeFault('agent_archived')
                 authorize_model(db, run.tenant_id, run.principal_id, version.model_profile_version_id)
                 model = db.get(ModelProfileVersionRecord, version.model_profile_version_id)
                 profile = db.get(ModelProfileRecord, model.profile_id)
@@ -201,7 +205,7 @@ class ExecutionPreparer:
                 append_event(db, run.id, 'run.started', {'status': 'running', 'attempt': run.attempt})
                 return ExecutionContext(run.id, run.session_id, run.tenant_id, run.principal_id,
                     principal_for_user(db, user.id), version.runtime_type, profile.provider, model.model_name,
-                    model.options, credential, (ModelMessage('system', system), *history), bindings,
+                    merged_model_options(model.options, version.budgets), credential, (ModelMessage('system', system), *history), bindings,
                     version.budgets, RuntimeProgress(**state.progress), tuple(allowed_runs))
             except (PlatformError, RuntimeFault) as exc:
                 code = exc.code if isinstance(exc, RuntimeFault) else 'run_authorization_denied'

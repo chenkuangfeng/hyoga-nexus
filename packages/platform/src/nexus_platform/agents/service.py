@@ -25,6 +25,11 @@ from nexus_platform.agents.access import require_agent_permission
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
+from nexus_platform.agents.generation import validate_generation
+
+
+#: Soft-deleted agents (proposal 2026-11-05 decision 2): hidden, not editable, cannot start Runs.
+ARCHIVED = "archived"
 
 
 def create_agent(
@@ -42,6 +47,7 @@ def create_agent(
 ) -> AgentRecord:
     now = utc_now()
     clean_public_options(budgets, "budgets")
+    validate_generation(budgets)
     clean_public_options(instructions, "instructions")
     clean_public_options(description, "description")
     name = name.strip()
@@ -83,6 +89,7 @@ def update_agent_draft(
 ) -> AgentRecord:
     now = utc_now()
     clean_public_options(budgets, "budgets")
+    validate_generation(budgets)
     clean_public_options(instructions, "instructions")
     clean_public_options(description, "description")
     name = name.strip()
@@ -97,7 +104,7 @@ def update_agent_draft(
                 AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id
             ).with_for_update()
         )
-        if agent is None:
+        if agent is None or agent.status == ARCHIVED:
             raise NotFound("Agent not found")
         require_agent_permission(session, tenant_id, user.id, agent, "edit")
         verify_model_version(session, tenant_id, model_profile_version_id)
@@ -126,7 +133,7 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
                 AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id
             ).with_for_update()
         )
-        if agent is None:
+        if agent is None or agent.status == ARCHIVED:
             raise NotFound("Agent not found")
         require_agent_permission(session, tenant_id, user.id, agent, "publish")
         if agent.draft_runtime_type != "native":
@@ -201,10 +208,11 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
 
 
 def get_agent(session: Session, tenant_id: UUID, agent_id: UUID):
+    """Return a non-archived agent and its draft bindings; archived agents report NotFound."""
     agent = session.scalar(
         select(AgentRecord).where(AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id)
     )
-    if agent is None:
+    if agent is None or agent.status == ARCHIVED:
         raise NotFound("Agent not found")
     draft_bindings = list(
         session.scalars(select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == agent.id))
@@ -223,10 +231,70 @@ def list_all_agents_for_platform_admin(session: Session, principal: Principal) -
 
 
 def list_agents(session: Session, tenant_id: UUID) -> list[AgentRecord]:
+    """List the space's agents in creation order, excluding archived ones."""
     return list(
         session.scalars(
-            select(AgentRecord).where(AgentRecord.tenant_id == tenant_id).order_by(AgentRecord.created_at)
+            select(AgentRecord).where(
+                AgentRecord.tenant_id == tenant_id, AgentRecord.status != ARCHIVED
+            ).order_by(AgentRecord.created_at)
         )
+    )
+
+
+def archive_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID) -> None:
+    """Soft-delete an agent (reference: WeKnora agent deletion; Nexus keeps history).
+
+    Requires ``agents:write`` and the agent's ``manage`` permission. The agent disappears from lists
+    and new sessions; existing sessions keep their messages but cannot submit new Runs. Published
+    versions and bindings are retained so past Runs stay auditable.
+    """
+    with session.begin():
+        user = resolve_user(session, principal)
+        require_tenant(session, tenant_id)
+        require_membership(session, tenant_id, user.id)
+        agent = session.scalar(
+            select(AgentRecord).where(
+                AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id
+            ).with_for_update()
+        )
+        if agent is None or agent.status == ARCHIVED:
+            raise NotFound("Agent not found")
+        require_agent_permission(session, tenant_id, user.id, agent, "manage")
+        require_api_permission(session, tenant_id, user.id, "agents:write")
+        agent.status = ARCHIVED
+        agent.updated_at = utc_now()
+        audit(session, tenant_id, user.id, "agent.archived", "agent", str(agent.id))
+
+
+def copy_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID, *, name: str) -> AgentRecord:
+    """Copy an agent's draft into a new, unpublished agent owned by the caller.
+
+    Shares, grants and published versions are not copied. Every binding and the model are
+    re-authorized for the caller, so a copy never widens access.
+    """
+    with session.begin():
+        user = resolve_user(session, principal)
+        require_tenant(session, tenant_id)
+        require_membership(session, tenant_id, user.id)
+        source = session.scalar(
+            select(AgentRecord).where(AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id)
+        )
+        if source is None or source.status == ARCHIVED:
+            raise NotFound("Agent not found")
+        require_agent_permission(session, tenant_id, user.id, source, "edit")
+        bindings = [binding_snapshot(row) for row in session.scalars(
+            select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == source.id)
+        )]
+        model_id = source.draft_model_profile_version_id
+        runtime_type, instructions = source.draft_runtime_type, source.draft_instructions
+        description, budgets = source.description, dict(source.draft_budgets or {})
+    for binding in bindings:
+        binding["source_tenant_id"] = UUID(binding["source_tenant_id"])
+    if model_id is None:
+        raise InvalidConfiguration("Agent must reference a model profile version")
+    return create_agent(
+        session, principal, tenant_id, name=name[:160], description=description, runtime_type=runtime_type,
+        instructions=instructions, model_profile_version_id=model_id, budgets=budgets, bindings=bindings,
     )
 
 
