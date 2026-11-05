@@ -137,7 +137,7 @@ class AgentRuntime(Protocol):
 
 ### 2.2 Native 引擎
 
-借鉴：GenericAgent `agent_loop.py`（循环形态、StepOutcome、坏调用恢复）；WeKnora `engine.go`（完成判断、守卫）与 `suspend.go`（挂起恢复）；OpenClaw `run-loop.ts`（外层恢复与预算伸缩）；Dify `fc_agent_runner.py`（最后一轮禁用工具）；n8n `executeBatch`（动作产出与执行分离）。取舍：拆为独立组件，不保留单文件循环。
+借鉴：GenericAgent `agent_loop.py`（循环形态、StepOutcome、坏调用恢复）；WeKnora `engine.go`（完成判断、守卫）与 `suspend.go`（挂起恢复）；OpenClaw `run-loop.ts`（外层恢复与预算伸缩）；Dify `fc_agent_runner.py`（最后一轮禁用工具）；n8n `executeBatch`（动作产出与执行分离）；Octop `agents/middleware/model_failover.py`（健康感知故障转移）、`agents/settings/runtime_limits.py`（智能体运行参数映射到运行时）、`gateway/steer/`（运行中追加指令；运行时本体在 octop-harness，未克隆）。取舍：拆为独立组件，不保留单文件循环。
 
 ```text
 RunOrchestrator     生命周期、取消、预算、事件持久化、租约检查
@@ -193,7 +193,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.5 工具与授权网关
 
-借鉴：GenericAgent `ga.py`（`do_*` 分发、输出限制）；DeepSeek Harness `spill`（大输出落盘）；WeKnora `tools/` 与工具策略（每次调用复核）。取舍：网关只能收紧权限；模型不能选择主体。
+借鉴：GenericAgent `ga.py`（`do_*` 分发、输出限制）；DeepSeek Harness `spill`（大输出落盘）；WeKnora `tools/` 与工具策略（每次调用复核）；Octop `agents/settings/tool_catalog.py`（工具目录与禁用策略）。取舍：网关只能收紧权限；模型不能选择主体。
 
 - **定义（ToolDefinition）**：名称、版本、JSON Schema（参数与结果投影）、风险等级、所需资源、副作用标记、幂等性标记、超时、所需 capability。
 - **注册**：按名称与版本登记。处理器必须可协作取消；阻塞或资源密集的函数需要独立执行器或隔离后端。
@@ -215,7 +215,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.7 MCP
 
-借鉴：WeKnora `approval/mcp_risk.go`（高风险 MCP 工具审批）。
+借鉴：WeKnora `approval/mcp_risk.go`（高风险 MCP 工具审批）；Octop `connectors/custom_mcp.py`（自定义 MCP 服务）、`mcp_tool_cache.py`（按用户缓存工具定义与指纹）、`connectors/oauth/`（连接器 OAuth）。
 
 - **客户端**：连接外部 MCP 服务，发现工具，按工具启用，不默认开放整个服务；凭据以引用保存。
 - **服务端**：平台对外暴露已授权工具，供 Codex、Claude 等 Runtime 调用。
@@ -253,7 +253,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.9 沙箱与执行环境
 
-借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）。
+借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）；Octop `infra/backend/`（工作区后端可插拔：本地、Docker、PostgreSQL、对象存储，与控制面数据库分离）。
 
 - **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端：`local`（仅开发模式，不能用于多用户）、`docker`（候选）、`ssh`（候选）。
 - **租约**：执行方持有租约，到期或任务结束后回收；超时与取消释放租约。
@@ -265,7 +265,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.10 知识库
 
-借鉴：RAGFlow `internal/agentic_rag/`（证据登记 `[ID:n]`、判断与断路、检索工具正交化）；WeKnora（先按权限过滤再检索，图谱按空间隔离）；FastGPT（数据集模型，仅参考）。
+借鉴：RAGFlow `internal/agentic_rag/`（证据登记 `[ID:n]`、判断与断路、检索工具正交化）；WeKnora（先按权限过滤再检索，图谱按空间隔离）；FastGPT（数据集模型，仅参考）；Octop `infra/knowledge/`（`gate.py` 能力门控、`citations.py` 机器可读引用）。
 
 **存储**：PostgreSQL 保存知识库、文档、不可变文档版本、索引任务、文本块定位与引用关系；原文件走可替换的对象存储接口；向量索引由独立向量服务承载，服务选型待技术验证。
 
@@ -296,7 +296,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.11 权限、授权与审批
 
-借鉴：WeKnora `approval/`（gate、grants，会话级授权）、`types/agent_grant.go`（授权与配置哈希绑定）、`application/service/agent_share_scope.go`（共享智能体不扩大底层资源）；Hermes `tools/approval.py`（危险命令检测）。
+借鉴：WeKnora `approval/`（gate、grants，会话级授权）、`types/agent_grant.go`（授权与配置哈希绑定）、`application/service/agent_share_scope.go`（共享智能体不扩大底层资源）；Hermes `tools/approval.py`（危险命令检测）；Octop `agents/security/`（`policy_store.py` 全局安全策略、`hitl_session.py` 会话内放行且不跳过追问、`tool_guard_rules.py` 工具守卫规则）。
 
 **身份**：`Principal` 由认证适配器提供（`issuer + subject`）。首次访问映射为本地用户；禁用用户拒绝访问。开发模式使用固定单一主体，不信任请求头中的用户标识。
 
@@ -383,7 +383,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 ### 2.13 模型与凭据
 
-借鉴：自研，无对应参考模块。
+借鉴：自研为主；Octop `agents/providers/`（`presets.py` 供应商预设、`probe.py` 连通探测、`health.py` 健康与故障转移分类）、`crypto/sealed_repos.py`（秘密字段落库加密）。
 
 - **配置**：供应商记录归属 Tenant；`owner_user_id` 非空时仅该用户可用，为空时为空间共享。每个供应商有多个 ModelProfile，修改产生不可变版本。
 - **协议**：`options.protocol` 必须显式设置（如 `openai_chat_completions`），不从供应商名称猜测。首个适配器使用锁定版本的 `openai` SDK 异步 Chat Completions 流；禁用 SDK 自动重试；工具执行后不重放整个回合。
@@ -397,7 +397,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 ### 2.14 渠道（connectors）
 
-借鉴：LobeHub 渠道适配器的组织方式（`chat-adapter-*`）。
+借鉴：LobeHub 渠道适配器的组织方式（`chat-adapter-*`）；Octop `infra/gateway/`（多 IM 通道归一为同一处理链路，渠道内审批 `gateway/hitl/`，IM 桥接本体在 octop-gateway）。
 
 - 企业微信优先，随后微信、QQ。各渠道只做消息标准化与投递，不复制智能体循环。
 - 渠道身份映射到平台用户（`ChannelIdentity`），渠道会话映射到平台会话（`ChannelSessionBinding`）。
