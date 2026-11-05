@@ -41,3 +41,17 @@
 - [x] 6.1 更新 `apps/web/docs/design.md`，记录与参考实现的偏离。
 - [ ] 6.2 更新 `docs/roadmap.md`（未完成） 对应进度。
 - [ ] 6.3 OpenSpec 规格同步与归档。
+
+## 7. 范围调整：完全复制 WeKnora 界面，缺失功能占位（2026-11-05，待确认）
+
+- [ ] 7.0 用户确认 proposal.md「范围调整」的待确认项 1–4。
+- [ ] 7.1 对话页按 `views/chat/index.vue` 结构重写，样式原样复制；直接复用 `botmsg`、`usermsg`、`AgentStreamDisplay`、`ChatQuestionMinimap`、`PendingPromptDock`、`MessageTimestamp`。
+- [ ] 7.2 适配层：Nexus 消息与 Run 事件映射为 `botmsg` 所需的会话对象（含单元测试）；历史 Run 事件按待确认项 3 加载。
+- [ ] 7.3 顶栏（`ChatHeader` 的 Nexus 版本）：标题、更多菜单（复制为 Markdown 实现，其余占位）、沙箱开关占位。
+- [ ] 7.4 欢迎页（`creatChat` 的 Nexus 版本）：标题、推荐问题占位区、项目目录占位、智能体选择。
+- [ ] 7.5 输入框：恢复 WeKnora 控制栏的全部入口，缺失项为占位。
+- [ ] 7.6 运行卡片：`AskUserCard` 接入等待输入；`ToolApprovalCard` 按待确认项 2。
+- [ ] 7.7 侧边与弹层占位：引用、附件预览、沙箱面板、浏览器预览、后台任务。
+- [ ] 7.8 统一的占位提示与文案（中英文及其他语言包）；测试断言占位不发出 WeKnora 接口请求。
+- [ ] 7.9 更新 `apps/web/docs/design.md`，记录占位清单与仍存在的偏离。
+
