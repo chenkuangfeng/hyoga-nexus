@@ -93,3 +93,13 @@ test('cards still open when the run ends are shown as canceled', () => {
   const stream = toAgentEventStream([ev('approval.requested', { approval_id: 'a1', tool_name: 't' })], 'cancelled')
   assert.equal((stream[0] as { canceled?: boolean }).canceled, true)
 })
+
+test('a failed run ends with its failure text as the answer, like WeKnora run errors', () => {
+  const failed = [ev('message.delta', { text: 'partial', turn: 0 }), ev('run.failed', { status: 'failed', error_code: 'model_timeout' })]
+  const stream = toAgentEventStream(failed, 'failed', { failureMessage: code => `failed: ${code}` })
+  const last = stream[stream.length - 1] as { type: string; content: string; done: boolean }
+  assert.equal(last.type, 'answer')
+  assert.equal(last.content, 'failed: model_timeout')
+  assert.equal(last.done, true)
+  assert.equal(toAgentEventStream(failed, 'failed').length, 1)
+})

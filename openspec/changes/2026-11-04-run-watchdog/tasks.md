@@ -15,7 +15,7 @@
 - [x] 2.3 不新增持久化字段。`attention_required` 由事件派生（最新告警晚于所有非 Watchdog 事件与确认事件），因此无迁移。（原任务为"持久化字段并迁移"，已在实施中调整。）
 - [x] 2.4 API：Run 视图增加 `attention_required`；新增 `POST .../runs/{run_id}/watchdog/acknowledge`。
 - [x] 2.5 配置：`[watchdog]` 读取与校验（`watchdog_settings`），worker 启动时读取，无效值直接拒绝启动；`configs/nexus.example.toml` 与 `configs/README.md` 已同步。
-- [x] 2.6 Web 工作台：告警条（`apps/web/src/views/native/NativeWatchdogBanner.vue`）提供"继续等待 / 发送提示 / 取消运行"，接入新增的 Native 运行页（见 2026-11-04-native-run-workbench）。`pnpm build` 尚未在本机通过（内存不足）。
+- [x] 2.6 Web 工作台：告警条（`apps/web/src/views/native/NativeWatchdogBanner.vue`）提供"继续等待 / 发送提示 / 取消运行"，接入新增的 Native 运行页（见 2026-11-04-native-run-workbench）。`pnpm build` 尚未在本机通过（内存不足）。2026-11-05：按用户要求，对话页（WeKnora 复刻版）不再显示该告警条，组件保留未挂载；后端仍上报 `attention_required`，Web 端暂无确认入口。
 
 ## 3. 测试
 

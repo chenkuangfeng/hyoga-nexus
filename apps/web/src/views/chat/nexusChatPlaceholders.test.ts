@@ -54,3 +54,16 @@ test('header keeps every WeKnora menu entry', () => {
   }
   assert.match(header, /emit\('copy-markdown'\)/)
 })
+
+test('agent selection uses WeKnora\'s agent button and picker; Nexus-only elements are gone', () => {
+  const page = read('./NexusChatPage.vue')
+  const template = page.slice(0, page.indexOf('<script'))
+  for (const removed of ['NativeWatchdogBanner', 'chat-run-status', 'chat-failure', 'chat-queued', '<t-select']) {
+    assert.equal(template.includes(removed), false, removed)
+  }
+  assert.match(template, /:nexus-agents="agentOptions"/)
+  const composer = read('../../components/Input-field.vue')
+  assert.match(composer, /class="control-btn agent-mode-btn is-custom"/)
+  assert.match(composer, /<NexusAgentSelector /)
+  assert.doesNotMatch(read('../../components/NexusAgentSelector.vue'), WEKNORA_APIS)
+})

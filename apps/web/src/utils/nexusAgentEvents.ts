@@ -12,6 +12,7 @@
  * - `input.requested` / `input.received`：映射为 `agent_prompt_required`（kind = ask_user），由 `AskUserCard` 渲染；
  *   候选项作为选项，并允许自由输入。
  * - 运行被取消时追加 `stop`，与 WeKnora 的用户停止事件一致。
+ * - 运行失败或中断时，与 WeKnora 处理运行级 error 一致：把错误说明作为一段已完成的回答追加（需传入 `failureMessage`）。
  * - 其他事件（进度、模型调用等）不进入时间线。
  *
  * 纯函数，不依赖 Vue 或网络，便于单元测试。
@@ -68,6 +69,8 @@ export type AgentStreamEvent = AgentStreamAnswer | AgentStreamToolCall | AgentSt
 export interface AgentEventStreamOptions {
   /** Arguments of pending approvals by approval id, from `GET .../approvals`. */
   approvalArgs?: ReadonlyMap<string, Record<string, unknown>>
+  /** Text shown as the answer of a failed or interrupted Run, from its error code (may be empty). */
+  failureMessage?: (errorCode: string) => string
 }
 
 /** 运行结束时的状态；只有 cancelled 会追加 stop 事件。 */
@@ -195,5 +198,11 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
   // 运行未结束时最后一段文本仍在流式输出，不能标记为 done。
   if (runStatus !== null && TERMINAL_RUN_STATUSES.has(runStatus)) closeAnswer()
   if (runStatus === 'cancelled') stream.push({ type: 'stop' })
+  if ((runStatus === 'failed' || runStatus === 'interrupted') && options.failureMessage) {
+    const terminal = [...events].reverse().find(e => e.event_type === `run.${runStatus}`)
+    const code = typeof terminal?.payload.error_code === 'string' ? terminal.payload.error_code : ''
+    const runId = terminal?.run_id ?? events[events.length - 1]?.run_id ?? 'run'
+    stream.push({ type: 'answer', id: `answer-${runId}-failure`, turn: -1, content: options.failureMessage(code), done: true })
+  }
   return stream
 }

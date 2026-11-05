@@ -89,7 +89,7 @@ function assistantRow(runId: string | null, key: string, content: string, create
  */
 export function buildChatRows(messages: readonly ConversationMessage[],
   eventsByRun: ReadonlyMap<string, readonly RunEvent[]>, pendingUsers: readonly string[] = [],
-  live: LiveRun | null = null): ChatRow[] {
+  live: LiveRun | null = null, baseOptions: AgentEventStreamOptions = {}): ChatRow[] {
   const rows: ChatRow[] = []
   let group: { runId: string | null; key: string; texts: string[]; createdAt: string } | null = null
 
@@ -101,7 +101,7 @@ export function buildChatRows(messages: readonly ConversationMessage[],
     const content = group.texts.join('\n\n')
     if (content || (events && events.length > 0)) {
       rows.push(assistantRow(group.runId, group.key, content, group.createdAt, events, status,
-        isLive && !TERMINAL_RUN_STATUSES.has(status), isLive ? live!.options : undefined))
+        isLive && !TERMINAL_RUN_STATUSES.has(status), { ...baseOptions, ...(isLive ? live!.options : {}) }))
     }
     group = null
   }
@@ -129,7 +129,7 @@ export function buildChatRows(messages: readonly ConversationMessage[],
   const persisted = live !== null && rows.some(row => row.role === 'assistant' && row.run_id === live.id)
   if (live && !persisted && (live.events.length > 0 || !TERMINAL_RUN_STATUSES.has(live.status))) {
     const row = assistantRow(live.id, live.id, '', '', live.events, live.status,
-      !TERMINAL_RUN_STATUSES.has(live.status), live.options)
+      !TERMINAL_RUN_STATUSES.has(live.status), { ...baseOptions, ...live.options })
     if (row.agentEventStream.length > 0) rows.push(row)
   }
   return rows

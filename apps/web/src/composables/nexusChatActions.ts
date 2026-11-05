@@ -8,6 +8,13 @@
  */
 import { inject, provide, type InjectionKey } from 'vue'
 
+/** One entry of the composer's agent picker (`NexusAgentSelector`); `id` is the published version id. */
+export interface NexusAgentOption {
+  id: string
+  name: string
+  description: string
+}
+
 export interface NexusChatActions {
   /** Approve or reject a pending tool call; `pendingId` is the Nexus approval id. */
   resolveApproval(pendingId: string, decision: 'approve' | 'reject', args?: Record<string, unknown>): Promise<void>

@@ -34,7 +34,8 @@ import { useEditorResourcesStore } from '@/stores/editorResources';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { hostSkillsOnly, mentionSkillTargetId } from '@/utils/skillTarget';
 import { useI18n } from 'vue-i18n'
-import { useNexusChatActions } from '@/composables/nexusChatActions';
+import { useNexusChatActions, type NexusAgentOption } from '@/composables/nexusChatActions';
+import NexusAgentSelector from '@/components/NexusAgentSelector.vue';
 import AttachmentUpload, { type AttachmentFile } from './AttachmentUpload.vue';
 import {
   kbSatisfiesAgentRequirements,
@@ -572,6 +573,21 @@ const props = defineProps({
   // Nexus 对话页：输入框只负责文本、发送、追加指令与停止。知识库、MCP、附件、模型、
   // 推理强度、网络搜索等 WeKnora 专属能力全部隐藏，且不调用 WeKnora 接口。
   nexusMode: {
+    type: Boolean,
+    default: false
+  },
+  /** Nexus mode: agents offered by the agent button ({ id, name, description }). */
+  nexusAgents: {
+    type: Array as () => NexusAgentOption[],
+    default: () => []
+  },
+  /** Nexus mode: the selected agent id (its published version id). */
+  nexusAgentId: {
+    type: String,
+    default: ''
+  },
+  /** Nexus mode: a session is bound to its agent; the button shows it and switching is a placeholder. */
+  nexusAgentLocked: {
     type: Boolean,
     default: false
   }
@@ -2093,6 +2109,7 @@ watch([selectedKbIds, selectedFileIds], ([kbIds, fileIds]) => {
 const emit = defineEmits<{
   (e: 'send-msg', query: string, modelId: string, mentionedItems: MentionRequestItem[], imageFiles: File[], attachmentFiles: AttachmentFile[], options: SendMessageOptions): void;
   (e: 'update:modelId', modelId: string): void;
+  (e: 'update:nexusAgentId', agentId: string): void;
   (e: 'stop-generation'): void;
   (e: 'stop-confirmed'): void;
   (e: 'stop-failed'): void;
@@ -2107,6 +2124,15 @@ const emit = defineEmits<{
 // Nexus 对话页：平台尚无后端的入口统一提示「暂未开放」（openspec 2026-11-04-weknora-chat-dialog）。
 const nexusActions = useNexusChatActions();
 const nexusPlanned = (feature: string) => nexusActions?.planned(feature);
+// Nexus 对话页的智能体按钮（WeKnora agent-mode-btn + 选择器）。
+const nexusAgentButtonRef = ref<HTMLElement | null>(null);
+const showNexusAgentSelector = ref(false);
+const nexusAgentName = computed(() =>
+  (props.nexusAgents as NexusAgentOption[]).find(agent => agent.id === props.nexusAgentId)?.name || t('input.agentMode'));
+const toggleNexusAgentSelector = () => {
+  if (props.nexusAgentLocked) { nexusPlanned('switchAgent'); return; }
+  showNexusAgentSelector.value = !showNexusAgentSelector.value;
+};
 
 // options ride along with this one send only: a send that returns early (or
 // steers into the running turn) drops them instead of leaving them behind.
@@ -3039,6 +3065,17 @@ defineExpose({
 
           <!-- Nexus 对话页：与 WeKnora 控制栏相同的入口与样式；平台尚无对应能力，点击只提示「暂未开放」。 -->
           <template v-if="nexusMode">
+            <div ref="nexusAgentButtonRef" class="control-btn agent-mode-btn is-custom" data-testid="composer-agent"
+              @click.stop="toggleNexusAgentSelector">
+              <span class="agent-mode-text">{{ nexusAgentName }}</span>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="dropdown-arrow"
+                :class="{ 'rotate': showNexusAgentSelector }">
+                <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
+              </svg>
+            </div>
+            <NexusAgentSelector :visible="showNexusAgentSelector" :anchor-el="nexusAgentButtonRef"
+              :current-agent-id="nexusAgentId" :agents="(nexusAgents as NexusAgentOption[])"
+              @close="showNexusAgentSelector = false" @select="(id: string) => emit('update:nexusAgentId', id)" />
             <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
               :content="$t('localBrowser.local')">
               <button type="button" class="control-btn browser-source-btn" :aria-label="$t('localBrowser.local')"

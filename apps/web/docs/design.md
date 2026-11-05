@@ -25,7 +25,9 @@ Vue 3、TypeScript、Element Plus、vue-router（history 模式）。外壳位�
 - 数据适配：`utils/nexusChatTranscript.ts` 把平台消息按 Run 分组为 WeKnora 行（一条用户消息 + 一条助手回答），历史回答的时间线由该 Run 的事件重建（打开会话时以最多 4 个并发读取 `GET .../runs/{id}/events`；读取失败时回退为正文）。`utils/nexusAgentEvents.ts` 把 Run 事件映射为 `agentEventStream`：文本、工具调用、`approval.*` → `tool_approval_required`、`input.*` → `agent_prompt_required`（ask_user）。审批参数只经 `GET .../approvals` 取得。
 - 运行操作：`composables/nexusChatActions.ts` 由对话页提供；`ToolApprovalCard` 与 `AskUserCard` 检测到它时改调平台审批与回答接口（审批后 `useNativeRun.resume()` 继续跟随），否则保持 WeKnora 原行为。
 - 占位：平台尚无后端的入口照常显示，点击统一提示「该功能暂未开放」——顶栏改名（含双击标题）、查看授权、删除会话、沙箱面板；欢迎页推荐问题与刷新；消息分叉、回滚、问助手、加入知识库、产物；输入框本地浏览器、联网搜索、图片与附件上传、@ 引用、模型与思考强度。「复制为 Markdown」在前端实现。数据驱动的区域（追问建议、子智能体标签页、引用与附件抽屉、浏览器任务预览、后台任务）在没有数据时与 WeKnora 一样不出现。
-- 与 WeKnora 仍不同之处：智能体选择使用欢迎态输入框控制区的下拉（WeKnora 为模式按钮加智能体弹层）；保留 Nexus 的运行告警条与运行状态标签；欢迎页不显示宿主沙箱的项目目录条（WeKnora 仅桌面端显示）。
+- 智能体选择与 WeKnora 一致：输入框左侧的 `agent-mode-btn` 打开 `components/NexusAgentSelector.vue`（按 WeKnora `AgentSelector.vue` 的模板、定位与样式复制，只列平台已发布的智能体，归入「自定义智能体」；不读取 WeKnora 的 store 与接口）。会话已绑定智能体，会话内点击该按钮为占位。
+- 已去掉 Nexus 自加的元素：运行状态标签、运行停滞告警条（`NativeWatchdogBanner.vue` 保留但不再挂载）、失败与排队提示行。运行失败时与 WeKnora 处理运行级错误相同：错误说明作为回答写入时间线，并弹出错误提示。因此对话页目前没有「继续等待 / 发送提示」与排队位置的入口；取消用输入框的停止按钮，追加指令用运行中的发送。
+- 与 WeKnora 仍不同之处：欢迎页不显示宿主沙箱的项目目录条（WeKnora 仅桌面端显示）。
 - 助手面板（`components/assistant/AssistantPanel.vue`）的对话区直接使用 `NexusChatPage`（`compact` 窄布局，会话由 `assistant.sessionId` 决定，空值即欢迎态），历史列表读取平台会话，智能体取第一个已发布的智能体。页面上下文芯片、选区、访问级别选择与子智能体标签页已移除，平台 Run 接口不携带这些上下文；历史列表也不删除会话（平台暂无删除接口）。
 - 尚未完成（见 `openspec/changes/2026-11-04-weknora-chat-dialog/tasks.md`）：完整 `vue-tsc` 与 `pnpm build` 未在受内存限制的环境中验证；浏览器用例未执行。
 - 智能体与模型设置页（`2026-11-05-weknora-agent-tool-model-settings`）：已通过 SFC 编译、LESS 编译与针对新文件的 `vue-tsc` 检查；完整 `pnpm build` 与浏览器验证需在内存充足的环境执行。

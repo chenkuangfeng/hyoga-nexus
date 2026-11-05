@@ -35,13 +35,8 @@
       </div>
       <div class="create-chat-composer">
         <InputField nexus-mode data-testid="chat-composer" :auto-focus="true" :is-replying="false" :can-steer="false"
-          @send-msg="onSendMsg">
-          <template #controls>
-            <t-select v-if="allowAgentSelect" v-model="selectedAgent" size="small" class="nexus-chat__agent"
-              :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
-              :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
-          </template>
-        </InputField>
+          :nexus-agents="agentOptions" :nexus-agent-id="selectedAgent ?? ''" :nexus-agent-locked="!allowAgentSelect"
+          @update:nexus-agent-id="(id: string) => { selectedAgent = id }" @send-msg="onSendMsg" />
       </div>
     </div>
   </div>
@@ -50,9 +45,6 @@
   <div v-else class="chat" :class="{ 'is-embedded': compact }">
     <div v-if="!compact" class="chat-topbar">
       <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
-      <t-tag v-if="run" :theme="statusTheme" variant="light" class="nexus-chat-status" data-testid="chat-run-status">
-        {{ statusLabel }}
-      </t-tag>
       <div class="sandbox-header-toggle">
         <t-tooltip placement="bottom">
           <template #content>{{ $t('chatHeader.toggleSandboxPanel') }}</template>
@@ -71,9 +63,6 @@
       <div ref="scrollContainer" class="chat_scroll_box" @scroll="handleScroll">
         <div class="chat_scroll_content">
           <div class="msg_list" :class="{ 'is-embedded': compact }" data-testid="chat-transcript" aria-live="polite">
-            <!-- Nexus extensions: run watchdog and request errors. -->
-            <NativeWatchdogBanner v-if="showWatchdogBanner(run)" :can-hint="canSteer(run)" :busy="busy"
-              @acknowledge="acknowledge" @cancel="cancelRun" @hint="sendHint" />
             <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat-alert" />
             <t-alert v-if="streamError" theme="warning" :message="$t('nativeRuns.streamError', { message: streamError })"
               class="nexus-chat-alert" />
@@ -113,12 +102,6 @@
               data-testid="chat-global-wait">
               <span class="chat-global-wait__spinner" aria-hidden="true"></span>
             </div>
-            <p v-if="failureText" class="nexus-chat-status-line is-failure" role="status" data-testid="chat-failure">
-              {{ failureText }}
-            </p>
-            <p v-if="run?.status === 'queued' && run.queue_position" class="nexus-chat-status-line" data-testid="chat-queued">
-              {{ $t('nativeRuns.queued', { count: run.queue_position - 1 }) }}
-            </p>
           </div>
         </div>
       </div>
@@ -134,13 +117,10 @@
           <PendingPromptDock :embedded-mode="compact" />
           <InputField nexus-mode compact data-testid="chat-composer" :auto-focus="isWelcome" :is-replying="isReplying"
             :can-steer="canSteer(run)" :embedded-mode="compact"
-            @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
-            <template #controls>
-              <t-select v-if="isWelcome && allowAgentSelect" v-model="selectedAgent" size="small" class="nexus-chat__agent"
-                :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
-                :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
-            </template>
-          </InputField>
+            :nexus-agents="agentOptions" :nexus-agent-id="isWelcome ? (selectedAgent ?? '') : sessionAgentVersion"
+            :nexus-agent-locked="!isWelcome || !allowAgentSelect"
+            @update:nexus-agent-id="(id: string) => { selectedAgent = id }"
+            @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun" />
         </div>
       </div>
       <div v-if="!compact" class="chat_overlays">
@@ -179,8 +159,7 @@ import {
 import { useNativeRun } from '@/composables/useNativeRun'
 import { provideNexusChatActions } from '@/composables/nexusChatActions'
 import { providePromptDock } from '@/composables/usePromptDock'
-import NativeWatchdogBanner from '@/views/native/NativeWatchdogBanner.vue'
-import { canSteer, failureCode, isActive, isTerminal, showWatchdogBanner } from '@/views/native/nativeRunState'
+import { canSteer, failureCode, isActive, isTerminal } from '@/views/native/nativeRunState'
 import InputField from '@/components/Input-field.vue'
 import NexusChatHeader from '@/components/NexusChatHeader.vue'
 import MessageTimestamp from '@/components/chat/MessageTimestamp.vue'
@@ -222,13 +201,13 @@ const messages = ref<ConversationMessage[]>([])
 const eventsByRun = ref(new Map<string, RunEvent[]>())
 const approvalArgs = ref(new Map<string, Record<string, unknown>>())
 const loading = ref(false)
-const loadingAgents = ref(false)
-const busy = ref(false)
 const errorText = ref('')
 const agents = ref<AgentView[]>([])
 const selectedAgent = ref<string | undefined>(undefined)
 const pendingUsers = ref<string[]>([])
 const sessionTitleText = ref('')
+/** Agent version the open session is bound to; shown on the composer's agent button. */
+const sessionAgentVersion = ref('')
 /** WeKnora: true on entering a session (history renders without the typewriter), false after sending. */
 const isFirstEnter = ref(true)
 const userHasScrolledUp = ref(false)
@@ -250,7 +229,7 @@ const rows = computed<ChatRow[]>(() => {
     events: native.state.value.events,
     options: { approvalArgs: approvalArgs.value },
   } : null
-  return buildChatRows(messages.value, eventsByRun.value, pendingUsers.value, live)
+  return buildChatRows(messages.value, eventsByRun.value, pendingUsers.value, live, { failureMessage })
 })
 
 // The prompt dock (WeKnora PendingPromptDock) reads a reactive message list.
@@ -259,23 +238,17 @@ watchEffect(() => { dockRows.splice(0, dockRows.length, ...rows.value) })
 providePromptDock(dockRows as unknown as Record<string, unknown>[])
 
 const agentOptions = computed(() => agents.value.map(agent => ({
-  label: agent.name,
-  value: agent.published_version_id as string,
+  id: agent.published_version_id as string,
+  name: agent.name,
+  description: agent.description,
 })))
 
-const STATUS_THEME: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'danger'> = {
-  queued: 'default', running: 'primary', waiting_input: 'warning', waiting_approval: 'warning',
-  completed: 'success', failed: 'danger', cancelled: 'default', interrupted: 'danger',
-}
 const isReplying = computed(() => isActive(run.value))
-const statusTheme = computed(() => (run.value ? STATUS_THEME[run.value.status] ?? 'default' : 'default'))
-const statusLabel = computed(() => (run.value ? t(`nativeRuns.status.${run.value.status}`) : ''))
-const failureText = computed(() => {
-  const code = failureCode(run.value)
-  if (code) return t('nativeRuns.failure', { code })
-  if (run.value?.status === 'cancelled') return t('nativeRuns.cancelled')
-  return ''
-})
+
+/** WeKnora shows a run-level error as the answer text; the code identifies the cause. */
+function failureMessage(code: string): string {
+  return code ? t('nativeRuns.failure', { code }) : t('chat.processError')
+}
 /** WeKnora showGlobalTypingIndicator: submitted, nothing streamed yet. */
 const showGlobalWait = computed(() => isActive(run.value) && native.state.value.events.length === 0)
 
@@ -306,7 +279,6 @@ function userQueryBefore(index: number): string {
 async function loadAgents() {
   const tenant = tenantId.value
   if (!tenant) return
-  loadingAgents.value = true
   try {
     agents.value = (await listAgents(tenant)).filter(agent => agent.published_version_id !== null)
     // From the agent list's "start chat": `?agent=<version id>` preselects that agent (standalone page only).
@@ -318,8 +290,6 @@ async function loadAgents() {
     }
   } catch (error) {
     errorText.value = messageOf(error, t('nativeRuns.loadError'))
-  } finally {
-    loadingAgents.value = false
   }
 }
 
@@ -328,7 +298,10 @@ async function loadSessionTitle(id: string) {
   if (!tenant || !id) return
   try {
     const found = (await listSessions(tenant)).find(item => item.id === id)
-    if (activeSessionId.value === id) sessionTitleText.value = found?.title || ''
+    if (activeSessionId.value === id) {
+      sessionTitleText.value = found?.title || ''
+      sessionAgentVersion.value = found?.agent_version_id || ''
+    }
   } catch {
     /* keep the default title */
   }
@@ -366,6 +339,7 @@ async function openSession() {
   eventsByRun.value = new Map()
   approvalArgs.value = new Map()
   void loadSessionTitle(id)
+  void loadAgents()
   try {
     messages.value = await native.loadSession(id)
     if (run.value?.status === 'waiting_approval') void loadApprovals()
@@ -416,6 +390,7 @@ async function sendText(text: string) {
       const session = await createSessionApi(tenantId.value, selectedAgent.value, deriveSessionTitle(text))
       createdSessionId = session.id
       sessionTitleText.value = session.title
+      sessionAgentVersion.value = session.agent_version_id
       pendingUsers.value = [text]
       await native.send(session.id, text)
       emit('session-created', session.id)
@@ -437,17 +412,13 @@ const onSteerMsg = (text: string) => {
 }
 
 async function act(action: () => Promise<void>, fallback: string) {
-  busy.value = true
   try {
     await action()
   } catch (error) {
     MessagePlugin.error(messageOf(error, fallback))
-  } finally {
-    busy.value = false
   }
 }
 
-const acknowledge = () => act(() => native.acknowledge(), t('nativeRuns.loadError'))
 const cancelRun = () => act(() => native.cancel(), t('nativeRuns.loadError'))
 const sendHint = (content: string) => act(async () => {
   await native.steer(content)
@@ -543,6 +514,10 @@ watch(() => pendingUsers.value.length, async (length, previous) => {
 watch(() => run.value?.status, (status, previous) => {
   if (!status || status === previous) return
   if (status === 'waiting_approval') void loadApprovals()
+  if (previous && (status === 'failed' || status === 'interrupted')) {
+    // WeKnora reportError: a toast next to the error text in the answer.
+    MessagePlugin.error(failureMessage(failureCode(run.value) ?? ''))
+  }
   if (previous && isTerminal(run.value)) {
     settleRun().catch(() => { /* keep current rows and pending inputs */ })
   }
@@ -554,6 +529,7 @@ watch(activeSessionId, (id) => {
   native.dispose()
   pendingUsers.value = []
   sessionTitleText.value = ''
+  sessionAgentVersion.value = ''
   if (!id) {
     messages.value = []
     eventsByRun.value = new Map()
@@ -1231,26 +1207,9 @@ defineExpose({ sendText })
 
 
 <style lang="less" scoped>
-/* Nexus-only additions: run status tag, watchdog/error alerts, status lines, welcome agent picker. */
-.nexus-chat-status {
-  flex-shrink: 0;
-}
-
+/* Request errors (load or stream failures) shown above the messages. */
 .nexus-chat-alert {
   width: 100%;
 }
 
-.nexus-chat-status-line {
-  margin: 0;
-  color: var(--td-text-color-secondary);
-  font-size: var(--app-text-sm);
-
-  &.is-failure {
-    color: var(--td-error-color);
-  }
-}
-
-.nexus-chat__agent {
-  width: 180px;
-}
 </style>
