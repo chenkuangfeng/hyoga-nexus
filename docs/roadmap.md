@@ -56,7 +56,7 @@
 ### 3. Native 运行时与引擎
 
 - **目标**：Native 智能体可运行并在对话工作台中使用；锁定运行时契约，把引擎拆分为独立组件并补齐功能，覆盖运行编排、回合执行、上下文、完成判断、工具、记忆、技能、取消、恢复和预算。行为与参考项目对齐。
-- **参考项目**：GenericAgent（`agent_loop.py`、`ga.py`、`memory/`）；WeKnora（`engine.go`、`suspend.go`、`compaction/`、`tools/`）；OpenClaw（`run-loop.ts`）；Dify（`fc_agent_runner.py`）；n8n（`executeBatch`）；DeepSeek Harness（`agent-loop`、`spill`）；DeepSeek Super-agent（Watchdog、Chain of Recall、异步工具，设计文章与原型）；Hermes Agent（`memory_tool.py`）；LobeHub（`context-engine`）；RAGFlow（`evidence_registry.go`）；DeerFlow（`agents/memory/`）；Octop（`infra/agents/middleware/model_failover.py` 健康感知故障转移、`agents/settings/runtime_limits.py` 智能体运行参数映射、`agents/settings/tool_catalog.py` 工具目录与禁用策略、`gateway/steer/` 运行中追加指令；运行时本体在 octop-harness，未克隆）。
+- **参考项目**：GenericAgent（`agent_loop.py`、`ga.py`、`memory/`）；WeKnora（`engine.go`、`suspend.go`、`compaction/`、`tools/`）；OpenClaw（`run-loop.ts`）；Dify（`fc_agent_runner.py`）；n8n（`executeBatch`）；DeepSeek Harness（`agent-loop`、`spill`）；DeepSeek Super-agent（Watchdog、Chain of Recall、异步工具，设计文章与原型）；Hermes Agent（`memory_tool.py`）；LobeHub（`context-engine`）；RAGFlow（`evidence_registry.go`）；DeerFlow（`agents/memory/`）；Octop（`infra/agents/middleware/model_failover.py` 健康感知故障转移、`agents/settings/runtime_limits.py` 智能体运行参数映射、`agents/settings/tool_catalog.py` 工具目录与禁用策略、`gateway/steer/` 运行中追加指令）；octop-harness（`compaction.py` 与 `middleware/summarization_limits.py` 压缩时不重发超大历史、`middleware/tool_order.py` 稳定工具顺序以复用提示缓存、`middleware/model_retry.py` 重试策略、`middleware/model_settings.py` 生成参数、`middleware/conversation_mode.py` 回合级工具白名单、`usage.py` 与 `context_usage.py` 用量归一与上下文占用、`protocols/think_splitter.py` 流式拆分思考内容）；octop-memory（L0 原始事件 → L1 候选 → L2 原子卡片 → L3 实体页 → L4 审计日志的分层；`pipeline/promotion/checks.py` 候选晋升前的五项检查、`pipeline/recall/` 召回路由、预算、注入前抑制与重排、`domain/retention.py` 按来源的保留规则）。
 - **子计划**：
   - [x] 3.1 基础闭环：流式模型、授权工具、取消、等待输入、检查点、SSE、对话工作台。
   - [ ] 3.2 真实 OpenAI-compatible 供应商在线验收（用户在设置页配置后）。
@@ -89,7 +89,7 @@
 ### 4. Codex 适配器
 
 - **目标**：以 `openai-codex` SDK 管进程，事件与审批经 app-server 协议获取。
-- **参考项目**：Hermes Agent（`agent/transports/codex_app_server.py`）；官方 `openai-codex` SDK 与 App Server 文档（无开源参考，实施时重新核对）；Octop（`infra/agents/settings/acp.py` 与出站 ACP Runner：经 Agent Client Protocol 委派 Codex，仅参考协议形态）。
+- **参考项目**：Hermes Agent（`agent/transports/codex_app_server.py`）；官方 `openai-codex` SDK 与 App Server 文档（无开源参考，实施时重新核对）；Octop（`infra/agents/settings/acp.py` 与出站 ACP Runner：经 Agent Client Protocol 委派 Codex，仅参考协议形态）；octop-harness（`acp/` 客户端、服务与权限处理，`builtin/tools/acp_runner.py` 委派工具）。
 - **门禁**：确认 SDK 是否暴露底层 JSON-RPC 通道。结论决定连接方案，方案变更通过 OpenSpec 记录。
 - **子计划**：
   - [ ] 4.1 能力探测（版本、`initialize` 能力）。
@@ -105,7 +105,7 @@
 ### 5. Claude Code 适配器
 
 - **目标**：以 `claude-agent-sdk` 封装 `ClaudeSDKClient`。
-- **参考项目**：官方 `claude-agent-sdk`（无开源参考实现，实施前核对官方文档）；Octop（出站 ACP Runner 委派 Claude Code，仅参考协议形态）。
+- **参考项目**：官方 `claude-agent-sdk`（无开源参考实现，实施前核对官方文档）；Octop（出站 ACP Runner 委派 Claude Code，仅参考协议形态）；octop-harness（`acp/` 客户端、服务与权限处理，`builtin/tools/acp_runner.py` 委派工具）。
 - **门禁**：读取官方文档，核对 `can_use_tool`、hooks、`resume`、`fork_session` 的实际行为并锁定版本，结果同步更新 [architecture.md](architecture.md) 第 2.4 节。
 - **子计划**：
   - [ ] 5.1 `can_use_tool` 审批桥；`disallowed_tools` 禁用原生工具。
@@ -131,7 +131,7 @@
 ### 7. 技能与 MCP
 
 - **目标**：版本化技能、来源检疫、依赖校验；MCP 按工具启用。
-- **参考项目**：Hermes Agent（`skills_guard.py`、`skills_hub`）；DeerFlow（`skills/`）；WeKnora（`approval/mcp_risk.go`）；Octop（`infra/connectors/custom_mcp.py` 自定义 MCP 服务、`mcp_tool_cache.py` 按用户的工具缓存与指纹、`connectors/oauth/`、`infra/skills/` 安装与归档）。
+- **参考项目**：Hermes Agent（`skills_guard.py`、`skills_hub`）；DeerFlow（`skills/`）；WeKnora（`approval/mcp_risk.go`）；Octop（`infra/connectors/custom_mcp.py` 自定义 MCP 服务、`mcp_tool_cache.py` 按用户的工具缓存与指纹、`connectors/oauth/`、`infra/skills/` 安装与归档）；octop-harness（`mcp.py` 与 `middleware/mcp_tools.py` 按请求过滤 MCP 工具、`middleware/mcp_tool_error.py` MCP 错误转为失败的工具结果、`middleware/skill_filter.py` 技能禁用与过滤、`middleware/tool_search.py` 工具渐进加载、`plugins/` 插件清单与加载）。
 - **子计划**：
   - [ ] 7.1 技能：版本、`SKILL.md` 与资源、依赖声明、发布前依赖校验、来源检疫、草稿与审核发布。
     - 已完成（提案 2026-11-04-skill-scripts）：解析与版本、内联加载、绑定与发布前依赖校验、脚本执行（子进程，仅开发门禁）、审批与审计、管理员发布与列表接口。
@@ -144,7 +144,7 @@
 ### 8. 沙箱后端
 
 - **目标**：评估候选后端，选择通过隔离验收的实现。
-- **参考项目**：DeerFlow（`sandbox/`）；Hermes Agent（`tools/environments/`）；DeepSeek Harness（接缝设计）；FastGPT（`agent-sandbox`，仅参考）；Octop（`infra/backend/` 可插拔工作区后端：本地、Docker、PostgreSQL、对象存储，`resolver.py` 组合路由，与控制面数据库分离）。
+- **参考项目**：DeerFlow（`sandbox/`）；Hermes Agent（`tools/environments/`）；DeepSeek Harness（接缝设计）；FastGPT（`agent-sandbox`，仅参考）；Octop（`infra/backend/` 可插拔工作区后端：本地、Docker、PostgreSQL、对象存储，`resolver.py` 组合路由，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。
 - **子计划**：
   - [ ] 8.1 `CommandExecutorPort` 与 `FileStorePort` 的实现（候选：docker、ssh）。
   - [ ] 8.2 租约、虚拟路径映射、原子写入、产物收集。
@@ -156,7 +156,7 @@
 ### 9. 渠道与治理
 
 - **目标**：IM 渠道接入与运行评估。
-- **参考项目**：LobeHub（`chat-adapter-*` 的组织方式）；DeepSeek Super-agent（事件两级过滤、Thread 订阅）；Octop（`infra/gateway/` 多 IM 通道归一为同一处理链路、`gateway/hitl/` 渠道内审批、`infra/cron/` 定时任务；IM 桥接本体在 octop-gateway，未克隆）。
+- **参考项目**：LobeHub（`chat-adapter-*` 的组织方式）；DeepSeek Super-agent（事件两级过滤、Thread 订阅）；Octop（`infra/gateway/` 多 IM 通道归一为同一处理链路、`gateway/hitl/` 渠道内审批、`infra/cron/` 定时任务）；octop-gateway（`channel.py` 渠道抽象、`manager.py` 按会话合批、`constraints.py` 平台限制与限流、`push_routing.py` 主动推送路由、`channels/wecom.py`、`channels/feishu.py`、`channels/dingtalk.py`、`channels/telegram/delivery.py` 只在明确拒绝时重试、`channels/telegram/policy.py` 先准入再取媒体）。
 - **子计划**：
   - [ ] 9.1 企业微信优先，随后微信、QQ：消息标准化、身份映射、会话映射、去重、鉴权、回复限制、重试。
   - [ ] 9.2 运行评估集：固定任务、检索引用正确率、技能选择准确率。

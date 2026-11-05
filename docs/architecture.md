@@ -137,7 +137,7 @@ class AgentRuntime(Protocol):
 
 ### 2.2 Native 引擎
 
-借鉴：GenericAgent `agent_loop.py`（循环形态、StepOutcome、坏调用恢复）；WeKnora `engine.go`（完成判断、守卫）与 `suspend.go`（挂起恢复）；OpenClaw `run-loop.ts`（外层恢复与预算伸缩）；Dify `fc_agent_runner.py`（最后一轮禁用工具）；n8n `executeBatch`（动作产出与执行分离）；Octop `agents/middleware/model_failover.py`（健康感知故障转移）、`agents/settings/runtime_limits.py`（智能体运行参数映射到运行时）、`gateway/steer/`（运行中追加指令；运行时本体在 octop-harness，未克隆）。取舍：拆为独立组件，不保留单文件循环。
+借鉴：GenericAgent `agent_loop.py`（循环形态、StepOutcome、坏调用恢复）；WeKnora `engine.go`（完成判断、守卫）与 `suspend.go`（挂起恢复）；OpenClaw `run-loop.ts`（外层恢复与预算伸缩）；Dify `fc_agent_runner.py`（最后一轮禁用工具）；n8n `executeBatch`（动作产出与执行分离）；Octop `agents/middleware/model_failover.py`（健康感知故障转移）、`agents/settings/runtime_limits.py`（智能体运行参数映射到运行时）、`gateway/steer/`（运行中追加指令）；octop-harness（`compaction.py` 与 `middleware/summarization_limits.py` 压缩时不重发超大历史、`middleware/tool_order.py` 稳定工具顺序以复用提示缓存、`middleware/model_retry.py` 重试策略、`middleware/model_settings.py` 生成参数、`middleware/conversation_mode.py` 回合级工具白名单、`usage.py` 与 `context_usage.py` 用量归一与上下文占用、`protocols/think_splitter.py` 流式拆分思考内容）。取舍：拆为独立组件，不保留单文件循环。
 
 ```text
 RunOrchestrator     生命周期、取消、预算、事件持久化、租约检查
@@ -166,7 +166,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.3 Codex 适配器
 
-借鉴：Hermes `codex_app_server.py`（JSON-RPC over stdio、initialize 握手、版本门槛）；官方 `openai-codex` SDK 与 App Server 文档（实施时重新核对）。
+借鉴：Hermes `codex_app_server.py`（JSON-RPC over stdio、initialize 握手、版本门槛）；官方 `openai-codex` SDK 与 App Server 文档（实施时重新核对）；octop-harness（经 ACP 委派外部编程智能体：`acp/` 客户端、服务与权限处理，`builtin/tools/acp_runner.py` 委派工具）。
 
 - **集成方式**：SDK 负责进程与基础调用；流式事件与审批经 app-server 协议获取。
 - **通道前提**：若 SDK 暴露底层 JSON-RPC 通道，事件、审批与 SDK 调用共用一个连接；若不暴露，则直连 app-server 协议，SDK 仅用于 CLI 版本锁定。该前提的确认结果记录在路线图中，方案变更须通过变更提案确认。
@@ -180,7 +180,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.4 Claude Code 适配器
 
-借鉴：官方 `claude-agent-sdk`（无开源参考实现）。实施前须读官方文档并锁定版本，未核对的行为保持 `unverified`。
+借鉴：官方 `claude-agent-sdk`（无开源参考实现）；octop-harness `acp/`（经 ACP 委派 Claude Code，仅参考协议形态）。实施前须读官方文档并锁定版本，未核对的行为保持 `unverified`。
 
 - **集成方式**：`ClaudeSDKClient`，支持自定义工具与 Python 回调钩子。
 - **权限**：`can_use_tool` 回调作为审批入口，映射到 `approval.requested`。`allowed_tools` 只做自动批准、不隐藏工具，因此禁用原生工具必须用 `disallowed_tools`。
@@ -193,7 +193,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.5 工具与授权网关
 
-借鉴：GenericAgent `ga.py`（`do_*` 分发、输出限制）；DeepSeek Harness `spill`（大输出落盘）；WeKnora `tools/` 与工具策略（每次调用复核）；Octop `agents/settings/tool_catalog.py`（工具目录与禁用策略）。取舍：网关只能收紧权限；模型不能选择主体。
+借鉴：GenericAgent `ga.py`（`do_*` 分发、输出限制）；DeepSeek Harness `spill`（大输出落盘）；WeKnora `tools/` 与工具策略（每次调用复核）；Octop `agents/settings/tool_catalog.py`（工具目录与禁用策略）；octop-harness `middleware/tool_guard.py` 与 `security/tool_guard/`（执行前扫描工具参数）、`middleware/tools_filter.py`（对模型隐藏禁用工具）、`middleware/tool_order.py`（稳定工具顺序）。取舍：网关只能收紧权限；模型不能选择主体。
 
 - **定义（ToolDefinition）**：名称、版本、JSON Schema（参数与结果投影）、风险等级、所需资源、副作用标记、幂等性标记、超时、所需 capability。
 - **注册**：按名称与版本登记。处理器必须可协作取消；阻塞或资源密集的函数需要独立执行器或隔离后端。
@@ -203,7 +203,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.6 技能（Skill）
 
-借鉴：Hermes `skills_guard.py`（来源检疫）、`skills_hub`（来源与安装）；DeerFlow `skills/`（projection 沙箱只读投射、security_scanner、mutations 审核修改）。取舍：技能不授予权限；发布需审核。
+借鉴：Hermes `skills_guard.py`（来源检疫）、`skills_hub`（来源与安装）；DeerFlow `skills/`（projection 沙箱只读投射、security_scanner、mutations 审核修改）；octop-harness `skills/catalog.py`（扫描技能目录）、`middleware/skill_filter.py`（智能体级禁用与按请求过滤）。取舍：技能不授予权限；发布需审核。
 
 - **定义**：版本化的 `SKILL.md` 加资源文件，描述工作流程、何时调用哪些工具、输出格式。**技能不授予任何权限**。
 - **版本**：SkillVersion 不可变，保存正文、资源、依赖（工具、MCP 工具、知识库）与内容哈希。草稿可改，发布生成新版本。
@@ -215,7 +215,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.7 MCP
 
-借鉴：WeKnora `approval/mcp_risk.go`（高风险 MCP 工具审批）；Octop `connectors/custom_mcp.py`（自定义 MCP 服务）、`mcp_tool_cache.py`（按用户缓存工具定义与指纹）、`connectors/oauth/`（连接器 OAuth）。
+借鉴：WeKnora `approval/mcp_risk.go`（高风险 MCP 工具审批）；Octop `connectors/custom_mcp.py`（自定义 MCP 服务）、`mcp_tool_cache.py`（按用户缓存工具定义与指纹）、`connectors/oauth/`（连接器 OAuth）；octop-harness `middleware/mcp_tools.py`（按请求过滤 MCP 工具）、`middleware/mcp_tool_error.py`（MCP 错误转为失败的工具结果）。
 
 - **客户端**：连接外部 MCP 服务，发现工具，按工具启用，不默认开放整个服务；凭据以引用保存。
 - **服务端**：平台对外暴露已授权工具，供 Codex、Claude 等 Runtime 调用。
@@ -224,7 +224,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.8 记忆
 
-借鉴：GenericAgent `memory/`（四层结构、SOP、写入约束）；Hermes `memory_tool.py`（冻结快照、用户画像）；DeerFlow `agents/memory/`（后端无关契约、prescreen 预筛、异步去抖）；TradingAgents `memory/log.py`（决策记录与事后回填）。
+借鉴：GenericAgent `memory/`（四层结构、SOP、写入约束）；Hermes `memory_tool.py`（冻结快照、用户画像）；DeerFlow `agents/memory/`（后端无关契约、prescreen 预筛、异步去抖）；TradingAgents `memory/log.py`（决策记录与事后回填）；octop-memory（L0 原始事件 → L1 候选 → L2 原子卡片 → L3 实体页 → L4 审计日志的分层；`pipeline/promotion/checks.py` 候选晋升前的五项检查、`pipeline/recall/` 召回路由、预算、注入前抑制与重排、`domain/retention.py` 按来源的保留规则）。
 
 实现位于独立包 `packages/memory`（规则）与 `nexus_platform.memory`（存储）。
 
@@ -253,7 +253,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.9 沙箱与执行环境
 
-借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）；Octop `infra/backend/`（工作区后端可插拔：本地、Docker、PostgreSQL、对象存储，与控制面数据库分离）。
+借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）；Octop `infra/backend/`（工作区后端可插拔：本地、Docker、PostgreSQL、对象存储，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。
 
 - **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端：`local`（仅开发模式，不能用于多用户）、`docker`（候选）、`ssh`（候选）。
 - **租约**：执行方持有租约，到期或任务结束后回收；超时与取消释放租约。
@@ -383,7 +383,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 ### 2.13 模型与凭据
 
-借鉴：自研为主；Octop `agents/providers/`（`presets.py` 供应商预设、`probe.py` 连通探测、`health.py` 健康与故障转移分类）、`crypto/sealed_repos.py`（秘密字段落库加密）。
+借鉴：自研为主；Octop `agents/providers/`（`presets.py` 供应商预设、`probe.py` 连通探测、`health.py` 健康与故障转移分类）、`crypto/sealed_repos.py`（秘密字段落库加密）；octop-harness `llm/factory.py`（由供应商与模型配置构建客户端）、`llm/http_timeout.py`（统一超时策略）、`usage.py`（跨供应商的用量归一）。
 
 - **配置**：供应商记录归属 Tenant；`owner_user_id` 非空时仅该用户可用，为空时为空间共享。每个供应商有多个 ModelProfile，修改产生不可变版本。
 - **协议**：`options.protocol` 必须显式设置（如 `openai_chat_completions`），不从供应商名称猜测。首个适配器使用锁定版本的 `openai` SDK 异步 Chat Completions 流；禁用 SDK 自动重试；工具执行后不重放整个回合。
@@ -397,7 +397,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 ### 2.14 渠道（connectors）
 
-借鉴：LobeHub 渠道适配器的组织方式（`chat-adapter-*`）；Octop `infra/gateway/`（多 IM 通道归一为同一处理链路，渠道内审批 `gateway/hitl/`，IM 桥接本体在 octop-gateway）。
+借鉴：LobeHub 渠道适配器的组织方式（`chat-adapter-*`）；Octop `infra/gateway/`（多 IM 通道归一为同一处理链路，渠道内审批 `gateway/hitl/`）；octop-gateway（`channel.py` 渠道抽象、`manager.py` 按会话合批、`constraints.py` 平台限制与限流、`push_routing.py` 主动推送路由、`channels/wecom.py`、`channels/feishu.py`、`channels/dingtalk.py`、`channels/telegram/delivery.py` 只在明确拒绝时重试、`channels/telegram/policy.py` 先准入再取媒体）。
 
 - 企业微信优先，随后微信、QQ。各渠道只做消息标准化与投递，不复制智能体循环。
 - 渠道身份映射到平台用户（`ChannelIdentity`），渠道会话映射到平台会话（`ChannelSessionBinding`）。
