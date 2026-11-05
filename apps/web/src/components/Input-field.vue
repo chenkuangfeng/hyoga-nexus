@@ -2809,7 +2809,7 @@ defineExpose({
 
 </script>
 <template>
-  <div class="answers-input" :class="{ 'is-embedded': embeddedMode, 'is-compact': compact }" @drop="onDrop" @dragover="onDragOver">
+  <div class="answers-input" :class="{ 'is-embedded': embeddedMode, 'is-inline': nexusMode, 'is-compact': compact }" @drop="onDrop" @dragover="onDragOver">
     <!-- Hidden file input for image upload -->
     <input ref="imageInputRef" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple
       style="display:none" @change="handleImageSelect" />
@@ -3186,6 +3186,16 @@ const getImgSrc = (url: string) => {
   display: flex;
   flex-direction: column;
   align-items: center;
+
+  /* Nexus 对话页把输入区放在 flex 列的底部（NexusChatPage 的 .nexus-chat__composer-wrap），
+     输入框须留在文档流中：绝对定位会让外层高度塌为 0，输入框压住消息区底部的内容。 */
+  &.is-inline {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    transform: none;
+    z-index: auto;
+  }
 
   &.is-embedded {
     position: relative;
