@@ -9025,7 +9025,8 @@ export default {
   },
   nexusChat: {
     placeholder: 'メッセージを入力（Enter で送信、Shift+Enter で改行）',
-    needAgent: '先にエージェントを選択してください'
+    needAgent: '先にエージェントを選択してください',
+    scrollToBottom: '一番下へ移動'
   },
   nativeRuns: {
     title: 'Native 実行',

@@ -9025,7 +9025,8 @@ export default {
   },
   nexusChat: {
     placeholder: 'Введите сообщение. Enter — отправить, Shift+Enter — новая строка',
-    needAgent: 'Сначала выберите агента'
+    needAgent: 'Сначала выберите агента',
+    scrollToBottom: 'Прокрутить вниз'
   },
   nativeRuns: {
     title: 'Native-запуски',

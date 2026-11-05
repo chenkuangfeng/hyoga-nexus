@@ -9007,7 +9007,8 @@ export default {
   },
   nexusChat: {
     placeholder: '输入消息，按 Enter 发送，Shift+Enter 换行',
-    needAgent: '请先选择智能体'
+    needAgent: '请先选择智能体',
+    scrollToBottom: '回到底部'
   },
   nativeRuns: {
     title: 'Native 运行',

@@ -9014,7 +9014,8 @@ export default {
   },
   nexusChat: {
     placeholder: 'Type a message. Enter to send, Shift+Enter for a new line',
-    needAgent: 'Choose an agent first'
+    needAgent: 'Choose an agent first',
+    scrollToBottom: 'Scroll to bottom'
   },
   nativeRuns: {
     title: 'Native runs',

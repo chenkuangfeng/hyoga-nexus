@@ -7,12 +7,39 @@
   -->
   <div class="nexus-chat" :class="{ 'is-welcome': isWelcome, 'is-compact': compact }">
     <header v-if="!isWelcome" class="nexus-chat__header">
-      <t-tag v-if="run" :theme="statusTheme" variant="light" data-testid="chat-run-status">{{ statusLabel }}</t-tag>
+      <!-- 与 WeKnora ChatHeader 的标题样式一致；平台暂无改名、置顶与删除接口，不提供菜单。 -->
+      <div class="chat-header">
+        <h1 class="chat-header__title" :title="sessionTitle">
+          <span class="chat-header__title-text" data-testid="chat-title">{{ sessionTitle }}</span>
+        </h1>
+      </div>
+      <t-tag v-if="run" :theme="statusTheme" variant="light" class="nexus-chat__status" data-testid="chat-run-status">{{ statusLabel }}</t-tag>
     </header>
 
-    <div class="nexus-chat__scroll" ref="scrollRef">
+    <div class="nexus-chat__scroll" ref="scrollRef" @scroll="handleScroll">
       <div class="nexus-chat__column">
-        <t-loading :loading="loading" size="small">
+        <!-- 欢迎态：与 WeKnora creatChat 一致，标题与输入框一起垂直居中。 -->
+        <div v-if="isWelcome && !compact" class="dialogue-title" data-testid="chat-welcome-title">
+          <span>{{ $t('createChat.title') }}</span>
+        </div>
+
+        <!-- 与 WeKnora 对话页一致：首次加载历史时显示消息骨架屏。 -->
+        <div v-if="loading && messages.length === 0" class="msg-skeleton-list" data-testid="chat-skeleton">
+          <div class="msg-skeleton msg-skeleton-user">
+            <t-skeleton animation="gradient" :row-col="[{ width: '45%', height: '36px', type: 'rect' }]" />
+          </div>
+          <div class="msg-skeleton msg-skeleton-bot">
+            <t-skeleton animation="gradient"
+              :row-col="[{ width: '80%', height: '16px' }, { width: '100%', height: '16px' }, { width: '60%', height: '16px' }]" />
+          </div>
+          <div class="msg-skeleton msg-skeleton-user">
+            <t-skeleton animation="gradient" :row-col="[{ width: '35%', height: '36px', type: 'rect' }]" />
+          </div>
+          <div class="msg-skeleton msg-skeleton-bot">
+            <t-skeleton animation="gradient" :row-col="[{ width: '70%', height: '16px' }, { width: '90%', height: '16px' }]" />
+          </div>
+        </div>
+        <div class="nexus-chat__body">
           <NativeWatchdogBanner v-if="showWatchdogBanner(run)" class="nexus-chat__banner"
             :can-hint="canSteer(run)" :busy="busy" @acknowledge="acknowledge" @cancel="cancelRun" @hint="sendHint" />
 
@@ -21,23 +48,41 @@
             class="nexus-chat__alert" />
 
           <section v-if="!isWelcome" class="nexus-chat__transcript" aria-live="polite" data-testid="chat-transcript">
-            <template v-for="message in messages" :key="message.id">
-              <div v-if="message.role === 'user'" class="nexus-chat__turn is-user">
-                <div class="nexus-chat__bubble">{{ message.content }}</div>
+            <template v-for="(message, index) in messages" :key="message.id">
+              <MessageTimestamp v-if="shouldShowConversationTimestamp(messages, index)" :value="message.created_at" />
+              <!-- 用户消息直接复用 WeKnora 的 usermsg（气泡、发送时间与复制）；平台暂无分叉与回滚。 -->
+              <div v-if="message.role === 'user'" class="nexus-chat__turn is-user" :data-message-id="message.id">
+                <usermsg :content="message.content" :message-id="message.id" :created-at="message.created_at"
+                  :session-id="activeSessionId" />
               </div>
-              <div v-else class="nexus-chat__turn is-assistant">
-                <div class="nexus-chat__markdown" v-html="renderMarkdown(message.content, false)" />
+              <div v-else class="nexus-chat__turn is-assistant" :data-message-id="message.id">
+                <div class="bot_msg">
+                  <div class="nexus-chat__markdown" v-html="renderMarkdown(message.content, false)" />
+                  <!-- 与 WeKnora botmsg 的 answer-toolbar 一致，悬停时显示；目前只提供复制。 -->
+                  <div v-if="message.content" class="answer-toolbar">
+                    <t-button size="small" variant="outline" shape="round" :title="$t('agent.copy')"
+                      :aria-label="$t('agent.copy')" data-testid="chat-copy-answer" @click.stop="copyAnswer(message.content)">
+                      <ChatActionIcon name="copy" />
+                    </t-button>
+                  </div>
+                </div>
               </div>
             </template>
 
             <!-- 本页提交、尚未写入持久化消息的用户输入：在 Run 结束并重新加载消息前先显示。 -->
             <div v-for="(text, index) in pendingUsers" :key="`pending-${index}`" class="nexus-chat__turn is-user">
-              <div class="nexus-chat__bubble">{{ text }}</div>
+              <usermsg :content="text" />
             </div>
 
             <!-- 当前运行：WeKnora 的智能体时间线组件，输入由 toAgentEventStream 从 Run 事件映射而来。 -->
             <div v-if="liveSession" class="nexus-chat__turn is-assistant is-live" data-testid="chat-live-stream">
               <AgentStreamDisplay class="nexus-chat__stream" :session="liveSession" />
+            </div>
+
+            <!-- 与 WeKnora 一致：已提交但尚无流式内容时显示等待指示。 -->
+            <div v-if="showGlobalWait" class="chat-global-wait" role="status" :aria-label="$t('chat.thinkingAlt')"
+              data-testid="chat-global-wait">
+              <span class="chat-global-wait__spinner" aria-hidden="true"></span>
             </div>
 
             <p v-if="failureText" class="nexus-chat__status-line is-failure" role="status" data-testid="chat-failure">
@@ -65,13 +110,19 @@
               </t-button>
             </form>
           </section>
-        </t-loading>
+        </div>
       </div>
     </div>
 
     <div class="nexus-chat__composer-wrap">
       <!-- 输入区复用 WeKnora 的 Input-field，nexus-mode 下只保留文本、发送、追加指令与停止。 -->
       <div class="input-container" :class="{ 'is-compact': compact }">
+        <transition name="scroll-btn-fade">
+          <button v-show="userHasScrolledUp && !isWelcome" type="button" class="scroll-to-bottom-btn"
+            :aria-label="$t('nexusChat.scrollToBottom')" data-testid="chat-scroll-bottom" @click="scrollToBottom(true)">
+            <t-icon name="chevron-down" size="18px" />
+          </button>
+        </transition>
         <InputField nexus-mode class="nexus-chat__input" data-testid="chat-composer" :auto-focus="isWelcome"
           :is-replying="isReplying" :can-steer="canSteer(run)"
           @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
@@ -96,6 +147,7 @@ import {
   createSession as createSessionApi,
   getConversation,
   listAgents,
+  listSessions,
   type AgentView,
   type ConversationMessage,
 } from '@/api/native-runs'
@@ -116,6 +168,11 @@ import InputField from '@/components/Input-field.vue'
 import { toAgentEventStream } from '@/utils/nexusAgentEvents'
 import { safeMarkdownToHTML, sanitizeMarkdownHTML } from '@/utils/security'
 import { deriveSessionTitle } from '@/utils/nexusChatTitle'
+import usermsg from '@/views/chat/components/usermsg.vue'
+import MessageTimestamp from '@/components/chat/MessageTimestamp.vue'
+import ChatActionIcon from '@/components/ChatActionIcon.vue'
+import { shouldShowConversationTimestamp } from '@/utils/messageTimestamp'
+import { copyWithToast } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -150,6 +207,12 @@ const agents = ref<AgentView[]>([])
 const selectedAgent = ref<string | undefined>(undefined)
 const scrollRef = ref<HTMLElement>()
 const pendingUsers = ref<string[]>([])
+/** 当前会话的标题；平台会话没有单独的读取接口，从会话列表中取。 */
+const sessionTitleText = ref('')
+/** 用户向上滚动离开底部后为 true：此时新内容不再自动滚动，并显示「回到底部」按钮（同 WeKnora）。 */
+const userHasScrolledUp = ref(false)
+/** 距底部小于该像素数视为仍在底部。 */
+const BOTTOM_THRESHOLD = 80
 /** 欢迎页创建的会话 ID。路由切换到它时不再重新加载，避免覆盖刚开始的 Run 状态。 */
 let createdSessionId = ''
 
@@ -174,6 +237,15 @@ const liveSession = computed(() => {
     agentEventStream: toAgentEventStream(events, current.status),
     knowledge_references: [],
   }
+})
+
+const sessionTitle = computed(() => sessionTitleText.value || t('createChat.newSessionTitle'))
+
+/** 已提交、但还没有任何流式事件时显示等待指示（WeKnora 的 showGlobalTypingIndicator）。 */
+const showGlobalWait = computed(() => {
+  const current = run.value
+  if (!current || !isActive(current)) return false
+  return native.state.value.events.length === 0
 })
 
 const agentOptions = computed(() => agents.value.map(agent => ({
@@ -244,6 +316,18 @@ async function loadAgents() {
   }
 }
 
+/** 读取会话标题；失败时沿用默认标题，不影响对话。 */
+async function loadSessionTitle(id: string) {
+  const tenant = tenantId.value
+  if (!tenant || !id) return
+  try {
+    const found = (await listSessions(tenant)).find(item => item.id === id)
+    if (activeSessionId.value === id) sessionTitleText.value = found?.title || ''
+  } catch {
+    /* 保留默认标题 */
+  }
+}
+
 async function openSession() {
   errorText.value = ''
   if (!tenantId.value) {
@@ -251,6 +335,8 @@ async function openSession() {
     return
   }
   loading.value = true
+  userHasScrolledUp.value = false
+  void loadSessionTitle(activeSessionId.value)
   try {
     messages.value = await native.loadSession(activeSessionId.value)
   } catch (error) {
@@ -279,6 +365,7 @@ async function sendText(text: string) {
       }
       const session = await createSessionApi(tenantId.value, selectedAgent.value, deriveSessionTitle(text))
       createdSessionId = session.id
+      sessionTitleText.value = session.title
       pendingUsers.value = [text]
       await native.send(session.id, text)
       emit('session-created', session.id)
@@ -330,21 +417,47 @@ watch(() => run.value?.status, (status, previous) => {
   }
 })
 
-// 新消息或流式文本增长时保持滚动到底部。
+function scrollToBottom(smooth = false) {
+  const el = scrollRef.value
+  if (!el) return
+  el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  userHasScrolledUp.value = false
+}
+
+function handleScroll() {
+  const el = scrollRef.value
+  if (!el) return
+  userHasScrolledUp.value = el.scrollHeight - el.scrollTop - el.clientHeight > BOTTOM_THRESHOLD
+}
+
+function copyAnswer(content: string) {
+  void copyWithToast(content, 'common.copySuccess', 'common.copyFailed')
+}
+
+// 新消息或流式文本增长时保持在底部；用户已向上滚动阅读时不打断（同 WeKnora）。
 watch(
   () => [messages.value.length, pendingUsers.value.length, native.state.value.events.length],
   async () => {
+    if (userHasScrolledUp.value) return
     await nextTick()
-    const el = scrollRef.value
-    if (el) el.scrollTop = el.scrollHeight
+    scrollToBottom()
   },
 )
+
+// 用户发送新消息时总是回到底部。
+watch(() => pendingUsers.value.length, async (length, previous) => {
+  if (length > (previous ?? 0)) {
+    await nextTick()
+    scrollToBottom()
+  }
+})
 
 watch(activeSessionId, (id) => {
   // 欢迎页刚创建的会话：Run 已在进行中，保留其流式状态，不做 dispose 与重新加载。
   if (id && String(id) === createdSessionId) return
   native.dispose()
   pendingUsers.value = []
+  sessionTitleText.value = ''
   if (!id) {
     messages.value = []
     errorText.value = ''
@@ -371,6 +484,8 @@ defineExpose({ sendText })
 
 <style lang="less" scoped>
 @import '../../components/css/chat-scrollbar.less';
+// 回答下方工具栏（answer-toolbar）与 WeKnora botmsg 共用。
+@import '../../components/css/chat-message-shared.less';
 .nexus-chat {
   /* 与 WeKnora 对话页 .chat 一致：整列居中，最窄 400px，由父级控制宽度 */
   --chat-content-inset: 20px;
@@ -446,21 +561,6 @@ defineExpose({ sendText })
   }
 }
 
-.nexus-chat__bubble {
-  /* 与 WeKnora usermsg 的 .user_msg 一致 */
-  width: max-content;
-  max-width: min(76%, 820px);
-  padding: 8px 12px;
-  border-radius: var(--app-radius-md);
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-text-color-primary);
-  font-size: var(--app-text-xl);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  box-sizing: border-box;
-}
 
 
 .nexus-chat__markdown {
@@ -586,6 +686,171 @@ defineExpose({ sendText })
 
   .nexus-chat__agent {
     width: 160px;
+  }
+}
+
+/* ---- 以下按 WeKnora 对话页样式复制（views/chat/index.vue、creatChat.vue、ChatHeader.vue） ---- */
+
+/* 欢迎态：标题与输入框一起垂直居中（WeKnora .dialogue-wrap / .dialogue-answers）。 */
+.nexus-chat.is-welcome:not(.is-compact) {
+  justify-content: center;
+
+  .nexus-chat__scroll {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .nexus-chat__column {
+    align-items: center;
+    gap: 24px;
+  }
+
+  .nexus-chat__composer-wrap {
+    padding-top: 24px;
+  }
+}
+
+.dialogue-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--td-text-color-primary);
+  font-family: var(--app-font-family);
+  font-size: var(--app-text-4xl);
+  font-weight: 600;
+  text-align: center;
+}
+
+.nexus-chat__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 顶栏标题（WeKnora ChatHeader）。 */
+.chat-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: min(520px, calc(100% - 120px));
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.chat-header__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  line-height: 20px;
+  cursor: default;
+}
+
+.chat-header__title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexus-chat__status {
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.bot_msg {
+  width: 100%;
+  min-width: 0;
+}
+
+.msg-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 960px;
+  padding: 16px 0;
+}
+
+.msg-skeleton-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg-skeleton-bot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+.scroll-to-bottom-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(100% + 8px);
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--td-text-color-secondary);
+  transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease;
+
+  &:hover {
+    background: var(--td-bg-color-container-hover);
+    color: var(--td-text-color-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    transform: translateX(-50%) scale(0.92);
+  }
+}
+
+.scroll-btn-fade-enter-active,
+.scroll-btn-fade-leave-active {
+  transition: opacity var(--app-motion-base) ease, transform var(--app-motion-base) ease;
+}
+
+.scroll-btn-fade-enter-from,
+.scroll-btn-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+}
+
+.chat-global-wait {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding-left: 4px;
+}
+
+.chat-global-wait__spinner {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--td-component-stroke);
+  border-top-color: var(--td-text-color-secondary);
+  border-radius: var(--app-radius-pill);
+  animation: wk-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-global-wait__spinner {
+    animation: none;
   }
 }
 </style>

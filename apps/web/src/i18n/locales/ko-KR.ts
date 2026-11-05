@@ -9025,7 +9025,8 @@ export default {
   },
   nexusChat: {
     placeholder: '메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)',
-    needAgent: '먼저 에이전트를 선택하세요'
+    needAgent: '먼저 에이전트를 선택하세요',
+    scrollToBottom: '맨 아래로 이동'
   },
   nativeRuns: {
     title: 'Native 실행',
