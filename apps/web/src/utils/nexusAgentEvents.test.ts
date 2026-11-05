@@ -63,7 +63,33 @@ test('a terminal run closes the open answer; cancellation appends stop', () => {
   assert.equal(cancelled[cancelled.length - 1].type, 'stop')
 })
 
-test('progress and input events are not part of the timeline', () => {
+test('progress events and malformed prompts are not part of the timeline', () => {
   const stream = toAgentEventStream([ev('tool.progress', { invocation_id: 'c1' }), ev('input.requested', {})], 'waiting_input')
   assert.deepEqual(stream, [])
+})
+
+test('an input request becomes an ask_user card resolved by input.received', () => {
+  const open = toAgentEventStream([ev('input.requested', { input_request_id: 'q1', question: 'Which?', candidates: ['A', 'B'] })], 'waiting_input')
+  assert.deepEqual(open, [{ type: 'agent_prompt_required', kind: 'ask_user', pending_id: 'q1',
+    request: { question: 'Which?', options: ['A', 'B'], allow_free_text: true }, resolved: false }])
+  const answered = toAgentEventStream([ev('input.requested', { input_request_id: 'q1', question: 'Which?' }),
+    ev('input.received', { input_request_id: 'q1' })], 'running')
+  assert.equal((answered[0] as { answered?: boolean }).answered, true)
+})
+
+test('an approval becomes a tool_approval_required card with arguments from the approvals API', () => {
+  const args = new Map([['a1', { path: '/tmp/x' }]])
+  const stream = toAgentEventStream([ev('approval.requested', { approval_id: 'a1', tool_name: 'run_skill_script' })],
+    'waiting_approval', { approvalArgs: args })
+  assert.equal(stream[0].type, 'tool_approval_required')
+  assert.equal((stream[0] as { mcp_tool_name: string }).mcp_tool_name, 'run_skill_script')
+  assert.match((stream[0] as { args_json: string }).args_json, /\/tmp\/x/)
+  const resolved = toAgentEventStream([ev('approval.requested', { approval_id: 'a1', tool_name: 't' }),
+    ev('approval.resolved', { approval_id: 'a1', approved: false })], 'running')
+  assert.equal((resolved[0] as { resolved: boolean; approved?: boolean }).approved, false)
+})
+
+test('cards still open when the run ends are shown as canceled', () => {
+  const stream = toAgentEventStream([ev('approval.requested', { approval_id: 'a1', tool_name: 't' })], 'cancelled')
+  assert.equal((stream[0] as { canceled?: boolean }).canceled, true)
 })

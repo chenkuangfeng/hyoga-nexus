@@ -188,6 +188,15 @@ export function useNativeRun(getTenantId: () => string | null) {
     startFollowing(tenantId, run.id)
   }
 
+  /** Refresh the Run and follow it again, after an out-of-band action (an approval) requeued it. */
+  async function resume(): Promise<void> {
+    const run = state.value.run
+    if (!run) return
+    const tenantId = requireTenant()
+    await refreshRun(tenantId, run.id)
+    startFollowing(tenantId, run.id)
+  }
+
   function dispose() {
     stopStream()
   }
@@ -203,6 +212,7 @@ export function useNativeRun(getTenantId: () => string | null) {
     cancel,
     steer,
     answerInput,
+    resume,
     dispose,
   }
 }

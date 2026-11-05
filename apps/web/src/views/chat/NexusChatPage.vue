@@ -1,133 +1,43 @@
 <template>
   <!--
-    对话页（主聊天路由：/platform/creatChat 与 /platform/chat/:chatid）。
-    布局参照 WeKnora 对话页：居中的欢迎区 / 居中的消息流，底部圆角输入框，
-    用户消息为右侧气泡，助手消息为左侧 Markdown 正文，工具调用以过程条展示。
-    数据全部来自平台 Native API（会话、Run、事件），见 openspec/changes/2026-11-04-weknora-chat-dialog。
+    Platform chat page (/platform/creatChat and /platform/chat/:chatid, and the assistant panel in compact mode).
+    Structure, components and styles copy WeKnora `views/chat/index.vue` (conversation) and
+    `views/creatChat/creatChat.vue` (welcome). Data comes only from the platform Native API.
+    Entries without a platform backend stay visible and show "not available yet"
+    (openspec 2026-11-04-weknora-chat-dialog, scope change 2026-11-05).
   -->
-  <div class="nexus-chat" :class="{ 'is-welcome': isWelcome, 'is-compact': compact }">
-    <header v-if="!isWelcome" class="nexus-chat__header">
-      <!-- 与 WeKnora ChatHeader 的标题样式一致；平台暂无改名、置顶与删除接口，不提供菜单。 -->
-      <div class="chat-header">
-        <h1 class="chat-header__title" :title="sessionTitle">
-          <span class="chat-header__title-text" data-testid="chat-title">{{ sessionTitle }}</span>
-        </h1>
+
+  <!-- Welcome (WeKnora creatChat): title, suggested questions, composer, centred together. -->
+  <div v-if="isWelcome && !compact" class="dialogue-wrap" data-testid="chat-welcome">
+    <div class="dialogue-answers">
+      <div class="dialogue-title">
+        <span data-testid="chat-welcome-title">{{ $t('createChat.title') }}</span>
       </div>
-      <t-tag v-if="run" :theme="statusTheme" variant="light" class="nexus-chat__status" data-testid="chat-run-status">{{ statusLabel }}</t-tag>
-    </header>
-
-    <div class="nexus-chat__scroll" ref="scrollRef" @scroll="handleScroll">
-      <div class="nexus-chat__column">
-        <!-- 欢迎态：与 WeKnora creatChat 一致，标题与输入框一起垂直居中。 -->
-        <div v-if="isWelcome && !compact" class="dialogue-title" data-testid="chat-welcome-title">
-          <span>{{ $t('createChat.title') }}</span>
-        </div>
-
-        <!-- 与 WeKnora 对话页一致：首次加载历史时显示消息骨架屏。 -->
-        <div v-if="loading && messages.length === 0" class="msg-skeleton-list" data-testid="chat-skeleton">
-          <div class="msg-skeleton msg-skeleton-user">
-            <t-skeleton animation="gradient" :row-col="[{ width: '45%', height: '36px', type: 'rect' }]" />
-          </div>
-          <div class="msg-skeleton msg-skeleton-bot">
-            <t-skeleton animation="gradient"
-              :row-col="[{ width: '80%', height: '16px' }, { width: '100%', height: '16px' }, { width: '60%', height: '16px' }]" />
-          </div>
-          <div class="msg-skeleton msg-skeleton-user">
-            <t-skeleton animation="gradient" :row-col="[{ width: '35%', height: '36px', type: 'rect' }]" />
-          </div>
-          <div class="msg-skeleton msg-skeleton-bot">
-            <t-skeleton animation="gradient" :row-col="[{ width: '70%', height: '16px' }, { width: '90%', height: '16px' }]" />
-          </div>
-        </div>
-        <div class="nexus-chat__body">
-          <NativeWatchdogBanner v-if="showWatchdogBanner(run)" class="nexus-chat__banner"
-            :can-hint="canSteer(run)" :busy="busy" @acknowledge="acknowledge" @cancel="cancelRun" @hint="sendHint" />
-
-          <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat__alert" />
-          <t-alert v-if="streamError" theme="warning" :message="$t('nativeRuns.streamError', { message: streamError })"
-            class="nexus-chat__alert" />
-
-          <section v-if="!isWelcome" class="nexus-chat__transcript" aria-live="polite" data-testid="chat-transcript">
-            <template v-for="(message, index) in messages" :key="message.id">
-              <MessageTimestamp v-if="shouldShowConversationTimestamp(messages, index)" :value="message.created_at" />
-              <!-- 用户消息直接复用 WeKnora 的 usermsg（气泡、发送时间与复制）；平台暂无分叉与回滚。 -->
-              <div v-if="message.role === 'user'" class="nexus-chat__turn is-user" :data-message-id="message.id">
-                <usermsg :content="message.content" :message-id="message.id" :created-at="message.created_at"
-                  :session-id="activeSessionId" />
-              </div>
-              <div v-else class="nexus-chat__turn is-assistant" :data-message-id="message.id">
-                <div class="bot_msg">
-                  <div class="nexus-chat__markdown" v-html="renderMarkdown(message.content, false)" />
-                  <!-- 与 WeKnora botmsg 的 answer-toolbar 一致，悬停时显示；目前只提供复制。 -->
-                  <div v-if="message.content" class="answer-toolbar">
-                    <t-button size="small" variant="outline" shape="round" :title="$t('agent.copy')"
-                      :aria-label="$t('agent.copy')" data-testid="chat-copy-answer" @click.stop="copyAnswer(message.content)">
-                      <ChatActionIcon name="copy" />
-                    </t-button>
-                  </div>
-                </div>
-              </div>
-            </template>
-
-            <!-- 本页提交、尚未写入持久化消息的用户输入：在 Run 结束并重新加载消息前先显示。 -->
-            <div v-for="(text, index) in pendingUsers" :key="`pending-${index}`" class="nexus-chat__turn is-user">
-              <usermsg :content="text" />
-            </div>
-
-            <!-- 当前运行：WeKnora 的智能体时间线组件，输入由 toAgentEventStream 从 Run 事件映射而来。 -->
-            <div v-if="liveSession" class="nexus-chat__turn is-assistant is-live" data-testid="chat-live-stream">
-              <AgentStreamDisplay class="nexus-chat__stream" :session="liveSession" />
-            </div>
-
-            <!-- 与 WeKnora 一致：已提交但尚无流式内容时显示等待指示。 -->
-            <div v-if="showGlobalWait" class="chat-global-wait" role="status" :aria-label="$t('chat.thinkingAlt')"
-              data-testid="chat-global-wait">
-              <span class="chat-global-wait__spinner" aria-hidden="true"></span>
-            </div>
-
-            <p v-if="failureText" class="nexus-chat__status-line is-failure" role="status" data-testid="chat-failure">
-              {{ failureText }}
+      <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat-alert" />
+      <div class="suggested-questions-container has-questions">
+        <div class="suggested-questions-inner">
+          <div class="suggested-questions-title-row">
+            <p class="suggested-questions-caption">
+              <span class="suggested-questions-title">{{ $t('chat.suggestedQuestions') }}</span>
+              <button type="button" class="suggested-questions-refresh" :title="$t('chat.refreshSuggestedQuestions')"
+                :aria-label="$t('chat.refreshSuggestedQuestions')" @click="planned('suggestedQuestions')">
+                <t-icon name="refresh" />
+              </button>
             </p>
-            <p v-if="run?.status === 'queued' && run.queue_position" class="nexus-chat__status-line" data-testid="chat-queued">
-              {{ $t('nativeRuns.queued', { count: run.queue_position - 1 }) }}
-            </p>
-          </section>
-
-          <section v-if="needsInput(run) && pendingInput" class="nexus-chat__input-request" data-testid="chat-input-request">
-            <h3 class="nexus-chat__input-title">{{ $t('nativeRuns.input.title') }}</h3>
-            <p class="nexus-chat__input-question">{{ pendingInput.question }}</p>
-            <div v-if="pendingInput.candidates.length > 0" class="nexus-chat__candidates">
-              <t-button v-for="candidate in pendingInput.candidates" :key="candidate" variant="outline" size="small"
-                :disabled="busy" @click="answer(candidate)">
-                {{ candidate }}
-              </t-button>
+          </div>
+          <div class="suggested-questions-grid">
+            <div class="suggested-question-card sq-card-visible" data-testid="chat-planned-suggestions"
+              @click="planned('suggestedQuestions')">
+              <span class="suggested-question-text">{{ $t('nexusChat.suggestionsPlanned') }}</span>
             </div>
-            <form class="nexus-chat__input-form" @submit.prevent="answer(answerText.trim())">
-              <t-input v-model="answerText" :placeholder="$t('nativeRuns.input.placeholder')" :maxlength="100000"
-                :disabled="busy" />
-              <t-button type="submit" theme="primary" :disabled="busy || !answerText.trim()">
-                {{ $t('nativeRuns.input.submit') }}
-              </t-button>
-            </form>
-          </section>
+          </div>
         </div>
       </div>
-    </div>
-
-    <div class="nexus-chat__composer-wrap">
-      <!-- 输入区复用 WeKnora 的 Input-field，nexus-mode 下只保留文本、发送、追加指令与停止。 -->
-      <div class="input-container" :class="{ 'is-compact': compact }">
-        <transition name="scroll-btn-fade">
-          <button v-show="userHasScrolledUp && !isWelcome" type="button" class="scroll-to-bottom-btn"
-            :aria-label="$t('nexusChat.scrollToBottom')" data-testid="chat-scroll-bottom" @click="scrollToBottom(true)">
-            <t-icon name="chevron-down" size="18px" />
-          </button>
-        </transition>
-        <InputField nexus-mode class="nexus-chat__input" data-testid="chat-composer" :auto-focus="isWelcome"
-          :is-replying="isReplying" :can-steer="canSteer(run)"
-          @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
+      <div class="create-chat-composer">
+        <InputField nexus-mode data-testid="chat-composer" :auto-focus="true" :is-replying="false" :can-steer="false"
+          @send-msg="onSendMsg">
           <template #controls>
-            <t-select v-if="isWelcome && allowAgentSelect" v-model="selectedAgent" size="small" class="nexus-chat__agent"
+            <t-select v-if="allowAgentSelect" v-model="selectedAgent" size="small" class="nexus-chat__agent"
               :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
               :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
           </template>
@@ -135,10 +45,121 @@
       </div>
     </div>
   </div>
+
+  <!-- Conversation (WeKnora views/chat/index.vue). -->
+  <div v-else class="chat" :class="{ 'is-embedded': compact }">
+    <div v-if="!compact" class="chat-topbar">
+      <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
+      <t-tag v-if="run" :theme="statusTheme" variant="light" class="nexus-chat-status" data-testid="chat-run-status">
+        {{ statusLabel }}
+      </t-tag>
+      <div class="sandbox-header-toggle">
+        <t-tooltip placement="bottom">
+          <template #content>{{ $t('chatHeader.toggleSandboxPanel') }}</template>
+          <button type="button" class="sandbox-header-toggle__btn" :aria-label="$t('chatHeader.toggleSandboxPanel')"
+            data-testid="chat-planned-sandbox" @click="planned('sandboxPanel')">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor" stroke-width="1.2" />
+              <line x1="12.5" y1="1.5" x2="12.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
+              <line x1="16" y1="7.5" x2="16" y2="12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </t-tooltip>
+      </div>
+    </div>
+    <div class="chat_thread" :style="{ '--chat-composer-height': `${composerHeight}px`, '--chat-scrollbar-gutter': `${scrollbarGutter}px` }">
+      <div ref="scrollContainer" class="chat_scroll_box" @scroll="handleScroll">
+        <div class="chat_scroll_content">
+          <div class="msg_list" :class="{ 'is-embedded': compact }" data-testid="chat-transcript" aria-live="polite">
+            <!-- Nexus extensions: run watchdog and request errors. -->
+            <NativeWatchdogBanner v-if="showWatchdogBanner(run)" :can-hint="canSteer(run)" :busy="busy"
+              @acknowledge="acknowledge" @cancel="cancelRun" @hint="sendHint" />
+            <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat-alert" />
+            <t-alert v-if="streamError" theme="warning" :message="$t('nativeRuns.streamError', { message: streamError })"
+              class="nexus-chat-alert" />
+
+            <div v-if="loading && rows.length === 0" class="msg-skeleton-list" data-testid="chat-skeleton">
+              <div class="msg-skeleton msg-skeleton-user">
+                <t-skeleton animation="gradient" :row-col="[{ width: '45%', height: '36px', type: 'rect' }]" />
+              </div>
+              <div class="msg-skeleton msg-skeleton-bot">
+                <t-skeleton animation="gradient"
+                  :row-col="[{ width: '80%', height: '16px' }, { width: '100%', height: '16px' }, { width: '60%', height: '16px' }]" />
+              </div>
+              <div class="msg-skeleton msg-skeleton-user">
+                <t-skeleton animation="gradient" :row-col="[{ width: '35%', height: '36px', type: 'rect' }]" />
+              </div>
+              <div class="msg-skeleton msg-skeleton-bot">
+                <t-skeleton animation="gradient" :row-col="[{ width: '70%', height: '16px' }, { width: '90%', height: '16px' }]" />
+              </div>
+            </div>
+
+            <div v-for="(row, index) in rows" :key="row.id" class="msg-item-wrapper">
+              <MessageTimestamp v-if="shouldShowConversationTimestamp(rows, index)" :value="row.created_at" />
+              <div v-if="row.role === 'user'" class="message-row" :data-message-id="row.id">
+                <usermsg :content="row.content" :session-id="activeSessionId" :message-id="row.id"
+                  :created-at="row.created_at" :embedded-mode="compact" :can-fork="!compact" :can-rewind="!compact"
+                  @fork="planned('fork')" @rewind="planned('rewind')" />
+              </div>
+              <div v-else class="message-row" :data-message-id="row.id">
+                <botmsg :content="row.content" :session="row" :session-id="activeSessionId" :user-query="userQueryBefore(index)"
+                  :is-first-enter="isFirstEnter" :embedded-mode="compact" :can-fork="!compact" :can-rewind="!compact"
+                  :can-ask-assistant="!compact" @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
+                  @rewind="planned('rewind')" @ask-assistant="planned('askAssistant')" />
+              </div>
+            </div>
+
+            <div v-if="showGlobalWait" class="chat-global-wait" role="status" :aria-label="$t('chat.thinkingAlt')"
+              data-testid="chat-global-wait">
+              <span class="chat-global-wait__spinner" aria-hidden="true"></span>
+            </div>
+            <p v-if="failureText" class="nexus-chat-status-line is-failure" role="status" data-testid="chat-failure">
+              {{ failureText }}
+            </p>
+            <p v-if="run?.status === 'queued' && run.queue_position" class="nexus-chat-status-line" data-testid="chat-queued">
+              {{ $t('nativeRuns.queued', { count: run.queue_position - 1 }) }}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div ref="composerElement" class="chat_composer">
+        <div class="input-container" :class="{ 'is-embedded': compact }">
+          <transition name="scroll-btn-fade">
+            <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" role="button" tabindex="0"
+              :aria-label="$t('nexusChat.scrollToBottom')" data-testid="chat-scroll-bottom"
+              @click="scrollToBottom(true)" @keydown.enter="scrollToBottom(true)">
+              <t-icon name="chevron-down" size="18px" />
+            </div>
+          </transition>
+          <PendingPromptDock :embedded-mode="compact" />
+          <InputField nexus-mode compact data-testid="chat-composer" :auto-focus="isWelcome" :is-replying="isReplying"
+            :can-steer="canSteer(run)" :embedded-mode="compact"
+            @send-msg="onSendMsg" @steer-msg="onSteerMsg" @stop-generation="cancelRun">
+            <template #controls>
+              <t-select v-if="isWelcome && allowAgentSelect" v-model="selectedAgent" size="small" class="nexus-chat__agent"
+                :placeholder="$t('nativeRuns.agentPlaceholder')" :loading="loadingAgents" :options="agentOptions"
+                :disabled="agentOptions.length === 0" data-testid="chat-agent-select" />
+            </template>
+          </InputField>
+        </div>
+      </div>
+      <div v-if="!compact" class="chat_overlays">
+        <ChatQuestionMinimap :scroll-container="scrollContainer" :messages="rows" @jump="jumpToQuestion" />
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+/**
+ * Conversation core. The session comes from the parent as `sessionId`; empty means the welcome state.
+ * Sending from the welcome state creates the session first and emits `session-created`.
+ *
+ * Rows are rebuilt from persisted messages plus each Run's events (`buildChatRows`), so finished answers
+ * show the same agent timeline as the live one. Approvals and questions use WeKnora's cards through
+ * `provideNexusChatActions`; entries without a platform backend call `planned()`.
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -147,50 +168,50 @@ import {
   createSession as createSessionApi,
   getConversation,
   listAgents,
+  listPendingApprovals,
+  listRunEvents,
   listSessions,
+  resolveApproval,
   type AgentView,
   type ConversationMessage,
+  type RunEvent,
 } from '@/api/native-runs'
 import { useNativeRun } from '@/composables/useNativeRun'
+import { provideNexusChatActions } from '@/composables/nexusChatActions'
+import { providePromptDock } from '@/composables/usePromptDock'
 import NativeWatchdogBanner from '@/views/native/NativeWatchdogBanner.vue'
-import {
-  canCancel,
-  canSteer,
-  failureCode,
-  isActive,
-  isTerminal,
-  needsInput,
-  showWatchdogBanner,
-} from '@/views/native/nativeRunState'
-import { configureMarkedForChatMarkdown, createChatMarkdownRenderer, renderChatMarkdown } from '@/utils/chatMarkdownRenderer'
-import AgentStreamDisplay from '@/views/chat/components/AgentStreamDisplay.vue'
+import { canSteer, failureCode, isActive, isTerminal, showWatchdogBanner } from '@/views/native/nativeRunState'
 import InputField from '@/components/Input-field.vue'
-import { toAgentEventStream } from '@/utils/nexusAgentEvents'
-import { safeMarkdownToHTML, sanitizeMarkdownHTML } from '@/utils/security'
-import { deriveSessionTitle } from '@/utils/nexusChatTitle'
-import usermsg from '@/views/chat/components/usermsg.vue'
+import NexusChatHeader from '@/components/NexusChatHeader.vue'
 import MessageTimestamp from '@/components/chat/MessageTimestamp.vue'
-import ChatActionIcon from '@/components/ChatActionIcon.vue'
+import ChatQuestionMinimap from '@/components/chat/ChatQuestionMinimap.vue'
+import usermsg from '@/views/chat/components/usermsg.vue'
+import botmsg from '@/views/chat/components/botmsg.vue'
+import PendingPromptDock from '@/views/chat/components/PendingPromptDock.vue'
 import { shouldShowConversationTimestamp } from '@/utils/messageTimestamp'
 import { copyWithToast } from '@/utils/clipboard'
+import { deriveSessionTitle } from '@/utils/nexusChatTitle'
+import { summarizeAskUserAnswer, type AskUserQuestion } from '@/utils/askUser'
+import { buildChatRows, runsNeedingEvents, transcriptMarkdown, type ChatRow } from '@/utils/nexusChatTranscript'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const route = useRoute()
 
-/**
- * 对话页核心。会话由父组件通过 sessionId 传入，空值即欢迎态；欢迎态发送时先创建会话，
- * 并通过 session-created 通知父组件（路由页据此改写地址，面板据此记录会话）。
- */
 const props = withDefaults(defineProps<{
-  /** 当前会话；为空时显示欢迎态（尚未创建会话）。 */
+  /** Current session; empty shows the welcome state. */
   sessionId?: string
-  /** 窄容器布局（如侧边面板）：输入区使用紧凑留白。 */
+  /** Narrow container (assistant panel): WeKnora's embedded layout, no header or minimap. */
   compact?: boolean
-  /** 欢迎态下允许选择智能体（独立对话页）；嵌入场景固定使用默认智能体。 */
+  /** Allow choosing the agent in the welcome state (standalone page). */
   allowAgentSelect?: boolean
 }>(), { sessionId: '', compact: false, allowAgentSelect: false })
 const emit = defineEmits<{ (e: 'session-created', id: string): void }>()
+
+/** Concurrent event reads when rebuilding the timelines of a session's finished Runs. */
+const EVENT_READ_CONCURRENCY = 4
+/** Distance from the bottom still treated as "at the bottom" (WeKnora SCROLL_BOTTOM_THRESHOLD). */
+const SCROLL_BOTTOM_THRESHOLD = 80
 
 const activeSessionId = computed(() => props.sessionId)
 const isWelcome = computed(() => !activeSessionId.value)
@@ -198,55 +219,44 @@ const tenantId = computed(() => authStore.effectiveTenantId)
 const native = useNativeRun(() => tenantId.value)
 
 const messages = ref<ConversationMessage[]>([])
+const eventsByRun = ref(new Map<string, RunEvent[]>())
+const approvalArgs = ref(new Map<string, Record<string, unknown>>())
 const loading = ref(false)
 const loadingAgents = ref(false)
 const busy = ref(false)
-const answerText = ref('')
 const errorText = ref('')
 const agents = ref<AgentView[]>([])
 const selectedAgent = ref<string | undefined>(undefined)
-const scrollRef = ref<HTMLElement>()
 const pendingUsers = ref<string[]>([])
-/** 当前会话的标题；平台会话没有单独的读取接口，从会话列表中取。 */
 const sessionTitleText = ref('')
-/** 用户向上滚动离开底部后为 true：此时新内容不再自动滚动，并显示「回到底部」按钮（同 WeKnora）。 */
+/** WeKnora: true on entering a session (history renders without the typewriter), false after sending. */
+const isFirstEnter = ref(true)
 const userHasScrolledUp = ref(false)
-/** 距底部小于该像素数视为仍在底部。 */
-const BOTTOM_THRESHOLD = 80
-/** 欢迎页创建的会话 ID。路由切换到它时不再重新加载，避免覆盖刚开始的 Run 状态。 */
+const scrollContainer = ref<HTMLElement | null>(null)
+const composerElement = ref<HTMLElement | null>(null)
+const composerHeight = ref(0)
+const scrollbarGutter = ref(0)
+/** Session created from the welcome state; the route change to it must not reload over the live Run. */
 let createdSessionId = ''
 
 const run = computed(() => native.state.value.run)
 const streamError = computed(() => native.streamError.value)
-const pendingInput = computed(() => native.pendingInput.value)
-/**
- * 当前运行的时间线数据。运行结束后，只要还有待显示的用户输入（即持久化消息尚未重新加载），
- * 时间线继续保留，直到消息重新加载，避免同一回答同时以流式和持久化两种形式出现。
- */
-const liveSession = computed(() => {
+
+const rows = computed<ChatRow[]>(() => {
   const current = run.value
-  if (!current) return null
-  if (isTerminal(current) && pendingUsers.value.length === 0) return null
-  const events = native.state.value.events
-  if (events.length === 0 && !isActive(current)) return null
-  return {
+  const live = current ? {
     id: current.id,
-    assistant_message_id: current.id,
-    request_id: current.id,
-    isAgentMode: true,
-    agentEventStream: toAgentEventStream(events, current.status),
-    knowledge_references: [],
-  }
+    status: current.status,
+    events: native.state.value.events,
+    options: { approvalArgs: approvalArgs.value },
+  } : null
+  return buildChatRows(messages.value, eventsByRun.value, pendingUsers.value, live)
 })
 
-const sessionTitle = computed(() => sessionTitleText.value || t('createChat.newSessionTitle'))
-
-/** 已提交、但还没有任何流式事件时显示等待指示（WeKnora 的 showGlobalTypingIndicator）。 */
-const showGlobalWait = computed(() => {
-  const current = run.value
-  if (!current || !isActive(current)) return false
-  return native.state.value.events.length === 0
-})
+// The prompt dock (WeKnora PendingPromptDock) reads a reactive message list.
+const dockRows = reactive<ChatRow[]>([])
+watchEffect(() => { dockRows.splice(0, dockRows.length, ...rows.value) })
+providePromptDock(dockRows as unknown as Record<string, unknown>[])
 
 const agentOptions = computed(() => agents.value.map(agent => ({
   label: agent.name,
@@ -254,14 +264,8 @@ const agentOptions = computed(() => agents.value.map(agent => ({
 })))
 
 const STATUS_THEME: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'danger'> = {
-  queued: 'default',
-  running: 'primary',
-  waiting_input: 'warning',
-  waiting_approval: 'warning',
-  completed: 'success',
-  failed: 'danger',
-  cancelled: 'default',
-  interrupted: 'danger',
+  queued: 'default', running: 'primary', waiting_input: 'warning', waiting_approval: 'warning',
+  completed: 'success', failed: 'danger', cancelled: 'default', interrupted: 'danger',
 }
 const isReplying = computed(() => isActive(run.value))
 const statusTheme = computed(() => (run.value ? STATUS_THEME[run.value.status] ?? 'default' : 'default'))
@@ -272,18 +276,8 @@ const failureText = computed(() => {
   if (run.value?.status === 'cancelled') return t('nativeRuns.cancelled')
   return ''
 })
-
-// 与 botmsg.vue 相同的 Markdown 管线：marked + KaTeX，输出经 DOMPurify 净化。
-configureMarkedForChatMarkdown()
-const markdownRenderer = createChatMarkdownRenderer()
-function renderMarkdown(text: string, streaming: boolean): string {
-  return renderChatMarkdown(text, {
-    renderer: markdownRenderer,
-    escapeMarkdown: safeMarkdownToHTML,
-    sanitizeHtml: sanitizeMarkdownHTML,
-    streaming,
-  })
-}
+/** WeKnora showGlobalTypingIndicator: submitted, nothing streamed yet. */
+const showGlobalWait = computed(() => isActive(run.value) && native.state.value.events.length === 0)
 
 function messageOf(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message
@@ -293,16 +287,29 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback
 }
 
+/** Entries kept from WeKnora whose platform backend does not exist yet. */
+function planned(feature: string) {
+  void feature
+  MessagePlugin.info({ content: t('nexusChat.planned'), duration: 2000 })
+}
 
+function userQueryBefore(index: number): string {
+  for (let i = index - 1; i >= 0; i--) {
+    const row = rows.value[i]
+    if (row.role === 'user') return row.content
+  }
+  return ''
+}
+
+// ---- data loading -----------------------------------------------------------------------------
 
 async function loadAgents() {
   const tenant = tenantId.value
   if (!tenant) return
   loadingAgents.value = true
   try {
-    // 只有已发布版本可以创建会话；草稿没有可运行的版本。
     agents.value = (await listAgents(tenant)).filter(agent => agent.published_version_id !== null)
-    // 从智能体列表「开始对话」进入时，`?agent=<版本 ID>` 预选该智能体（仅限独立对话页）。
+    // From the agent list's "start chat": `?agent=<version id>` preselects that agent (standalone page only).
     const requested = props.allowAgentSelect && typeof route.query.agent === 'string' ? route.query.agent : ''
     if (requested && agents.value.some(agent => agent.published_version_id === requested)) {
       selectedAgent.value = requested
@@ -316,7 +323,6 @@ async function loadAgents() {
   }
 }
 
-/** 读取会话标题；失败时沿用默认标题，不影响对话。 */
 async function loadSessionTitle(id: string) {
   const tenant = tenantId.value
   if (!tenant || !id) return
@@ -324,8 +330,27 @@ async function loadSessionTitle(id: string) {
     const found = (await listSessions(tenant)).find(item => item.id === id)
     if (activeSessionId.value === id) sessionTitleText.value = found?.title || ''
   } catch {
-    /* 保留默认标题 */
+    /* keep the default title */
   }
+}
+
+/** Read the events of finished Runs, a few at a time; a failed read leaves that answer as plain text. */
+async function loadRunEvents(sessionId: string) {
+  const tenant = tenantId.value
+  if (!tenant) return
+  const queue = runsNeedingEvents(messages.value, new Set(eventsByRun.value.keys()), run.value?.id ?? null)
+  const worker = async () => {
+    for (let id = queue.shift(); id; id = queue.shift()) {
+      try {
+        const events = await listRunEvents(tenant, id)
+        if (activeSessionId.value !== sessionId) return
+        eventsByRun.value = new Map(eventsByRun.value).set(id, events)
+      } catch {
+        /* the row keeps its persisted text */
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: EVENT_READ_CONCURRENCY }, worker))
 }
 
 async function openSession() {
@@ -334,11 +359,17 @@ async function openSession() {
     errorText.value = t('nativeRuns.noSpace')
     return
   }
+  const id = activeSessionId.value
   loading.value = true
   userHasScrolledUp.value = false
-  void loadSessionTitle(activeSessionId.value)
+  isFirstEnter.value = true
+  eventsByRun.value = new Map()
+  approvalArgs.value = new Map()
+  void loadSessionTitle(id)
   try {
-    messages.value = await native.loadSession(activeSessionId.value)
+    messages.value = await native.loadSession(id)
+    if (run.value?.status === 'waiting_approval') void loadApprovals()
+    void loadRunEvents(id)
   } catch (error) {
     errorText.value = messageOf(error, t('nativeRuns.loadError'))
   } finally {
@@ -346,17 +377,36 @@ async function openSession() {
   }
 }
 
-/** 运行结束后重新读取持久化的消息，使流式文本与已保存的回答不会同时出现。 */
-async function reloadMessages() {
-  if (!tenantId.value || !activeSessionId.value) return
+/** After a Run ends: keep its events for the timeline and reload the persisted messages. */
+async function settleRun() {
+  const current = run.value
+  if (!tenantId.value || !activeSessionId.value || !current) return
+  eventsByRun.value = new Map(eventsByRun.value).set(current.id, [...native.state.value.events])
   const page = await getConversation(tenantId.value, activeSessionId.value)
   messages.value = page.messages
+  pendingUsers.value = []
 }
 
-/** 发送一条消息：欢迎页先创建会话，会话页直接提交新的 Run（服务端排队，忙时不阻止）。 */
+/** Approval arguments are only exposed to the Run owner through the approvals API. */
+async function loadApprovals() {
+  const current = run.value
+  if (!tenantId.value || !current) return
+  try {
+    const pending = await listPendingApprovals(tenantId.value, current.id)
+    const next = new Map(approvalArgs.value)
+    for (const item of pending) next.set(item.id, item.arguments)
+    approvalArgs.value = next
+  } catch {
+    /* the card shows without arguments */
+  }
+}
+
+// ---- sending and run actions ------------------------------------------------------------------
+
 async function sendText(text: string) {
   if (!tenantId.value) return
   errorText.value = ''
+  isFirstEnter.value = false
   try {
     if (isWelcome.value) {
       if (!selectedAgent.value) {
@@ -380,13 +430,12 @@ async function sendText(text: string) {
 
 const onSendMsg = (text: string) => { void sendText(text) }
 
-/** 运行中发送的追加指令：作为 steer 注入当前 Run，并显示为待显示的用户消息。 */
+/** A message sent while running is a steer for the current Run, shown as a pending user message. */
 const onSteerMsg = (text: string) => {
   pendingUsers.value = [...pendingUsers.value, text]
   void sendHint(text)
 }
 
-/** 对当前 Run 执行操作；失败只提示，不改变本地 Run 视图。 */
 async function act(action: () => Promise<void>, fallback: string) {
   busy.value = true
   try {
@@ -404,47 +453,84 @@ const sendHint = (content: string) => act(async () => {
   await native.steer(content)
   MessagePlugin.success(t('nativeRuns.hintSent'))
 }, t('nativeRuns.sendError'))
-const answer = (response: string) => act(async () => {
-  await native.answerInput(response)
-  answerText.value = ''
-}, t('nativeRuns.sendError'))
 
-watch(() => run.value?.status, (status, previous) => {
-  if (status && previous && status !== previous && isTerminal(run.value)) {
-    reloadMessages()
-      .then(() => { pendingUsers.value = [] })
-      .catch(() => { /* 保留当前消息与待显示的用户输入 */ })
+function promptRequest(pendingId: string): AskUserQuestion {
+  for (const row of rows.value) {
+    if (row.role !== 'assistant') continue
+    for (const event of row.agentEventStream) {
+      if (event.type === 'agent_prompt_required' && event.pending_id === pendingId) return event.request as AskUserQuestion
+    }
   }
+  return { question: '' } as AskUserQuestion
+}
+
+provideNexusChatActions({
+  async resolveApproval(pendingId, decision, args) {
+    const current = run.value
+    if (!tenantId.value || !current) throw new Error(t('nativeRuns.loadError'))
+    await resolveApproval(tenantId.value, current.id, pendingId, decision === 'approve', args)
+    await native.resume()
+  },
+  async answerPrompt(pendingId, response) {
+    const text = response.declined ? t('agentStream.askUser.declinedTag')
+      : summarizeAskUserAnswer(promptRequest(pendingId), response)
+    await native.answerInput(text)
+  },
+  planned,
 })
 
+function copyMarkdown() {
+  const markdown = transcriptMarkdown(sessionTitleText.value || t('createChat.newSessionTitle'), rows.value,
+    { user: t('nativeRuns.user'), assistant: t('nativeRuns.assistant') })
+  void copyWithToast(markdown, 'common.copySuccess', 'common.copyFailed')
+}
+
+// ---- scrolling (WeKnora index.vue) ------------------------------------------------------------
+
 function scrollToBottom(smooth = false) {
-  const el = scrollRef.value
+  const el = scrollContainer.value
   if (!el) return
   el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
   userHasScrolledUp.value = false
 }
 
 function handleScroll() {
-  const el = scrollRef.value
+  const el = scrollContainer.value
   if (!el) return
-  userHasScrolledUp.value = el.scrollHeight - el.scrollTop - el.clientHeight > BOTTOM_THRESHOLD
+  userHasScrolledUp.value = el.scrollHeight - el.scrollTop - el.clientHeight > SCROLL_BOTTOM_THRESHOLD
 }
 
-function copyAnswer(content: string) {
-  void copyWithToast(content, 'common.copySuccess', 'common.copyFailed')
+function jumpToQuestion(id: string) {
+  const root = scrollContainer.value
+  if (!root || !id) return
+  const el = root.querySelector(`[data-message-id="${CSS.escape(id)}"]`)
+  if (!el) return
+  const offset = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop
+  userHasScrolledUp.value = root.scrollHeight - offset >= root.clientHeight + SCROLL_BOTTOM_THRESHOLD
+  el.scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 
-// 新消息或流式文本增长时保持在底部；用户已向上滚动阅读时不打断（同 WeKnora）。
-watch(
-  () => [messages.value.length, pendingUsers.value.length, native.state.value.events.length],
-  async () => {
-    if (userHasScrolledUp.value) return
-    await nextTick()
-    scrollToBottom()
-  },
-)
+/** The composer floats over the thread (WeKnora); its height pads the scroll content. */
+let composerObserver: ResizeObserver | null = null
+function measureLayout() {
+  composerHeight.value = composerElement.value?.offsetHeight ?? 0
+  const el = scrollContainer.value
+  scrollbarGutter.value = el ? el.offsetWidth - el.clientWidth : 0
+}
+watch(composerElement, (el, previous) => {
+  if (previous && composerObserver) composerObserver.unobserve(previous)
+  if (!el || typeof ResizeObserver === 'undefined') return
+  composerObserver ??= new ResizeObserver(measureLayout)
+  composerObserver.observe(el)
+  measureLayout()
+})
 
-// 用户发送新消息时总是回到底部。
+// Follow new content unless the user scrolled up to read (WeKnora).
+watch(() => [rows.value.length, native.state.value.events.length], async () => {
+  if (userHasScrolledUp.value) return
+  await nextTick()
+  scrollToBottom()
+})
 watch(() => pendingUsers.value.length, async (length, previous) => {
   if (length > (previous ?? 0)) {
     await nextTick()
@@ -452,14 +538,25 @@ watch(() => pendingUsers.value.length, async (length, previous) => {
   }
 })
 
+// ---- lifecycle --------------------------------------------------------------------------------
+
+watch(() => run.value?.status, (status, previous) => {
+  if (!status || status === previous) return
+  if (status === 'waiting_approval') void loadApprovals()
+  if (previous && isTerminal(run.value)) {
+    settleRun().catch(() => { /* keep current rows and pending inputs */ })
+  }
+})
+
 watch(activeSessionId, (id) => {
-  // 欢迎页刚创建的会话：Run 已在进行中，保留其流式状态，不做 dispose 与重新加载。
+  // A session just created from the welcome state already has its Run streaming.
   if (id && String(id) === createdSessionId) return
   native.dispose()
   pendingUsers.value = []
   sessionTitleText.value = ''
   if (!id) {
     messages.value = []
+    eventsByRun.value = new Map()
     errorText.value = ''
     void loadAgents()
     return
@@ -476,126 +573,674 @@ onMounted(() => {
   if (isWelcome.value) void loadAgents()
   else void openSession()
 })
-onBeforeUnmount(() => native.dispose())
+onBeforeUnmount(() => {
+  native.dispose()
+  composerObserver?.disconnect()
+})
 
-// 父组件（如侧边面板）通过此方法发送消息：有会话则发到该会话，欢迎态则新建会话。
+// Parents (the assistant panel) send through this: to the session, or create one from the welcome state.
 defineExpose({ sendText })
 </script>
 
+<!-- Copied from WeKnora views/chat/index.vue -->
 <style lang="less" scoped>
 @import '../../components/css/chat-scrollbar.less';
-// 回答下方工具栏（answer-toolbar）与 WeKnora botmsg 共用。
-@import '../../components/css/chat-message-shared.less';
-.nexus-chat {
-  /* 与 WeKnora 对话页 .chat 一致：整列居中，最窄 400px，由父级控制宽度 */
-  --chat-content-inset: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  position: relative;
-  background: var(--td-bg-color-container);
+.chat {
+    // 水平方向不留 padding，让滚动条贴到内容区最右缘；
+    // 消息列与输入列各自用 --chat-content-inset 做左右对称的留白（窄屏时才可见）。
+    padding: 0;
+    --chat-content-inset: 20px;
+    box-sizing: border-box;
+    flex: 1;
+    // The parent .platform-route-outlet is a flex column with min-height:0
+    // and overflow:hidden — we also need min-height:0 here so that our
+    // own flex:1 child (.chat_thread) can shrink below its content height.
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%;
+    min-width: 400px;
+
+    &.is-embedded {
+        max-width: 100%;
+        min-width: 100%;
+        padding: 0;
+        overflow-x: hidden;
+    }
+
+    &:not(.is-embedded) {
+        @media (min-width: 960px) {
+            transition: padding-right var(--app-motion-slow) cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+    }
+
+    &.has-references-panel:not(.is-embedded) {
+        @media (min-width: 960px) {
+            padding-right: var(--references-panel-width, 420px);
+            box-sizing: border-box;
+
+            .chat_scroll_box {
+                padding-top: 0;
+            }
+        }
+    }
+
+    // 沙箱可视化右侧面板：宽度可拖拽调整（--sandbox-panel-width 由
+    // composable 持久化），聊天区 padding 跟随面板宽度让位。
+    &.has-sandbox-panel:not(.is-embedded) {
+        @media (min-width: 960px) {
+            padding-right: var(--sandbox-panel-width, 420px);
+            box-sizing: border-box;
+        }
+    }
+
+    &.has-sandbox-panel.has-references-panel:not(.is-embedded) {
+        @media (min-width: 1400px) {
+            padding-right: calc(var(--references-panel-width, 420px) + var(--sandbox-panel-width, 420px));
+        }
+
+        @media (max-width: 1399.98px) and (min-width: 960px) {
+            padding-right: var(--sandbox-panel-width, 420px);
+        }
+    }
+
+    &.is-embedded :deep(.answers-input) {
+        position: relative;
+        transform: translateX(0);
+        width: 100%;
+        left: 0;
+        bottom: auto;
+        display: flex;
+        justify-content: center;
+    }
+
+    &.is-embedded :deep(.control-bar) {
+        justify-content: flex-end;
+    }
+
+    &:not(.is-embedded) :deep(.answers-input) {
+        position: static;
+        transform: translateX(0);
+
+        .t-textarea__inner {
+            width: 100% !important;
+        }
+    }
+
+    &.is-embedded :deep(.answers-input) .t-textarea__inner {
+        width: 100% !important;
+    }
 }
 
+.chat-child-detail { flex: 1; min-height: 0; width: 100%; overflow: hidden; }
 
-.nexus-chat__header {
-  display: flex;
-  align-items: center;
-  flex: 0 0 var(--app-chat-header-height);
-  width: 100%;
-  min-width: 0;
-  padding: 0 12px 0 var(--chat-content-inset, 20px);
-  box-sizing: border-box;
-  border-bottom: 1px solid var(--td-component-stroke);
-  background: var(--td-bg-color-container);
+.chat_thread {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-
-.nexus-chat__scroll {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  padding: 8px 0 0;
-  box-sizing: border-box;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  .chat-scrollbar();
+.chat-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 var(--app-chat-header-height);
+    width: 100%;
+    min-width: 0;
+    padding: 0 12px 0 var(--chat-content-inset, 20px);
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--td-component-stroke);
+    background: var(--td-bg-color-container);
 }
 
-
-
-.nexus-chat__column {
-  /* 与 WeKnora .msg_list 一致：最宽 960px，左右各留 --chat-content-inset */
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
-  width: 100%;
-  margin: 0 auto;
-  padding: 0 var(--chat-content-inset, 20px);
-  box-sizing: border-box;
+.sandbox-header-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
-
-.nexus-chat__transcript {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.nexus-chat__turn {
-  display: flex;
-
-  &.is-user {
-    justify-content: flex-end;
-  }
-
-  &.is-assistant {
-    justify-content: flex-start;
-  }
-}
-
-
-
-.nexus-chat__markdown {
-  width: 100%;
-  color: var(--td-text-color-primary);
-  line-height: 1.75;
-  word-break: break-word;
-
-  :deep(p) {
-    margin: 0 0 8px;
-  }
-
-  :deep(pre) {
-    overflow-x: auto;
-    padding: 12px;
+.sandbox-header-toggle__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
     border-radius: var(--app-radius-sm);
-    background: var(--td-bg-color-secondarycontainer);
-  }
+    color: var(--td-text-color-placeholder);
+    background: transparent;
+    cursor: pointer;
+    transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 
-  :deep(table) {
-    display: block;
-    overflow-x: auto;
-    border-collapse: collapse;
-  }
+    &:hover {
+        color: var(--td-text-color-primary);
+        background: var(--td-bg-color-container-hover);
+    }
 
-  :deep(th),
-  :deep(td) {
-    padding: 6px 10px;
-    border: 1px solid var(--td-component-stroke);
-  }
+    &:active {
+        background: var(--td-bg-color-container-active);
+    }
 }
 
+.chat_scroll_box {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    padding: 8px 0 0;
+    box-sizing: border-box;
+    overflow-y: auto;
+    // Keep native message bounce without chaining scroll to the outer page.
+    overscroll-behavior-y: contain;
+    scroll-padding-bottom: var(--chat-composer-height, 0px);
+    .chat-scrollbar();
+}
+
+// Keep the full-height message scrollbar and reserve space below the last
+// message for the composer, which sits outside the bouncing scroll viewport.
+.chat_scroll_content {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+
+    // Use an in-flow spacer so the content ResizeObserver also detects composer
+    // height changes and keeps the last message visible when following replies.
+    &::after {
+        content: '';
+        flex: 0 0 var(--chat-composer-height, 0px);
+    }
+}
+
+.chat_composer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: var(--chat-scrollbar-gutter, 0px);
+    z-index: 12;
+    padding: 16px 0 max(8px, env(safe-area-inset-bottom));
+    background: var(--td-bg-color-container);
+}
+
+.is-embedded .chat_composer {
+    padding: 0;
+}
+
+.chat_overlays {
+    position: absolute;
+    inset: 0 0 var(--chat-composer-height, 0px);
+    pointer-events: none;
+
+    :deep(.browser-task-preview) {
+        pointer-events: auto;
+    }
+}
+
+.scroll-to-bottom-btn {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(100% + 8px);
+    z-index: 10;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--td-bg-color-container);
+    border: 1px solid var(--td-component-stroke);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--td-text-color-secondary);
+    transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease;
+
+    &:hover {
+        background: var(--td-bg-color-container-hover);
+        color: var(--td-text-color-primary);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    &:active {
+        transform: translateX(-50%) scale(0.92);
+    }
+}
+
+.scroll-btn-fade-enter-active,
+.scroll-btn-fade-leave-active {
+    transition: opacity var(--app-motion-base) ease, transform var(--app-motion-base) ease;
+}
+
+.scroll-btn-fade-enter-from,
+.scroll-btn-fade-leave-to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+}
+
+@keyframes contentFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.msg-skeleton-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 960px;
+    padding: 16px 0;
+    animation: contentFadeIn 0.3s ease-out;
+}
+
+.msg-skeleton-user {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.msg-skeleton-bot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 4px;
+}
+
+.input-container {
+    min-height: 0;
+    flex-shrink: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 960px;
+    box-sizing: border-box;
+    position: relative;
+
+    &:not(.is-embedded) {
+        padding: 0 var(--chat-content-inset, 20px);
+        max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
+    }
+
+    &.is-embedded {
+        max-width: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 12px 16px 16px;
+        min-height: auto;
+        box-sizing: border-box;
+        overflow-x: clip;
+    }
+}
+
+.automation-session-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 0;
+    color: var(--td-text-color-secondary);
+    font-size: var(--app-text-sm);
+    line-height: 1.6;
+
+    > .t-icon { flex-shrink: 0; }
+}
+
+.msg_list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 960px;
+    flex: 1;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+
+    &:not(.is-embedded) {
+        padding: 0 var(--chat-content-inset, 20px);
+        max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
+    }
+
+    // Matches the composer's inset, and keeps text clear of the scrollbar,
+    // which overlays content where the platform uses overlay scrollbars.
+    &.is-embedded {
+        padding: 0 16px;
+    }
+
+    /*
+      给每条消息加 layout/style containment：
+      - 一条消息的内部布局变化不再让浏览器去 invalidate 整个文档，
+        这是修掉"hover 到 session 列表也变白"那个问题的关键。
+      - 不要再用 content-visibility: auto / contain-intrinsic-size：
+        agent 消息真实高度差异巨大（几百 ~ 数千 px），估的占位高度会让消息进入视口时
+        反复发生"占位 -> 真实高度"的大幅 layout shift + 首次 paint 滞后，
+        反而在向上滚动时制造"未画完"的白屏闪烁。
+        当前 handleMsgList 全流程 ~50ms，根本无需跳过渲染，老老实实正常渲染最稳。
+      - 不开 contain: paint：AgentStreamDisplay 里有 tooltip / popover 等会溢出的浮层，
+        paint containment 会把它们裁掉。
+    */
+    .msg-item-wrapper {
+        contain: layout style;
+        &.is-empty-segment { display: none; }
+        &.is-steer-prefix { margin-bottom: -4px; }
+    }
+
+    .message-row {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+
+    }
+
+    .botanswer_laoding_gif {
+        width: 24px;
+        height: 18px;
+        margin-left: 16px;
+    }
+
+    .chat-global-wait {
+        display: flex;
+        align-items: center;
+        min-height: 28px;
+        padding-left: 4px;
+    }
+
+    .chat-global-wait__spinner {
+        width: 12px;
+        height: 12px;
+        box-sizing: border-box;
+        border: 1.5px solid var(--td-component-stroke);
+        border-top-color: var(--td-text-color-secondary);
+        border-radius: 50%;
+        animation: wk-spin 0.8s linear infinite;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-global-wait__spinner {
+        animation: none;
+    }
+}
+
+@import '../../components/css/suggested-questions.less';
+
+.suggested-questions-container {
+    transition: min-height var(--app-motion-slow) @suggested-ease;
+}
+
+.suggested-questions-inner {
+    animation: contentFadeIn 0.3s ease-out;
+}
+
+.sq-fade-enter-active,
+.sq-fade-leave-active {
+    transition: opacity var(--app-motion-slow) @suggested-ease;
+}
+
+.sq-fade-enter-from,
+.sq-fade-leave-to {
+    opacity: 0;
+}
+</style>
+
+<style lang="less">
+.chat-rewind-popconfirm {
+    .t-popconfirm__content {
+        width: 280px;
+        max-width: calc(100vw - 24px);
+        padding: 14px 16px 12px;
+        box-sizing: border-box;
+    }
+
+    .t-popconfirm__body {
+        gap: 8px;
+    }
+
+    .t-popconfirm__body > .t-icon {
+        flex-shrink: 0;
+        margin: 0;
+        padding: 3px 0 0;
+        font-size: var(--app-text-xl);
+    }
+
+    .t-popconfirm__inner {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        white-space: normal;
+    }
+
+    .chat-rewind-confirm__title {
+        font-size: var(--app-text-base);
+        font-weight: 500;
+        line-height: 22px;
+        color: var(--td-text-color-primary);
+    }
+
+    .chat-rewind-confirm__body {
+        margin-top: 2px;
+        font-size: var(--app-text-md);
+        line-height: 20px;
+        color: var(--td-text-color-secondary);
+    }
+
+    .t-popconfirm__buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+
+        .t-popconfirm__confirm {
+            margin-left: 0;
+        }
+    }
+}
+</style>
+
+<!-- Copied from WeKnora views/creatChat/creatChat.vue -->
+<style lang="less" scoped>
+.dialogue-wrap {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    // position: relative;
+}
+
+.dialogue-answers {
+    display: flex;
+    flex-flow: column;
+    align-items: center;
+    width: 100%;
+    max-width: 960px;
+    gap: 24px;
+
+    :deep(.answers-input) {
+        position: static;
+        transform: translateX(0);
+    }
+}
+
+.create-chat-composer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+}
+
+.project-dir-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    max-width: 960px;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.project-dir-bar__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    height: 28px;
+    padding: 0 10px;
+    border: 0.5px solid var(--td-component-border);
+    border-radius: var(--app-radius-md);
+    background: var(--td-bg-color-container);
+    color: var(--td-text-color-secondary);
+    font-size: var(--app-text-sm);
+    cursor: pointer;
+}
+
+.project-dir-bar__btn.is-bound {
+    color: var(--td-text-color-primary);
+}
+
+.project-dir-bar__btn.is-picking,
+.project-dir-bar__btn:disabled {
+    cursor: default;
+    opacity: 0.75;
+}
+
+.project-dir-bar__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-dir-bar__clear {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    padding: 0 4px;
+    color: var(--td-text-color-placeholder);
+    font-size: var(--app-text-base);
+    line-height: 1;
+    cursor: pointer;
+}
+
+.dialogue-title {
+    display: flex;
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family);
+    font-size: 28px;
+    font-weight: 600;
+    align-items: center;
+    margin-bottom: 0;
+
+    .icon {
+        display: flex;
+        width: 32px;
+        height: 32px;
+        justify-content: center;
+        align-items: center;
+        border-radius: var(--app-radius-sm);
+        background: var(--td-bg-color-container);
+        box-shadow: var(--td-shadow-1);
+        margin-right: 12px;
+
+        .logo_img {
+            height: 24px;
+            width: 24px;
+        }
+    }
+}
+
+@import '../../components/css/suggested-questions.less';
+
+@keyframes skeletonFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.suggested-questions-container {
+    max-width: 960px;
+    margin: 0;
+    padding: 0 16px;
+    transition: height var(--app-motion-slow) @suggested-ease;
+}
+
+.suggested-questions-inner {
+    animation: skeletonFadeIn 0.3s ease-out;
+}
+
+.sq-slide-fade-enter-active {
+    transition: opacity var(--app-motion-slow) @suggested-ease, transform var(--app-motion-slow) @suggested-ease;
+}
+
+.sq-slide-fade-leave-active {
+    transition: opacity var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1),
+        transform var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1);
+}
+
+.sq-slide-fade-enter-from {
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.sq-slide-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-4px);
+}
+
+.suggested-question-card {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+    transition:
+        opacity var(--app-motion-slow) @suggested-ease,
+        transform var(--app-motion-slow) @suggested-ease,
+        background var(--app-motion-base) @suggested-ease,
+        border-color var(--app-motion-slow) @suggested-ease,
+        box-shadow var(--app-motion-slow) @suggested-ease;
+
+    &.sq-card-skeleton {
+        opacity: 1;
+        transform: none;
+    }
+
+    &.sq-card-visible {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+
+    &:not(.sq-card-skeleton):active {
+        transform: scale(0.98);
+    }
+
+    &.sq-card-visible:active {
+        transform: scale(0.98);
+    }
+}
+</style>
 
 
-.nexus-chat__status-line {
+<style lang="less" scoped>
+/* Nexus-only additions: run status tag, watchdog/error alerts, status lines, welcome agent picker. */
+.nexus-chat-status {
+  flex-shrink: 0;
+}
+
+.nexus-chat-alert {
+  width: 100%;
+}
+
+.nexus-chat-status-line {
   margin: 0;
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-sm);
@@ -605,252 +1250,7 @@ defineExpose({ sendText })
   }
 }
 
-.nexus-chat__input-request {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-md);
-}
-
-.nexus-chat__input-title {
-  margin: 0;
-  font-size: var(--app-text-base);
-  font-weight: 600;
-}
-
-.nexus-chat__input-question {
-  margin: 0;
-}
-
-.nexus-chat__candidates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.nexus-chat__input-form {
-  display: flex;
-  gap: 8px;
-}
-
-.nexus-chat__composer-wrap {
-  /* 与 WeKnora .chat_composer / .input-container（非嵌入）一致：底部固定在列内 */
-  flex-shrink: 0;
-  width: 100%;
-  padding: 16px 0 max(8px, env(safe-area-inset-bottom));
-  box-sizing: border-box;
-  background: var(--td-bg-color-container);
-}
-
-.input-container {
-  /* 与 WeKnora .input-container（非嵌入）一致 */
-  position: relative;
-  min-height: 0;
-  flex-shrink: 0;
-  width: 100%;
-  max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
-  margin: 0 auto;
-  padding: 0 var(--chat-content-inset, 20px);
-  box-sizing: border-box;
-}
-
-.nexus-chat.is-compact .nexus-chat__composer-wrap {
-  padding: 0;
-}
-
-.input-container.is-compact {
-  max-width: 100%;
-  margin: 0;
-  padding: 12px 16px 16px;
-}
-
-
-/* 子组件根节点需要占满列宽：Input-field 与流式展示都以 scoped 根类接入。 */
-.nexus-chat__input,
-.nexus-chat__stream {
-  width: 100%;
-  min-width: 0;
-}
-
 .nexus-chat__agent {
-  width: 220px;
-}
-
-
-@media (max-width: 720px) {
-  .nexus-chat__column {
-    padding: 0 12px;
-  }
-
-  .nexus-chat__agent {
-    width: 160px;
-  }
-}
-
-/* ---- 以下按 WeKnora 对话页样式复制（views/chat/index.vue、creatChat.vue、ChatHeader.vue） ---- */
-
-/* 欢迎态：标题与输入框一起垂直居中（WeKnora .dialogue-wrap / .dialogue-answers）。 */
-.nexus-chat.is-welcome:not(.is-compact) {
-  justify-content: center;
-
-  .nexus-chat__scroll {
-    flex: 0 0 auto;
-    overflow: visible;
-    padding: 0;
-  }
-
-  .nexus-chat__column {
-    align-items: center;
-    gap: 24px;
-  }
-
-  .nexus-chat__composer-wrap {
-    padding-top: 24px;
-  }
-}
-
-.dialogue-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-primary);
-  font-family: var(--app-font-family);
-  font-size: var(--app-text-4xl);
-  font-weight: 600;
-  text-align: center;
-}
-
-.nexus-chat__body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* 顶栏标题（WeKnora ChatHeader）。 */
-.chat-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  max-width: min(520px, calc(100% - 120px));
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.chat-header__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  color: var(--td-text-color-secondary);
-  font-size: var(--app-text-base);
-  font-weight: 500;
-  line-height: 20px;
-  cursor: default;
-}
-
-.chat-header__title-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nexus-chat__status {
-  margin-left: 8px;
-  flex-shrink: 0;
-}
-
-.bot_msg {
-  width: 100%;
-  min-width: 0;
-}
-
-.msg-skeleton-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-width: 960px;
-  padding: 16px 0;
-}
-
-.msg-skeleton-user {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.msg-skeleton-bot {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-left: 4px;
-}
-
-.scroll-to-bottom-btn {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(100% + 8px);
-  z-index: 10;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: var(--app-radius-pill);
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--td-text-color-secondary);
-  transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease;
-
-  &:hover {
-    background: var(--td-bg-color-container-hover);
-    color: var(--td-text-color-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  &:active {
-    transform: translateX(-50%) scale(0.92);
-  }
-}
-
-.scroll-btn-fade-enter-active,
-.scroll-btn-fade-leave-active {
-  transition: opacity var(--app-motion-base) ease, transform var(--app-motion-base) ease;
-}
-
-.scroll-btn-fade-enter-from,
-.scroll-btn-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(8px);
-}
-
-.chat-global-wait {
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-  padding-left: 4px;
-}
-
-.chat-global-wait__spinner {
-  width: 12px;
-  height: 12px;
-  box-sizing: border-box;
-  border: 1.5px solid var(--td-component-stroke);
-  border-top-color: var(--td-text-color-secondary);
-  border-radius: var(--app-radius-pill);
-  animation: wk-spin 0.8s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-global-wait__spinner {
-    animation: none;
-  }
+  width: 180px;
 }
 </style>

@@ -87,6 +87,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { CheckIcon } from 'tdesign-icons-vue-next'
 import { useI18n } from 'vue-i18n'
 import { resolveAgentPrompt } from '@/api/mcp-service'
+import { useNexusChatActions } from '@/composables/nexusChatActions'
 import { resolveEmbedAgentPrompt } from '@/api/embed'
 import { resumeSuspendedRunKey } from '@/utils/suspendedRun'
 import { usePromptCountdown } from '@/composables/usePromptCountdown'
@@ -144,6 +145,8 @@ const selectedMany = ref<string[]>([])
 const values = reactive<Record<string, unknown>>({})
 const text = ref('')
 const submitting = ref(false)
+// Nexus chat page: answers go to the platform input API instead of WeKnora's.
+const nexusActions = useNexusChatActions()
 
 const fieldHasOption = (name: string, option: string) =>
   Array.isArray(values[name]) && (values[name] as string[]).includes(option)
@@ -212,6 +215,11 @@ const submit = async (decline: boolean) => {
   const response = decline ? { declined: true } : draft()
   submitting.value = true
   try {
+    if (nexusActions) {
+      await nexusActions.answerPrompt(props.pendingId, response)
+      markPromptSubmitted(props.pendingId, response)
+      return
+    }
     const { resumed } = await (embedTarget()
       ? resolveEmbedAgentPrompt(
         props.embedChannelId!, props.embedToken!, props.embedSessionId!, props.embedSessionSig!,

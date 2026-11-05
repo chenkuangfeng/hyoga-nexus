@@ -173,6 +173,7 @@ import {
     installArtifactLinkRenderer,
 } from '@/utils/sandboxArtifactRefs';
 import { useI18n } from 'vue-i18n';
+import { useNexusChatActions } from '@/composables/nexusChatActions';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useUIStore } from '@/stores/ui';
 import { useAssistantStore } from '@/stores/assistant';
@@ -330,7 +331,11 @@ const messageIdForArtifacts = computed(() => {
 // Set when the drawer is opened by clicking an inline artifact card, so it
 // lands directly on that file's preview instead of the list.
 const artifactPreviewIndex = ref(null);
+// Nexus chat page: entries without a platform backend show the "not available yet" notice.
+const nexusActions = useNexusChatActions();
+
 function openArtifactDrawer(previewIndex = null) {
+    if (nexusActions) { nexusActions.planned('artifacts'); return; }
     if (!hasArtifacts.value) return;
     if (sandboxPanel && !props.embeddedMode) {
         if (previewIndex == null) {
@@ -478,6 +483,7 @@ const handleCopyAnswer = async () => {
 
 // 添加到知识库
 const handleAddToKnowledge = () => {
+    if (nexusActions) { nexusActions.planned('addToKnowledgeBase'); return; }
     const content = getActualContent();
     if (!content) {
         MessagePlugin.warning(t('chat.emptyContentWarning'));

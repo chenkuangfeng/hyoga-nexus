@@ -98,6 +98,7 @@ import { ref, computed, inject, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { resolveToolApproval } from '@/api/mcp-service'
+import { useNexusChatActions } from '@/composables/nexusChatActions'
 import { resolveEmbedToolApproval } from '@/api/embed'
 import { resumeSuspendedRunKey } from '@/utils/suspendedRun'
 import { usePromptCountdown } from '@/composables/usePromptCountdown'
@@ -170,6 +171,8 @@ const grantLapsedText = computed(() => (
     : ''
 ))
 const submitting = ref(false)
+// Nexus chat page: decisions go to the platform approval API instead of WeKnora's.
+const nexusActions = useNexusChatActions()
 const { parked, secondsLeft, timerClass, countdownText, parkedText } = usePromptCountdown(props)
 
 const submission = computed(() => promptSubmission(props.pendingId))
@@ -388,6 +391,12 @@ const submit = async (decision: 'approve' | 'reject') => {
         MessagePlugin.error(t('agentStream.toolApproval.invalidJson'))
         return
       }
+    }
+    if (nexusActions) {
+      await nexusActions.resolveApproval(props.pendingId, decision, decision === 'approve' ? modified : undefined)
+      markPromptSubmitted(props.pendingId, { approved: decision === 'approve' })
+      MessagePlugin.success(t('agentStream.toolApproval.submitted'))
+      return
     }
     const { resumed } = await (useEmbedApproval()
       ? resolveEmbedToolApproval(

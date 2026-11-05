@@ -9022,7 +9022,9 @@ export default {
   nexusChat: {
     placeholder: '輸入訊息，按 Enter 傳送，Shift+Enter 換行',
     needAgent: '請先選擇智能體',
-    scrollToBottom: '回到底部'
+    scrollToBottom: '回到底部',
+    planned: '此功能尚未開放',
+    suggestionsPlanned: '推薦問題尚未開放，可直接在下方輸入問題'
   },
   nativeRuns: {
     title: 'Native 執行',

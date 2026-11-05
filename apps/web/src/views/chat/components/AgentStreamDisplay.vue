@@ -506,7 +506,7 @@
                     :disabled="artifactButtonCollecting"
                     :title="hasArtifacts ? $t('agent.artifactDrawer.buttonTitle') : $t('agent.artifactDrawer.collecting')"
                     :aria-label="hasArtifacts ? $t('agent.artifactDrawer.buttonTitle') : $t('agent.artifactDrawer.collecting')"
-                    @click.stop="openArtifactDrawer()">
+                    @click.stop="openArtifacts()">
                     <t-icon v-if="artifactButtonCollecting" name="loading" class="answer-toolbar__artifact-spinner" />
                     <ChatActionIcon v-else name="folder" />
                   </t-button>
@@ -780,6 +780,7 @@ import { useUIStore } from '@/stores/ui';
 import { useSettingsStore } from '@/stores/settings';
 import { useAuthStore } from '@/stores/auth';
 import { useI18n } from 'vue-i18n';
+import { useNexusChatActions } from '@/composables/nexusChatActions';
 import i18n from '@/i18n';
 import { hydrateProtectedFileImages, sanitizeMarkdownHTML } from '@/utils/security';
 import { useProtectedImageRecovery } from '@/composables/useProtectedImageRecovery';
@@ -1244,6 +1245,14 @@ const protectedFileAccess = computed<ProtectedFileAccessContext | undefined>(() 
 // Same contract as botmsg.vue: only render the button when the persisted
 // assistant message actually recorded files, then open the sandbox panel's
 // artifacts tab, or a session-local drawer for embedded/child conversations.
+// Nexus chat page: entries without a platform backend show the "not available yet" notice.
+const nexusActions = useNexusChatActions();
+/** Template entry for the artifact drawer; on the Nexus page it is a placeholder. */
+function openArtifacts(previewIndex: number | null = null) {
+  if (nexusActions) { nexusActions.planned('artifacts'); return; }
+  openArtifactDrawer(previewIndex);
+}
+
 const showArtifactDrawer = ref(false);
 const sandboxPanel = useChatSandboxPanel();
 // A child inherits the parent's injection, but that panel belongs to a different
@@ -2594,7 +2603,7 @@ const onRootClick = (e: Event) => {
   if (artifactIndex !== null) {
     e.preventDefault();
     e.stopPropagation();
-    openArtifactDrawer(artifactIndex);
+    openArtifacts(artifactIndex);
     return;
   }
 
@@ -2700,7 +2709,7 @@ const onRootKeydown = (e: KeyboardEvent) => {
   if (artifactIndex !== null) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      openArtifactDrawer(artifactIndex);
+      openArtifacts(artifactIndex);
     }
     return;
   }
@@ -3418,6 +3427,7 @@ const handleCopyAnswer = async (answerEvent: any) => {
 };
 
 const handleAddToKnowledge = (answerEvent: any) => {
+  if (nexusActions) { nexusActions.planned('addToKnowledgeBase'); return; }
   const content = getActualContent(answerEvent);
   if (!content) {
     MessagePlugin.warning(t('agentStream.saveToKb.emptyContent'));

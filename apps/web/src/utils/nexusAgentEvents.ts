@@ -7,8 +7,12 @@
  * 映射规则：
  * - `message.delta`：同一轮（turn）的文本合并为一个 `answer` 事件；遇到工具事件、轮次变化或运行结束时该 answer 标记为 done。
  * - `tool.started` / `tool.completed` / `tool.failed`：按 invocation_id 对应为一个 `tool_call`，pending / success 随之更新。
+ * - `approval.requested` / `approval.resolved`：映射为 WeKnora 的 `tool_approval_required`，由 `ToolApprovalCard` 渲染。
+ *   事件不携带工具参数（只对 Run 所有者通过审批接口开放），参数由调用方经 `approvalArgs` 传入。
+ * - `input.requested` / `input.received`：映射为 `agent_prompt_required`（kind = ask_user），由 `AskUserCard` 渲染；
+ *   候选项作为选项，并允许自由输入。
  * - 运行被取消时追加 `stop`，与 WeKnora 的用户停止事件一致。
- * - 其他事件（进度、等待输入、审批等）不进入时间线；它们由页面的告警条与输入卡片处理。
+ * - 其他事件（进度、模型调用等）不进入时间线。
  *
  * 纯函数，不依赖 Vue 或网络，便于单元测试。
  */
@@ -36,12 +40,43 @@ export interface AgentStreamStop {
   type: 'stop'
 }
 
-export type AgentStreamEvent = AgentStreamAnswer | AgentStreamToolCall | AgentStreamStop
+/** WeKnora `tool_approval_required`; `pending_id` is the Nexus approval id. */
+export interface AgentStreamApproval {
+  type: 'tool_approval_required'
+  pending_id: string
+  mcp_tool_name: string
+  service_name: string
+  args_json: string
+  resolved: boolean
+  approved?: boolean
+  canceled?: boolean
+}
+
+/** WeKnora `agent_prompt_required` (ask_user); `pending_id` is the Nexus input request id. */
+export interface AgentStreamPrompt {
+  type: 'agent_prompt_required'
+  kind: 'ask_user'
+  pending_id: string
+  request: { question: string; options?: string[]; allow_free_text: boolean }
+  resolved: boolean
+  answered?: boolean
+  canceled?: boolean
+}
+
+export type AgentStreamEvent = AgentStreamAnswer | AgentStreamToolCall | AgentStreamStop | AgentStreamApproval | AgentStreamPrompt
+
+export interface AgentEventStreamOptions {
+  /** Arguments of pending approvals by approval id, from `GET .../approvals`. */
+  approvalArgs?: ReadonlyMap<string, Record<string, unknown>>
+}
 
 /** 运行结束时的状态；只有 cancelled 会追加 stop 事件。 */
-export function toAgentEventStream(events: readonly RunEvent[], runStatus: string | null): AgentStreamEvent[] {
+export function toAgentEventStream(events: readonly RunEvent[], runStatus: string | null,
+  options: AgentEventStreamOptions = {}): AgentStreamEvent[] {
   const stream: AgentStreamEvent[] = []
   const toolById = new Map<string, AgentStreamToolCall>()
+  const approvalById = new Map<string, AgentStreamApproval>()
+  const promptById = new Map<string, AgentStreamPrompt>()
   let openAnswer: AgentStreamAnswer | null = null
 
   const closeAnswer = () => {
@@ -93,8 +128,67 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
         }
         break
       }
+      case 'approval.requested': {
+        closeAnswer()
+        const id = typeof payload.approval_id === 'string' ? payload.approval_id : ''
+        if (!id || approvalById.has(id)) break
+        const args = options.approvalArgs?.get(id)
+        const card: AgentStreamApproval = {
+          type: 'tool_approval_required',
+          pending_id: id,
+          mcp_tool_name: typeof payload.tool_name === 'string' ? payload.tool_name : 'tool',
+          service_name: '',
+          args_json: args ? JSON.stringify(args, null, 2) : '',
+          resolved: false,
+        }
+        approvalById.set(id, card)
+        stream.push(card)
+        break
+      }
+      case 'approval.resolved': {
+        const card = approvalById.get(typeof payload.approval_id === 'string' ? payload.approval_id : '')
+        if (!card) break
+        card.resolved = true
+        card.approved = payload.approved === true
+        break
+      }
+      case 'input.requested': {
+        closeAnswer()
+        const id = typeof payload.input_request_id === 'string' ? payload.input_request_id : ''
+        if (!id || promptById.has(id)) break
+        const candidates = Array.isArray(payload.candidates)
+          ? payload.candidates.filter((item): item is string => typeof item === 'string') : []
+        const card: AgentStreamPrompt = {
+          type: 'agent_prompt_required',
+          kind: 'ask_user',
+          pending_id: id,
+          request: {
+            question: typeof payload.question === 'string' ? payload.question : '',
+            ...(candidates.length ? { options: candidates } : {}),
+            allow_free_text: true,
+          },
+          resolved: false,
+        }
+        promptById.set(id, card)
+        stream.push(card)
+        break
+      }
+      case 'input.received': {
+        const card = promptById.get(typeof payload.input_request_id === 'string' ? payload.input_request_id : '')
+        if (!card) break
+        card.resolved = true
+        card.answered = true
+        break
+      }
       default:
         break
+    }
+  }
+
+  // A Run that ended while a card was still open closes it, so history never shows an answerable card.
+  if (runStatus !== null && TERMINAL_RUN_STATUSES.has(runStatus)) {
+    for (const card of [...approvalById.values(), ...promptById.values()]) {
+      if (!card.resolved) { card.resolved = true; card.canceled = true }
     }
   }
 

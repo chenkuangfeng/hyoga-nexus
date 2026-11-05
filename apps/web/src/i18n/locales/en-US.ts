@@ -9015,7 +9015,9 @@ export default {
   nexusChat: {
     placeholder: 'Type a message. Enter to send, Shift+Enter for a new line',
     needAgent: 'Choose an agent first',
-    scrollToBottom: 'Scroll to bottom'
+    scrollToBottom: 'Scroll to bottom',
+    planned: 'This feature is not available yet',
+    suggestionsPlanned: 'Suggested questions are not available yet. Type your question below'
   },
   nativeRuns: {
     title: 'Native runs',

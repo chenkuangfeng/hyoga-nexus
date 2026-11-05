@@ -9026,7 +9026,9 @@ export default {
   nexusChat: {
     placeholder: '메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)',
     needAgent: '먼저 에이전트를 선택하세요',
-    scrollToBottom: '맨 아래로 이동'
+    scrollToBottom: '맨 아래로 이동',
+    planned: '이 기능은 아직 제공되지 않습니다',
+    suggestionsPlanned: '추천 질문은 아직 제공되지 않습니다. 아래에 질문을 입력하세요'
   },
   nativeRuns: {
     title: 'Native 실행',

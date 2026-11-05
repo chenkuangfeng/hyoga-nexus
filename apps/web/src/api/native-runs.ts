@@ -98,6 +98,48 @@ export async function cancelRun(tenantId: string, runId: string): Promise<RunVie
   return requireValid(data, isRunView, 'run')
 }
 
+/** Page size of `GET .../runs/{id}/events` (server maximum). */
+const EVENT_PAGE_LIMIT = 500
+
+/**
+ * Read every persisted event of one Run, in sequence order. Used to rebuild the timeline of
+ * finished answers; pages until a short page. Malformed rows are dropped.
+ */
+export async function listRunEvents(tenantId: string, runId: string): Promise<RunEvent[]> {
+  const events: RunEvent[] = []
+  let after = 0
+  for (;;) {
+    const data: unknown = await get(`${tenantPath(tenantId)}/runs/${encodeURIComponent(runId)}/events`,
+      { params: { after_sequence: after, limit: EVENT_PAGE_LIMIT } })
+    if (!Array.isArray(data)) throw new Error('Unexpected run events response')
+    const page = data.filter(isRunEvent)
+    events.push(...page)
+    if (data.length < EVENT_PAGE_LIMIT || page.length === 0) return events
+    after = page[page.length - 1].sequence
+  }
+}
+
+/** A pending tool approval of the caller's own Run; arguments are only exposed here, never in events. */
+export interface PendingApproval {
+  id: string
+  tool_name: string
+  arguments: Record<string, unknown>
+}
+
+export async function listPendingApprovals(tenantId: string, runId: string): Promise<PendingApproval[]> {
+  const data: unknown = await get(`${tenantPath(tenantId)}/native/runs/${encodeURIComponent(runId)}/approvals`)
+  if (!Array.isArray(data)) throw new Error('Unexpected approvals response')
+  return data.filter((row): row is PendingApproval => isRecord(row) && isString(row.id) && isString(row.tool_name))
+    .map(row => ({ ...row, arguments: isRecord(row.arguments) ? row.arguments : {} }))
+}
+
+/** Approve or reject one tool call; approval may carry corrected arguments (revalidated by the server). */
+export async function resolveApproval(tenantId: string, runId: string, approvalId: string, approve: boolean,
+  args?: Record<string, unknown>): Promise<void> {
+  await post(`${tenantPath(tenantId)}/native/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(approvalId)}`,
+    { approve, arguments: approve ? args ?? null : null })
+}
+
 /** "Keep waiting" on a watchdog alert. Does not change the Run's execution. */
 export async function acknowledgeWatchdog(tenantId: string, runId: string): Promise<RunView> {
   const data = await post<unknown>(`${tenantPath(tenantId)}/runs/${encodeURIComponent(runId)}/watchdog/acknowledge`, {})
