@@ -231,6 +231,22 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 }
 
 /**
+ * 开发模式免密登录：服务端以 `[auth].dev_user_id` 指定的本地账号签发会话。
+ * 仅当 getAuthConfig() 返回 development_login 为 true 时调用；其他模式下接口返回 404。
+ */
+export async function devSession(): Promise<LoginResponse> {
+  try {
+    const response = await post('/api/v1/auth/dev-session', {})
+    return response as unknown as LoginResponse
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || t('error.auth.loginFailed')
+    }
+  }
+}
+
+/**
  * 获取 OIDC 登录跳转地址
  */
 export async function getOIDCAuthorizationURL(redirectURI: string): Promise<OIDCAuthURLResponse> {
@@ -275,6 +291,8 @@ export interface AuthConfigResponse {
   success: boolean
   registration_mode: 'self_serve' | 'invite_register' | 'invite_only' | string
   complex_password_enabled: boolean
+  // true when the server runs in development mode and offers passwordless local sign-in (see devSession)
+  development_login?: boolean
 }
 
 export async function getAuthConfig(): Promise<AuthConfigResponse> {

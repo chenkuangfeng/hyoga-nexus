@@ -185,6 +185,7 @@ import {
   getOIDCConfig,
   autoSetup,
   getAuthConfig,
+  devSession,
   userInfoFromApi,
   getInvitationByToken,
   registerByInvite,
@@ -439,6 +440,21 @@ const loadOIDCConfig = async () => {
   }
 }
 
+// Development mode only: sign in as the configured local account without the form. Any failure (including
+// a server that is not in development mode) leaves the normal login page in place.
+const tryDevelopmentLogin = async (): Promise<boolean> => {
+  try {
+    const config = await getAuthConfig()
+    if (!config.success || !config.development_login) return false
+    const response = await devSession()
+    if (!response.success) return false
+    await persistLoginResponse(response)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Registration stays hidden if configuration cannot be loaded.
 const loadAuthConfig = async () => {
   try {
@@ -637,6 +653,9 @@ onMounted(async () => {
     loadOIDCConfig()
     return
   }
+
+  // 开发模式：服务端返回 development_login 时免密登录配置的本地账号，直接进入空间。
+  if (!authStore.isLoggedIn && (await tryDevelopmentLogin())) return
 
   if (authStore.isLoggedIn) {
     router.replace('/platform/knowledge-bases')

@@ -41,16 +41,44 @@ def test_invalid_auth_section_is_rejected(deployment_config, body):
         auth_settings()
 
 
+def _seeded_session(username: str):
+    """A database with one password account named `username`; development mode must find it."""
+    import uuid
+    from datetime import datetime, timezone
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from nexus_platform.auth.accounts import PASSWORD_PROVIDER
+    from nexus_platform.persistence.models import Base, UserIdentityRecord, UserRecord
+
+    engine = create_engine('sqlite+pysqlite:///:memory:', connect_args={'check_same_thread': False},
+                           poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
+    with factory() as db, db.begin():
+        user = UserRecord(id=uuid.uuid4(), status='active', email=f'{username}@example.com',
+                          created_at=datetime.now(timezone.utc))
+        db.add(user)
+        db.flush()
+        db.add(UserIdentityRecord(id=uuid.uuid4(), user_id=user.id, provider=PASSWORD_PROVIDER, scope='',
+                                  external_id=username, created_at=datetime.now(timezone.utc)))
+    return factory
+
+
 def test_mode_comes_from_file(deployment_config):
-    deployment_config('[auth]\nmode = "development"\n')
-    assert get_principal(_request(), db=None).id == 'local-developer'
+    deployment_config('[auth]\nmode = "development"\ndev_user_id = "alice"\n')
+    with _seeded_session('alice')() as db:
+        assert get_principal(_request(), db=db).id == 'alice'
 
 
 def test_environment_variables_are_ignored(deployment_config, monkeypatch):
     deployment_config('[auth]\nmode = "development"\ndev_user_id = "alice"\n')
     monkeypatch.setenv('NEXUS_AUTH_MODE', 'session')
     monkeypatch.setenv('NEXUS_DEV_USER_ID', 'bob')
-    assert get_principal(_request(), db=None).id == 'alice'
+    with _seeded_session('alice')() as db:
+        assert get_principal(_request(), db=db).id == 'alice'
 
 
 def test_unset_mode_is_unconfigured(deployment_config):

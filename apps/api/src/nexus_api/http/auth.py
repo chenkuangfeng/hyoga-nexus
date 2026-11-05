@@ -26,7 +26,7 @@ from nexus_platform.identity.service import resolve_user
 from nexus_platform.persistence.models import TenantRecord, UserIdentityRecord, UserRecord
 from nexus_platform.tenants import service as tenants
 from nexus_api.dependencies.platform import (
-    CSRF_HEADER, SESSION_COOKIE, get_database_session, get_principal, get_tenant_header, bearer_token,
+    CSRF_HEADER, SESSION_COOKIE, bearer_token, development_identity, get_database_session, get_principal, get_tenant_header,
 )
 from nexus_api.http.wecom_directory import HttpWeComDirectory
 
@@ -125,6 +125,8 @@ def auth_config():
         "success": True,
         "registration_mode": "self_serve" if auth_settings().registration_enabled else "invite_only",
         "complex_password_enabled": True,
+        # True in development mode: the web client may call /auth/dev-session instead of showing the form.
+        "development_login": (auth_settings().mode or "").casefold() == "development",
     }
 
 
@@ -156,6 +158,11 @@ def login(body: EmailLogin, request: Request, response: Response, db: Session = 
     """Sign in with email and password. The response lists the spaces the user may enter; the client picks one."""
     token, expires, user_id = accounts.authenticate_email(db, body.email, body.password)
     _set_session(response, token, expires)
+    return _login_payload(db, user_id, token)
+
+
+def _login_payload(db: Session, user_id: UUID, token: str) -> dict[str, Any]:
+    """The login response body for a signed-in user: profile, home space and every space they may enter."""
     with db.begin():
         user = db.get(UserRecord, user_id)
         user_view = _user_view(db, user)
@@ -177,6 +184,23 @@ def login(body: EmailLogin, request: Request, response: Response, db: Session = 
         "memberships": memberships,
         "token": token,
     }
+
+
+@router.post("/dev-session")
+def dev_session(response: Response, db: Session = Depends(get_database_session)):
+    """Development mode only: sign in as the configured local account without a password.
+
+    Issues a normal session for the account named by `[auth].dev_user_id`, so the web client stores and sends
+    its token like any other login. Any other mode answers 404. The loopback guard limits it to this machine.
+    """
+    settings = auth_settings()
+    if (settings.mode or "").casefold() != "development":
+        raise NotFound("Not found")
+    identity = development_identity(db, settings)  # runs and commits its own transaction
+    with db.begin():
+        token, expires = sessions.issue_session(db, identity.user_id, identity.id)
+    _set_session(response, token, expires)
+    return _login_payload(db, identity.user_id, token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from uuid import UUID
@@ -10,9 +11,10 @@ from uuid import UUID
 from nexus_core.platform import Principal
 from nexus_platform.auth.sessions import resolve_session
 from nexus_platform.configuration import AuthFileSettings, DatabaseConfigurationError, DEFAULT_DEV_USER_ID, auth_settings
+from nexus_platform.auth.accounts import PASSWORD_PROVIDER
 from nexus_platform.errors import Forbidden, ServiceUnavailable, Unauthenticated
 from nexus_platform.persistence.database import create_database_engine, session_factory
-from nexus_platform.persistence.models import UserRecord
+from nexus_platform.persistence.models import UserIdentityRecord, UserRecord
 
 
 def get_database_session(request: Request) -> Iterator[Session]:
@@ -53,13 +55,37 @@ def _auth_file_settings() -> AuthFileSettings:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def development_identity(db: Session, settings: AuthFileSettings) -> UserIdentityRecord:
+    """The existing password identity that development mode acts as (`[auth].dev_user_id`, a username).
+
+    Development mode never creates accounts: the identity must already exist, normally the default owner
+    bootstrapped at API start. Raises 503 with the fix when it is missing.
+    """
+    username = (settings.dev_user_id or DEFAULT_DEV_USER_ID).strip()
+    # Run the lookup in its own transaction: later handlers call session.begin() on this request's session,
+    # which would fail if a transaction were already open from the implicit autobegin.
+    with db.begin():
+        identity = db.scalar(select(UserIdentityRecord).where(
+            UserIdentityRecord.provider == PASSWORD_PROVIDER,
+            UserIdentityRecord.scope == "",
+            UserIdentityRecord.external_id == username,
+        ))
+    if identity is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Development mode: no password account named {username!r}; set [auth].dev_user_id to an existing username",
+        )
+    return identity
+
+
 def get_principal(request: Request, db: Session = Depends(get_database_session)) -> Principal:
     settings = _auth_file_settings()
     mode = (settings.mode or "unconfigured").casefold()
     if mode == "development":
-        # A fixed process identity supports local single-user development without trusting a client header.
-        subject = (settings.dev_user_id or DEFAULT_DEV_USER_ID).strip()
-        return Principal(id=subject, issuer="nexus-development")
+        # Local development acts as one existing account on every request; the loopback guard keeps this off
+        # the network. Accounts are never created here.
+        identity = development_identity(db, settings)
+        return Principal(id=identity.external_id, issuer=identity.provider, scope=identity.scope)
     provider = getattr(request.app.state, "principal_provider", None)
     if mode not in {"session", "external"} and provider is None:
         raise HTTPException(status_code=503, detail="Authentication provider is not configured")

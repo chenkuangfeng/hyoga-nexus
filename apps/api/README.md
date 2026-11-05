@@ -14,6 +14,7 @@ FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型�
 
   该命令当前未注册为 pyproject 脚本入口，需通过 `python -m` 调用。之后的成员账号由管理员在“角色与权限”页面创建。
 - API 启动时自动补齐默认企业空间 `hyoga` 与其 owner 账号（`nexus_platform.bootstrap`）：账号邮箱 `9600543@qq.com`、用户名 `9600543`、初始密码 `cmm_1212121212`。已存在的空间、账号、成员关系不会重复创建；成员关系被撤销时会恢复为 owner。该密码豁免长度策略，仅用于开发环境，上线前必须修改或删除该启动逻辑。数据库未迁移或不可用时只记录警告，API 仍会启动。
+- 开发免登录：`[auth] mode = "development"` 时，API 的每个请求都以 `[auth].dev_user_id`（用户名，默认 `9600543`）指定的已有账号身份执行，不会新建账号；该账号不存在时返回 503 并提示修改配置。网页端登录页自动调用 `POST /api/v1/auth/dev-session` 签发一个普通会话，因此无需输入密码。`/api/v1/auth/config` 返回 `development_login: true` 表示该能力开启；其他模式下 `dev-session` 返回 404。所有开发模式请求仅接受回环地址（见 `nexus_api.security`）。
 
 ## 模块文档
 

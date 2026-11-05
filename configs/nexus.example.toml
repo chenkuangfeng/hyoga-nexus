@@ -9,11 +9,11 @@ url = "sqlite:///./nexus.db"
 
 [auth]
 # Sign-in model for the API: "development", "session" or "external". Leave unset for production-like runs.
-# "development" gives every request one fixed identity: local machine only, API bound to 127.0.0.1.
+# "development" skips the sign-in form: the web app signs in as the local account named by dev_user_id
+# (default owner 9600543 created at API start). Requests are bound to 127.0.0.1 only and no account is created.
 # "session" shows the password sign-in form (accounts created with the create-owner command or the default owner).
-# The default is "session" so a fresh copy of this file can sign in over local HTTP without extra edits.
-mode = "session"
-# dev_user_id = "local-developer"
+mode = "development"
+dev_user_id = "9600543"
 # Session cookies are Secure by default. This example turns that off for local HTTP; set it to true
 # (or remove the line) for any deployment served over HTTPS.
 cookie_secure = false
