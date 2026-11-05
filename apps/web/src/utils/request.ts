@@ -102,6 +102,8 @@ instance.interceptors.request.use(
       }
     }
     
+    // 后端对 Cookie 会话的写请求要求 X-Nexus-Request 头（防跨站伪造），否则返回 403。
+    config.headers["X-Nexus-Request"] = "1";
     config.headers["X-Request-ID"] = `${generateRandomString(12)}`;
     return config;
   },
