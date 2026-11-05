@@ -9077,5 +9077,139 @@ export default {
     noSpace: '請先選擇空間',
     notFound: '會話不存在或無權存取',
     sendError: '傳送失敗'
+  },
+  nexusAgent: {
+    basicInfoDesc: "設定智慧體的名稱與描述",
+    promptsConfigDesc: "設定智慧體的系統提示詞",
+    modelConfigDesc: "設定對話模型與生成參數",
+    temperatureDesc: "控制輸出的隨機性，0 最確定。新建時預設 0.7，編輯時沿用模型設定中的值",
+    maxTokensDesc: "每次模型呼叫的最大生成 Token。預設 {count}；選「自訂」後依填寫的值儲存",
+    maxIterationsDesc: "限制單次執行的模型推理輪數，最多 {max} 輪",
+    thinkingDesc: "「自動」沿用模型設定；「關閉」不向模型傳送思考參數；其他等級需要模型支援",
+    llmCallTimeoutDesc: "單次模型呼叫的最長等待時間（秒），留空使用預設值 {seconds} 秒",
+    toolsDesc: "勾選的工具會在發布時綁定到智慧體，執行時每次呼叫仍會複核權限",
+    toolGroups: {
+      base: "基礎",
+      memory: "記憶",
+      skills: "技能"
+    },
+    risk: {
+      low: "低風險",
+      medium: "中風險",
+      high: "高風險"
+    },
+    requiresApproval: "需審批",
+    readOnly: "唯讀",
+    notEnabled: "空間未啟用",
+    enable: "啟用",
+    enableHint: "此工具尚未在空間中啟用，請聯絡空間管理員",
+    enableDone: "已在空間中啟用 {name}",
+    enableFailed: "啟用失敗",
+    loadFailed: "載入失敗",
+    saveFailed: "儲存失敗",
+    saved: "已儲存並發布",
+    publishFailed: "草稿已儲存，但發布失敗：{reason}",
+    deleteTitle: "刪除智慧體",
+    deleteConfirm: "確定刪除智慧體「{name}」嗎？既有會話仍可檢視，但無法繼續對話。",
+    deleted: "已刪除",
+    copied: "已複製為「{name}」",
+    copySuffix: "副本",
+    noModels: "尚無可用的對話模型，請先在「設定 → 模型管理」中新增",
+    goModelSettings: "前往新增模型",
+    draft: "未發布",
+    versionTag: "v{version}",
+    startChat: "開始對話",
+    notPublished: "智慧體尚未發布，儲存後即可對話",
+    empty: "尚無智慧體",
+    emptyDesc: "建立一個智慧體，選擇模型與工具後即可開始對話",
+    noSpace: "請先選擇空間",
+    searchPlaceholder: "搜尋智慧體",
+    tools: {
+      ask_user: {
+        label: "詢問使用者",
+        desc: "向使用者提問，可提供快捷選項"
+      },
+      update_working_checkpoint: {
+        label: "工作檢查點",
+        desc: "更新本次任務的工作筆記"
+      },
+      propose_memory_draft: {
+        label: "提交記憶草稿",
+        desc: "提交待審核的記憶或 SOP 修改"
+      },
+      start_long_term_update: {
+        label: "整理長期記憶",
+        desc: "讀取記憶索引並整理可重用的結論"
+      },
+      read_memory: {
+        label: "讀取記憶",
+        desc: "讀取已發布的記憶或 SOP"
+      },
+      search_memory: {
+        label: "搜尋記憶",
+        desc: "依關鍵字搜尋已發布的記憶"
+      },
+      read_tool_output: {
+        label: "讀取工具輸出",
+        desc: "分頁讀取較大的工具輸出"
+      },
+      todo: {
+        label: "待辦",
+        desc: "列出或更新本次執行的待辦事項"
+      },
+      load_skill: {
+        label: "載入技能",
+        desc: "載入已綁定技能的完整說明"
+      },
+      read_skill_file: {
+        label: "讀取技能檔案",
+        desc: "讀取已載入技能的資源檔案"
+      },
+      run_skill_script: {
+        label: "執行技能腳本",
+        desc: "執行技能宣告的腳本，每次呼叫需審批"
+      }
+    }
+  },
+  nexusModels: {
+    description: "管理對話、向量、重排、視覺與語音模型。位址與 Key 儲存在服務商上，同一服務商下的模型共用",
+    scopeLabel: "可見範圍",
+    scope: {
+      personal: "個人",
+      tenant: "空間共享"
+    },
+    defaultTag: {
+      personal: "個人預設",
+      tenant: "空間預設"
+    },
+    setDefault: {
+      personal: "設為個人預設",
+      tenant: "設為空間預設"
+    },
+    clearDefault: {
+      personal: "取消個人預設",
+      tenant: "取消空間預設"
+    },
+    providerCustom: "自訂（OpenAI 相容介面）",
+    providerName: "服務商名稱",
+    providerNamePlaceholder: "例如 DeepSeek",
+    baseUrlPlaceholder: "https://api.example.com/v1",
+    apiKey: "API Key",
+    apiKeyPlaceholder: "輸入 API Key",
+    apiKeyKeep: "留空則保留已儲存的 Key（更換位址時必須填寫）",
+    sharedKeyHint: "此服務商下的 {count} 個模型都會使用修改後的名稱、位址與 Key",
+    modelNamePlaceholder: "服務商的模型識別碼，例如 deepseek-chat",
+    protocol: "介面協定",
+    typeLocked: "模型類型建立後無法修改",
+    existingProviderHint: "使用已儲存的位址與 Key",
+    saved: "已儲存",
+    deleted: "已停用",
+    loadFailed: "載入失敗",
+    saveFailed: "儲存失敗",
+    defaultSaved: "預設模型已更新",
+    empty: "尚無模型",
+    emptyViewer: "尚無可用的模型，請聯絡空間管理員新增",
+    confirmDelete: "確定停用模型「{name}」嗎？已發布的智慧體版本保留原引用。",
+    testHint: "測試會向服務商傳送一次很短的請求，可能產生費用"
   }
 }

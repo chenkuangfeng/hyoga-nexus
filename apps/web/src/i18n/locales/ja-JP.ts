@@ -9081,5 +9081,139 @@ export default {
     noSpace: '先にスペースを選択してください',
     notFound: 'セッションが存在しないか、アクセスできません',
     sendError: '送信に失敗しました'
+  },
+  nexusAgent: {
+    basicInfoDesc: "エージェントの名前と説明を設定します",
+    promptsConfigDesc: "エージェントのシステムプロンプトを設定します",
+    modelConfigDesc: "チャットモデルと生成パラメータを設定します",
+    temperatureDesc: "出力のランダム性を制御します。0 が最も確定的です。新規作成時は 0.7、編集時はモデル設定の値を引き継ぎます",
+    maxTokensDesc: "モデル呼び出し 1 回あたりの最大生成トークン数。既定値は {count}。「カスタム」では入力値を保存します",
+    maxIterationsDesc: "1 回の実行における推論ラウンド数の上限（最大 {max}）",
+    thinkingDesc: "「自動」はモデル設定に従います。「オフ」は思考パラメータを送信しません。その他のレベルはモデルの対応が必要です",
+    llmCallTimeoutDesc: "モデル呼び出し 1 回の最大待機時間（秒）。空欄の場合は既定の {seconds} 秒",
+    toolsDesc: "選択したツールは公開時にエージェントへ割り当てられ、実行時も呼び出しごとに権限を確認します",
+    toolGroups: {
+      base: "基本",
+      memory: "メモリ",
+      skills: "スキル"
+    },
+    risk: {
+      low: "低リスク",
+      medium: "中リスク",
+      high: "高リスク"
+    },
+    requiresApproval: "要承認",
+    readOnly: "読み取り専用",
+    notEnabled: "スペースで未有効",
+    enable: "有効化",
+    enableHint: "このツールはスペースでまだ有効化されていません。スペース管理者に連絡してください",
+    enableDone: "スペースで {name} を有効化しました",
+    enableFailed: "有効化に失敗しました",
+    loadFailed: "読み込みに失敗しました",
+    saveFailed: "保存に失敗しました",
+    saved: "保存して公開しました",
+    publishFailed: "下書きは保存しましたが、公開に失敗しました：{reason}",
+    deleteTitle: "エージェントを削除",
+    deleteConfirm: "エージェント「{name}」を削除しますか？既存のセッションは閲覧できますが、会話は続けられません。",
+    deleted: "削除しました",
+    copied: "「{name}」としてコピーしました",
+    copySuffix: "コピー",
+    noModels: "利用できるチャットモデルがありません。先に「設定 → モデル管理」で追加してください",
+    goModelSettings: "モデルを追加",
+    draft: "未公開",
+    versionTag: "v{version}",
+    startChat: "チャットを開始",
+    notPublished: "このエージェントはまだ公開されていません。保存すると会話できます",
+    empty: "エージェントがありません",
+    emptyDesc: "エージェントを作成し、モデルとツールを選ぶと会話を始められます",
+    noSpace: "先にスペースを選択してください",
+    searchPlaceholder: "エージェントを検索",
+    tools: {
+      ask_user: {
+        label: "ユーザーに質問",
+        desc: "選択肢付きでユーザーに質問します"
+      },
+      update_working_checkpoint: {
+        label: "作業チェックポイント",
+        desc: "このタスクの作業メモを更新します"
+      },
+      propose_memory_draft: {
+        label: "メモリ草案を提出",
+        desc: "メモリや SOP の変更をレビューに提出します"
+      },
+      start_long_term_update: {
+        label: "長期メモリを整理",
+        desc: "メモリ索引を読み、再利用できる結論を整理します"
+      },
+      read_memory: {
+        label: "メモリを読む",
+        desc: "公開済みのメモリや SOP を読みます"
+      },
+      search_memory: {
+        label: "メモリを検索",
+        desc: "公開済みのメモリをキーワードで検索します"
+      },
+      read_tool_output: {
+        label: "ツール出力を読む",
+        desc: "大きなツール出力をページごとに読みます"
+      },
+      todo: {
+        label: "ToDo",
+        desc: "この実行の ToDo を一覧・更新します"
+      },
+      load_skill: {
+        label: "スキルを読み込む",
+        desc: "割り当て済みスキルの説明全体を読み込みます"
+      },
+      read_skill_file: {
+        label: "スキルファイルを読む",
+        desc: "読み込んだスキルのリソースファイルを読みます"
+      },
+      run_skill_script: {
+        label: "スキルスクリプトを実行",
+        desc: "スキルが宣言したスクリプトを実行します。毎回承認が必要です"
+      }
+    }
+  },
+  nexusModels: {
+    description: "チャット、埋め込み、リランク、ビジョン、音声モデルを管理します。アドレスと Key はプロバイダーに保存され、同じプロバイダーのモデルで共有されます",
+    scopeLabel: "公開範囲",
+    scope: {
+      personal: "個人",
+      tenant: "スペース共有"
+    },
+    defaultTag: {
+      personal: "個人の既定",
+      tenant: "スペースの既定"
+    },
+    setDefault: {
+      personal: "個人の既定に設定",
+      tenant: "スペースの既定に設定"
+    },
+    clearDefault: {
+      personal: "個人の既定を解除",
+      tenant: "スペースの既定を解除"
+    },
+    providerCustom: "カスタム（OpenAI 互換 API）",
+    providerName: "プロバイダー名",
+    providerNamePlaceholder: "例：DeepSeek",
+    baseUrlPlaceholder: "https://api.example.com/v1",
+    apiKey: "API Key",
+    apiKeyPlaceholder: "API Key を入力",
+    apiKeyKeep: "空欄の場合は保存済みの Key を使用します（アドレス変更時は必須）",
+    sharedKeyHint: "このプロバイダーの {count} 個のモデルすべてが変更後の名前、アドレス、Key を使用します",
+    modelNamePlaceholder: "プロバイダーでのモデル識別子（例：deepseek-chat）",
+    protocol: "API プロトコル",
+    typeLocked: "モデルの種類は作成後に変更できません",
+    existingProviderHint: "保存済みのアドレスと Key を使用します",
+    saved: "保存しました",
+    deleted: "無効化しました",
+    loadFailed: "読み込みに失敗しました",
+    saveFailed: "保存に失敗しました",
+    defaultSaved: "既定のモデルを更新しました",
+    empty: "モデルがありません",
+    emptyViewer: "利用できるモデルがありません。スペース管理者に追加を依頼してください",
+    confirmDelete: "モデル「{name}」を無効化しますか？公開済みのエージェントのバージョンは元の参照を保持します。",
+    testHint: "テストではプロバイダーに短いリクエストを 1 回送信するため、料金が発生する場合があります"
   }
 }

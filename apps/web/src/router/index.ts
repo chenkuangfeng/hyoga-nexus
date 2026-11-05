@@ -171,7 +171,8 @@ const router = createRouter({
         {
           path: "agents",
           name: "agentList",
-          component: PlannedPage,
+          // Nexus agent list and editor (openspec 2026-11-05-weknora-agent-tool-model-settings).
+          component: () => import("../views/agent/NexusAgentList.vue"),
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
         },
         {

@@ -9081,5 +9081,139 @@ export default {
     noSpace: '먼저 공간을 선택하세요',
     notFound: '세션이 없거나 접근할 수 없습니다',
     sendError: '전송하지 못했습니다'
+  },
+  nexusAgent: {
+    basicInfoDesc: "에이전트 이름과 설명을 설정합니다",
+    promptsConfigDesc: "에이전트 시스템 프롬프트를 설정합니다",
+    modelConfigDesc: "채팅 모델과 생성 매개변수를 설정합니다",
+    temperatureDesc: "출력의 무작위성을 조절합니다. 0이 가장 결정적입니다. 새로 만들 때는 0.7, 편집 시에는 모델 설정 값을 따릅니다",
+    maxTokensDesc: "모델 호출 1회당 최대 생성 토큰 수입니다. 기본값은 {count}이며, 「사용자 지정」은 입력한 값으로 저장합니다",
+    maxIterationsDesc: "한 번의 실행에서 모델 추론 라운드 수를 제한합니다(최대 {max})",
+    thinkingDesc: "「자동」은 모델 설정을 따르고, 「끄기」는 추론 매개변수를 보내지 않습니다. 다른 단계는 모델 지원이 필요합니다",
+    llmCallTimeoutDesc: "모델 호출 1회의 최대 대기 시간(초)입니다. 비워 두면 기본값 {seconds}초를 사용합니다",
+    toolsDesc: "선택한 도구는 게시할 때 에이전트에 연결되며, 실행 중에도 호출마다 권한을 다시 확인합니다",
+    toolGroups: {
+      base: "기본",
+      memory: "메모리",
+      skills: "스킬"
+    },
+    risk: {
+      low: "낮은 위험",
+      medium: "중간 위험",
+      high: "높은 위험"
+    },
+    requiresApproval: "승인 필요",
+    readOnly: "읽기 전용",
+    notEnabled: "공간에서 미사용",
+    enable: "사용",
+    enableHint: "이 도구는 아직 공간에서 사용 설정되지 않았습니다. 공간 관리자에게 문의하세요",
+    enableDone: "공간에서 {name}을(를) 사용 설정했습니다",
+    enableFailed: "사용 설정에 실패했습니다",
+    loadFailed: "불러오지 못했습니다",
+    saveFailed: "저장하지 못했습니다",
+    saved: "저장 및 게시했습니다",
+    publishFailed: "초안은 저장했지만 게시에 실패했습니다: {reason}",
+    deleteTitle: "에이전트 삭제",
+    deleteConfirm: "에이전트 「{name}」을(를) 삭제할까요? 기존 세션은 볼 수 있지만 대화를 이어갈 수 없습니다.",
+    deleted: "삭제했습니다",
+    copied: "「{name}」(으)로 복사했습니다",
+    copySuffix: "사본",
+    noModels: "사용할 수 있는 채팅 모델이 없습니다. 먼저 「설정 → 모델 관리」에서 추가하세요",
+    goModelSettings: "모델 추가",
+    draft: "미게시",
+    versionTag: "v{version}",
+    startChat: "대화 시작",
+    notPublished: "아직 게시되지 않은 에이전트입니다. 저장하면 대화할 수 있습니다",
+    empty: "에이전트가 없습니다",
+    emptyDesc: "에이전트를 만들고 모델과 도구를 선택하면 대화를 시작할 수 있습니다",
+    noSpace: "먼저 공간을 선택하세요",
+    searchPlaceholder: "에이전트 검색",
+    tools: {
+      ask_user: {
+        label: "사용자에게 질문",
+        desc: "빠른 선택지와 함께 사용자에게 질문합니다"
+      },
+      update_working_checkpoint: {
+        label: "작업 체크포인트",
+        desc: "이 작업의 작업 메모를 업데이트합니다"
+      },
+      propose_memory_draft: {
+        label: "메모리 초안 제출",
+        desc: "메모리 또는 SOP 변경을 검토용으로 제출합니다"
+      },
+      start_long_term_update: {
+        label: "장기 메모리 정리",
+        desc: "메모리 색인을 읽고 재사용 가능한 결론을 정리합니다"
+      },
+      read_memory: {
+        label: "메모리 읽기",
+        desc: "게시된 메모리 또는 SOP를 읽습니다"
+      },
+      search_memory: {
+        label: "메모리 검색",
+        desc: "게시된 메모리를 키워드로 검색합니다"
+      },
+      read_tool_output: {
+        label: "도구 출력 읽기",
+        desc: "큰 도구 출력을 페이지 단위로 읽습니다"
+      },
+      todo: {
+        label: "할 일",
+        desc: "이 실행의 할 일을 나열하거나 업데이트합니다"
+      },
+      load_skill: {
+        label: "스킬 불러오기",
+        desc: "연결된 스킬의 전체 지침을 불러옵니다"
+      },
+      read_skill_file: {
+        label: "스킬 파일 읽기",
+        desc: "불러온 스킬의 리소스 파일을 읽습니다"
+      },
+      run_skill_script: {
+        label: "스킬 스크립트 실행",
+        desc: "스킬이 선언한 스크립트를 실행합니다. 호출마다 승인이 필요합니다"
+      }
+    }
+  },
+  nexusModels: {
+    description: "채팅, 임베딩, 재정렬, 비전, 음성 모델을 관리합니다. 주소와 Key는 공급자에 저장되며 같은 공급자의 모델이 함께 사용합니다",
+    scopeLabel: "공개 범위",
+    scope: {
+      personal: "개인",
+      tenant: "공간 공유"
+    },
+    defaultTag: {
+      personal: "개인 기본값",
+      tenant: "공간 기본값"
+    },
+    setDefault: {
+      personal: "개인 기본값으로 설정",
+      tenant: "공간 기본값으로 설정"
+    },
+    clearDefault: {
+      personal: "개인 기본값 해제",
+      tenant: "공간 기본값 해제"
+    },
+    providerCustom: "사용자 지정(OpenAI 호환 API)",
+    providerName: "공급자 이름",
+    providerNamePlaceholder: "예: DeepSeek",
+    baseUrlPlaceholder: "https://api.example.com/v1",
+    apiKey: "API Key",
+    apiKeyPlaceholder: "API Key 입력",
+    apiKeyKeep: "비워 두면 저장된 Key를 유지합니다(주소를 바꿀 때는 필수)",
+    sharedKeyHint: "이 공급자의 모델 {count}개 모두 변경된 이름, 주소, Key를 사용합니다",
+    modelNamePlaceholder: "공급자의 모델 식별자, 예: deepseek-chat",
+    protocol: "API 프로토콜",
+    typeLocked: "모델 유형은 생성 후 변경할 수 없습니다",
+    existingProviderHint: "저장된 주소와 Key를 사용합니다",
+    saved: "저장했습니다",
+    deleted: "사용 중지했습니다",
+    loadFailed: "불러오지 못했습니다",
+    saveFailed: "저장하지 못했습니다",
+    defaultSaved: "기본 모델을 업데이트했습니다",
+    empty: "모델이 없습니다",
+    emptyViewer: "사용할 수 있는 모델이 없습니다. 공간 관리자에게 추가를 요청하세요",
+    confirmDelete: "모델 「{name}」을(를) 사용 중지할까요? 게시된 에이전트 버전은 기존 참조를 유지합니다.",
+    testHint: "테스트는 공급자에게 짧은 요청을 한 번 보내며 요금이 발생할 수 있습니다"
   }
 }

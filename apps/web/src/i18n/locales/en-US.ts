@@ -9070,5 +9070,139 @@ export default {
     noSpace: 'Select a space first',
     notFound: 'Session not found or not accessible',
     sendError: 'Failed to send'
+  },
+  nexusAgent: {
+    basicInfoDesc: "Configure the agent name and description",
+    promptsConfigDesc: "Configure the agent system prompt",
+    modelConfigDesc: "Configure the chat model and generation parameters",
+    temperatureDesc: "Controls output randomness; 0 is most deterministic. New agents start at 0.7; editing keeps the model setting",
+    maxTokensDesc: "Maximum tokens generated per model call. Defaults to {count}; a custom value is saved as entered",
+    maxIterationsDesc: "Caps the model reasoning rounds of one run, up to {max}",
+    thinkingDesc: "Auto follows the model setting; Off sends no reasoning parameter; other levels need model support",
+    llmCallTimeoutDesc: "Maximum wait for one model call (seconds). Leave empty for the default of {seconds} seconds",
+    toolsDesc: "Selected tools are bound to the agent when it is published; every call is still authorized at run time",
+    toolGroups: {
+      base: "Basic",
+      memory: "Memory",
+      skills: "Skills"
+    },
+    risk: {
+      low: "Low risk",
+      medium: "Medium risk",
+      high: "High risk"
+    },
+    requiresApproval: "Approval",
+    readOnly: "Read-only",
+    notEnabled: "Not enabled in space",
+    enable: "Enable",
+    enableHint: "This tool is not enabled in the space yet. Ask a space administrator",
+    enableDone: "Enabled {name} in the space",
+    enableFailed: "Failed to enable",
+    loadFailed: "Failed to load",
+    saveFailed: "Failed to save",
+    saved: "Saved and published",
+    publishFailed: "Draft saved, but publishing failed: {reason}",
+    deleteTitle: "Delete agent",
+    deleteConfirm: "Delete agent \"{name}\"? Existing sessions stay readable but cannot continue.",
+    deleted: "Deleted",
+    copied: "Copied as \"{name}\"",
+    copySuffix: "copy",
+    noModels: "No chat model is available yet. Add one in Settings → Models first",
+    goModelSettings: "Add a model",
+    draft: "Unpublished",
+    versionTag: "v{version}",
+    startChat: "Start chat",
+    notPublished: "This agent is not published yet. Save it to start chatting",
+    empty: "No agents yet",
+    emptyDesc: "Create an agent, pick a model and tools, then start chatting",
+    noSpace: "Select a space first",
+    searchPlaceholder: "Search agents",
+    tools: {
+      ask_user: {
+        label: "Ask user",
+        desc: "Ask the user a question with optional quick choices"
+      },
+      update_working_checkpoint: {
+        label: "Working checkpoint",
+        desc: "Update the working notes of this task"
+      },
+      propose_memory_draft: {
+        label: "Propose memory draft",
+        desc: "Propose memory or SOP changes for review"
+      },
+      start_long_term_update: {
+        label: "Consolidate memory",
+        desc: "Read the memory index and consolidate reusable findings"
+      },
+      read_memory: {
+        label: "Read memory",
+        desc: "Read a published memory or SOP"
+      },
+      search_memory: {
+        label: "Search memory",
+        desc: "Search published memory by keywords"
+      },
+      read_tool_output: {
+        label: "Read tool output",
+        desc: "Read a large tool output page by page"
+      },
+      todo: {
+        label: "Todo",
+        desc: "List or update the todo items of this run"
+      },
+      load_skill: {
+        label: "Load skill",
+        desc: "Load the full instructions of a bound skill"
+      },
+      read_skill_file: {
+        label: "Read skill file",
+        desc: "Read a resource file of a loaded skill"
+      },
+      run_skill_script: {
+        label: "Run skill script",
+        desc: "Run a script declared by a skill; each call needs approval"
+      }
+    }
+  },
+  nexusModels: {
+    description: "Manage chat, embedding, rerank, vision and speech models. Address and Key belong to the provider and are shared by its models",
+    scopeLabel: "Visibility",
+    scope: {
+      personal: "Personal",
+      tenant: "Shared in space"
+    },
+    defaultTag: {
+      personal: "Personal default",
+      tenant: "Space default"
+    },
+    setDefault: {
+      personal: "Set as personal default",
+      tenant: "Set as space default"
+    },
+    clearDefault: {
+      personal: "Clear personal default",
+      tenant: "Clear space default"
+    },
+    providerCustom: "Custom (OpenAI-compatible API)",
+    providerName: "Provider name",
+    providerNamePlaceholder: "For example DeepSeek",
+    baseUrlPlaceholder: "https://api.example.com/v1",
+    apiKey: "API Key",
+    apiKeyPlaceholder: "Enter the API Key",
+    apiKeyKeep: "Leave empty to keep the saved Key (required when the address changes)",
+    sharedKeyHint: "All {count} models of this provider will use the changed name, address and Key",
+    modelNamePlaceholder: "Model identifier at the provider, for example deepseek-chat",
+    protocol: "API protocol",
+    typeLocked: "The model type cannot be changed after creation",
+    existingProviderHint: "Uses the saved address and Key",
+    saved: "Saved",
+    deleted: "Disabled",
+    loadFailed: "Failed to load",
+    saveFailed: "Failed to save",
+    defaultSaved: "Default model updated",
+    empty: "No models yet",
+    emptyViewer: "No model is available yet. Ask a space administrator to add one",
+    confirmDelete: "Disable model \"{name}\"? Published agent versions keep their reference.",
+    testHint: "The test sends one short request to the provider and may incur a charge"
   }
 }

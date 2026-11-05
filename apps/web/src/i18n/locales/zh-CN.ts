@@ -9063,5 +9063,139 @@ export default {
     noSpace: '请先选择空间',
     notFound: '会话不存在或无权访问',
     sendError: '发送失败'
+  },
+  nexusAgent: {
+    basicInfoDesc: "配置智能体的名称与描述",
+    promptsConfigDesc: "配置智能体的系统提示词",
+    modelConfigDesc: "配置对话模型与生成参数",
+    temperatureDesc: "控制输出的随机性，0 最确定。新建时默认 0.7，编辑时沿用模型配置中的值",
+    maxTokensDesc: "每次模型调用的最大生成 Token。默认 {count}；选「自定义」后按填写的值保存",
+    maxIterationsDesc: "限制单次运行的模型推理轮数，最多 {max} 轮",
+    thinkingDesc: "「自动」沿用模型配置；「关闭」不向模型发送思考参数；其他等级需要模型支持",
+    llmCallTimeoutDesc: "单次模型调用的最大等待时间（秒），留空使用默认值 {seconds} 秒",
+    toolsDesc: "勾选的工具会在发布时绑定到智能体，运行时每次调用仍会复核权限",
+    toolGroups: {
+      base: "基础",
+      memory: "记忆",
+      skills: "技能"
+    },
+    risk: {
+      low: "低风险",
+      medium: "中风险",
+      high: "高风险"
+    },
+    requiresApproval: "需审批",
+    readOnly: "只读",
+    notEnabled: "空间未启用",
+    enable: "启用",
+    enableHint: "该工具尚未在空间中启用，请联系空间管理员",
+    enableDone: "已在空间中启用 {name}",
+    enableFailed: "启用失败",
+    loadFailed: "加载失败",
+    saveFailed: "保存失败",
+    saved: "已保存并发布",
+    publishFailed: "草稿已保存，但发布失败：{reason}",
+    deleteTitle: "删除智能体",
+    deleteConfirm: "确定删除智能体「{name}」吗？已有会话仍可查看，但不能继续对话。",
+    deleted: "已删除",
+    copied: "已复制为「{name}」",
+    copySuffix: "副本",
+    noModels: "还没有可用的对话模型，请先在「设置 → 模型管理」中添加",
+    goModelSettings: "去添加模型",
+    draft: "未发布",
+    versionTag: "v{version}",
+    startChat: "开始对话",
+    notPublished: "智能体尚未发布，保存后即可对话",
+    empty: "还没有智能体",
+    emptyDesc: "创建一个智能体，选择模型和工具后即可开始对话",
+    noSpace: "请先选择空间",
+    searchPlaceholder: "搜索智能体",
+    tools: {
+      ask_user: {
+        label: "询问用户",
+        desc: "向用户提问，可提供快捷选项"
+      },
+      update_working_checkpoint: {
+        label: "工作检查点",
+        desc: "更新本次任务的工作笔记"
+      },
+      propose_memory_draft: {
+        label: "提交记忆草稿",
+        desc: "提交待审核的记忆或 SOP 修改"
+      },
+      start_long_term_update: {
+        label: "整理长期记忆",
+        desc: "读取记忆索引并整理可复用的结论"
+      },
+      read_memory: {
+        label: "读取记忆",
+        desc: "读取已发布的记忆或 SOP"
+      },
+      search_memory: {
+        label: "搜索记忆",
+        desc: "按关键词搜索已发布的记忆"
+      },
+      read_tool_output: {
+        label: "读取工具输出",
+        desc: "分页读取较大的工具输出"
+      },
+      todo: {
+        label: "待办",
+        desc: "列出或更新本次运行的待办事项"
+      },
+      load_skill: {
+        label: "加载技能",
+        desc: "加载已绑定技能的完整说明"
+      },
+      read_skill_file: {
+        label: "读取技能文件",
+        desc: "读取已加载技能的资源文件"
+      },
+      run_skill_script: {
+        label: "运行技能脚本",
+        desc: "运行技能声明的脚本，每次调用需审批"
+      }
+    }
+  },
+  nexusModels: {
+    description: "管理对话、向量、重排、视觉与语音模型。地址与 Key 保存在服务商上，同一服务商下的模型共用",
+    scopeLabel: "可见范围",
+    scope: {
+      personal: "个人",
+      tenant: "空间共享"
+    },
+    defaultTag: {
+      personal: "个人默认",
+      tenant: "空间默认"
+    },
+    setDefault: {
+      personal: "设为个人默认",
+      tenant: "设为空间默认"
+    },
+    clearDefault: {
+      personal: "取消个人默认",
+      tenant: "取消空间默认"
+    },
+    providerCustom: "自定义（OpenAI 兼容接口）",
+    providerName: "服务商名称",
+    providerNamePlaceholder: "例如 DeepSeek",
+    baseUrlPlaceholder: "https://api.example.com/v1",
+    apiKey: "API Key",
+    apiKeyPlaceholder: "输入 API Key",
+    apiKeyKeep: "留空则保持已保存的 Key（更换地址时必须填写）",
+    sharedKeyHint: "该服务商下的 {count} 个模型都会使用修改后的名称、地址与 Key",
+    modelNamePlaceholder: "服务商的模型标识，例如 deepseek-chat",
+    protocol: "接口协议",
+    typeLocked: "模型类型创建后不可修改",
+    existingProviderHint: "使用已保存的地址与 Key",
+    saved: "已保存",
+    deleted: "已停用",
+    loadFailed: "加载失败",
+    saveFailed: "保存失败",
+    defaultSaved: "默认模型已更新",
+    empty: "还没有模型",
+    emptyViewer: "还没有可用的模型，请联系空间管理员添加",
+    confirmDelete: "确定停用模型「{name}」吗？已发布的智能体版本保留原引用。",
+    testHint: "测试会向服务商发送一次很短的请求，可能产生费用"
   }
 }

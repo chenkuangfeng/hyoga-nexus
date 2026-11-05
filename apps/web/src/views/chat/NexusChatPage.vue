@@ -89,6 +89,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -118,6 +119,7 @@ import { deriveSessionTitle } from '@/utils/nexusChatTitle'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const route = useRoute()
 
 /**
  * 对话页核心。会话由父组件通过 sessionId 传入，空值即欢迎态；欢迎态发送时先创建会话，
@@ -228,7 +230,11 @@ async function loadAgents() {
   try {
     // 只有已发布版本可以创建会话；草稿没有可运行的版本。
     agents.value = (await listAgents(tenant)).filter(agent => agent.published_version_id !== null)
-    if (!selectedAgent.value || !agents.value.some(agent => agent.published_version_id === selectedAgent.value)) {
+    // 从智能体列表「开始对话」进入时，`?agent=<版本 ID>` 预选该智能体（仅限独立对话页）。
+    const requested = props.allowAgentSelect && typeof route.query.agent === 'string' ? route.query.agent : ''
+    if (requested && agents.value.some(agent => agent.published_version_id === requested)) {
+      selectedAgent.value = requested
+    } else if (!selectedAgent.value || !agents.value.some(agent => agent.published_version_id === selectedAgent.value)) {
       selectedAgent.value = agents.value[0]?.published_version_id ?? undefined
     }
   } catch (error) {

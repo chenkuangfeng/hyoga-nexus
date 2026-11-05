@@ -68,7 +68,11 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 
 `agents/access.py` 与 `tenant_agent_grants`（迁移 `b7d1e5c3a9f2`）按角色授予智能体级权限：`view`、`run`、`edit`、`publish`、`manage`。`manage` 蕴含全部，`publish` 蕴含 `edit` 与 `view`，`edit` 蕴含 `view`，规则见 `authz/catalog.py`。owner、admin 与智能体创建者保留原有完整权限。无 `view` 的成员看不到智能体（返回 404），其他缺失权限返回 403。智能体列表只返回可见智能体。创建会话需要 `run`；修改草稿需要 `edit`；发布需要 `publish`。角色管理者只能授予自己持有的智能体权限。
 
-智能体绑定的工具、技能与知识库沿用已有的资源绑定（`ResourceBindingRecord`），使用时按智能体配置执行，不逐用户重新检查。Run 提交阶段目前只复核会话所属用户的成员身份，尚未在每次 Run 提交时复核 `run` 权限，这是后续需要补齐的缺口。
+智能体绑定的工具、技能与知识库沿用已有的资源绑定（`ResourceBindingRecord`），使用时按智能体配置执行，不逐用户重新检查。每次提交 Run 时复核调用者的成员身份与该智能体的 `run` 权限（`runs/submission_access.py`），撤权后下一次提交被拒绝。
+
+智能体状态为 `draft`、`published`、`archived`。`agents/service.py` 的 `archive_agent` 把智能体归档（软删除，需要 `agents:write` 与 `manage`）：列表、共享智能体列表与详情不再返回它；新建会话与提交 Run 返回 409，已排队的 Run 在准备阶段以 `agent_archived` 失败；已发布版本、绑定与会话消息保留。`copy_agent` 把草稿复制为调用者创建的新草稿，绑定与模型逐项重新授权，不复制版本、共享与授权。
+
+`agents/generation.py` 定义智能体级生成参数 `budgets.generation`（`temperature` 0–2，`reasoning_effort` 为 `off/auto/minimal/low/medium/high/xhigh/max`），创建与修改草稿时校验。运行准备阶段 `merged_model_options` 以智能体值覆盖模型档案的同名选项：`auto` 沿用模型档案，`off` 移除思考参数；故障转移模型同样适用，上下文压缩的摘要模型不适用。
 
 模型设置中的 `can_manage_tenant` 等 UI 标记、资源授权（`authz/resources.py`）仍按 owner/admin 判断，尚未迁移到目录权限。
 

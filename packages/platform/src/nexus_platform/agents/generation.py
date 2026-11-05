@@ -13,7 +13,7 @@ from typing import Any, Mapping
 GENERATION_KEY = 'generation'
 #: ``off`` disables reasoning for this agent: the merged options carry no ``reasoning_effort``.
 #: ``auto`` follows the model profile (no override); other levels are sent to the provider as is.
-REASONING_EFFORTS = ('off', 'auto', 'minimal', 'low', 'medium', 'high')
+REASONING_EFFORTS = ('off', 'auto', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 TEMPERATURE_RANGE = (0.0, 2.0)
 
 
