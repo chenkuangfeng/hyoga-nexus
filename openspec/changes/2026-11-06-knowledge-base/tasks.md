@@ -21,7 +21,7 @@
 
 ## K1 文档库核心
 
-> K1.9 进度：API 模块与适配层、向量库/存储后端/检索设置的 API、设置页向量库引擎选择器（待实现禁用 + 徽标）、编辑器的库类型/索引策略（FAQ、Wiki、图谱标待实现）、知识库路由已切到真实页面。本机内存不足，`.vue` 文件未做 vue-tsc 与 `pnpm build`，需在内存充足的环境验证。智能体编辑器已增加「知识库」分区（绑定库时一并绑定三个知识工具，共享库默认授予 read+use）。创建流程的向量库选择器（系统默认 = 内置 SQLite，登记的库带「未验证」徽标）已接通；`listModels` 改读 Nexus 模型设置（模型版本 ID 作为 id），Embedding 选择器可用。仍待：详情页各入口逐页核对、对话引用渲染。前端单测 2094 通过，仅 `style guard: font-size-literal`（45 > 基线 33，非本变更文件）为既有失败。
+> K1.9 进度：API 模块与适配层、向量库/存储后端/检索设置的 API、设置页向量库引擎选择器（待实现禁用 + 徽标）、编辑器的库类型/索引策略（FAQ、Wiki、图谱标待实现）、知识库路由已切到真实页面。本机内存不足，`.vue` 文件未做 vue-tsc 与 `pnpm build`，需在内存充足的环境验证。智能体编辑器已增加「知识库」分区（绑定库时一并绑定三个知识工具，共享库默认授予 read+use）。创建流程的向量库选择器（系统默认 = 内置 SQLite，登记的库带「未验证」徽标）已接通；`listModels` 改读 Nexus 模型设置（模型版本 ID 作为 id），Embedding 选择器可用。详情页：未实现的 WeKnora 接口（数据源、Wiki、图谱抽取、分块调试、解析引擎、共享界面等）由请求层集中拦截（`plannedEndpoints.ts`），不发请求并以「待实现 · 阶段」拒绝。仍待：知识库共享界面接入 `/knowledge/bases/{id}/shares`（后端已有）、在浏览器里逐页确认交互。对话引用渲染已完成。前端单测 2094 通过，仅 `style guard: font-size-literal`（45 > 基线 33，非本变更文件）为既有失败。
 
 - [x] K1.1 领域：`ingest.parse`（文本、Markdown、CSV、JSON、pypdf）、`ingest.chunk`（标题/页 + 定长重叠）、`retrieval.fuse`、`evidence`，移植参考项目测试样例。
   - `nexus_knowledge.text`（与记忆相同的 CJK 二元分词，复制以免跨包依赖）、`ingest.parse`（Section 带页码与标题路径；docx 等返回 `unsupported_type`，扫描 PDF 返回 `empty_text`）、`ingest.chunk`（段内定长重叠，切点优先段落、句末、空白）、`retrieval.fuse`、`evidence.registry`（编号从 1 开始）。新依赖 `pypdf==6.21.4`。测试 `tests/test_knowledge_domain.py`。

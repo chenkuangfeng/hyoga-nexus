@@ -4,6 +4,7 @@ import { generateRandomString, MAX_FILE_SIZE_MB, MAX_SKILL_BUNDLE_SIZE_MB } from
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
 import { isSkillBundleUploadUrl } from './uploadLimit';
+import { plannedErrorFor } from '@/api/knowledge-base/plannedEndpoints';
 import { isTimeoutError, uploadTimeoutMs } from './requestTimeouts';
 import {
   forceReloginRedirect,
@@ -71,6 +72,9 @@ export function getCurrentLanguage(): string {
 
 instance.interceptors.request.use(
   (config) => {
+    // Knowledge features Nexus has not implemented: reject before sending (openspec 2026-11-06-knowledge-base).
+    const planned = plannedErrorFor(typeof config.url === 'string' ? config.url : undefined);
+    if (planned) return Promise.reject(planned);
     const existingAuth = config.headers?.Authorization ?? config.headers?.authorization;
     const isEmbedAuth = typeof existingAuth === 'string' && existingAuth.startsWith('Embed ');
     const isEmbedPath = typeof config.url === 'string' && config.url.includes('/api/v1/embed/');
@@ -136,7 +140,10 @@ instance.interceptors.response.use(
   },
   async (error: any) => {
     const originalRequest = error.config;
-    
+
+    // A planned (not yet implemented) feature is not a network failure: keep its message.
+    if (error?.planned === true) return Promise.reject(error);
+
     if (!error.response) {
       // A timeout and an unreachable server both arrive without a response, but
       // telling someone whose upload timed out to "check your connection" sends

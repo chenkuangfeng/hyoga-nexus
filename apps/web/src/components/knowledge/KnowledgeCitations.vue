@@ -46,7 +46,7 @@ function open(kbId?: string) {
 .knowledge-citations__label { color: var(--td-text-color-secondary); font-size: var(--app-text-xs); }
 .knowledge-citations__item {
   display: inline-flex; gap: 6px; align-items: center; max-width: 100%; padding: 2px 8px; cursor: pointer;
-  border: 1px solid var(--td-component-border); border-radius: 12px; background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border); border-radius: var(--app-radius-pill); background: var(--td-bg-color-container);
   color: var(--td-text-color-primary); font-size: var(--app-text-xs);
 }
 .knowledge-citations__item:disabled { cursor: default; }

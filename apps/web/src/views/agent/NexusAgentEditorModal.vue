@@ -933,7 +933,7 @@ async function save() {
 // 推荐问题列表
 
 .kb-bind-list { display: flex; flex-direction: column; gap: 10px; }
-.kb-bind-tag { margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: var(--app-text-xs);
+.kb-bind-tag { margin-left: 6px; padding: 0 6px; border-radius: var(--app-radius-pill); font-size: var(--app-text-xs);
   color: var(--td-brand-color); background: var(--td-brand-color-1); }
 .kb-bind-desc { margin-left: 8px; color: var(--td-text-color-secondary); font-size: var(--app-text-xs); }
 .tools-overview {

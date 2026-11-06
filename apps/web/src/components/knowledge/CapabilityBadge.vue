@@ -34,7 +34,7 @@ const tip = computed(() => state.value.kind === 'planned' ? t('planned.plannedTi
 <style scoped>
 .capability-badge {
   display: inline-flex; align-items: center; margin-left: 6px; padding: 0 6px; height: 18px;
-  border-radius: 9px; font-size: var(--app-text-xs); line-height: 18px; white-space: nowrap;
+  border-radius: var(--app-radius-pill); font-size: var(--app-text-xs); line-height: 18px; white-space: nowrap;
   vertical-align: middle;
 }
 .capability-badge--planned { color: var(--td-warning-color); background: var(--td-warning-color-1); }
