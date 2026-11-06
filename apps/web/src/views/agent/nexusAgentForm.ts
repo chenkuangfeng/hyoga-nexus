@@ -34,6 +34,15 @@ export interface AgentEditorForm {
   /** Seconds; null means "follow the default". */
   llm_call_timeout: number | null
   allowed_tools: string[]
+  /** `budgets.memory.enabled`: false turns long-term memory off for this agent; true inherits. */
+  memory_enabled: boolean
+  /** `budgets.memory.recall`: false stops per-turn memory recall (openspec 2026-11-06-memory-evolution D3). */
+  memory_recall: boolean
+}
+
+function memoryOf(budgets: Record<string, unknown> | undefined): Record<string, unknown> {
+  const value = budgets?.memory
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 function numberOr(value: unknown, fallback: number): number {
@@ -69,6 +78,8 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: typeof budgets.model_timeout_seconds === 'number' ? budgets.model_timeout_seconds : null,
     allowed_tools: (agent.resource_bindings || []).filter(b => b.kind === 'tool').map(b => b.resource_id),
+    memory_enabled: memoryOf(budgets).enabled !== false,
+    memory_recall: memoryOf(budgets).recall !== false,
   }
 }
 
@@ -86,6 +97,8 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: null,
     allowed_tools: [...defaultTools],
+    memory_enabled: true,
+    memory_recall: true,
   }
 }
 
@@ -123,6 +136,14 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   const generation: Record<string, unknown> = { temperature: Math.min(Math.max(form.temperature, 0), 2) }
   if (form.reasoning_effort !== 'auto') generation.reasoning_effort = form.reasoning_effort
   budgets.generation = generation
+
+  // Memory switches (openspec 2026-11-05-memory-switches, 2026-11-06-memory-evolution): only "off" is
+  // stored; an agent that leaves both on inherits the space and member settings.
+  const memory: Record<string, unknown> = {}
+  if (!form.memory_enabled) memory.enabled = false
+  if (!form.memory_recall) memory.recall = false
+  if (Object.keys(memory).length) budgets.memory = memory
+  else delete budgets.memory
 
   const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool')
   const tools: AgentDraftInput['resource_bindings'] = [...new Set(form.allowed_tools)].map(name => ({

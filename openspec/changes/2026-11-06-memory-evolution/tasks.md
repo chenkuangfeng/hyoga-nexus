@@ -50,8 +50,9 @@
 - [x] 2.6 空间设置 `extract_instructions`：校验、威胁扫描、写入抽取提示（B6）。
 - [x] 2.7 前端：事件映射，时间线"引用了 N 条记忆"，对话内草稿确认卡片（发布、拒绝、已处理），历史回放状态校正（E1、B5）。
   - `memory.used` 汇总进 WeKnora 原有的 `ChatMemoryStep` 行（显示条目标题）；该行的"删除"在 Nexus 页面改为归档条目。卡片 `MemoryDraftCard.vue` 经 `useNexusChatActions` 调用审核接口，409 显示"已在别处处理"；历史回放时读 `GET /memory` 的待审草稿判断状态。
-- [ ] 2.8 前端：空间记忆设置页增加自定义规则；我的记忆页增加 `profile` 类型、重要度、使用次数显示。
+- [x] 2.8 前端：空间记忆设置页增加自定义规则；我的记忆页增加 `profile` 类型、重要度、使用次数显示。
   - 阻塞：依赖 `2026-11-05-memory-switches` 前端第 2 节（两个设置页尚未接入 Nexus 接口）。接口已就绪：`GET/PUT /native/memory-settings` 返回并接受 `extract_instructions`；`GET /memory` 返回 `topic`、`importance`，审核可传 `importance`。
+  - 已完成（2026-11-06）：空间页的自定义抽取规则；我的记忆页显示类型（含画像、关注）、重要度（审核时可改）、主题、证据与提示。
 - [x] 2.9 文案：所有语言包补齐（`agentStream.memoryDraft.*`，6 种语言）。设置页文案随 2.8。
 - [x] 2.10 pytest 与前端单元测试；文档同步。
   - 后端：`tests/test_memory_evolution_stage2.py`（11 项），全量 819 通过。前端：`nexusAgentEvents.test.ts`、`nexusChatTranscript.test.ts` 新增用例，语言包键一致性通过。
@@ -67,8 +68,9 @@
 - [x] 3.4 `retention.run_retention` 与 worker 调度（C3）。
   - 不写逐行审计（与 octop-memory ADR-028 同理），删除数量写日志。
 - [x] 3.5 排序中对久未使用条目降级（C4）。
-- [ ] 3.6 前端：相似与合并草稿的展示，"整理记忆"按钮（替换现有占位）。
+- [x] 3.6 前端：相似与合并草稿的展示，"整理记忆"按钮（替换现有占位）。
   - 已完成：对话内草稿卡片显示相似提示（`similarHint`，6 种语言）。阻塞：合并草稿列表与"整理记忆"按钮在"我的记忆"设置页，随 2.8 一并实施。
+  - 已完成（2026-11-06）：我的记忆页的合并草稿（显示将归档的条目）与"立即整理"按钮。
 - [x] 3.7 pytest 与前端单元测试；文档同步。
   - `tests/test_memory_evolution_stage3.py`（11 项），全量 830 通过（另更新表数量断言）。
 
@@ -93,8 +95,9 @@
 - [ ] 5.4 抓取用量记录与"我的记忆"页统计；`same_model` 复盘模式（D7）。
   - 已完成：抽取调用的 token 用量写入 `memory_capture_jobs.usage`，`GET /native/memory-capture/usage` 返回最近 30 天合计。
   - 未做：`same_model` 模式。要命中提示缓存，抓取需要逐字节重建该 Run 的系统提示、工具定义和完整历史，并改用 Run 的模型；这与第 1 阶段"只以用户原话为来源"的抽取输入冲突。建议先积累用量数据，再决定是否需要（需用户确认后实施或删除本项）。
-- [ ] 5.5 前端：空间设置中的 Embedding 模型、智能体编辑器中的主动召回开关、我的记忆中的复盘模式与用量。
+- [x] 5.5 前端：空间设置中的 Embedding 模型、智能体编辑器中的主动召回开关、我的记忆中的复盘模式与用量。
   - 阻塞：三处都在 `2026-11-05-memory-switches` 前端第 2 节（设置页 2.2/2.3、智能体编辑器 2.4）尚未接入的页面上。接口已就绪：`memory-settings` 的 `embedding_model_version_id`、`budgets.memory.recall`、`memory-capture/usage`。
+  - 已完成（2026-11-06）：空间页的 Embedding 模型、编辑器的每轮主动召回开关、我的记忆页的近 30 天用量。复盘模式随 5.4 未做。
 - [x] 5.6 pytest（向量用假 Embedding）与前端单元测试；比较两种复盘模式并写入 `design.md` 6.3 节；文档同步。
   - `tests/test_memory_evolution_stage5.py`（11 项），全量 845 通过。两种复盘模式的比较随 5.4 未做。
 
@@ -102,9 +105,10 @@
 
 - [x] 6.1 迁移：`memory_topic_stats`；`memory_space_settings.interest_threshold`；`memory_entries.kind` 允许 `interest`。
   - 同一迁移加入 `memory_space_settings.memory_provider`（6.3 用）。
-- [ ] 6.2 主题计数、晋升为 `interest` 草稿、拒绝后停止计数；我的记忆中的主题列表（替换占位）（D4）。
+- [x] 6.2 主题计数、晋升为 `interest` 草稿、拒绝后停止计数；我的记忆中的主题列表（替换占位）（D4）。
   - 已完成：抓取每个窗口按有效项主题计数（同一会话只计一次），达到空间阈值（默认 3，2–10）生成一次 `interest` 草稿；被拒主题不再计数；抽取模型不能直接新增 `interest`；`interest` 条目参与每轮召回。接口 `GET /native/memory-topics`。
   - 阻塞：主题列表界面在"我的记忆"设置页，随 `2026-11-05-memory-switches` 前端第 2 节一并实施。
+  - 已完成（2026-11-06）：我的记忆页的关注主题列表（次数/阈值、是否已提议、别名）。
 - [x] 6.3 `MemoryProviderPort`、`BuiltinMemoryProvider`、外部提供方注册、超时与卡死保护、测试替身（D6）。
   - 端口在 `nexus_core.runtime.memory`（同步钩子 `snapshot_block`、`prefetch`、`sync_turn`，上下文只提供 `propose`）；平台 `memory/providers.py` 负责注册、按空间选择、截止时间（8 秒 / 30 秒）、连续 3 次失败暂停 10 分钟、`memory.provider_failed` 审计、结果包裹转义。内置记忆就是现有的快照、召回与工具，不另包一层 `BuiltinMemoryProvider` 类，`builtin` 名称保留。hermes 的会话结束与子任务钩子未接入：Nexus 目前没有对应事件。
 - [ ] 6.4 门禁：路线图第 6 步知识检索与引用登记可用后，实施 `memory_doc_affinity`、Run 完成时的记录、重排加权、管理入口（D5）。门禁不满足时保持未勾选。
@@ -114,5 +118,5 @@
 ## 7. 规格与归档
 
 - [ ] 7.1 新增 `openspec/specs/memory-evolution/spec.md`，由本变更的 `specs/` 归档生成。
-- [ ] 7.2 `docs/roadmap.md`：第 3 步记忆相关子项和第 9.3 节的状态。
+- [x] 7.2 `docs/roadmap.md`：第 3 步记忆相关子项和第 9.3 节的状态。
 - [ ] 7.3 全部阶段完成后归档本变更。D5 未满足门禁时，说明保留项后再归档，或者等门禁满足后归档。

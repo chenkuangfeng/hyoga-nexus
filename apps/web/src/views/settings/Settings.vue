@@ -111,7 +111,7 @@
 
         <!-- 长期记忆（空间级开关） -->
         <div v-if="currentSection === 'memory' && isPhase1Section('memory')" class="section">
-          <MemoryWorkspaceSettings />
+          <NexusMemoryWorkspaceSettings />
         </div>
 
         <!-- 助手（个人偏好 + 空间名称与权限上限） -->
@@ -121,7 +121,7 @@
 
         <!-- 我的记忆（个人记忆管理） -->
         <div v-if="currentSection === 'mymemory' && isPhase1Section('mymemory')" class="section">
-          <MemorySettings />
+          <NexusMemorySettings />
         </div>
 
         <!-- 沙箱密钥（成员自己的技能 / 沙箱密钥） -->
@@ -229,9 +229,9 @@ import ModelCatalog from '../system/ModelCatalog.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import WebSearchSettings from './WebSearchSettings.vue'
 import ChatHistorySettings from './ChatHistorySettings.vue'
-import MemorySettings from './MemorySettings.vue'
+import NexusMemorySettings from './NexusMemorySettings.vue'
 import EnvVarSettings from './EnvVarSettings.vue'
-import MemoryWorkspaceSettings from './MemoryWorkspaceSettings.vue'
+import NexusMemoryWorkspaceSettings from './NexusMemoryWorkspaceSettings.vue'
 import AssistantSettings from './AssistantSettings.vue'
 import VectorStoreSettings from './VectorStoreSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'

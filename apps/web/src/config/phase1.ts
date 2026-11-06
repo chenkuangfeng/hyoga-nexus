@@ -1,6 +1,6 @@
 /**
  * Settings sections implemented in the current phase (see openspec/changes/2026-11-03-enterprise-personal-spaces;
- * `models` since 2026-11-05-weknora-agent-tool-model-settings).
+ * `models` since 2026-11-05-weknora-agent-tool-model-settings; `memory` and `mymemory` since 2026-11-05-memory-switches).
  *
  * The settings navigation keeps every Nexus entry so the menu is complete. A section outside this
  * set renders the planned-page notice instead of its copied content, which still targets Nexus's
@@ -9,6 +9,8 @@
 export const PHASE1_SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
   'general',
   'models',
+  'memory',
+  'mymemory',
   'userprofile',
   'tenant',
   'members',

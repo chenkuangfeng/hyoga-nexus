@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：已确认（2026-11-05），实施中。
+状态：已完成并归档（2026-11-06）。
 
 ## 0. 准备
 
@@ -24,15 +24,16 @@
 
 ## 2. 前端
 
-- [ ] 2.1 `api/nexus-memory.ts` 与映射函数（单元测试）。
-- [ ] 2.2 `NexusMemoryWorkspaceSettings.vue`（空间设置，非管理员只读，缺失项占位）。
-- [ ] 2.3 `NexusMemorySettings.vue`（个人开关、自动提炼、待审核、生效中、已归档，缺失项占位）。
-- [ ] 2.4 `NexusAgentEditorModal.vue` 与 `nexusAgentForm.ts`：长期记忆开关（单元测试覆盖继承与关闭）。
-- [ ] 2.5 设置页分区指向新组件；`memory`、`mymemory` 加入 `config/phase1.ts`；断言不再请求 `/api/v1/memory/*` 的 WeKnora 路径。
-- [ ] 2.6 文案：所有语言包补齐新增键。
+- [x] 2.1 `api/nexus-memory.ts` 与映射函数（单元测试）。
+- [x] 2.2 `NexusMemoryWorkspaceSettings.vue`（空间设置，非管理员只读，缺失项占位）。
+- [x] 2.3 `NexusMemorySettings.vue`（个人开关、自动提炼、待审核、生效中、已归档，缺失项占位）。
+- [x] 2.4 `NexusAgentEditorModal.vue` 与 `nexusAgentForm.ts`：长期记忆开关（单元测试覆盖继承与关闭）。
+- [x] 2.5 设置页分区指向新组件；`memory`、`mymemory` 加入 `config/phase1.ts`；断言不再请求 `/api/v1/memory/*` 的 WeKnora 路径。
+- [x] 2.6 文案：所有语言包补齐新增键。
+  - 实施于 2026-11-06（随 `2026-11-06-memory-evolution` 的设置页一并完成）：`NexusMemoryWorkspaceSettings.vue`、`NexusMemorySettings.vue`、`api/nexus-memory.ts`（解析在 `nexus-memory-types.ts`），编辑器"长期记忆"与"每轮主动召回"开关，`memory`、`mymemory` 加入 `config/phase1.ts`，新增文案在 `nexusMemory.*`（6 种语言）。WeKnora 的抽取延迟、最小间隔、记忆参与检索、条数上限保留为"规划中"；已归档列表仍为占位（`GET /memory` 不返回已归档条目）。本机内存不足无法运行 `pnpm build`，已做组件编译与局部类型检查，单测 1629 项通过。
 
 ## 3. 文档与规格
 
 - [x] 3.1 `packages/memory/docs/design.md`、`packages/platform/docs/design.md`：开关规则与使用点。
-- [ ] 3.2 新增规格 `openspec/specs/memory-switches/spec.md`（由本变更的 `specs/` 归档生成）。
-- [ ] 3.3 父提案 `2026-11-02-weknora-parity/tasks.md` 第 51 行与能力对照表第 23 项更新状态。
+- [x] 3.2 新增规格 `openspec/specs/memory-switches/spec.md`（由本变更的 `specs/` 归档生成）。
+- [x] 3.3 父提案 `2026-11-02-weknora-parity/tasks.md` 第 51 行与能力对照表第 23 项更新状态。

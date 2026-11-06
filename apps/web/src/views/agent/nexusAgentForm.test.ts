@@ -71,3 +71,15 @@ test('validation requires name, model and system prompt', () => {
   const errors = validateForm(formForNewAgent(null, '', []))
   assert.deepEqual(Object.keys(errors).sort(), ['model_id', 'name', 'system_prompt'])
 })
+
+test('memory switches are stored only when turned off and read back', () => {
+  const inherited = formFromAgent(agent({ budgets: {} }))
+  assert.equal(inherited.memory_enabled, true)
+  assert.equal(inherited.memory_recall, true)
+  assert.equal(draftFromForm(inherited, agent({ budgets: { memory: { enabled: false } } }), null, TENANT).budgets.memory, undefined)
+  const off = draftFromForm({ ...inherited, memory_enabled: false, memory_recall: false }, agent({ budgets: {} }), null, TENANT)
+  assert.deepEqual(off.budgets.memory, { enabled: false, recall: false })
+  const read = formFromAgent(agent({ budgets: { memory: { recall: false } } }))
+  assert.equal(read.memory_enabled, true)
+  assert.equal(read.memory_recall, false)
+})

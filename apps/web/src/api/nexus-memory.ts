@@ -5,7 +5,7 @@
  * the "forget" action of the used-memory row (B5). Reviewing a draft always goes through the owner's
  * review endpoint: the model can propose drafts but never publish them.
  */
-import { del, get, post } from '@/utils/request'
+import { del, get, patch, post, put } from '@/utils/request'
 import { isRecord, isString } from './native-run-types'
 
 function memoryPath(tenantId: string): string {
@@ -42,4 +42,111 @@ export async function reviewMemoryDraft(tenantId: string, draftId: string, appro
 /** Archive a published entry: it leaves the index and future conversations; its history is kept. */
 export async function archiveMemoryEntry(tenantId: string, entryId: string): Promise<void> {
   await del(`${memoryPath(tenantId)}/memory/${encodeURIComponent(entryId)}`)
+}
+
+// ---------------------------------------------------------------- settings pages
+// openspec 2026-11-05-memory-switches (switches, capture) and 2026-11-06-memory-evolution (rules, embedding,
+// interests, consolidation, topics, usage). Every request goes to the Nexus `/native` API.
+
+
+export * from './nexus-memory-types'
+import {
+  asNumber, asString, memoryListFromResponse, type CaptureSettings, type CaptureUsage, type MemoryDraft, type MemoryEntry,
+  type MemoryPreferences, type MemoryTopic, type SpaceMemorySettings, type WriteMode,
+} from './nexus-memory-types'
+
+export async function getSpaceMemorySettings(tenantId: string): Promise<SpaceMemorySettings> {
+  const data: unknown = await get(`${memoryPath(tenantId)}/memory-settings`)
+  if (!isRecord(data) || typeof data.enabled !== 'boolean') throw new Error('Unexpected memory settings response')
+  return {
+    enabled: data.enabled, write_mode: data.write_mode === 'explicit' ? 'explicit' : 'auto',
+    extract_instructions: asString(data.extract_instructions),
+    embedding_model_version_id: typeof data.embedding_model_version_id === 'string' ? data.embedding_model_version_id : null,
+    interest_threshold: asNumber(data.interest_threshold, 3),
+    memory_provider: typeof data.memory_provider === 'string' ? data.memory_provider : null,
+    can_edit: data.can_edit === true,
+  }
+}
+
+export interface SpaceMemorySettingsInput {
+  enabled: boolean
+  write_mode: WriteMode
+  extract_instructions: string
+  embedding_model_version_id: string | null
+  interest_threshold: number
+}
+
+export async function updateSpaceMemorySettings(tenantId: string, body: SpaceMemorySettingsInput): Promise<void> {
+  await put(`${memoryPath(tenantId)}/memory-settings`, body)
+}
+
+export async function getMemoryPreferences(tenantId: string): Promise<MemoryPreferences> {
+  const data: unknown = await get(`${memoryPath(tenantId)}/memory-preferences`)
+  if (!isRecord(data) || typeof data.memory_enabled !== 'boolean') throw new Error('Unexpected memory preferences response')
+  return {
+    memory_enabled: data.memory_enabled, effective: data.effective === true,
+    reason: typeof data.reason === 'string' ? data.reason : null,
+    write_mode: data.write_mode === 'explicit' ? 'explicit' : 'auto',
+  }
+}
+
+export async function updateMemoryPreferences(tenantId: string, memoryEnabled: boolean): Promise<void> {
+  await put(`${memoryPath(tenantId)}/memory-preferences`, { memory_enabled: memoryEnabled })
+}
+
+export async function getCaptureSettings(tenantId: string): Promise<CaptureSettings> {
+  const data: unknown = await get(`${memoryPath(tenantId)}/memory-capture`)
+  if (!isRecord(data) || typeof data.enabled !== 'boolean') throw new Error('Unexpected capture settings response')
+  return {
+    enabled: data.enabled,
+    model_profile_version_id: typeof data.model_profile_version_id === 'string' ? data.model_profile_version_id : null,
+    capacity_policy: data.capacity_policy === 'evict_auto' ? 'evict_auto' : 'reject',
+  }
+}
+
+export async function updateCaptureSettings(tenantId: string, body: CaptureSettings): Promise<void> {
+  await put(`${memoryPath(tenantId)}/memory-capture`, body)
+}
+
+export async function getCaptureUsage(tenantId: string): Promise<CaptureUsage> {
+  const data: unknown = await get(`${memoryPath(tenantId)}/memory-capture/usage`)
+  if (!isRecord(data) || !isRecord(data.usage)) throw new Error('Unexpected capture usage response')
+  const usage: Record<string, number> = {}
+  for (const [key, value] of Object.entries(data.usage)) if (typeof value === 'number') usage[key] = value
+  return { days: asNumber(data.days, 30), calls: asNumber(data.calls), usage }
+}
+
+export async function listMemory(tenantId: string): Promise<{ entries: MemoryEntry[]; drafts: MemoryDraft[] }> {
+  return memoryListFromResponse(await get(`${memoryPath(tenantId)}/memory`))
+}
+
+/** Review with the full set of options the settings page offers (the chat card only sends a title). */
+export async function reviewMemoryDraftWith(tenantId: string, draftId: string,
+  body: { approve: boolean; title: string; importance?: number; entry_id?: string; expected_version?: number }): Promise<void> {
+  await post(`${memoryPath(tenantId)}/memory-drafts/${encodeURIComponent(draftId)}/review`, body)
+}
+
+export async function setMemoryAvailability(tenantId: string, entryId: string,
+  body: { enabled?: boolean; valid_until?: string | null }): Promise<void> {
+  await patch(`${memoryPath(tenantId)}/memory/${encodeURIComponent(entryId)}`, body)
+}
+
+export async function restoreMemoryVersion(tenantId: string, entryId: string, version: number,
+  expectedVersion: number): Promise<void> {
+  await post(`${memoryPath(tenantId)}/memory/${encodeURIComponent(entryId)}/restore`,
+    { version, expected_version: expectedVersion })
+}
+
+export async function requestConsolidation(tenantId: string): Promise<void> {
+  await post(`${memoryPath(tenantId)}/memory-consolidation`, {})
+}
+
+export async function listMemoryTopics(tenantId: string): Promise<MemoryTopic[]> {
+  const data: unknown = await get(`${memoryPath(tenantId)}/memory-topics`)
+  if (!Array.isArray(data)) throw new Error('Unexpected memory topics response')
+  return data.filter(isRecord).filter(item => isString(item.id)).map(item => ({
+    id: item.id as string, topic: asString(item.topic),
+    aliases: Array.isArray(item.aliases) ? item.aliases.filter(isString) : [],
+    hits: asNumber(item.hits), threshold: asNumber(item.threshold, 3), promoted: item.promoted === true,
+  }))
 }

@@ -10,7 +10,7 @@
 前置变更：
 
 - `openspec/changes/2026-11-01-memory-optimization/`：草稿审核、版本、墓碑、预算、索引、检索、快照、自动抓取。
-- `openspec/changes/2026-11-05-memory-switches/`：三级开关。其前端任务第 2 节尚未完成，本提案第 2 阶段的界面工作在它之后进行。
+- `openspec/changes/archive/2026-11-05-memory-switches/`：三级开关（已完成并归档，其前端与本提案的设置页于 2026-11-06 一并实施）。
 
 ## 原因
 

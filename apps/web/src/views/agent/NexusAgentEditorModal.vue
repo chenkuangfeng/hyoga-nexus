@@ -60,6 +60,28 @@
                 :placeholder="$t('agent.editor.descriptionPlaceholder')" :autosize="{ minRows: 2, maxRows: 4 }" />
             </div>
           </div>
+
+          <!-- Long-term memory (openspec 2026-11-05-memory-switches; WeKnora AgentEditorModal basic section).
+               The switch can only turn memory off: space or member settings that are off still win. -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('agent.editor.memoryEnabled') }}</label>
+              <p class="desc">{{ $t('agentEditor.desc.memoryEnabled') }}</p>
+            </div>
+            <div class="setting-control">
+              <t-switch v-model="form.memory_enabled" />
+            </div>
+          </div>
+
+          <div v-if="form.memory_enabled" class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusMemory.agentRecall') }}</label>
+              <p class="desc">{{ $t('nexusMemory.agentRecallDesc') }}</p>
+            </div>
+            <div class="setting-control">
+              <t-switch v-model="form.memory_recall" />
+            </div>
+          </div>
         </div>
       </div>
 
