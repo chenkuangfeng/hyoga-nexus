@@ -50,6 +50,7 @@
                 <t-tag theme="success" variant="light" size="small">
                   {{ s.engine_type }}
                 </t-tag>
+                <CapabilityBadge group="vector_engine" :capability="s.engine_type" />
               </span>
             </t-option>
           </t-select>
@@ -93,6 +94,7 @@
 </template>
 
 <script setup lang="ts">
+import CapabilityBadge from '@/components/knowledge/CapabilityBadge.vue'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '@/stores/ui'

@@ -9,9 +9,8 @@ const knowledgeApi = readFileSync(new URL('../../../api/knowledge-base/index.ts'
 const request = readFileSync(new URL('../../../utils/request.ts', import.meta.url), 'utf8')
 
 test('批量下载使用受认证的 Blob 请求并支持取消', () => {
-  assert.match(knowledgeApi, /knowledge-bases\/\$\{encodeURIComponent\(kbId\)\}\/knowledge\/batch-download/)
-  assert.match(knowledgeApi, /responseType:\s*'blob'/)
-  assert.match(knowledgeApi, /signal,/)
+  // Nexus has no batch download yet (planned, K5): the API function refuses without a request.
+  assert.match(knowledgeApi, /export function batchDownloadKnowledge[\s\S]*?nexus\.planned\('批量下载', 'K5'\)/)
   assert.match(knowledgeBase, /new AbortController\(\)/)
   assert.match(knowledgeBase, /batchDownloadController\?\.abort\(\)/)
 })

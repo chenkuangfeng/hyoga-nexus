@@ -1,6 +1,9 @@
 import { get, post, postUpload, put, del } from '../../utils/request';
 import i18n from '@/i18n'
 import { ModelInUseError, modelInUseErrorFromRequest } from './modelUsage'
+import { useAuthStore } from '@/stores/auth'
+import { getModelSettings } from '../nexus-models'
+import { modelsFromSettings } from './nexusModelList'
 
 export * from './modelUsage'
 
@@ -135,28 +138,13 @@ export function createModel(data: ModelConfig): Promise<ModelConfig> {
   });
 }
 
-// 获取模型列表
-export function listModels(type?: string): Promise<ModelConfig[]> {
-  return new Promise((resolve, reject) => {
-    const url = `/api/v1/models`;
-    get(url)
-      .then((response: any) => {
-        if (response.success && response.data) {
-          if (type) {
-            response.data = response.data.filter((item: ModelConfig) => item.type === type);
-          }
-          resolve(response.data);
-        } else {
-          resolve([]);
-        }
-      })
-      .catch((error: any) => {
-        console.error('Failed to list models:', error);
-        // 抛出而非吞掉：调用方（含缓存层）才能区分「真失败」与「成功但无模型」，
-        // 避免把一次瞬时失败的空结果缓存下来。各 UI 调用点均已 try/catch 兜底。
-        reject(error);
-      });
-  });
+// 获取模型列表：来自 Nexus 模型设置（模型版本 ID 作为 id），按类型过滤
+export async function listModels(type?: string): Promise<ModelConfig[]> {
+  const tenantId = useAuthStore().effectiveTenantId || '';
+  if (!tenantId) return [];
+  const view = await getModelSettings(tenantId);
+  const models = modelsFromSettings(view) as unknown as ModelConfig[];
+  return type ? models.filter(item => item.type === type) : models;
 }
 
 // 获取单个模型

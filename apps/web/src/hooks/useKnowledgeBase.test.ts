@@ -27,6 +27,18 @@ function setup(t: TestContext) {
       put,
     },
     './knowledgeFileListQuery': {},
+    // The page functions now call the Nexus API; requests are queued so the tests control their order.
+    './nexusKnowledgeApi': {
+      getDocument: (id: string) => new Promise((resolve, reject) => {
+        metadata.push({ url: `/api/v1/knowledge/${id}`, resolve, reject })
+      }),
+      listChunks: (id: string, page: number, pageSize: number) => new Promise((resolve, reject) => {
+        chunks.push({ url: `/api/v1/chunks/${id}?page=${page}&page_size=${pageSize}`, resolve, reject })
+      }),
+      planned: (feature: string, stage: string | null) =>
+        Promise.reject(Object.assign(new Error(`待实现：${feature}`), { planned: true, stage })),
+      plannedEmpty: (data: unknown) => Promise.resolve({ success: true, data }),
+    },
   })
   const stores = f.evaluate(readFileSync(new URL('../stores/knowledge.ts', import.meta.url), 'utf8'), { vue, pinia })
   const root = pinia.createPinia()
@@ -108,7 +120,7 @@ test('chunk pagination does not discard pending metadata for the same document',
   assert.equal(hook.details.chunkLoading, false)
 })
 
-test('summary updates target the current document after an old detail response arrives', async t => {
+test('summary editing is planned (K5): it is refused without a request, whichever document is open', async t => {
   const { hook, metadata, api, put } = setup(t)
   hook.getCardDetails({ id: 'a' })
   hook.getCardDetails({ id: 'b' })
@@ -117,10 +129,9 @@ test('summary updates target the current document after an old detail response a
   metadata[0].resolve(detail('a', 'stale'))
   await flush()
 
-  // The drawer submits its current details.id to this production API helper.
-  await api.updateKnowledgeSummary(hook.details.id, 'Edited B summary')
-  assert.equal(put.mock.calls[0].arguments[0], '/api/v1/knowledge/b')
-  assert.equal((put.mock.calls[0].arguments[1] as { description: string }).description, 'Edited B summary')
+  assert.equal(hook.details.id, 'b')
+  await assert.rejects(api.updateKnowledgeSummary(hook.details.id, 'Edited B summary'), /待实现/)
+  assert.equal(put.mock.calls.length, 0)
 })
 
 test('a rejected old metadata request leaves the current document intact', async t => {
