@@ -59,7 +59,9 @@
 - [x] K2.4 `entity` 模式（WeKnora ExtractConfig）与 `query_knowledge_graph` 工具。
 - [x] K2.5 库级构建任务、重建、版本切换；有界图检索、截断提示、降级。
 - [ ] K2.7 `neo4j` 图存储实现与越权测试（需 Neo4j 测试环境）。
-- [ ] K2.6 前端图存储管理、图谱设置、任务状态、图谱浏览。
+- [x] K2.6 前端图存储管理、图谱设置、任务状态、图谱浏览。
+
+> K2.6 进度：接口 `GET /knowledge/graph-stores`、`/bases/{id}/graph`、`/graph/rebuild`、`/graph/overview`；前端 `KBGraphConfig.vue`（模式、图存储、抽取模型、实体/关系类型、补充说明、构建状态、重新构建）、`KnowledgeGraphBrowser.vue`（列表式浏览，含社区报告与截断提示）已替换编辑器里的 WeKnora 抽取演练场；`updateKBConfig` 改为更新 Nexus 库的 Embedding 与分块。图存储注册表只列出引擎（neo4j 待实现），自定义图存储的增删待 K2.7。浏览器验证与整体 `pnpm build` 待在内存充足的环境执行。
 
 ## K3 FAQ 库
 

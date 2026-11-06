@@ -1,3 +1,4 @@
+import { updateBase as updateNexusBase } from '../knowledge-base/nexusKnowledgeApi';
 import { get, post, put } from '../../utils/request';
 import i18n from '@/i18n'
 import type { ModelCapabilities, ModelSpecOverride, ReasoningEffortLevel } from '../model'
@@ -165,18 +166,16 @@ export interface KBModelConfigRequest {
 }
 
 export function updateKBConfig(kbId: string, config: KBModelConfigRequest): Promise<any> {
-    return new Promise((resolve, reject) => {
-        console.log('Starting KB config update (simplified)...', kbId, config);
-        put(`/api/v1/initialization/config/${kbId}`, config)
-            .then((response: any) => {
-                console.log('KB config update completed', response);
-                resolve(response);
-            })
-            .catch((error: any) => {
-                console.error('Failed to update KB config:', error);
-                reject(error.error || error);
-            });
-    });
+    // Nexus keeps the embedding model and chunk size on the knowledge base itself (openspec
+    // 2026-11-06-knowledge-base). The rest of this WeKnora payload (multimodal, storage, extraction,
+    // question generation) belongs to later stages and is ignored until they are implemented.
+    const body: Record<string, any> = {};
+    if (config.embeddingModelId) body.embedding_model_id = config.embeddingModelId;
+    const splitting = config.documentSplitting;
+    if (splitting?.chunkSize) {
+        body.chunking_config = { chunk_size: splitting.chunkSize, chunk_overlap: splitting.chunkOverlap ?? 120 };
+    }
+    return updateNexusBase(kbId, body).catch((error: any) => Promise.reject(error?.error || error));
 }
 
 // 根据知识库ID执行配置更新（旧版，保留兼容性）

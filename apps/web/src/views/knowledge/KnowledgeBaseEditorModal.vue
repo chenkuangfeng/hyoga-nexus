@@ -539,12 +539,12 @@
 
       <!-- 知识图谱 -->
       <div v-if="!isFAQ && currentSection === 'graph'" class="section">
-        <GraphSettings
+        <!-- Nexus 图谱配置（模式、图存储、模型、类型；构建状态与浏览） -->
+        <KBGraphConfig
           v-if="formData"
-          :graph-extract="formData.nodeExtractConfig"
-          :model-id="formData.modelConfig.llmModelId"
-          :all-models="allModels"
-          @update:graphExtract="handleNodeExtractUpdate"
+          v-model="formData.nexusGraph"
+          :kb-id="savedKbId || props.kbId"
+          :readonly="false"
         />
       </div>
 
@@ -673,7 +673,7 @@ import KBChunkingSettings from './settings/KBChunkingSettings.vue'
 import KBVectorStoreSettings from './settings/KBVectorStoreSettings.vue'
 import KBAdvancedSettings from './settings/KBAdvancedSettings.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
-import GraphSettings from './settings/GraphSettings.vue'
+import KBGraphConfig from './settings/KBGraphConfig.vue'
 import KBShareSettings from './settings/KBShareSettings.vue'
 import DataSourceSettings from './settings/DataSourceSettings.vue'
 import KnowledgeBaseActivitySettings from './settings/KnowledgeBaseActivitySettings.vue'
@@ -1004,6 +1004,8 @@ const initFormData = (type: 'document' | 'faq' = 'document') => {
       modelId: '',
       language: ''
     },
+    nexusGraph: { mode: 'graphrag_light', store: 'builtin', model_id: '', entity_types: [] as string[],
+      relation_types: [] as string[], instructions: '' },
     nodeExtractConfig: {
       enabled: false,
       text: '',
@@ -1174,6 +1176,11 @@ const loadKBData = async (
         enabled: !!kb.asr_config?.enabled,
         modelId: kb.asr_config?.model_id || '',
         language: kb.asr_config?.language || ''
+      },
+      nexusGraph: {
+        mode: kb.graph?.mode || 'graphrag_light', store: kb.graph?.store || 'builtin', model_id: kb.graph?.model_id || '',
+        entity_types: kb.graph?.entity_types || [], relation_types: kb.graph?.relation_types || [],
+        instructions: kb.graph?.instructions || '',
       },
       nodeExtractConfig: {
         enabled: kb.extract_config?.enabled || false,
@@ -1696,6 +1703,11 @@ const buildSubmitData = () => {
     }
   }
 
+  // Nexus graph configuration (mode, store, model, types); sent whenever the graph strategy is on.
+  if (formData.value.indexingStrategy?.graphEnabled) {
+    data.graph = { ...formData.value.nexusGraph }
+  }
+
   // Always persist extract_config so the toggle state from GraphSettings is saved,
   // regardless of whether the graph indexing strategy is currently enabled.
   if (formData.value.nodeExtractConfig) {
@@ -1805,6 +1817,9 @@ const doSubmit = async () => {
       // 编辑器里对图片分类的修改被静默丢弃（新建时能存、之后再改无效）。
       if (data.image_processing_config) {
         updateConfig.image_processing_config = data.image_processing_config
+      }
+      if (data.graph) {
+        updateConfig.graph = data.graph
       }
       await updateKnowledgeBase(kbId, {
         name: data.name,
