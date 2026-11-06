@@ -1,0 +1,114 @@
+{
+  "_source": "Nexus rules for run_skill_script arguments (tool-call-hardening F17), patterns adapted from octop-harness.",
+  "rules": [
+    {
+      "id": "SKILL_ARG_FS_DESTRUCTION",
+      "tools": [
+        "run_skill_script"
+      ],
+      "params": [
+        "*"
+      ],
+      "category": "command_injection",
+      "severity": "CRITICAL",
+      "patterns": [
+        "\\bmkfs(\\.[a-zA-Z0-9_]+)?\\b",
+        "\\bmke2fs\\b",
+        "\\bdd\\s+.*of=/dev/",
+        ">\\s*/dev/(sd[a-z][0-9]*|vd[a-z][0-9]*|nvme\\d+n\\d+(p\\d+)?)",
+        "\\brm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f?[a-zA-Z]*\\s+/(\\s|$|\\*)"
+      ],
+      "description": "脚本参数包含格式化磁盘、写裸设备或删除根目录的命令",
+      "remediation": "不要在技能脚本参数中传入这类命令；如需清理数据，请让用户手动操作。"
+    },
+    {
+      "id": "SKILL_ARG_PIPE_TO_SHELL",
+      "tools": [
+        "run_skill_script"
+      ],
+      "params": [
+        "*"
+      ],
+      "category": "command_injection",
+      "severity": "CRITICAL",
+      "patterns": [
+        "\\b(curl|wget)\\b\\s+.*\\|.*\\b(bash|sh|zsh|ash|dash|python3?)\\b",
+        "\\bbase64\\s+(-d|--decode)\\s*\\|\\s*\\b(bash|sh|zsh)\\b"
+      ],
+      "description": "脚本参数包含下载后直接执行的管道命令",
+      "remediation": "先下载并检查内容，不要把远程内容直接交给解释器执行。"
+    },
+    {
+      "id": "SKILL_ARG_REVERSE_SHELL",
+      "tools": [
+        "run_skill_script"
+      ],
+      "params": [
+        "*"
+      ],
+      "category": "command_injection",
+      "severity": "CRITICAL",
+      "patterns": [
+        "/dev/(tcp|udp)/",
+        "\\bnc\\s+.*-e\\s*\\S+"
+      ],
+      "description": "脚本参数包含反向 shell 特征",
+      "remediation": "移除网络回连命令。"
+    },
+    {
+      "id": "SKILL_ARG_PRIVILEGE",
+      "tools": [
+        "run_skill_script"
+      ],
+      "params": [
+        "*"
+      ],
+      "category": "privilege_escalation",
+      "severity": "HIGH",
+      "patterns": [
+        "\\bsudo\\s+",
+        "\\bchmod\\s+-[a-zA-Z]*R[a-zA-Z]*\\s+(777|a\\+rwx)\\s+/",
+        "\\bauthorized_keys\\b",
+        "\\bcrontab\\b"
+      ],
+      "description": "脚本参数涉及提权、全局放开权限或持久化",
+      "remediation": "确认确有必要，并由用户人工审批。"
+    },
+    {
+      "id": "SKILL_ARG_SECRET_READ",
+      "tools": [
+        "run_skill_script"
+      ],
+      "params": [
+        "*"
+      ],
+      "category": "data_exfiltration",
+      "severity": "HIGH",
+      "patterns": [
+        "/proc/(?:self|\\d+)/environ",
+        "(^|/)\\.env(\\b|$)",
+        "\\.(netrc|pgpass|npmrc|pypirc)\\b",
+        "\\bid_(rsa|ed25519)\\b"
+      ],
+      "description": "脚本参数指向凭据或环境变量文件",
+      "remediation": "不要读取凭据文件；需要配置时请使用平台提供的密钥设置。"
+    },
+    {
+      "id": "SKILL_ARG_DELETE",
+      "tools": [
+        "run_skill_script"
+      ],
+      "params": [
+        "*"
+      ],
+      "category": "command_injection",
+      "severity": "MEDIUM",
+      "patterns": [
+        "\\brm\\s+-[a-zA-Z]*r",
+        "\\bRemove-Item\\b"
+      ],
+      "description": "脚本参数包含递归删除",
+      "remediation": "确认删除范围。"
+    }
+  ]
+}

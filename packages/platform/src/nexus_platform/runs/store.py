@@ -226,7 +226,7 @@ class DurableRuntimeStore:
                 'signature': tool_signature(call.name, call.arguments)})
             return str(invocation_id)
 
-    async def approval(self, call: ToolCall, reason: str = 'policy', risk: str | None = None):
+    async def approval(self, call: ToolCall, reason: str = 'policy', risk: str | None = None, rules=()):
         """Persist/consume a per-call action decision after current resource authorization.
 
         `reason` and `risk` (tool-call-hardening E) decide whether the owner may remember the decision.
@@ -234,7 +234,7 @@ class DurableRuntimeStore:
         from .approvals import request
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
-            return request(db, self._run(db), call, reason=reason, risk=risk)
+            return request(db, self._run(db), call, reason=reason, risk=risk, rules=rules)
 
     async def grant(self, call: ToolCall) -> bool:
         """Whether an active session grant lets this call skip a policy approval (queried on every call)."""

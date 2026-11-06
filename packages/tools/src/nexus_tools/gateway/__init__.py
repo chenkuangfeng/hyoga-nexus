@@ -10,6 +10,7 @@ from typing import Protocol
 from nexus_core.native.policy import TOOL_OUTPUT_READER, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import CancellationTokenPort, RuntimeFault, ToolCall, ToolResult
 from nexus_tools import arguments as tool_arguments
+from nexus_tools import guard as tool_guard
 from nexus_tools import output as tool_output
 from nexus_tools import policy as tool_policy
 from nexus_tools import threats
@@ -96,7 +97,8 @@ class AuthorizedToolGateway:
     def __init__(self, registry: ToolRegistry, access: ToolAccessPort,
                  bindings: dict[str, str], *, run_id: str, session_id: str, tenant_id: str,
                  services: object | None = None, spill: OutputSpill | None = None,
-                 turn_budget: int = 0, injection_scan: bool = True, tool_access: str = 'standard'):
+                 turn_budget: int = 0, injection_scan: bool = True, tool_access: str = 'standard',
+                 guard_rules: tuple | None = None):
         self.registry, self.access, self.bindings = registry, access, bindings
         self.run_id, self.session_id, self.tenant_id = run_id, session_id, tenant_id
         self.services = services
@@ -108,17 +110,22 @@ class AuthorizedToolGateway:
         self.injection_scan = injection_scan
         #: Agent access level (tool-call-hardening D11): `read_only`, `standard` or `strict`.
         self.tool_access = tool_access
+        #: Argument guard rules (tool-call-hardening F); loaded here so a malformed rule file stops startup.
+        self.guard_rules = tool_guard.bundled_rules() if guard_rules is None else guard_rules
 
     def _decide(self, tool) -> str:
         definition = tool.definition
         return tool_policy.decide(definition.risk, self.tool_access, definition.requires_approval)
 
-    async def _approval(self, call: ToolCall, reason: str, risk: str):
-        """Ask the port for approval, passing `reason` and `risk` when the port accepts them."""
+    async def _approval(self, call: ToolCall, reason: str, risk: str, findings=()):
+        """Ask the port for approval, passing `reason`, `risk` and the guard rules when the port accepts them."""
         parameters = inspect.signature(self.access.approval).parameters
+        kwargs = {}
         if 'reason' in parameters:
-            return await self.access.approval(call, reason=reason, risk=risk)
-        return await self.access.approval(call)
+            kwargs.update(reason=reason, risk=risk)
+        if 'rules' in parameters:
+            kwargs['rules'] = [{'id': f.rule_id, 'description': f.description} for f in findings]
+        return await self.access.approval(call, **kwargs)
 
     def begin_turn(self) -> None:
         """Called by the engine before each turn's tool calls: resets the per-turn output budget."""
@@ -186,14 +193,28 @@ class AuthorizedToolGateway:
             arguments, invalid = prepare_arguments(tool, call.arguments)
             if arguments is not None:
                 call = replace(call, arguments=json.dumps(arguments, ensure_ascii=False))
-        needs_approval = not error and invalid is None and self._decide(tool) == 'ask'
-        if needs_approval and tool.definition.risk != 'destructive' and hasattr(self.access, 'grant'):
+        findings = []
+        if not error and invalid is None and arguments is not None:
+            findings = tool_guard.scan(call.name, arguments, self.guard_rules)
+            for finding in findings:
+                if hasattr(self.access, 'observe'):
+                    await self.access.observe('', 'tool.guard_finding', {
+                        'tool': call.name, 'rule': finding.rule_id, 'severity': finding.severity, 'param': finding.param})
+            if findings and findings[0].severity == 'CRITICAL':
+                # The floor: no approval or grant can let this call run. The model sees the rule, not its arguments.
+                worst = findings[0]
+                invalid = ToolResult(f'工具调用被安全规则拒绝（{worst.rule_id}）：{worst.description}。{worst.remediation}',
+                                     error_code='tool_guard_denied')
+        guarded = any(f.severity == 'HIGH' for f in findings) and invalid is None
+        needs_approval = not error and invalid is None and (guarded or self._decide(tool) == 'ask')
+        if needs_approval and not guarded and tool.definition.risk != 'destructive' and hasattr(self.access, 'grant'):
             # A session grant (tool-call-hardening E) covers approvals asked for by policy, never destructive tools.
             needs_approval = not await self.access.grant(call)
         if needs_approval:
             if not hasattr(self.access, 'approval'):
                 return ToolResult('Action approval is unavailable', error_code='tool_approval_unavailable')
-            decision = await self._approval(call, 'policy', tool.definition.risk)
+            decision = await self._approval(call, 'guard' if guarded else 'policy', tool.definition.risk,
+                                            [f for f in findings if f.severity == 'HIGH'])
             if isinstance(decision, ToolResult):
                 return decision
             # The approver may edit the arguments: prepare them again.

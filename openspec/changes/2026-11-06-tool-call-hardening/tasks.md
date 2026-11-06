@@ -51,9 +51,10 @@
 
 ## 6. 参数守卫
 
-- [ ] 6.1 `nexus_tools.guard` 规则加载、预编译、规范化匹配；规则文件格式错误时启动失败。
-- [ ] 6.2 随包规则 `dangerous_shell_commands.yaml`、`skill_scripts.yaml` 与样例测试（含混淆写法）。
-- [ ] 6.3 网关接入：`CRITICAL` 拒绝、`HIGH` 以 `reason='guard'` 审批（忽略会话放行）、`MEDIUM` 只记事件；`tool.guard_finding` 事件。
+- [x] 6.1 `nexus_tools.guard` 规则加载、预编译、规范化匹配；规则文件格式错误时启动失败。
+- [x] 6.2 随包规则 `dangerous_shell_commands.yaml`、`skill_scripts.yaml` 与样例测试（含混淆写法）。
+- [x] 6.3 网关接入：`CRITICAL` 拒绝、`HIGH` 以 `reason='guard'` 审批（忽略会话放行）、`MEDIUM` 只记事件；`tool.guard_finding` 事件。
+  - 调整：规则文件改用 JSON（字段与 octop-harness YAML 相同），因为 `nexus_tools` 不依赖 PyYAML，不为此新增依赖；`dangerous_shell_commands.json` 由 octop-harness 的 YAML 转换（20 条，作用于 `shell`/`execute`/`bash`），`skill_scripts.json` 6 条。守卫审批的 `approval.requested` 事件带 `guard_rules` 供审批卡显示。全量 926 通过。
 
 ## 7. 前端
 

@@ -121,3 +121,11 @@ def test_migration_adds_and_removes_action_grants(tmp_path):
     assert {'reason', 'risk'} <= {c['name'] for c in inspector.get_columns('action_approvals')}
     command.downgrade(config, 'a9b8c7d6e5f4')
     assert 'action_grants' not in inspect(create_engine(url)).get_table_names()
+
+
+def test_guard_triggered_or_destructive_approvals_are_not_rememberable():
+    from nexus_platform.persistence.models import ActionApprovalRecord
+    from nexus_platform.runs.approvals import rememberable
+    assert rememberable(ActionApprovalRecord(reason='policy', risk='write'))
+    assert not rememberable(ActionApprovalRecord(reason='guard', risk='write'))
+    assert not rememberable(ActionApprovalRecord(reason='policy', risk='destructive'))

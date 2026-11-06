@@ -28,7 +28,7 @@ def binding_hash(run) -> str:
     return hashlib.sha256(json.dumps(run.config_snapshot, sort_keys=True).encode()).hexdigest()
 
 
-def request(db, run, call, *, reason: str = 'policy', risk: str | None = None):
+def request(db, run, call, *, reason: str = 'policy', risk: str | None = None, rules=()):
     """Return an existing unconsumed decision or persist a new pending action prompt.
 
     `reason` (`policy` / `guard`) and `risk` are kept on the prompt: they decide whether the owner may
@@ -55,8 +55,11 @@ def request(db, run, call, *, reason: str = 'policy', risk: str | None = None):
             arguments=call.arguments, binding_hash=binding_hash(run), status='pending', created_at=utc_now(),
             reason=reason, risk=risk)
         db.add(row)
-        append_event(db, run.id, 'approval.requested', {'approval_id': str(row.id), 'tool_name': call.name,
-                                                        'reason': reason, 'rememberable': rememberable(row)})
+        payload = {'approval_id': str(row.id), 'tool_name': call.name, 'reason': reason,
+                   'rememberable': rememberable(row)}
+        if rules:
+            payload['guard_rules'] = [dict(rule) for rule in rules][:5]  # shown on the approval card
+        append_event(db, run.id, 'approval.requested', payload)
     return ToolResult('Approval required for ' + call.name, disposition=ToolDisposition.WAIT_APPROVAL)
 
 

