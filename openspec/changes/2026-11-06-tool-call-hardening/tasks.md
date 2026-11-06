@@ -34,10 +34,11 @@
 
 ## 4. 风险与访问级别
 
-- [ ] 4.1 `nexus_core.ToolDefinition.risk` 取代 `risk_level`，构造校验；更新内置工具取值。
-- [ ] 4.2 `nexus_tools.policy.decide` 与组合测试（3 种访问级别 × 4 种风险 × 是否声明 `requires_approval`）。
-- [ ] 4.3 网关 `definitions()` / `execute()` 接入；`NativePolicy.tool_access` 校验（非法值 422）。
-- [ ] 4.4 目录接口返回 `risk` 与推导出的 `risk_level`；更新接口测试。
+- [x] 4.1 `nexus_core.ToolDefinition.risk` 取代 `risk_level`，构造校验；更新内置工具取值。
+- [x] 4.2 `nexus_tools.policy.decide` 与组合测试（3 种访问级别 × 4 种风险 × 是否声明 `requires_approval`）。
+- [x] 4.3 网关 `definitions()` / `execute()` 接入；`NativePolicy.tool_access` 校验（非法值 422）。
+- [x] 4.4 目录接口返回 `risk` 与推导出的 `risk_level`；更新接口测试。
+  - `risk_level` 保留为由 `risk` 派生的只读属性（省略 `risk` 时只读工具为 `read`，其余为 `write`），`read_only` 工具只能是 `read`/`probe`。网关参数 `tool_access` 由 worker 按 `NativePolicy.tool_access` 传入；非法值在设置与草稿校验中被拒绝（422）。全量 914 通过。
 
 ## 5. 会话放行
 

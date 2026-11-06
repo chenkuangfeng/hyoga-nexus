@@ -11,4 +11,4 @@ def ask_user_tool():
     schema = {'type': 'object', 'properties': {'question': {'type': 'string', 'minLength': 1, 'maxLength': 4000},
         'candidates': {'type': 'array', 'maxItems': 12, 'items': {'type': 'string', 'minLength': 1, 'maxLength': 500}}},
         'required': ['question'], 'additionalProperties': False}
-    return RegisteredTool(ToolDefinition('ask_user', 'Ask a question with optional quick-select choices.', schema), ask, lambda r: r.data)
+    return RegisteredTool(ToolDefinition('ask_user', 'Ask a question with optional quick-select choices.', schema, risk='read'), ask, lambda r: r.data)

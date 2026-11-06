@@ -15,4 +15,4 @@ def checkpoint_tool():
         return ToolResult('Working checkpoint updated')
     schema = {'type': 'object', 'properties': {name: {'type': 'string', 'maxLength': 8000} for name in ('key_info', 'content')},
         'anyOf': [{'required': ['key_info']}, {'required': ['content']}], 'additionalProperties': False}
-    return RegisteredTool(ToolDefinition('update_working_checkpoint', 'Replace the task working notepad.', schema), checkpoint, lambda r: r.data)
+    return RegisteredTool(ToolDefinition('update_working_checkpoint', 'Replace the task working notepad.', schema, risk='read'), checkpoint, lambda r: r.data)

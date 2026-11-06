@@ -331,3 +331,70 @@ def test_run_ends_with_tool_loop_detected_after_eight_identical_calls(database):
 
 
 from test_platform import database  # noqa: E402,F401 (pytest fixture)
+
+
+# ---------------------------------------------------------------- section 4: risk and access levels
+
+from nexus_core.native import NativePolicy  # noqa: E402
+from nexus_tools import policy  # noqa: E402
+from nexus_tools.builtins.catalog import builtin_catalog  # noqa: E402
+
+
+@pytest.mark.parametrize('access, risk, approval, expected', [
+    (access, risk, approval, expected)
+    for access, row in {
+        'read_only': {'read': 'allow', 'probe': 'allow', 'write': 'deny', 'destructive': 'deny'},
+        'standard': {'read': 'allow', 'probe': 'allow', 'write': 'allow', 'destructive': 'ask'},
+        'strict': {'read': 'allow', 'probe': 'allow', 'write': 'ask', 'destructive': 'ask'},
+    }.items()
+    for risk, base in row.items()
+    for approval, expected in ((False, base), (True, 'ask' if base == 'allow' else base))
+])
+def test_policy_matrix(access, risk, approval, expected):
+    assert policy.decide(risk, access, approval) == expected
+
+
+def _risk_registry(**risks):
+    tools = ToolRegistry()
+    for name, risk in risks.items():
+        tools.register(RegisteredTool(ToolDefinition(name, name, {'type': 'object', 'properties': {}}, risk=risk,
+                                                     read_only=risk in ('read', 'probe')),
+                                      lambda args, context, name=name: ToolResult(name), lambda r: r.data))
+    return tools
+
+
+def test_read_only_agents_neither_see_nor_run_write_tools():
+    tools = _risk_registry(look='read', save='write', wipe='destructive')
+    gateway = AuthorizedToolGateway(tools, Access(), {'look': 'v1', 'save': 'v1', 'wipe': 'v1'}, run_id='r',
+                                    session_id='s', tenant_id='t', tool_access='read_only')
+    assert [d.name for d in asyncio.run(gateway.definitions())] == ['look']
+    refused = asyncio.run(gateway.execute(ToolCall('c', 'save', '{}'), CancellationToken()))
+    assert refused.error_code == 'tool_authorization_denied'
+
+
+def test_strict_agents_need_approval_for_writes_and_standard_for_destructive():
+    tools = _risk_registry(save='write', wipe='destructive')
+    for access, name, expected in (('strict', 'save', 1), ('standard', 'save', 0), ('standard', 'wipe', 1)):
+        checker = Access()
+        gateway = AuthorizedToolGateway(tools, checker, {'save': 'v1', 'wipe': 'v1'}, run_id='r', session_id='s',
+                                        tenant_id='t', tool_access=access)
+        asyncio.run(gateway.execute(ToolCall('c', name, '{}'), CancellationToken()))
+        assert len(checker.approvals) == expected, (access, name)
+
+
+def test_builtin_risks_and_catalog_fields():
+    risks = {entry.name: (entry.risk, entry.risk_level) for entry in builtin_catalog()}
+    assert risks['run_skill_script'] == ('destructive', 'high')
+    assert risks['propose_memory_draft'] == ('write', 'medium')
+    for name in ('ask_user', 'todo', 'update_working_checkpoint', 'start_long_term_update', 'read_memory',
+                 'search_memory', 'read_tool_output', 'load_skill', 'read_skill_file', 'search_conversations'):
+        assert risks[name] == ('read', 'low'), name
+
+
+def test_policy_settings_are_validated():
+    assert NativePolicy(tool_access='strict').tool_access == 'strict'
+    for bad in ({'tool_access': 'admin'}, {'tool_turn_budget_chars': 100}, {'tool_repeat_warn_at': 8, 'tool_repeat_stop_at': 8},
+                {'tool_failure_stop_at': 99}, {'tool_injection_scan': 'yes'}):
+        with pytest.raises(ValueError):
+            NativePolicy(**bad)
+    assert NativePolicy(tool_turn_budget_chars=0, tool_repeat_warn_at=0, tool_repeat_stop_at=0).tool_turn_budget_chars == 0

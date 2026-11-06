@@ -10,6 +10,7 @@ from nexus_core.native.policy import TOOL_OUTPUT_READER, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import CancellationTokenPort, RuntimeFault, ToolCall, ToolResult
 from nexus_tools import arguments as tool_arguments
 from nexus_tools import output as tool_output
+from nexus_tools import policy as tool_policy
 from nexus_tools import threats
 from nexus_tools.registry import ToolContext, ToolRegistry
 from nexus_tools.registry.invocation import invoke
@@ -94,7 +95,7 @@ class AuthorizedToolGateway:
     def __init__(self, registry: ToolRegistry, access: ToolAccessPort,
                  bindings: dict[str, str], *, run_id: str, session_id: str, tenant_id: str,
                  services: object | None = None, spill: OutputSpill | None = None,
-                 turn_budget: int = 0, injection_scan: bool = True):
+                 turn_budget: int = 0, injection_scan: bool = True, tool_access: str = 'standard'):
         self.registry, self.access, self.bindings = registry, access, bindings
         self.run_id, self.session_id, self.tenant_id = run_id, session_id, tenant_id
         self.services = services
@@ -104,6 +105,12 @@ class AuthorizedToolGateway:
         self.turn_budget = turn_budget if self.spill is not None else 0
         self.turn_used = 0
         self.injection_scan = injection_scan
+        #: Agent access level (tool-call-hardening D11): `read_only`, `standard` or `strict`.
+        self.tool_access = tool_access
+
+    def _decide(self, tool) -> str:
+        definition = tool.definition
+        return tool_policy.decide(definition.risk, self.tool_access, definition.requires_approval)
 
     def begin_turn(self) -> None:
         """Called by the engine before each turn's tool calls: resets the per-turn output budget."""
@@ -116,6 +123,8 @@ class AuthorizedToolGateway:
         for name, version in self.bindings.items():
             tool = self.registry.get(name, version)
             if tool and tool.definition.capability == 'python_function':
+                if self._decide(tool) == 'deny':
+                    continue  # never offered: a read-only agent does not see write tools
                 try:
                     await self.access.authorize(name, version)
                 except RuntimeFault:
@@ -157,6 +166,9 @@ class AuthorizedToolGateway:
             except RuntimeFault as exc:
                 # Stable denial codes the model can act on pass through; anything else stays generic.
                 error = exc.code if exc.code in DENIAL_CODES else 'tool_authorization_denied'
+            else:
+                if self._decide(tool) == 'deny':
+                    error = 'tool_authorization_denied'
         if error:
             await self.access.denied(call.name)
         # Arguments are prepared before approval so the approval card, the invocation record and the
@@ -166,7 +178,7 @@ class AuthorizedToolGateway:
             arguments, invalid = prepare_arguments(tool, call.arguments)
             if arguments is not None:
                 call = replace(call, arguments=json.dumps(arguments, ensure_ascii=False))
-        if not error and invalid is None and tool.definition.requires_approval:
+        if not error and invalid is None and self._decide(tool) == 'ask':
             if not hasattr(self.access, 'approval'):
                 return ToolResult('Action approval is unavailable', error_code='tool_approval_unavailable')
             decision = await self.access.approval(call)

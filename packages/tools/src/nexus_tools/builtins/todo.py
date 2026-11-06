@@ -33,4 +33,4 @@ def todo_tool():
         'items': {'type': 'array', 'maxItems': MAX_ITEMS, 'items': item}},
         'required': ['op'], 'additionalProperties': False}
     return RegisteredTool(ToolDefinition('todo', 'List or replace this Run\'s todo items. Statuses: pending, in_progress, done.',
-                                          schema), todo, lambda r: r.data)
+                                          schema, risk='read'), todo, lambda r: r.data)

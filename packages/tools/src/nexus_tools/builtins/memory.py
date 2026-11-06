@@ -47,7 +47,7 @@ def memory_tools():
         'memory for environment facts and conventions, sop for verified procedures.',
         draft_schema), draft, lambda r: r.data)
     yield RegisteredTool(ToolDefinition('start_long_term_update', 'Read the memory index and consolidate reusable findings.',
-        {'type': 'object', 'properties': {}, 'additionalProperties': False}), start, lambda r: r.data)
+        {'type': 'object', 'properties': {}, 'additionalProperties': False}, risk='read'), start, lambda r: r.data)
     yield RegisteredTool(ToolDefinition('read_memory', 'Read a published authorized memory/SOP version.',
         {'type': 'object', 'properties': {'entry_id': {'type': 'string', 'maxLength': 36}}, 'required': ['entry_id'], 'additionalProperties': False},
         read_only=True, idempotent=True), read, lambda r: r.data)

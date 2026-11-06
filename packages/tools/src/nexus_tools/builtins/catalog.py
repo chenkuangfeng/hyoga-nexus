@@ -30,6 +30,9 @@ class CatalogEntry:
     name: str
     description: str
     group: str
+    #: `read` / `probe` / `write` / `destructive` (tool-call-hardening D10).
+    risk: str
+    #: Legacy label derived from `risk`, kept one release for existing clients.
     risk_level: str
     read_only: bool
     requires_approval: bool
@@ -51,7 +54,7 @@ def builtin_catalog() -> list[CatalogEntry]:
         definition = tool.definition
         entries.append(CatalogEntry(
             name=name, description=definition.description, group=TOOL_GROUPS.get(name, 'base'),
-            risk_level=definition.risk_level, read_only=definition.read_only,
+            risk=definition.risk, risk_level=definition.risk_level, read_only=definition.read_only,
             requires_approval=definition.requires_approval, side_effects=definition.side_effects,
         ))
     return entries
