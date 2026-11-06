@@ -25,7 +25,7 @@ from nexus_platform.authz.resources import grant_resource, revoke_resource_grant
 from nexus_platform.configuration import knowledge_settings
 from nexus_platform.errors import NotFound
 from nexus_platform.identity.service import require_membership, resolve_user
-from nexus_platform.knowledge import access, search as knowledge_search, service, stores
+from nexus_platform.knowledge import access, faq as faq_service, search as knowledge_search, service, stores
 from nexus_platform.persistence.models import (AuditRecord, KnowledgeBaseRecord, KnowledgeDocumentRecord,
                                                ResourceGrantRecord, TenantRecord)
 
@@ -341,6 +341,142 @@ def delete_document(tenant_id: UUID, document_id: UUID, principal: Principal = D
         user = _user(db, principal, tenant_id)
         service.delete_document(db, tenant_id, user.id, document_id)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- FAQ (K3)
+
+class FaqEntryInput(BaseModel):
+    standard_question: str = Field(max_length=2000)
+    similar_questions: list[str] = Field(default_factory=list, max_length=200)
+    negative_questions: list[str] = Field(default_factory=list, max_length=200)
+    answers: list[str] = Field(default_factory=list, max_length=50)
+    category: str = Field('', max_length=200)
+    answer_strategy: Literal['all', 'first'] = 'all'
+    is_enabled: bool = True
+    is_recommended: bool = False
+
+
+class FaqImportInput(BaseModel):
+    entries: list[dict[str, Any]] = Field(max_length=faq_service.MAX_IMPORT)
+    mode: Literal['append', 'replace'] = 'append'
+
+
+class FaqFieldsInput(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=2000)
+    is_enabled: bool | None = None
+    is_recommended: bool | None = None
+
+
+class FaqIdsInput(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=2000)
+
+
+@router.get('/bases/{kb_id}/faq/entries')
+def list_faq_entries(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_length=200),
+                     is_enabled: bool | None = None, offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=200),
+                     principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    user = _user(db, principal, tenant_id)
+    rows, total = faq_service.list_entries(db, tenant_id, user.id, kb_id, keyword=keyword, enabled=is_enabled,
+                                           offset=offset, limit=limit)
+    return {'items': [faq_service.view(row) for row in rows], 'total': total}
+
+
+@router.post('/bases/{kb_id}/faq/entries', status_code=201)
+def create_faq_entry(tenant_id: UUID, kb_id: UUID, body: FaqEntryInput, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        row, notes = faq_service.create_entry(db, tenant_id, user.id, kb_id, body.model_dump())
+        result = faq_service.view(row)
+    return {**result, 'notes': notes}
+
+
+@router.put('/bases/{kb_id}/faq/entries/{entry_id}')
+def update_faq_entry(tenant_id: UUID, kb_id: UUID, entry_id: UUID, body: FaqEntryInput,
+                     principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        row, notes = faq_service.update_entry(db, tenant_id, user.id, kb_id, entry_id, body.model_dump())
+        result = faq_service.view(row)
+    return {**result, 'notes': notes}
+
+
+@router.patch('/bases/{kb_id}/faq/entries')
+def update_faq_fields(tenant_id: UUID, kb_id: UUID, body: FaqFieldsInput, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)):
+    changes = body.model_dump(exclude_unset=True, exclude={'ids'})
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'updated': faq_service.batch_fields(db, tenant_id, user.id, kb_id, body.ids, changes)}
+
+
+@router.post('/bases/{kb_id}/faq/entries/delete')
+def delete_faq_entries(tenant_id: UUID, kb_id: UUID, body: FaqIdsInput, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'deleted': faq_service.delete_entries(db, tenant_id, user.id, kb_id, body.ids)}
+
+
+@router.post('/bases/{kb_id}/faq/import')
+def import_faq(tenant_id: UUID, kb_id: UUID, body: FaqImportInput, principal: Principal = Depends(get_principal),
+               db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return faq_service.import_entries(db, tenant_id, user.id, kb_id, body.entries, body.mode)
+
+
+@router.post('/bases/{kb_id}/faq/import-file')
+async def import_faq_file(tenant_id: UUID, kb_id: UUID, file: UploadFile = File(...), mode: str = Form('append'),
+                          principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Import a WeKnora-format CSV (columns 分类, 问题, 相似问题, 反例问题, 机器人回答, 是否全部回复, 是否停用)."""
+    from nexus_knowledge import faq as faq_rules
+    data = await file.read(knowledge_settings().max_upload_mb * 1024 * 1024 + 1)
+    rows = faq_rules.parse_csv(data)
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return faq_service.import_entries(db, tenant_id, user.id, kb_id, rows, mode)
+
+
+@router.get('/bases/{kb_id}/faq/export')
+def export_faq(tenant_id: UUID, kb_id: UUID, format: Literal['csv', 'json'] = 'csv',
+               principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    from nexus_knowledge import faq as faq_rules
+    user = _user(db, principal, tenant_id)
+    rows = faq_service.export_entries(db, tenant_id, user.id, kb_id)
+    if format == 'json':
+        import json as _json
+        return Response(_json.dumps(rows, ensure_ascii=False, indent=2).encode(), media_type='application/json',
+                        headers={'Content-Disposition': 'attachment; filename="faq.json"'})
+    return Response(faq_rules.to_csv(rows), media_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition': 'attachment; filename="faq.csv"'})
+
+
+@router.post('/bases/{kb_id}/faq/retry')
+def retry_faq_index(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
+                    db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'retried': faq_service.retry_failed(db, tenant_id, user.id, kb_id)}
+
+
+class FaqSearchInput(BaseModel):
+    query_text: str = Field(min_length=1, max_length=2000)
+    match_count: int = Field(10, ge=1, le=50)
+
+
+@router.post('/bases/{kb_id}/faq/search')
+async def search_faq(tenant_id: UUID, kb_id: UUID, body: FaqSearchInput, request: Request,
+                     principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Search one FAQ base; hits carry the entry, the score and the channels that matched."""
+    user = _user(db, principal, tenant_id)
+    access.readable_base(db, kb_id, tenant_id, user.id)
+    factory = getattr(request.app.state, 'session_factory', None) or sessionmaker(
+        bind=db.get_bind(), expire_on_commit=False, autoflush=False)
+    result = await knowledge_search.search(factory, db, tenant_id, user.id, body.query_text, limit=body.match_count,
+                                           requested=[kb_id])
+    db.commit()
+    return {'items': [knowledge_search.hit_view(hit) for hit in result.hits], 'degraded': result.degraded}
 
 
 # ---------------------------------------------------------------- retrieval test

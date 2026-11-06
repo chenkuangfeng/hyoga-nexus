@@ -761,7 +761,8 @@ export function updateKnowledgeTagBatch(data: { updates: Record<string, string[]
 }
 
 export function updateFAQEntryTagBatch(kbId: string, data: { updates: Record<number, number | null> }) {
-  return nexus.planned('FAQ', 'K3');
+  void kbId; void data;
+  return nexus.planned('FAQ 标签', 'K5');
 }
 
 const buildQuery = (params?: Record<string, any>) => {
@@ -786,20 +787,19 @@ export function listFAQEntries(
     is_enabled?: boolean
   },
 ) {
-  const query = buildQuery(params);
-  return nexus.plannedEmpty([], { total: 0 });
+  return nexus.listFaq(kbId, params ?? {});
 }
 
 export function upsertFAQEntries(kbId: string, data: { entries: any[]; mode: 'append' | 'replace' }) {
-  return nexus.planned('FAQ', 'K3');
+  return nexus.importFaq(kbId, data.entries, data.mode);
 }
 
 export function createFAQEntry(kbId: string, data: any) {
-  return nexus.planned('FAQ', 'K3');
+  return nexus.createFaq(kbId, data);
 }
 
 export function updateFAQEntry(kbId: string, entryId: number, data: any) {
-  return nexus.planned('FAQ', 'K3');
+  return nexus.updateFaq(kbId, String(entryId), data);
 }
 
 // Unified batch update API - supports is_enabled, is_recommended, tag_id
@@ -819,11 +819,23 @@ export interface FAQEntryFieldsBatchRequest {
 }
 
 export function updateFAQEntryFieldsBatch(kbId: string, data: FAQEntryFieldsBatchRequest) {
-  return nexus.planned('FAQ', 'K3');
+  // Entries are selected by id; selection by tag is planned with tags (K5).
+  const updates = data.by_id ?? {};
+  const groups = new Map<string, { ids: string[], fields: FAQEntryFieldsUpdate }>();
+  for (const [id, fields] of Object.entries(updates)) {
+    const { is_enabled, is_recommended } = fields;
+    const signature = JSON.stringify({ is_enabled, is_recommended });
+    const group = groups.get(signature) ?? { ids: [], fields: { is_enabled, is_recommended } };
+    group.ids.push(id);
+    groups.set(signature, group);
+  }
+  if (!groups.size) return nexus.planned('按标签批量修改', 'K5');
+  return Promise.all([...groups.values()].map(group => nexus.updateFaqFields(kbId, group.ids, group.fields)))
+    .then(() => ({ success: true, data: null }));
 }
 
 export function deleteFAQEntries(kbId: string, ids: number[]) {
-  return nexus.planned('FAQ', 'K3');
+  return nexus.deleteFaq(kbId, ids.map(String));
 }
 
 export function searchFAQEntries(
@@ -834,13 +846,12 @@ export function searchFAQEntries(
     match_count?: number
   }
 ) {
-  return nexus.planned('FAQ', 'K3');
+  return nexus.searchFaq(kbId, data.query_text, data.match_count);
 }
 
 // Export FAQ entries as CSV or JSON file
 export async function exportFAQEntries(kbId: string, format: 'csv' | 'json' = 'csv'): Promise<Blob> {
-  void kbId; void format;
-  return nexus.planned('FAQ 导出', 'K3')
+  return nexus.exportFaq(kbId, format);
 }
 
 // FAQ Import Progress API
@@ -876,7 +887,7 @@ export interface FAQImportProgress {
 }
 
 export function getFAQImportProgress(taskId: string) {
-  return nexus.planned('FAQ 导入', 'K3');
+  return nexus.faqImportProgress(taskId);
 }
 
 export function updateFAQImportResultDisplayStatus(knowledgeBaseId: string, displayStatus: 'open' | 'close') {

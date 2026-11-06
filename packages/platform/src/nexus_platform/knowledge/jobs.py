@@ -289,6 +289,8 @@ async def _cleanup(factory, job_id: UUID) -> None:
             row = db.get(KnowledgeBaseRecord, kb_id)
             if row is not None and row.status == 'deleting':
                 db.execute(KnowledgeDocumentRecord.__table__.delete().where(KnowledgeDocumentRecord.kb_id == kb_id))
+                from nexus_platform.persistence.models import FaqEntryRecord
+                db.execute(FaqEntryRecord.__table__.delete().where(FaqEntryRecord.kb_id == kb_id))
                 db.execute(KnowledgeJobRecord.__table__.delete().where(
                     KnowledgeJobRecord.kb_id == kb_id, KnowledgeJobRecord.id != job_id))
                 db.delete(row)

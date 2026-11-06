@@ -6,10 +6,10 @@
  * `./nexusAdapter`. Features not implemented yet go through {@link planned} (rejects without a request) or
  * {@link plannedEmpty} (resolves an empty WeKnora envelope for read-only lists, so pages render).
  */
-import { del, get, getDown, patch, post, postUpload } from '@/utils/request'
+import { del, get, getDown, patch, post, postUpload, put } from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import {
-  PlannedFeatureError, ok, pageToOffset, toNexusBaseInput, toWeKnoraBase, toWeKnoraChunk, toWeKnoraKnowledge,
+  PlannedFeatureError, ok, pageToOffset, toFaqImportProgress, toNexusBaseInput, toNexusFaqInput, toWeKnoraFaqEntry, toWeKnoraBase, toWeKnoraChunk, toWeKnoraKnowledge,
   toWeKnoraSearchHit,
 } from './nexusAdapter'
 
@@ -114,4 +114,64 @@ export async function searchBases(query: string, kbIds?: string[], limit = 10): 
   if (kbIds?.length) body.kb_ids = kbIds
   const res: Json = await post(`${knowledgePath()}/search`, body)
   return ok((res.items || []).map(toWeKnoraSearchHit), { degraded: res.degraded || [], ignored: res.ignored || [] })
+}
+
+// ---------------------------------------------------------------- FAQ (K3)
+
+function faqPath(kbId: string): string {
+  return `${knowledgePath()}/bases/${encodeURIComponent(kbId)}/faq`
+}
+
+export async function listFaq(kbId: string, params: Json): Promise<Json> {
+  const limit = Math.max(1, Math.min(Number(params.page_size) || 20, 200))
+  const offset = (Math.max(1, Number(params.page) || 1) - 1) * limit
+  const query = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  if (params.keyword) query.set('keyword', String(params.keyword))
+  if (typeof params.is_enabled === 'boolean') query.set('is_enabled', String(params.is_enabled))
+  const res: Json = await get(`${faqPath(kbId)}/entries?${query}`)
+  return ok({ data: (res.items || []).map(toWeKnoraFaqEntry), total: res.total ?? 0 })
+}
+
+export async function createFaq(kbId: string, data: Json): Promise<Json> {
+  return ok(toWeKnoraFaqEntry(await post(`${faqPath(kbId)}/entries`, toNexusFaqInput(data))))
+}
+
+export async function updateFaq(kbId: string, entryId: string, data: Json): Promise<Json> {
+  return ok(toWeKnoraFaqEntry(await put(`${faqPath(kbId)}/entries/${encodeURIComponent(entryId)}`, toNexusFaqInput(data))))
+}
+
+export async function updateFaqFields(kbId: string, ids: string[], fields: Json): Promise<Json> {
+  return ok(await patch(`${faqPath(kbId)}/entries`, { ids, ...fields }))
+}
+
+export async function deleteFaq(kbId: string, ids: string[]): Promise<Json> {
+  return ok(await post(`${faqPath(kbId)}/entries/delete`, { ids }))
+}
+
+const importResults = new Map<string, Json>()
+
+/** Import entries. The server answers at once; the result is kept under a task id so the progress UI shows it. */
+export async function importFaq(kbId: string, entries: Json[], mode: 'append' | 'replace'): Promise<Json> {
+  const result: Json = await post(`${faqPath(kbId)}/import`, { entries: entries.map(toNexusFaqInput), mode })
+  const taskId = `nexus-faq-${Date.now()}-${importResults.size}`
+  importResults.set(taskId, toFaqImportProgress(taskId, kbId, entries.length, result))
+  return ok({ task_id: taskId })
+}
+
+export function faqImportProgress(taskId: string): Promise<Json> {
+  const progress = importResults.get(taskId)
+  return progress ? Promise.resolve(ok(progress)) : Promise.reject(new PlannedFeatureError('导入任务已过期'))
+}
+
+export async function searchFaq(kbId: string, queryText: string, matchCount = 10): Promise<Json> {
+  const res: Json = await post(`${faqPath(kbId)}/search`, { query_text: queryText, match_count: matchCount })
+  return ok((res.items || []).map((hit: Json) => ({
+    ...toWeKnoraFaqEntry({ id: hit.document_id, kb_id: hit.kb_id, standard_question: hit.filename,
+      answers: String(hit.content || '').split('答：').slice(1) }),
+    score: hit.score, match_type: Object.keys(hit.channels || {}).length > 1 ? 'hybrid'
+      : hit.channels?.vector !== undefined ? 'vector' : 'keyword' })))
+}
+
+export function exportFaq(kbId: string, format: 'csv' | 'json'): Promise<Blob> {
+  return getDown(`${faqPath(kbId)}/export?format=${format}`)
 }

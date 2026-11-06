@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import {
   PlannedFeatureError, isPlannedFeatureError, pageToOffset, parseStatus, toNexusBaseInput, toWeKnoraBase,
-  toWeKnoraChunk, toWeKnoraKnowledge, toWeKnoraSearchHit,
+  toFaqImportProgress, toNexusFaqInput, toWeKnoraChunk, toWeKnoraFaqEntry, toWeKnoraKnowledge, toWeKnoraSearchHit,
 } from './nexusAdapter.ts'
 
 test('knowledge base maps to WeKnora names and keeps settings blocks', () => {
@@ -55,4 +55,15 @@ test('paging and planned errors', () => {
   const error = new PlannedFeatureError('FAQ', 'K3')
   assert.equal(isPlannedFeatureError(error), true)
   assert.match(error.message, /K3/)
+})
+
+test('FAQ entries map both ways and imports report blocked rows', () => {
+  const entry = toWeKnoraFaqEntry({ id: 'e1', kb_id: 'k', standard_question: 'q', answers: ['a'], category: '账号', is_enabled: false })
+  assert.equal(entry.id, 'e1')
+  assert.equal(entry.is_enabled, false)
+  assert.equal(entry.tag_name, '账号')
+  const body = toNexusFaqInput({ standard_question: 'q', answers: ['a'], tag_name: '账号', is_enabled: false })
+  assert.deepEqual([body.category, body.is_enabled, body.answer_strategy], ['账号', false, 'all'])
+  const progress = toFaqImportProgress('t', 'k', 3, { created: 2, blocked: [{ index: 1, standard_question: 'q', reason: '重复' }], notes: [] })
+  assert.deepEqual([progress.status, progress.blocked, progress.total], ['completed', 1, 3])
 })

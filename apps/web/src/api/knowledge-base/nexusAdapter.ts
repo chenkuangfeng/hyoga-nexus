@@ -198,3 +198,42 @@ export function pageToOffset(page?: number, pageSize?: number): { offset: number
   const current = Math.max(1, Number(page) || 1)
   return { offset: (current - 1) * limit, limit }
 }
+
+/** Nexus FAQ entry → WeKnora `FAQEntry`. Ids are UUID strings; tags are planned, the category is shown as the tag name. */
+export function toWeKnoraFaqEntry(raw: unknown): Json {
+  const entry = record(raw)
+  return {
+    id: entry.id, chunk_id: entry.id, knowledge_id: entry.id, knowledge_base_id: entry.kb_id,
+    tag_id: undefined, tag_name: entry.category ?? '', category: entry.category ?? '',
+    is_enabled: entry.is_enabled !== false, is_recommended: entry.is_recommended === true,
+    standard_question: entry.standard_question ?? '',
+    similar_questions: Array.isArray(entry.similar_questions) ? entry.similar_questions : [],
+    negative_questions: Array.isArray(entry.negative_questions) ? entry.negative_questions : [],
+    answers: Array.isArray(entry.answers) ? entry.answers : [],
+    answer_strategy: entry.answer_strategy ?? 'all',
+    index_state: entry.index_state, index_error: entry.index_error ?? null,
+    updated_at: entry.updated_at,
+  }
+}
+
+/** WeKnora FAQ entry payload → Nexus body (`tag_name` is the category). */
+export function toNexusFaqInput(data: Json): Json {
+  return {
+    standard_question: data.standard_question ?? '',
+    similar_questions: data.similar_questions ?? [], negative_questions: data.negative_questions ?? [],
+    answers: data.answers ?? [], category: data.category ?? data.tag_name ?? '',
+    answer_strategy: data.answer_strategy === 'first' ? 'first' : 'all',
+    is_enabled: data.is_enabled !== false, is_recommended: data.is_recommended === true,
+  }
+}
+
+/** Import result of the server → the progress object the WeKnora import UI polls. */
+export function toFaqImportProgress(taskId: string, kbId: string, total: number, result: Json): Json {
+  const blocked = Array.isArray(result.blocked) ? result.blocked : []
+  return {
+    task_id: taskId, kb_id: kbId, knowledge_id: kbId, status: 'completed', progress: 100, total,
+    processed: total, blocked: blocked.length, blocked_entries: blocked,
+    success_entries: [], message: Array.isArray(result.notes) ? result.notes.join('\n') : '', error: '',
+    created_at: Date.now(), updated_at: Date.now(),
+  }
+}

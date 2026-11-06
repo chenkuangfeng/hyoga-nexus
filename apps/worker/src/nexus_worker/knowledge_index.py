@@ -54,6 +54,9 @@ def knowledge_tick(factory: sessionmaker[Session], loop, concurrency: int) -> bo
     import nexus_knowledge.index  # noqa: F401  (registers the vector engines)
     from nexus_platform.knowledge.graph.build import run_due as run_graph_due
     from nexus_platform.knowledge.jobs import run_due
+    from nexus_platform.knowledge.faq import index_tick as faq_tick
     if loop.run_until_complete(run_due(factory, concurrency)) > 0:
+        return True
+    if loop.run_until_complete(faq_tick(factory)) > 0:
         return True
     return loop.run_until_complete(run_graph_due(factory, 1)) > 0

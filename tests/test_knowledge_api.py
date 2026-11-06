@@ -84,9 +84,9 @@ def test_base_document_and_search_flow(api):
 
 def test_planned_features_and_limits_are_refused(api):
     client, path, identity, _ = api
-    faq = client.post(path + '/bases', json={'name': 'faq', 'type': 'faq'})
-    assert faq.status_code == 422 and faq.json()['error']['code'] == 'capability_planned'
-    assert faq.json()['error']['details']['stage'] == 'K3'
+    wiki = client.post(path + '/bases', json={'name': 'wiki', 'type': 'wiki'})
+    assert wiki.status_code == 422 and wiki.json()['error']['code'] == 'capability_planned'
+    assert wiki.json()['error']['details']['stage'] == 'K6'
     kb_id = client.post(path + '/bases', json={'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
     too_big = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.txt', b'x' * (1024 * 1024 + 1))})
     assert too_big.status_code == 422

@@ -27,9 +27,10 @@ from nexus_knowledge.index import Scope, VectorStoreError, collection_name
 from nexus_knowledge.retrieval.fuse import Candidate, fuse
 from nexus_knowledge.text import query_tokens
 from nexus_platform.authz.audit import audit
-from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
+from nexus_platform.persistence.models import (FaqEntryRecord, KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord)
 from . import access, embedding, stores
+from . import faq as faq_rules
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,9 @@ def resolve_scope(db: Session, tenant_id: UUID, user_id: UUID, *, bound: Sequenc
         ignored += [str(i) for i in requested if i not in found and str(i) not in ignored]
     out = []
     for kb in bases:
+        if kb.kb_type == 'faq':
+            out.append(ScopedBase(kb, faq_rules.scope_ids(db, kb.id)))  # FAQ entries play the role of versions
+            continue
         versions = db.scalars(select(KnowledgeDocumentRecord.current_version_id).where(
             KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active',
             KnowledgeDocumentRecord.current_version_id.is_not(None))).all()
@@ -146,7 +150,7 @@ async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, u
         finally:
             await index.close()
     fused = fuse(vector_lists, keyword_lists, vector_weight=vector_weight, keyword_weight=keyword_weight)
-    result.hits = _load_hits(db, fused, scoped, limit)
+    result.hits = _load_hits(db, fused, scoped, limit, query)
     return result
 
 
@@ -184,33 +188,57 @@ def _degrade(db: Session, result: SearchResult, tenant_id: UUID, user_id: UUID, 
           {'channel': channel, 'reason': reason})
 
 
-def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int) -> list[SearchHit]:
+def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: str = '') -> list[SearchHit]:
     allowed = {version for item in scoped for version in item.version_ids}
     names = {item.kb.id: item.kb.name for item in scoped}
-    ids = []
+    ids, faq_ids = [], []
     for item in fused:
+        if item.chunk_id.startswith('f:'):
+            try:
+                faq_ids.append(UUID(item.chunk_id.split(':')[1]))
+            except (ValueError, IndexError):
+                pass
+            continue
         try:
             ids.append(UUID(item.chunk_id))
         except ValueError:
             continue
-    if not ids:
-        return []
-    rows = db.execute(select(KnowledgeChunkRecord, KnowledgeDocumentVersionRecord, KnowledgeDocumentRecord).join(
-        KnowledgeDocumentVersionRecord, KnowledgeDocumentVersionRecord.id == KnowledgeChunkRecord.version_id).join(
-        KnowledgeDocumentRecord, KnowledgeDocumentRecord.id == KnowledgeDocumentVersionRecord.document_id).where(
-        KnowledgeChunkRecord.id.in_(ids[: limit * 4]))).all()
-    by_id = {str(chunk.id): (chunk, version, doc) for chunk, version, doc in rows}
-    hits = []
+    by_id: dict = {}
+    if ids:
+        rows = db.execute(select(KnowledgeChunkRecord, KnowledgeDocumentVersionRecord, KnowledgeDocumentRecord).join(
+            KnowledgeDocumentVersionRecord, KnowledgeDocumentVersionRecord.id == KnowledgeChunkRecord.version_id).join(
+            KnowledgeDocumentRecord, KnowledgeDocumentRecord.id == KnowledgeDocumentVersionRecord.document_id).where(
+            KnowledgeChunkRecord.id.in_(ids[: limit * 4]))).all()
+        by_id = {str(chunk.id): (chunk, version, doc) for chunk, version, doc in rows}
+    faq_by_id = {}
+    if faq_ids:
+        faq_by_id = {str(e.id): e for e in db.scalars(select(FaqEntryRecord).where(
+            FaqEntryRecord.id.in_(faq_ids), FaqEntryRecord.status == 'active', FaqEntryRecord.enabled.is_(True),
+            FaqEntryRecord.index_state == 'ready'))}
+    hits, seen_entries = [], set()
     for item in fused:
-        found = by_id.get(item.chunk_id)
-        if found is None:
-            continue
-        chunk, version, doc = found
-        if str(version.id) not in allowed or doc.status != 'active':  # stale index row or out of scope
-            continue
-        hits.append(SearchHit(item.chunk_id, round(item.score, 6), item.ranks, chunk.content, str(doc.kb_id),
-                              names.get(doc.kb_id, ''), str(doc.id), doc.filename, str(version.id), chunk.ordinal,
-                              chunk.page, list(chunk.section)))
+        if item.chunk_id.startswith('f:'):
+            entry = faq_by_id.get(item.chunk_id.split(':')[1]) if item.chunk_id.count(':') >= 2 else None
+            if entry is None or str(entry.id) not in allowed or str(entry.id) in seen_entries:
+                continue
+            if faq_rules.rules.negated(query, entry.negative_questions):  # the entry says it is not the answer
+                continue
+            seen_entries.add(str(entry.id))
+            answer = faq_rules.rules.answer_text(entry.answers, entry.answer_strategy)
+            hits.append(SearchHit(f'f:{entry.id}', round(item.score, 6), item.ranks,
+                                  f'问：{entry.standard_question}\n答：{answer}', str(entry.kb_id),
+                                  names.get(entry.kb_id, ''), str(entry.id), entry.standard_question, str(entry.id), 0,
+                                  None, [entry.category] if entry.category else []))
+        else:
+            found = by_id.get(item.chunk_id)
+            if found is None:
+                continue
+            chunk, version, doc = found
+            if str(version.id) not in allowed or doc.status != 'active':  # stale index row or out of scope
+                continue
+            hits.append(SearchHit(item.chunk_id, round(item.score, 6), item.ranks, chunk.content, str(doc.kb_id),
+                                  names.get(doc.kb_id, ''), str(doc.id), doc.filename, str(version.id), chunk.ordinal,
+                                  chunk.page, list(chunk.section)))
         if len(hits) >= limit:
             break
     return hits

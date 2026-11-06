@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import (JSON, BigInteger, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text,
+from sqlalchemy import (JSON, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text,
                         UniqueConstraint, Uuid, text)
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -185,7 +185,7 @@ class KnowledgeJobRecord(Base):
 __all__ = ['VectorStoreRecord', 'StorageBackendRecord', 'KnowledgeBaseRecord', 'KnowledgeDocumentRecord',
            'KnowledgeDocumentVersionRecord', 'KnowledgeChunkRecord', 'KnowledgeJobRecord', 'GraphStoreRecord',
            'GraphBuildRecord', 'GraphEntityRecord', 'GraphRelationRecord', 'GraphCommunityRecord',
-           'GraphExtractionCacheRecord']
+           'GraphExtractionCacheRecord', 'FaqEntryRecord']
 
 
 # ---------------------------------------------------------------- graph (openspec 2026-11-06-knowledge-base K2)
@@ -299,3 +299,44 @@ class GraphExtractionCacheRecord(Base):
     cache_key: Mapped[str] = mapped_column(String(64), nullable=False)
     result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# ---------------------------------------------------------------- FAQ (openspec 2026-11-06-knowledge-base K3)
+
+class FaqEntryRecord(Base):
+    """One FAQ entry of a ``faq`` knowledge base (WeKnora ``FAQChunkMetadata``).
+
+    Searched through the base's vector store with the entry id as the index "version": an entry is searchable
+    only while ``status='active'``, ``enabled`` and ``index_state='ready'``. An edit sets ``index_state`` back to
+    ``pending``; the worker re-embeds it and the old index rows are replaced, so a stale answer is never served
+    from a half-updated entry (the entry leaves search until it is indexed again).
+    """
+
+    __tablename__ = 'knowledge_faq_entries'
+    __table_args__ = (
+        CheckConstraint("status IN ('active','deleting')", name='ck_faq_entries_status'),
+        CheckConstraint("index_state IN ('pending','ready','failed')", name='ck_faq_entries_index_state'),
+        Index('ix_faq_entries_kb', 'kb_id', 'status', 'enabled'),
+        Index('ix_faq_entries_pending', 'index_state', 'status'),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
+    category: Mapped[str] = mapped_column(String(160), nullable=False, default='')
+    standard_question: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Normalized standard question; unique per base among active entries.
+    question_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    similar_questions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    negative_questions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    answers: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    #: ``all`` returns every answer, ``first`` only the first one.
+    answer_strategy: Mapped[str] = mapped_column(String(16), nullable=False, default='all')
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
+    index_state: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')
+    index_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    index_error: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -173,7 +173,7 @@ def test_write_access_and_capability_checks(env):
             service.prepare_upload(db, tenant_id, owner, kb_id, 'a.txt', b'x' * 200, 100)
     with factory() as db, db.begin():
         with pytest.raises(capabilities.CapabilityPlanned):
-            service.create_base(db, tenant_id, owner, name='faq', kb_type='faq', indexing={'keyword': True})
+            service.create_base(db, tenant_id, owner, name='wiki', kb_type='wiki', indexing={'vector': False, 'keyword': True})
         with pytest.raises(capabilities.CapabilityPlanned):
             service.create_base(db, tenant_id, owner, name='w', indexing={'keyword': True, 'wiki': True})
         with pytest.raises(ValueError, match='chat model'):  # graph is implemented but needs its configuration

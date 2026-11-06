@@ -67,7 +67,9 @@
 
 ## K3 FAQ 库
 
-- [ ] K3.1 FAQ 条目、相似问、索引模式、批量导入；检索命中直接返回答案；前端 FAQ 管理。
+- [x] K3.1 FAQ 条目、相似问、索引模式、批量导入；检索命中直接返回答案；前端 FAQ 管理。
+  - 表 `knowledge_faq_entries`（迁移 `e2f3a4b5c6d7`）；领域规则 `nexus_knowledge.faq`：标准问唯一（重复拦截）、相似问与其他条目冲突则移除、反例与本条问题相同则移除、`##` 分隔的 WeKnora CSV 导入导出、四种索引文本组合（`question_only|question_answer` × `combined|separate`）。检索：FAQ 库的 Pre-Filter 范围是启用且已索引的条目 id，命中返回「问/答」，查询与条目反例近似（相似度 ≥ 0.85）时该条目不返回；编辑条目后先退出检索，worker 重新索引后再恢复；停用/删除立即不可见。索引由 worker 的 `faq.index_tick` 完成，失败重试 3 次后标 `failed`，可手动重试。接口：`/bases/{id}/faq/entries`（增删改查、批量启停）、`import`、`import-file`（CSV）、`export`、`search`、`retry`。前端 FAQ 管理页改接这些接口；标签与按标签批量修改仍待 K5；类别以标签名形式显示。
+  - 测试 `tests/test_knowledge_faq.py`、`tests/test_knowledge_faq_domain.py`；后端全量 998 通过，前端 2097 通过（既有字号检查失败除外）。
 
 ## K4 解析与分块增强
 

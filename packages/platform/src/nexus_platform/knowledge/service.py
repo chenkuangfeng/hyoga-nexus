@@ -36,6 +36,7 @@ from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChu
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
 from . import access, stores
 from .graph import config as graph_config
+from . import faq as faq_rules
 
 KB_TYPES = ('document', 'faq', 'wiki')
 INDEXING_KEYS = ('vector', 'keyword', 'graph', 'wiki')
@@ -47,6 +48,10 @@ DEFAULT_INDEXING = {'vector': True, 'keyword': True, 'graph': False, 'wiki': Fal
 def base_view(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UUID) -> dict[str, Any]:
     counts = db.execute(select(func.count(KnowledgeDocumentRecord.id)).where(
         KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active')).scalar_one()
+    if kb.kb_type == 'faq':  # entries are the "documents" of a FAQ base
+        from nexus_platform.persistence.models import FaqEntryRecord
+        counts = db.execute(select(func.count(FaqEntryRecord.id)).where(
+            FaqEntryRecord.kb_id == kb.id, FaqEntryRecord.status == 'active')).scalar_one()
     processing = db.execute(select(func.count(KnowledgeDocumentVersionRecord.id)).where(
         KnowledgeDocumentVersionRecord.kb_id == kb.id,
         KnowledgeDocumentVersionRecord.state.in_(('pending', 'parsed', 'embedded')))).scalar_one()
@@ -113,6 +118,10 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
             capabilities.require_available('indexing', key)
     if not (normalized['vector'] or normalized['keyword']):
         raise ValueError('enable vector or keyword indexing')
+    if kb_type == 'faq':
+        if normalized['graph'] or normalized['wiki']:
+            raise ValueError('FAQ knowledge bases index questions and answers only (no graph or wiki)')
+        faq_rules.validate_config(settings)
     if normalized['graph']:
         # Graph building calls a chat model with the creator's key (decision 6) and needs a valid configuration.
         config = graph_config.parse(settings)
@@ -448,6 +457,9 @@ def cancel_graph_builds(db: Session, kb_id: UUID) -> None:
 
 # Implemented here (capability catalog, decision 5).
 capabilities.mark_available('kb_type', 'document')
+capabilities.mark_available('kb_type', 'faq')
+for _faq_feature in ('faq_entries', 'faq_import'):
+    capabilities.mark_available('kb_feature', _faq_feature)
 capabilities.mark_available('indexing', 'vector')
 capabilities.mark_available('indexing', 'keyword')
 capabilities.mark_available('parser_engine', 'builtin')
