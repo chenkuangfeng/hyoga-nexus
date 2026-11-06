@@ -479,10 +479,11 @@ class DurableRuntimeStore:
                 return 'Not created: the content matched prohibited instruction patterns: ' + ', '.join(outcome['rules'])
             return 'Not created: the owner previously rejected this content.'
 
-    async def search_knowledge(self, query: str, kb_ids: list[str], limit: int, state: dict) -> str:
+    async def search_knowledge(self, query: str, kb_ids: list[str], limit: int, state: dict,
+                               filters: dict | None = None) -> str:
         """Pre-Filtered search over the agent's bound knowledge bases (openspec 2026-11-06-knowledge-base K1.8)."""
         from nexus_platform.knowledge.tools import search_for_run
-        return await search_for_run(self.factory, self.context.run_id, query, kb_ids, limit, state)
+        return await search_for_run(self.factory, self.context.run_id, query, kb_ids, limit, state, filters or {})
 
     async def read_document(self, document_id: str, chunk: int, count: int, state: dict) -> str:
         from nexus_platform.knowledge.tools import read_document_for_run

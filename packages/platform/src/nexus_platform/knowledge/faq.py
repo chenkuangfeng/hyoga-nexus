@@ -21,7 +21,7 @@ from nexus_knowledge.index import IndexRow, collection_name
 from nexus_knowledge.text import tokenize
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Conflict, NotFound
-from nexus_platform.persistence.models import FaqEntryRecord, KnowledgeBaseRecord
+from nexus_platform.persistence.models import FaqEntryRecord, KnowledgeBaseRecord, KnowledgeTagRecord
 from . import access, embedding, stores
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def validate_config(settings: Mapping[str, Any] | None) -> None:
 
 
 def view(entry: FaqEntryRecord) -> dict[str, Any]:
-    return {'id': str(entry.id), 'kb_id': str(entry.kb_id), 'category': entry.category,
+    return {'id': str(entry.id), 'kb_id': str(entry.kb_id), 'category': entry.category, 'tag_id': str(entry.tag_id) if entry.tag_id else None,
             'standard_question': entry.standard_question, 'similar_questions': list(entry.similar_questions),
             'negative_questions': list(entry.negative_questions), 'answers': list(entry.answers),
             'answer_strategy': entry.answer_strategy, 'is_enabled': entry.enabled, 'is_recommended': entry.recommended,
@@ -85,6 +85,37 @@ def _apply(row: FaqEntryRecord, entry: rules.FaqInput) -> None:
     row.updated_at = utc_now()
 
 
+def _tag_of(db: Session, kb: KnowledgeBaseRecord, value: Any) -> UUID | None:
+    """A tag of this base by id; None clears. Unknown ids are rejected."""
+    if value in (None, ''):
+        return None
+    try:
+        tag = db.get(KnowledgeTagRecord, UUID(str(value)))
+    except ValueError:
+        tag = None
+    if tag is None or tag.kb_id != kb.id:
+        raise NotFound('Tag not found')
+    return tag.id
+
+
+def _tag_by_category(db: Session, kb: KnowledgeBaseRecord, category: str, cache: dict[str, UUID]) -> UUID | None:
+    """The tag named like an imported category, created on first use (WeKnora turns the 分类 column into tags)."""
+    name = ' '.join((category or '').split())[:120]
+    if not name:
+        return None
+    key = name.casefold()
+    if key not in cache:
+        existing = db.scalar(select(KnowledgeTagRecord).where(KnowledgeTagRecord.kb_id == kb.id,
+                                                              func.lower(KnowledgeTagRecord.name) == key))
+        if existing is None:
+            existing = KnowledgeTagRecord(id=new_id(), tenant_id=kb.tenant_id, kb_id=kb.id, name=name, color='',
+                                          sort_order=0, created_by=kb.created_by, created_at=utc_now())
+            db.add(existing)
+            db.flush()
+        cache[key] = existing.id
+    return cache[key]
+
+
 def create_entry(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, payload: Mapping[str, Any]) -> tuple[FaqEntryRecord, list[str]]:
     kb = _faq_base(db, tenant_id, user_id, kb_id, write=True)
     resolved = rules.resolve(rules.normalize(payload), *_taken(db, kb.id))
@@ -96,6 +127,7 @@ def create_entry(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, paylo
                          negative_questions=[], answer_strategy='all', enabled=True, recommended=False,
                          index_state='pending', index_attempts=0)
     _apply(row, resolved.entry)
+    row.tag_id = _tag_of(db, kb, payload.get('tag_id'))
     db.add(row)
     db.flush()
     audit(db, tenant_id, user_id, 'faq_entry.created', 'faq_entry', str(row.id), {'kb_id': str(kb.id)})
@@ -117,6 +149,8 @@ def update_entry(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, entry
     if resolved.entry is None:
         raise Conflict(resolved.reason)
     _apply(row, resolved.entry)
+    if 'tag_id' in payload:
+        row.tag_id = _tag_of(db, kb, payload.get('tag_id'))
     audit(db, tenant_id, user_id, 'faq_entry.updated', 'faq_entry', str(row.id), {'kb_id': str(kb.id)})
     return row, resolved.notes
 
@@ -132,6 +166,8 @@ def batch_fields(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, ids: 
             row.enabled = bool(changes['is_enabled'])
         if 'is_recommended' in changes:
             row.recommended = bool(changes['is_recommended'])
+        if 'tag_id' in changes:
+            row.tag_id = _tag_of(db, kb, changes['tag_id'])
         row.updated_at = utc_now()
         count += 1
     return count
@@ -150,7 +186,7 @@ def delete_entries(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, ids
 
 
 def list_entries(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, *, keyword: str = '', enabled: bool | None = None,
-                 offset: int = 0, limit: int = 20) -> tuple[list[FaqEntryRecord], int]:
+                 tag_ids: Sequence[str] = (), offset: int = 0, limit: int = 20) -> tuple[list[FaqEntryRecord], int]:
     kb = _faq_base(db, tenant_id, user_id, kb_id, write=False)
     query = select(FaqEntryRecord).where(FaqEntryRecord.kb_id == kb.id, FaqEntryRecord.status == 'active')
     if keyword:
@@ -160,6 +196,8 @@ def list_entries(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, *, ke
                                 FaqEntryRecord.category.ilike(like, escape='\\')))
     if enabled is not None:
         query = query.where(FaqEntryRecord.enabled.is_(enabled))
+    if tag_ids:
+        query = query.where(FaqEntryRecord.tag_id.in_([UUID(t) for t in tag_ids]))
     total = db.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     rows = db.scalars(query.order_by(FaqEntryRecord.created_at.desc(), FaqEntryRecord.id).offset(max(0, offset))
                       .limit(max(1, min(limit, 200)))).all()
@@ -184,6 +222,7 @@ def import_entries(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, row
     standard, similar = _taken(db, kb.id)
     created, blocked, notes = 0, [], []
     now = utc_now()
+    tag_cache: dict[str, UUID] = {}
     for index, raw in enumerate(rows, start=1):
         try:
             resolved = rules.resolve(rules.normalize(raw), standard, similar)
@@ -199,6 +238,7 @@ def import_entries(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, row
                                similar_questions=[], negative_questions=[], answer_strategy='all', enabled=True,
                                recommended=False, index_state='pending', index_attempts=0)
         _apply(entry, resolved.entry)
+        entry.tag_id = _tag_by_category(db, kb, resolved.entry.category, tag_cache)
         db.add(entry)
         standard[entry.question_key] = str(entry.id)
         for question in entry.similar_questions:
@@ -218,11 +258,14 @@ def export_entries(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> 
                  FaqEntryRecord.kb_id == kb.id, FaqEntryRecord.status == 'active').order_by(FaqEntryRecord.created_at))]
 
 
-def scope_ids(db: Session, kb_id: UUID) -> tuple[str, ...]:
-    """Entries a search may return: active, enabled and indexed."""
-    return tuple(sorted(str(i) for i in db.scalars(select(FaqEntryRecord.id).where(
+def scope_ids(db: Session, kb_id: UUID, tag_ids: Sequence[str] | None = None) -> tuple[str, ...]:
+    """Entries a search may return: active, enabled and indexed (optionally with one of the given tags)."""
+    query = select(FaqEntryRecord.id).where(
         FaqEntryRecord.kb_id == kb_id, FaqEntryRecord.status == 'active', FaqEntryRecord.enabled.is_(True),
-        FaqEntryRecord.index_state == 'ready'))))
+        FaqEntryRecord.index_state == 'ready')
+    if tag_ids:
+        query = query.where(FaqEntryRecord.tag_id.in_([UUID(t) for t in tag_ids]))
+    return tuple(sorted(str(i) for i in db.scalars(query)))
 
 
 # ---------------------------------------------------------------- worker

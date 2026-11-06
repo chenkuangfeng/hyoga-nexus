@@ -15,7 +15,9 @@ from .services import run_state_of, store_of as _store
 def knowledge_tools():
     async def search(arguments, context):
         return ToolResult(await _store(context).search_knowledge(
-            arguments['query'], arguments.get('kb_ids') or [], arguments.get('limit', 8), run_state_of(context)))
+            arguments['query'], arguments.get('kb_ids') or [], arguments.get('limit', 8), run_state_of(context),
+            {'tags': arguments.get('tags') or [], 'folder': arguments.get('folder'),
+             'metadata': arguments.get('metadata') or {}}))
 
     async def read(arguments, context):
         return ToolResult(await _store(context).read_document(
@@ -50,7 +52,12 @@ def knowledge_tools():
             'query': {'type': 'string', 'minLength': 1, 'maxLength': 500},
             'kb_ids': {'type': 'array', 'items': {'type': 'string', 'maxLength': 36}, 'maxItems': 20,
                        'description': 'Optional subset of the bound knowledge base ids.'},
-            'limit': {'type': 'integer', 'minimum': 1, 'maximum': 20}},
+            'limit': {'type': 'integer', 'minimum': 1, 'maximum': 20},
+            'tags': {'type': 'array', 'items': {'type': 'string', 'maxLength': 120}, 'maxItems': 10,
+                     'description': 'Only documents with one of these tag names.'},
+            'folder': {'type': 'string', 'maxLength': 1024, 'description': 'Only documents in this folder and below.'},
+            'metadata': {'type': 'object', 'additionalProperties': {'type': 'string'}, 'maxProperties': 10,
+                         'description': 'Only documents whose custom metadata has all these values.'}},
          'required': ['query'], 'additionalProperties': False},
         read_only=True, idempotent=True), search, lambda r: r.data)
     yield RegisteredTool(ToolDefinition(

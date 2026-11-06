@@ -70,7 +70,7 @@ export function toWeKnoraBase(raw: unknown): Json {
     chunk_count: kb.chunk_count ?? 0,
     processing_count: kb.processing_count ?? 0,
     is_processing: kb.is_processing === true,
-    is_pinned: false,
+    is_pinned: kb.is_pinned === true,
     share_count: 0,
     is_shared: kb.shared === true,
     can_edit: kb.can_edit === true,
@@ -138,8 +138,10 @@ export function toWeKnoraKnowledge(raw: unknown, kbName = ''): Json {
     file_type: doc.file_type ?? '',
     file_size: shown.size ?? 0,
     file_hash: shown.content_hash ?? '',
-    folder_path: '',
-    tags: [],
+    folder_path: doc.folder_path ?? '',
+    tags: Array.isArray(doc.tag_ids) ? doc.tag_ids : [],
+    tag_ids: Array.isArray(doc.tag_ids) ? doc.tag_ids : [],
+    custom_metadata: doc.custom_metadata ?? {},
     description: '',
     source: 'upload',
     channel: 'web',
@@ -204,7 +206,7 @@ export function toWeKnoraFaqEntry(raw: unknown): Json {
   const entry = record(raw)
   return {
     id: entry.id, chunk_id: entry.id, knowledge_id: entry.id, knowledge_base_id: entry.kb_id,
-    tag_id: undefined, tag_name: entry.category ?? '', category: entry.category ?? '',
+    tag_id: entry.tag_id ?? undefined, tag_name: entry.category ?? '', category: entry.category ?? '',
     is_enabled: entry.is_enabled !== false, is_recommended: entry.is_recommended === true,
     standard_question: entry.standard_question ?? '',
     similar_questions: Array.isArray(entry.similar_questions) ? entry.similar_questions : [],
@@ -222,6 +224,7 @@ export function toNexusFaqInput(data: Json): Json {
     standard_question: data.standard_question ?? '',
     similar_questions: data.similar_questions ?? [], negative_questions: data.negative_questions ?? [],
     answers: data.answers ?? [], category: data.category ?? data.tag_name ?? '',
+    ...(data.tag_id !== undefined ? { tag_id: data.tag_id || null } : {}),
     answer_strategy: data.answer_strategy === 'first' ? 'first' : 'all',
     is_enabled: data.is_enabled !== false, is_recommended: data.is_recommended === true,
   }

@@ -57,3 +57,17 @@ def test_chunk_parent_columns_round_trip_on_sqlite(tmp_path):
     command.downgrade(config, 'e2f3a4b5c6d7')
     assert 'parent_id' not in {c['name'] for c in inspect(engine).get_columns('knowledge_chunks')}
     command.upgrade(config, 'head')
+
+
+def test_organization_columns_round_trip_on_sqlite(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'org.db')
+    config = Config('alembic.ini')
+    config.attributes['database_url'] = url
+    command.upgrade(config, 'head')
+    engine = create_engine(url)
+    columns = {c['name'] for c in inspect(engine).get_columns('knowledge_documents')}
+    assert {'tag_ids', 'folder_path', 'custom_metadata'} <= columns and 'knowledge_tags' in inspect(engine).get_table_names()
+    command.downgrade(config, 'f3a4b5c6d7e8')
+    assert 'knowledge_tags' not in inspect(engine).get_table_names()
+    assert 'folder_path' not in {c['name'] for c in inspect(engine).get_columns('knowledge_documents')}
+    command.upgrade(config, 'head')

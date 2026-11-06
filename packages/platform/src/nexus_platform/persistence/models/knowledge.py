@@ -20,7 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (JSON, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text,
-                        UniqueConstraint, Uuid, text, true)
+                        UniqueConstraint, Uuid, false, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -83,6 +83,9 @@ class KnowledgeBaseRecord(Base):
     chunk_overlap: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
+    #: Pinned bases are listed first (WeKnora ``is_pinned``).
+    pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -105,6 +108,11 @@ class KnowledgeDocumentRecord(Base):
     #: Newest uploaded version (may still be indexing or failed).
     latest_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default='active')
+    #: Organization (K5): tags of the base, a folder path such as ``docs/spec`` ('' = top level) and free metadata
+    #: that search can filter on.
+    tag_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    folder_path: Mapped[str] = mapped_column(String(1024), nullable=False, default='', server_default='')
+    custom_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -190,7 +198,7 @@ class KnowledgeJobRecord(Base):
 __all__ = ['VectorStoreRecord', 'StorageBackendRecord', 'KnowledgeBaseRecord', 'KnowledgeDocumentRecord',
            'KnowledgeDocumentVersionRecord', 'KnowledgeChunkRecord', 'KnowledgeJobRecord', 'GraphStoreRecord',
            'GraphBuildRecord', 'GraphEntityRecord', 'GraphRelationRecord', 'GraphCommunityRecord',
-           'GraphExtractionCacheRecord', 'FaqEntryRecord']
+           'GraphExtractionCacheRecord', 'FaqEntryRecord', 'KnowledgeTagRecord']
 
 
 # ---------------------------------------------------------------- graph (openspec 2026-11-06-knowledge-base K2)
@@ -328,6 +336,8 @@ class FaqEntryRecord(Base):
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
     kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
     category: Mapped[str] = mapped_column(String(160), nullable=False, default='')
+    #: Tag of the base (K5); ``category`` keeps the free-text label from CSV imports.
+    tag_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     standard_question: Mapped[str] = mapped_column(Text, nullable=False)
     #: Normalized standard question; unique per base among active entries.
     question_key: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -345,3 +355,18 @@ class FaqEntryRecord(Base):
     created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class KnowledgeTagRecord(Base):
+    """A tag of one knowledge base (WeKnora ``KnowledgeTag``): documents and FAQ entries are grouped by it."""
+
+    __tablename__ = 'knowledge_tags'
+    __table_args__ = (UniqueConstraint('kb_id', 'name', name='uq_knowledge_tags_name'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    color: Mapped[str] = mapped_column(String(32), nullable=False, default='')
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

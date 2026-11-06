@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
-from typing import Any
+from typing import Any, Sequence
 from uuid import UUID
 
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import new_id, utc_now
@@ -74,6 +74,7 @@ def base_view(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UU
         'knowledge_count': counts, 'chunk_count': chunks, 'processing_count': processing,
         'is_processing': processing > 0, 'creator_id': str(kb.created_by),
         'creator_name': getattr(creator, 'display_name', None) or '',
+        'is_pinned': bool(kb.pinned), 'pinned_at': kb.pinned_at.isoformat() if kb.pinned_at else None,
         'created_at': kb.created_at.isoformat(), 'updated_at': kb.updated_at.isoformat(),
     }
 
@@ -93,6 +94,8 @@ def document_view(db: Session, doc: KnowledgeDocumentRecord) -> dict[str, Any]:
             'current_version': version_view(current) if current else None,
             'latest_version': version_view(latest) if latest else None,
             'parse_status': _parse_status(latest), 'file_type': suffix_of(doc.filename).lstrip('.'),
+            'tag_ids': list(doc.tag_ids or []), 'folder_path': doc.folder_path or '',
+            'custom_metadata': dict(doc.custom_metadata or {}),
             'created_at': doc.created_at.isoformat(), 'updated_at': doc.updated_at.isoformat()}
 
 
@@ -378,16 +381,29 @@ def readable_document(db: Session, tenant_id: UUID, user_id: UUID, document_id: 
 
 
 def list_documents(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, *, keyword: str = '',
-                   offset: int = 0, limit: int = 50) -> tuple[list[KnowledgeDocumentRecord], int]:
+                   offset: int = 0, limit: int = 50, tag_ids: Sequence[str] = (), folder: str | None = None,
+                   recursive: bool = True, file_type: str = '') -> tuple[list[KnowledgeDocumentRecord], int]:
     kb = access.readable_base(db, kb_id, tenant_id, user_id)
     query = select(KnowledgeDocumentRecord).where(KnowledgeDocumentRecord.kb_id == kb.id,
                                                   KnowledgeDocumentRecord.status == 'active')
     if keyword:
         escaped = keyword.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
         query = query.where(KnowledgeDocumentRecord.filename.ilike(f'%{escaped}%', escape='\\'))
+    if folder is not None:
+        path = folder.strip('/')
+        like = path.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        query = query.where(KnowledgeDocumentRecord.folder_path == path if not recursive else or_(
+            KnowledgeDocumentRecord.folder_path == path,
+            KnowledgeDocumentRecord.folder_path.like(f'{like}/%', escape='\\')) if path else True)
+    if file_type:
+        query = query.where(KnowledgeDocumentRecord.filename.ilike(f'%.{file_type.lstrip(".")}', escape='\\'))
+    ordered = query.order_by(KnowledgeDocumentRecord.updated_at.desc(), KnowledgeDocumentRecord.id)
+    if tag_ids:  # JSON containment differs by database; tags are few, so filter in Python
+        wanted = set(tag_ids)
+        matching = [d for d in db.scalars(ordered) if wanted & set(d.tag_ids or [])]
+        return matching[max(0, offset):max(0, offset) + max(1, min(limit, 200))], len(matching)
     total = db.execute(select(func.count()).select_from(query.subquery())).scalar_one()
-    rows = db.scalars(query.order_by(KnowledgeDocumentRecord.updated_at.desc(), KnowledgeDocumentRecord.id)
-                      .offset(max(0, offset)).limit(max(1, min(limit, 200)))).all()
+    rows = db.scalars(ordered.offset(max(0, offset)).limit(max(1, min(limit, 200)))).all()
     return list(rows), total
 
 
@@ -463,6 +479,8 @@ def cancel_graph_builds(db: Session, kb_id: UUID) -> None:
 # Implemented here (capability catalog, decision 5).
 capabilities.mark_available('kb_type', 'document')
 capabilities.mark_available('kb_type', 'faq')
+for _org_feature in ('tags', 'folders', 'pin'):
+    capabilities.mark_available('kb_feature', _org_feature)
 for _chunk_feature in ('chunking_strategy', 'parent_child', 'chunking_debug'):
     capabilities.mark_available('kb_feature', _chunk_feature)
 for _faq_feature in ('faq_entries', 'faq_import'):

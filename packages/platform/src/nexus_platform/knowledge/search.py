@@ -31,6 +31,7 @@ from nexus_platform.persistence.models import (FaqEntryRecord, KnowledgeBaseReco
                                                KnowledgeDocumentVersionRecord)
 from . import access, embedding, stores
 from . import faq as faq_rules
+from .organize import DocumentFilter
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class SearchResult:
 
 
 def resolve_scope(db: Session, tenant_id: UUID, user_id: UUID, *, bound: Sequence[UUID] | None = None,
-                  requested: Sequence[UUID] | None = None) -> tuple[list[ScopedBase], list[str]]:
+                  requested: Sequence[UUID] | None = None, doc_filter: DocumentFilter | None = None) -> tuple[list[ScopedBase], list[str]]:
     """Readable bases with their searchable versions; second value lists requested ids that were ignored.
 
     ``bound`` restricts to an agent version's bindings (None: every readable base, used by the management
@@ -95,24 +96,29 @@ def resolve_scope(db: Session, tenant_id: UUID, user_id: UUID, *, bound: Sequenc
     out = []
     for kb in bases:
         if kb.kb_type == 'faq':
-            out.append(ScopedBase(kb, faq_rules.scope_ids(db, kb.id)))  # FAQ entries play the role of versions
+            # FAQ entries play the role of versions; a tag filter keeps only entries with a wanted tag.
+            ids = faq_rules.scope_ids(db, kb.id, doc_filter.tag_ids if doc_filter and doc_filter.tag_ids else None)
+            out.append(ScopedBase(kb, () if doc_filter and (doc_filter.folder is not None or doc_filter.metadata) else ids))
             continue
-        versions = db.scalars(select(KnowledgeDocumentRecord.current_version_id).where(
+        docs = db.scalars(select(KnowledgeDocumentRecord).where(
             KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active',
             KnowledgeDocumentRecord.current_version_id.is_not(None))).all()
-        out.append(ScopedBase(kb, tuple(sorted(str(v) for v in versions))))
+        if doc_filter is not None and not doc_filter.empty():
+            docs = [d for d in docs if doc_filter.matches(d)]
+        out.append(ScopedBase(kb, tuple(sorted(str(d.current_version_id) for d in docs))))
     return out, ignored
 
 
 async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, user_id: UUID, query: str, *,
                  limit: int = 8, bound: Sequence[UUID] | None = None, requested: Sequence[UUID] | None = None,
-                 vector_weight: float = 1.0, keyword_weight: float = 1.0) -> SearchResult:
+                 vector_weight: float = 1.0, keyword_weight: float = 1.0,
+                 doc_filter: DocumentFilter | None = None) -> SearchResult:
     """Search the caller's readable scope. ``db`` is used for reads only; audits are written in it too."""
     query = (query or '').strip()
     if not query:
         raise ValueError('query must not be empty')
     limit = max(1, min(int(limit), MAX_LIMIT))
-    scoped, ignored = resolve_scope(db, tenant_id, user_id, bound=bound, requested=requested)
+    scoped, ignored = resolve_scope(db, tenant_id, user_id, bound=bound, requested=requested, doc_filter=doc_filter)
     result = SearchResult(hits=[], ignored=ignored)
     tokens = query_tokens(query)
     vector_lists: list[list[Candidate]] = []

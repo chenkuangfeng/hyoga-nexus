@@ -58,6 +58,7 @@ from .knowledge import (
     GraphCommunityRecord,
     GraphExtractionCacheRecord,
     FaqEntryRecord,
+    KnowledgeTagRecord,
 )
 __all__ = [
     'SessionMemorySnapshotRecord',
@@ -139,4 +140,5 @@ __all__ = [
     'GraphCommunityRecord',
     'GraphExtractionCacheRecord',
     'FaqEntryRecord',
+    'KnowledgeTagRecord',
 ]

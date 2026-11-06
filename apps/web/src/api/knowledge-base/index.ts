@@ -488,8 +488,7 @@ export function getKnowledgeMoveProgress(taskId: string) {
 }
 
 export function togglePinKnowledgeBase(id: string) {
-  void id;
-  return nexus.planned('置顶', 'K5');
+  return nexus.togglePin(id);
 }
 
 // 知识文件 API（基于具体知识库）
@@ -585,9 +584,7 @@ export interface KnowledgeFolderTree {
 }
 
 export function listKnowledgeFolders(kbId: string) {
-  void kbId;
-  // Folders are planned (K5): one level, every document at the top.
-  return nexus.plannedEmpty({ root_document_count: 0, total_document_count: 0, folders: [] });
+  return nexus.folderTree(kbId);
 }
 
 /**
@@ -596,12 +593,12 @@ export function listKnowledgeFolders(kbId: string) {
  * created by this call. Only the grouping changes; documents are not re-parsed.
  */
 export function moveKnowledgeToFolder(kbId: string, ids: string[], folderPath: string) {
-  return nexus.planned('移动到文件夹', 'K5');
+  return nexus.organizeDocuments(kbId, ids, { folder_path: folderPath });
 }
 
 /** Rename or move a folder together with everything below it. */
 export function renameKnowledgeFolder(kbId: string, from: string, to: string) {
-  return nexus.planned('重命名文件夹', 'K5');
+  return nexus.renameFolder(kbId, from, to);
 }
 
 export function getKnowledgeDetails(id: string, options?: { agent_id?: string; agent_source_tenant_id?: string }) {
@@ -732,15 +729,14 @@ export function listKnowledgeTags(
   kbId: string,
   params?: { page?: number; page_size?: number; keyword?: string },
 ) {
-  const query = buildQuery(params);
-  return nexus.plannedEmpty([], { total: 0 });
+  return nexus.listTags(kbId, params ?? {});
 }
 
 export function createKnowledgeBaseTag(
   kbId: string,
   data: { name: string; color?: string; sort_order?: number },
 ) {
-  return nexus.planned('标签', 'K5');
+  return nexus.createTag(kbId, data);
 }
 
 export function updateKnowledgeBaseTag(
@@ -748,21 +744,26 @@ export function updateKnowledgeBaseTag(
   tagId: string,
   data: { name?: string; color?: string; sort_order?: number },
 ) {
-  return nexus.planned('标签', 'K5');
+  return nexus.updateTag(kbId, tagId, data);
 }
 
 export function deleteKnowledgeBaseTag(kbId: string, tagSeqId: number, params?: { force?: boolean }) {
-  const forceQuery = params?.force ? '?force=true' : '';
-  return nexus.planned('标签', 'K5');
+  return nexus.deleteTag(kbId, String(tagSeqId), params?.force === true);
 }
 
 export function updateKnowledgeTagBatch(data: { updates: Record<string, string[]> }) {
-  return nexus.planned('标签', 'K5');
+  return nexus.setDocumentTags(data.updates);
 }
 
 export function updateFAQEntryTagBatch(kbId: string, data: { updates: Record<number, number | null> }) {
-  void kbId; void data;
-  return nexus.planned('FAQ 标签', 'K5');
+  // {entryId: tagId | null} → one request per tag.
+  const byTag = new Map<string, string[]>();
+  for (const [entryId, tagId] of Object.entries(data.updates)) {
+    const key = tagId === null || tagId === undefined ? '' : String(tagId);
+    byTag.set(key, [...(byTag.get(key) ?? []), entryId]);
+  }
+  return Promise.all([...byTag].map(([tagId, ids]) => nexus.updateFaqFields(kbId, ids, { tag_id: tagId || null })))
+    .then(() => ({ success: true, data: null }));
 }
 
 const buildQuery = (params?: Record<string, any>) => {

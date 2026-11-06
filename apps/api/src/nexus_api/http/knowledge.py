@@ -25,7 +25,7 @@ from nexus_platform.authz.resources import grant_resource, revoke_resource_grant
 from nexus_platform.configuration import knowledge_settings
 from nexus_platform.errors import NotFound
 from nexus_platform.identity.service import require_membership, resolve_user
-from nexus_platform.knowledge import access, faq as faq_service, search as knowledge_search, service, stores
+from nexus_platform.knowledge import access, faq as faq_service, organize, search as knowledge_search, service, stores
 from nexus_platform.persistence.models import (AuditRecord, KnowledgeBaseRecord, KnowledgeDocumentRecord,
                                                ResourceGrantRecord, TenantRecord)
 
@@ -250,11 +250,15 @@ async def graph_overview(tenant_id: UUID, kb_id: UUID, request: Request, names: 
 
 @router.get('/bases/{kb_id}/documents')
 def list_documents(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_length=200),
+                   tag_ids: str = Query('', max_length=2000), folder_path: str | None = Query(None, max_length=1024),
+                   folder_recursive: bool = True, file_type: str = Query('', max_length=16),
                    offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200),
                    principal: Principal = Depends(get_principal),
                    db: Session = Depends(get_database_session)) -> dict[str, Any]:
     user = _user(db, principal, tenant_id)
-    rows, total = service.list_documents(db, tenant_id, user.id, kb_id, keyword=keyword, offset=offset, limit=limit)
+    rows, total = service.list_documents(
+        db, tenant_id, user.id, kb_id, keyword=keyword, offset=offset, limit=limit,
+        tag_ids=[t for t in tag_ids.split(',') if t], folder=folder_path, recursive=folder_recursive, file_type=file_type)
     return {'items': [service.document_view(db, doc) for doc in rows], 'total': total}
 
 
@@ -343,6 +347,111 @@ def delete_document(tenant_id: UUID, document_id: UUID, principal: Principal = D
     return Response(status_code=204)
 
 
+# ---------------------------------------------------------------- organization (K5)
+
+class TagInput(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    color: str = Field('', max_length=32)
+    sort_order: int = 0
+
+
+class TagUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    color: str | None = Field(None, max_length=32)
+    sort_order: int | None = None
+
+
+class OrganizeInput(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=500)
+    tag_ids: list[UUID] | None = None
+    folder_path: str | None = Field(None, max_length=1024)
+    custom_metadata: dict[str, str] | None = None
+
+
+class FolderRenameInput(BaseModel):
+    source: str = Field(min_length=1, max_length=1024)
+    target: str = Field(max_length=1024)
+
+
+class TagBatchInput(BaseModel):
+    updates: dict[UUID, list[UUID]] = Field(max_length=500)
+
+
+@router.get('/bases/{kb_id}/tags')
+def list_tags(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_length=100),
+              principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    user = _user(db, principal, tenant_id)
+    return {'items': organize.list_tags(db, tenant_id, user.id, kb_id, keyword)}
+
+
+@router.post('/bases/{kb_id}/tags', status_code=201)
+def create_tag(tenant_id: UUID, kb_id: UUID, body: TagInput, principal: Principal = Depends(get_principal),
+               db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return organize.tag_view(organize.create_tag(db, tenant_id, user.id, kb_id, name=body.name, color=body.color,
+                                                     sort_order=body.sort_order))
+
+
+@router.put('/bases/{kb_id}/tags/{tag_id}')
+def update_tag(tenant_id: UUID, kb_id: UUID, tag_id: UUID, body: TagUpdate, principal: Principal = Depends(get_principal),
+               db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return organize.tag_view(organize.update_tag(db, tenant_id, user.id, kb_id, tag_id, body.model_dump(exclude_unset=True)))
+
+
+@router.delete('/bases/{kb_id}/tags/{tag_id}')
+def delete_tag(tenant_id: UUID, kb_id: UUID, tag_id: UUID, force: bool = False,
+               principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'removed_from': organize.delete_tag(db, tenant_id, user.id, kb_id, tag_id, force=force)}
+
+
+@router.patch('/bases/{kb_id}/documents')
+def organize_documents(tenant_id: UUID, kb_id: UUID, body: OrganizeInput, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)):
+    """Set tags, folder and/or custom metadata of documents; only the fields sent change."""
+    changes = body.model_dump(exclude_unset=True, exclude={'ids'})
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'updated': organize.organize_documents(db, tenant_id, user.id, kb_id, body.ids, changes)}
+
+
+@router.put('/document-tags')
+def set_document_tags(tenant_id: UUID, body: TagBatchInput, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)):
+    """WeKnora batch tagging: each document gets exactly the listed tags (write access to its base is checked)."""
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        updates = {str(k): [str(t) for t in v] for k, v in body.updates.items()}
+        return {'updated': organize.add_tags(db, tenant_id, user.id, updates)}
+
+
+@router.get('/bases/{kb_id}/folders')
+def get_folders(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
+                db: Session = Depends(get_database_session)):
+    user = _user(db, principal, tenant_id)
+    return organize.folder_tree(db, tenant_id, user.id, kb_id)
+
+
+@router.put('/bases/{kb_id}/folders')
+def rename_folder(tenant_id: UUID, kb_id: UUID, body: FolderRenameInput, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'moved': organize.rename_folder(db, tenant_id, user.id, kb_id, body.source, body.target)}
+
+
+@router.put('/bases/{kb_id}/pin')
+def pin_base(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
+             db: Session = Depends(get_database_session)):
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'is_pinned': organize.toggle_pin(db, tenant_id, user.id, kb_id)}
+
+
 # ---------------------------------------------------------------- FAQ (K3)
 
 class FaqEntryInput(BaseModel):
@@ -351,6 +460,7 @@ class FaqEntryInput(BaseModel):
     negative_questions: list[str] = Field(default_factory=list, max_length=200)
     answers: list[str] = Field(default_factory=list, max_length=50)
     category: str = Field('', max_length=200)
+    tag_id: UUID | None = None
     answer_strategy: Literal['all', 'first'] = 'all'
     is_enabled: bool = True
     is_recommended: bool = False
@@ -365,6 +475,7 @@ class FaqFieldsInput(BaseModel):
     ids: list[UUID] = Field(min_length=1, max_length=2000)
     is_enabled: bool | None = None
     is_recommended: bool | None = None
+    tag_id: UUID | None = None
 
 
 class FaqIdsInput(BaseModel):
@@ -373,11 +484,11 @@ class FaqIdsInput(BaseModel):
 
 @router.get('/bases/{kb_id}/faq/entries')
 def list_faq_entries(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_length=200),
-                     is_enabled: bool | None = None, offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=200),
+                     tag_ids: str = Query('', max_length=2000), is_enabled: bool | None = None, offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=200),
                      principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     user = _user(db, principal, tenant_id)
     rows, total = faq_service.list_entries(db, tenant_id, user.id, kb_id, keyword=keyword, enabled=is_enabled,
-                                           offset=offset, limit=limit)
+                                           tag_ids=[t for t in tag_ids.split(',') if t], offset=offset, limit=limit)
     return {'items': [faq_service.view(row) for row in rows], 'total': total}
 
 
@@ -396,7 +507,7 @@ def update_faq_entry(tenant_id: UUID, kb_id: UUID, entry_id: UUID, body: FaqEntr
                      principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     with db.begin():
         user = _user(db, principal, tenant_id)
-        row, notes = faq_service.update_entry(db, tenant_id, user.id, kb_id, entry_id, body.model_dump())
+        row, notes = faq_service.update_entry(db, tenant_id, user.id, kb_id, entry_id, body.model_dump(exclude_unset=True))
         result = faq_service.view(row)
     return {**result, 'notes': notes}
 
@@ -526,6 +637,9 @@ class SearchInput(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     kb_ids: list[UUID] | None = None
     limit: int = Field(8, ge=1, le=knowledge_search.MAX_LIMIT)
+    tag_ids: list[UUID] = Field(default_factory=list, max_length=50)
+    folder_path: str | None = Field(None, max_length=1024)
+    metadata: dict[str, str] = Field(default_factory=dict, max_length=20)
     vector_weight: float = Field(1.0, ge=0, le=10)
     keyword_weight: float = Field(1.0, ge=0, le=10)
 
@@ -539,7 +653,11 @@ async def search(tenant_id: UUID, body: SearchInput, request: Request, principal
         bind=db.get_bind(), expire_on_commit=False, autoflush=False)
     result = await knowledge_search.search(factory, db, tenant_id, user.id, body.query, limit=body.limit,
                                            requested=body.kb_ids, vector_weight=body.vector_weight,
-                                           keyword_weight=body.keyword_weight)
+                                           keyword_weight=body.keyword_weight,
+                                           doc_filter=organize.DocumentFilter(
+                                               tuple(str(t) for t in body.tag_ids),
+                                               organize.clean_folder(body.folder_path) if body.folder_path is not None else None,
+                                               True, body.metadata))
     db.commit()  # degradation audits
     return {'items': [knowledge_search.hit_view(hit) for hit in result.hits], 'degraded': result.degraded,
             'searched': result.searched, 'ignored': result.ignored}

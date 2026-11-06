@@ -81,7 +81,8 @@ def readable_bases(db: Session, tenant_id: UUID, user_id: UUID, kb_ids: list[UUI
         if not kb_ids:
             return []
         query = query.where(KnowledgeBaseRecord.id.in_(kb_ids))
-    rows = db.scalars(query.order_by(KnowledgeBaseRecord.created_at)).all()
+    rows = db.scalars(query.order_by(KnowledgeBaseRecord.pinned.desc(), KnowledgeBaseRecord.pinned_at.desc(),
+                                     KnowledgeBaseRecord.created_at)).all()
     shared = {UUID(value) for value in db.scalars(shared_ids).all() if _is_uuid(value)}
     return [kb for kb in rows if kb.tenant_id == tenant_id or (kb.id in shared and shared_into(db, kb, tenant_id))]
 

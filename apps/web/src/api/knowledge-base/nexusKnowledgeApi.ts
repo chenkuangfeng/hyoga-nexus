@@ -80,6 +80,12 @@ export async function listDocuments(kbId: string, params: Json): Promise<Json> {
   const { offset, limit } = pageToOffset(params.page, params.page_size)
   const query = new URLSearchParams({ offset: String(offset), limit: String(limit) })
   if (params.keyword) query.set('keyword', String(params.keyword))
+  if (params.tag_ids) query.set('tag_ids', String(params.tag_ids))
+  if (params.file_type) query.set('file_type', String(params.file_type))
+  if (params.folder_path !== undefined) {
+    query.set('folder_path', String(params.folder_path))
+    query.set('folder_recursive', String(params.folder_recursive === true))
+  }
   const res: Json = await get(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/documents?${query}`)
   return ok((res.items || []).map((doc: Json) => toWeKnoraKnowledge(doc)), {
     total: res.total ?? 0, page: params.page ?? 1, page_size: limit })
@@ -127,6 +133,7 @@ export async function listFaq(kbId: string, params: Json): Promise<Json> {
   const offset = (Math.max(1, Number(params.page) || 1) - 1) * limit
   const query = new URLSearchParams({ offset: String(offset), limit: String(limit) })
   if (params.keyword) query.set('keyword', String(params.keyword))
+  if (params.tag_ids) query.set('tag_ids', String(params.tag_ids))
   if (typeof params.is_enabled === 'boolean') query.set('is_enabled', String(params.is_enabled))
   const res: Json = await get(`${faqPath(kbId)}/entries?${query}`)
   return ok({ data: (res.items || []).map(toWeKnoraFaqEntry), total: res.total ?? 0 })
@@ -174,4 +181,45 @@ export async function searchFaq(kbId: string, queryText: string, matchCount = 10
 
 export function exportFaq(kbId: string, format: 'csv' | 'json'): Promise<Blob> {
   return getDown(`${faqPath(kbId)}/export?format=${format}`)
+}
+
+// ---------------------------------------------------------------- organization (K5)
+
+export async function listTags(kbId: string, params: Json = {}): Promise<Json> {
+  const query = params.keyword ? `?keyword=${encodeURIComponent(String(params.keyword))}` : ''
+  const res: Json = await get(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/tags${query}`)
+  const items = res.items || []
+  return ok({ data: items, total: items.length }, { total: items.length })
+}
+
+export async function createTag(kbId: string, data: Json): Promise<Json> {
+  return ok(await post(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/tags`, data))
+}
+
+export async function updateTag(kbId: string, tagId: string, data: Json): Promise<Json> {
+  return ok(await put(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/tags/${encodeURIComponent(tagId)}`, data))
+}
+
+export async function deleteTag(kbId: string, tagId: string, force: boolean): Promise<Json> {
+  return ok(await del(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/tags/${encodeURIComponent(tagId)}?force=${force}`))
+}
+
+export async function setDocumentTags(updates: Record<string, string[]>): Promise<Json> {
+  return ok(await put(`${knowledgePath()}/document-tags`, { updates }))
+}
+
+export async function organizeDocuments(kbId: string, ids: string[], changes: Json): Promise<Json> {
+  return ok(await patch(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/documents`, { ids, ...changes }))
+}
+
+export async function folderTree(kbId: string): Promise<Json> {
+  return ok(await get(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/folders`))
+}
+
+export async function renameFolder(kbId: string, source: string, target: string): Promise<Json> {
+  return ok(await put(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/folders`, { source, target }))
+}
+
+export async function togglePin(kbId: string): Promise<Json> {
+  return ok(await put(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/pin`, {}))
 }
