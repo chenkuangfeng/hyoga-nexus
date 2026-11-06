@@ -6,7 +6,8 @@ Importing this package registers the engines whose code is installed. ``sqlite``
 """
 from .base import (FACTORIES, IndexRow, Scope, VectorIndex, VectorStoreError, collection_name, open_index,
                    register_engine)
-from . import sqlite  # noqa: F401  (registers the engine)
+from . import sqlite  # noqa: F401  (registers the engines)
+from . import elasticsearch, milvus, postgres, qdrant  # noqa: F401,E401
 
 __all__ = ['FACTORIES', 'IndexRow', 'Scope', 'VectorIndex', 'VectorStoreError', 'collection_name', 'open_index',
            'register_engine']

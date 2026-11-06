@@ -94,3 +94,10 @@ def test_local_blob_store_round_trip_and_key_safety(tmp_path):
     assert run(store.ping())['provider'] == 'local'
     with pytest.raises(capabilities.CapabilityPlanned):
         open_blob_store('s3', {})
+
+
+def test_first_batch_engines_are_registered_but_unverified():
+    rows = {r['key']: r for r in capabilities.snapshot() if r['group'] == 'vector_engine'}
+    for engine in ('postgres', 'qdrant', 'elasticsearch', 'milvus'):
+        assert (rows[engine]['status'], rows[engine]['verified']) == ('available', False)
+    assert rows['weaviate']['status'] == 'planned'

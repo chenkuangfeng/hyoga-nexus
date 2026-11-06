@@ -53,6 +53,8 @@ class VectorIndex(ABC):
     engine: str = ''
     #: False when the engine cannot serve the keyword channel (the search then uses vectors only).
     supports_keyword: bool = True
+    #: True when every row needs a vector: knowledge bases on this engine must have an embedding model.
+    requires_vectors: bool = False
 
     @abstractmethod
     async def ping(self) -> dict[str, Any]:
