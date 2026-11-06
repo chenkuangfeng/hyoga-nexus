@@ -73,7 +73,9 @@
 
 ## K4 解析与分块增强
 
-- [ ] K4.1 解析引擎规则与 Office 文档；分块策略、父子分块、分块调试。
+- [x] K4.1 解析引擎规则与 Office 文档；分块策略、父子分块、分块调试。
+  - Office：`ingest/office.py` 用标准库解析 `.docx`（标题样式转章节）、`.pptx`（每页一段，页码=幻灯片号）、`.xlsx`（每个工作表一段，`列名: 值`）；拒绝 DTD 与超大解压（64MB）。分块：`ChunkConfig` 与策略 `auto|heading|heuristic|recursive|legacy`、自定义分隔符；`auto` 按文档特征选择并给出被否决的层级。父子分块：父块不索引、子块索引，命中子块返回父块文本（同一父块只返回一次）；块表新增 `parent_id`、`indexed`（迁移 `f3a4b5c6d7e8`），读取/块列表/图谱构建只看父块或普通块。接口 `POST /knowledge/chunk-preview`（分块调试）、`GET /knowledge/parser-engines`；解析引擎规则里选了未实现的引擎返回 `capability_planned`。外部引擎（MarkItDown、AnyDoc、MinerU、PaddleOCR 等）仍待实现。
+  - 测试：`tests/test_knowledge_domain.py`（Office、策略、父子、预览）、`tests/test_knowledge_service.py`（父子检索、docx 入库）、`tests/test_knowledge_api.py`；后端全量 1008 通过。
 - [ ] K4.2 OCR、VLM 图片描述、图片库；ASR。
 
 ## K5 组织与增强

@@ -215,7 +215,11 @@ def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: 
         faq_by_id = {str(e.id): e for e in db.scalars(select(FaqEntryRecord).where(
             FaqEntryRecord.id.in_(faq_ids), FaqEntryRecord.status == 'active', FaqEntryRecord.enabled.is_(True),
             FaqEntryRecord.index_state == 'ready'))}
-    hits, seen_entries = [], set()
+    parents = {}
+    parent_ids = {c.parent_id for c, _, _ in by_id.values() if c.parent_id is not None}
+    if parent_ids:
+        parents = {p.id: p for p in db.scalars(select(KnowledgeChunkRecord).where(KnowledgeChunkRecord.id.in_(parent_ids)))}
+    hits, seen_entries, seen_parents = [], set(), set()
     for item in fused:
         if item.chunk_id.startswith('f:'):
             entry = faq_by_id.get(item.chunk_id.split(':')[1]) if item.chunk_id.count(':') >= 2 else None
@@ -236,6 +240,13 @@ def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: 
             chunk, version, doc = found
             if str(version.id) not in allowed or doc.status != 'active':  # stale index row or out of scope
                 continue
+            if chunk.parent_id is not None and chunk.parent_id in parents:
+                # Parent-child chunking: the child matched, the model gets the larger parent (once).
+                if chunk.parent_id in seen_parents:
+                    continue
+                seen_parents.add(chunk.parent_id)
+                chunk = parents[chunk.parent_id]
+                item = type(item)(str(chunk.id), item.score, item.ranks)
             hits.append(SearchHit(item.chunk_id, round(item.score, 6), item.ranks, chunk.content, str(doc.kb_id),
                                   names.get(doc.kb_id, ''), str(doc.id), doc.filename, str(version.id), chunk.ordinal,
                                   chunk.page, list(chunk.section)))

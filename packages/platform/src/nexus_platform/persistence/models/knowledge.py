@@ -20,7 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (JSON, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text,
-                        UniqueConstraint, Uuid, text)
+                        UniqueConstraint, Uuid, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -153,6 +153,11 @@ class KnowledgeChunkRecord(Base):
     section: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     char_start: Mapped[int] = mapped_column(Integer, nullable=False)
     char_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Parent chunk of a child (parent-child chunking). Children are what search matches; parents hold the text
+    #: returned to the model. NULL for parents and for ordinary chunks.
+    parent_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    #: False for parents of a parent-child split: stored and readable, not embedded and not searched.
+    indexed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
 
 
 class KnowledgeJobRecord(Base):

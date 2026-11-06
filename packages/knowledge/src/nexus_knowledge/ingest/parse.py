@@ -3,9 +3,10 @@
 The result is a list of :class:`Section`: text plus where it came from (PDF page, Markdown heading path).
 Chunking keeps these positions so a citation can point at a page or a section.
 
-Supported in K1: plain text (``.txt``, ``.text``, ``.log``), Markdown (``.md``, ``.markdown``), ``.csv``,
-``.tsv``, ``.json``, ``.jsonl`` and text PDFs (pypdf). Other types raise :class:`UnsupportedDocument`;
-their parser engines are planned for K4. A scanned PDF yields no text and raises :class:`EmptyDocument`
+Supported by the builtin engine: plain text (``.txt``, ``.text``, ``.log``), Markdown (``.md``, ``.markdown``),
+``.csv``, ``.tsv``, ``.json``, ``.jsonl``, text PDFs (pypdf) and Office files ``.docx``, ``.pptx``, ``.xlsx``
+(:mod:`.office`). Other types raise :class:`UnsupportedDocument`; the external parser engines (MinerU, MarkItDown,
+AnyDoc, PaddleOCR) are planned. A scanned PDF yields no text and raises :class:`EmptyDocument`
 (no OCR in K1).
 
 Text decoding tries UTF-8 then GB18030, so Chinese files saved by Windows tools are not read as mojibake
@@ -24,7 +25,9 @@ MARKDOWN_SUFFIXES = frozenset({'.md', '.markdown'})
 TABLE_SUFFIXES = frozenset({'.csv', '.tsv'})
 JSON_SUFFIXES = frozenset({'.json', '.jsonl'})
 PDF_SUFFIXES = frozenset({'.pdf'})
-SUPPORTED_SUFFIXES = PLAIN_SUFFIXES | MARKDOWN_SUFFIXES | TABLE_SUFFIXES | JSON_SUFFIXES | PDF_SUFFIXES
+OFFICE_SUFFIXES = frozenset({'.docx', '.pptx', '.xlsx'})
+SUPPORTED_SUFFIXES = (PLAIN_SUFFIXES | MARKDOWN_SUFFIXES | TABLE_SUFFIXES | JSON_SUFFIXES | PDF_SUFFIXES
+                      | OFFICE_SUFFIXES)
 
 _ENCODINGS = ('utf-8-sig', 'gb18030')
 _HEADING = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
@@ -75,6 +78,9 @@ def parse_document(filename: str, data: bytes) -> list[Section]:
     suffix = suffix_of(filename)
     if suffix in PDF_SUFFIXES:
         sections = _parse_pdf(data)
+    elif suffix in OFFICE_SUFFIXES:
+        from . import office
+        sections = {'.docx': office.parse_docx, '.pptx': office.parse_pptx, '.xlsx': office.parse_xlsx}[suffix](data)
     elif suffix in MARKDOWN_SUFFIXES:
         sections = parse_markdown(decode_text(data))
     elif suffix in PLAIN_SUFFIXES:

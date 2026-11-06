@@ -101,6 +101,8 @@ export function getPromptTemplates(): Promise<{ data: PromptTemplatesConfig }> {
   return get('/api/v1/tenants/kv/prompt-templates')
 }
 
+import { knowledgePath } from '../knowledge-base/nexusKnowledgeApi'
+
 export interface ParserEngineInfo {
   Name: string
   Description: string
@@ -154,7 +156,8 @@ export interface ParserEnginesResponse {
 }
 
 export function getParserEngines(): Promise<ParserEnginesResponse> {
-  return get('/api/v1/system/parser-engines')
+  // Nexus lists the engines of the build: `builtin` is implemented, the external ones are marked planned.
+  return get(`${knowledgePath()}/parser-engines`)
 }
 
 /** 使用当前填写的参数检测引擎可用性（不保存），用于填写新参数后即时测试 */

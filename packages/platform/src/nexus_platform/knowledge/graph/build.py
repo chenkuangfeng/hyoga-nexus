@@ -183,7 +183,8 @@ def _current(factory, build_id: UUID):
         rows = db.execute(select(KnowledgeChunkRecord.id, KnowledgeChunkRecord.version_id,
                                  KnowledgeChunkRecord.content).join(
             KnowledgeDocumentRecord, KnowledgeDocumentRecord.current_version_id == KnowledgeChunkRecord.version_id)
-            .where(KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active')
+            .where(KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active',
+                   KnowledgeChunkRecord.parent_id.is_(None))
             .order_by(KnowledgeChunkRecord.version_id, KnowledgeChunkRecord.ordinal)).all()
         return build, kb, config, [(str(c), str(v), text) for c, v, text in rows]
 

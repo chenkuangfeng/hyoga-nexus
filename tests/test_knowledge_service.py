@@ -168,7 +168,7 @@ def test_write_access_and_capability_checks(env):
         with pytest.raises(NotFound):
             service.prepare_upload(db, other_id, outsider, kb_id, 'a.txt', b'x', 100)
         with pytest.raises(ValueError):
-            service.prepare_upload(db, tenant_id, owner, kb_id, 'a.docx', b'x', 100)
+            service.prepare_upload(db, tenant_id, owner, kb_id, 'a.doc', b'x', 100)
         with pytest.raises(ValueError):
             service.prepare_upload(db, tenant_id, owner, kb_id, 'a.txt', b'x' * 200, 100)
     with factory() as db, db.begin():
@@ -241,3 +241,50 @@ def test_hybrid_search_and_vector_degradation(env, monkeypatch):
             assert db.scalar(select(AuditRecord).where(AuditRecord.action == 'knowledge.search_degraded')) is not None
     finally:
         embedding.set_embedder_factory(None)
+
+
+def test_parent_child_chunking_matches_children_and_returns_parents(env):
+    factory, tenant_id, _, owner, member, _ = env
+    settings = {'chunking_config': {'enable_parent_child': True, 'parent_chunk_size': 600, 'child_chunk_size': 150,
+                                    'strategy': 'recursive'}}
+    kb_id = create_kb(factory, tenant_id, owner, name='父子', settings=settings)
+    text = ''.join(f'第{i}段讲的是产品功能说明。' for i in range(60)) + '独一无二的关键短语位于末尾。'
+    doc_id, _ = upload(factory, tenant_id, owner, kb_id, '手册.txt', text.encode())
+    drain(factory)
+    from nexus_platform.persistence.models import KnowledgeChunkRecord
+    with factory() as db:
+        doc = db.get(KnowledgeDocumentRecord, doc_id)
+        rows = db.scalars(select(KnowledgeChunkRecord).where(KnowledgeChunkRecord.version_id == doc.current_version_id)).all()
+        parents = [r for r in rows if r.parent_id is None]
+        children = [r for r in rows if r.parent_id is not None]
+        assert parents and children and all(not r.indexed for r in parents) and all(r.indexed for r in children)
+        version = db.get(KnowledgeDocumentVersionRecord, doc.current_version_id)
+        assert version.chunk_count == len(parents) and version.indexed_count == len(children)
+        listed, total = service.chunks_of(db, tenant_id, member, doc_id)
+        assert total == len(parents)  # readers see parents, not the small children
+    result = find(factory, tenant_id, member, '独一无二的关键短语')
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert '独一无二的关键短语' in hit.content and 150 < len(hit.content) <= 600  # the parent, not the child
+
+
+def test_docx_upload_is_indexed_with_heading_sections(env):
+    import io
+    import zipfile
+    factory, tenant_id, _, owner, member, _ = env
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    document = (f'<w:document {w}><w:body>'
+                '<w:p><w:pPr><w:pStyle w:val="H1"/></w:pPr><w:r><w:t>报销制度</w:t></w:r></w:p>'
+                '<w:p><w:r><w:t>差旅费需在出差结束后五个工作日内提交报销。</w:t></w:r></w:p>'
+                '<w:p><w:pPr><w:pStyle w:val="H1"/></w:pPr><w:r><w:t>请假制度</w:t></w:r></w:p>'
+                '<w:p><w:r><w:t>年假需提前三天申请。</w:t></w:r></w:p></w:body></w:document>')
+    styles = f'<w:styles {w}><w:style w:styleId="H1"><w:name w:val="heading 1"/></w:style></w:styles>'
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        archive.writestr('word/document.xml', document)
+        archive.writestr('word/styles.xml', styles)
+    kb_id = create_kb(factory, tenant_id, owner, name='制度')
+    upload(factory, tenant_id, owner, kb_id, '制度.docx', buffer.getvalue())
+    drain(factory)
+    hit = find(factory, tenant_id, member, '年假').hits[0]
+    assert hit.section == ['请假制度'] and hit.filename == '制度.docx'

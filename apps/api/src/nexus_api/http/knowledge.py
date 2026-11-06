@@ -479,6 +479,47 @@ async def search_faq(tenant_id: UUID, kb_id: UUID, body: FaqSearchInput, request
     return {'items': [knowledge_search.hit_view(hit) for hit in result.hits], 'degraded': result.degraded}
 
 
+# ---------------------------------------------------------------- chunking and parser engines (K4)
+
+class ChunkingPreviewInput(BaseModel):
+    text: str = Field(min_length=1, max_length=64 * 1024)
+    chunking_config: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post('/chunk-preview')
+def preview_chunking(tenant_id: UUID, body: ChunkingPreviewInput, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Run the chunker over sample text without storing anything (the editor's chunking debug panel)."""
+    from nexus_knowledge.ingest import chunk as chunking
+    from nexus_knowledge.ingest.parse import parse_markdown
+    _user(db, principal, tenant_id)
+    raw = body.chunking_config
+    config = chunking.ChunkConfig.from_settings(
+        int(raw.get('chunk_size') or chunking.DEFAULT_SIZE), int(raw.get('chunk_overlap') or 0),
+        {'strategy': raw.get('strategy') or 'auto', 'separators': raw.get('separators') or [],
+         'enable_parent_child': raw.get('enable_parent_child'), 'parent_chunk_size': raw.get('parent_chunk_size'),
+         'child_chunk_size': raw.get('child_chunk_size')})
+    return {'success': True, 'data': chunking.preview(parse_markdown(body.text), config)}
+
+
+@router.get('/parser-engines')
+def list_parser_engines(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                        db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Parser engines with file types and state; only ``builtin`` is implemented."""
+    from nexus_knowledge.ingest.parse import SUPPORTED_SUFFIXES
+    _user(db, principal, tenant_id)
+    data = []
+    for row in capabilities.snapshot():
+        if row['group'] != 'parser_engine':
+            continue
+        available = row['status'] == 'available'
+        data.append({'Name': row['key'], 'Description': row['label'],
+                     'FileTypes': sorted(s.lstrip('.') for s in SUPPORTED_SUFFIXES) if row['key'] == 'builtin' else [],
+                     'Available': available,
+                     'UnavailableReason': '' if available else f'待实现 · {row["stage"]}' if row['stage'] else '待实现'})
+    return {'data': data, 'connected': True}
+
+
 # ---------------------------------------------------------------- retrieval test
 
 class SearchInput(BaseModel):

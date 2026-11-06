@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import new_id, utc_now
 from nexus_knowledge import capabilities
-from nexus_knowledge.ingest.chunk import validate as validate_chunking
+from nexus_knowledge.ingest.chunk import ChunkConfig
 from nexus_knowledge.ingest.parse import SUPPORTED_SUFFIXES, suffix_of
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import register_resource, deactivate_resource
@@ -57,7 +57,8 @@ def base_view(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UU
         KnowledgeDocumentVersionRecord.state.in_(('pending', 'parsed', 'embedded')))).scalar_one()
     chunks = db.execute(select(func.count(KnowledgeChunkRecord.id)).join(
         KnowledgeDocumentRecord, KnowledgeDocumentRecord.current_version_id == KnowledgeChunkRecord.version_id).where(
-        KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active')).scalar_one()
+        KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active',
+        KnowledgeChunkRecord.parent_id.is_(None))).scalar_one()
     creator = db.get(UserRecord, kb.created_by)
     return {
         'id': str(kb.id), 'tenant_id': str(kb.tenant_id), 'name': kb.name, 'description': kb.description,
@@ -135,7 +136,10 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
                 raise NotFound('Graph store not found')
         if user_id is not None:
             _authorize_chat_model(db, tenant_id, user_id, config.model_id)
-    validate_chunking(chunk_size, chunk_overlap)
+    ChunkConfig.from_settings(chunk_size, chunk_overlap, (settings or {}).get('chunking_config'))
+    for rule in ((settings or {}).get('chunking_config') or {}).get('parser_engine_rules') or []:
+        if isinstance(rule, dict) and rule.get('engine'):
+            capabilities.require_available('parser_engine', str(rule['engine']))  # external engines are planned
     store = stores.vector_store_of_tenant(db, tenant_id, vector_store_id)
     backend = stores.storage_backend_of_tenant(db, tenant_id, storage_backend_id)
     if normalized['vector'] and embedding_model_id is None:
@@ -435,7 +439,8 @@ def chunks_of(db: Session, tenant_id: UUID, user_id: UUID, document_id: UUID, *,
     _, doc = readable_document(db, tenant_id, user_id, document_id)
     if doc.current_version_id is None:
         return [], 0
-    query = select(KnowledgeChunkRecord).where(KnowledgeChunkRecord.version_id == doc.current_version_id)
+    query = select(KnowledgeChunkRecord).where(KnowledgeChunkRecord.version_id == doc.current_version_id,
+                                               KnowledgeChunkRecord.parent_id.is_(None))
     total = db.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     rows = db.scalars(query.order_by(KnowledgeChunkRecord.ordinal).offset(max(0, offset))
                       .limit(max(1, min(limit, 200)))).all()
@@ -458,6 +463,8 @@ def cancel_graph_builds(db: Session, kb_id: UUID) -> None:
 # Implemented here (capability catalog, decision 5).
 capabilities.mark_available('kb_type', 'document')
 capabilities.mark_available('kb_type', 'faq')
+for _chunk_feature in ('chunking_strategy', 'parent_child', 'chunking_debug'):
+    capabilities.mark_available('kb_feature', _chunk_feature)
 for _faq_feature in ('faq_entries', 'faq_import'):
     capabilities.mark_available('kb_feature', _faq_feature)
 capabilities.mark_available('indexing', 'vector')

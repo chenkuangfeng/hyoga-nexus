@@ -90,7 +90,7 @@ def test_planned_features_and_limits_are_refused(api):
     kb_id = client.post(path + '/bases', json={'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
     too_big = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.txt', b'x' * (1024 * 1024 + 1))})
     assert too_big.status_code == 422
-    unsupported = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.docx', b'x')})
+    unsupported = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.doc', b'x')})
     assert unsupported.status_code == 422
     store = client.post(path + '/vector-stores', json={'name': 'w', 'engine': 'weaviate'})
     assert store.json()['error']['code'] == 'capability_planned'
@@ -145,3 +145,22 @@ def test_vector_store_types_list_every_engine(api):
     assert items['milvus']['status'] == 'available' and items['milvus']['verified'] is False
     assert any(field['name'] == 'token' and field['sensitive'] for field in items['milvus']['connection_fields'])
     assert items['weaviate']['status'] == 'planned' and items['weaviate']['connection_fields'] == []
+
+
+def test_chunk_preview_parser_engines_and_engine_rules(api):
+    client, path, _, _ = api
+    preview = client.post(path + '/chunk-preview', json={
+        'text': '# 甲\n' + '正文。' * 80 + '\n# 乙\n' + '正文。' * 80,
+        'chunking_config': {'chunk_size': 200, 'chunk_overlap': 20, 'strategy': 'auto'}})
+    assert preview.status_code == 200, preview.text
+    data = preview.json()['data']
+    assert data['selected_tier'] == 'heading' and data['stats']['count'] >= 4
+    bad = client.post(path + '/chunk-preview', json={'text': 'x', 'chunking_config': {'chunk_size': 50}})
+    assert bad.status_code == 422
+    engines = {e['Name']: e for e in client.get(path + '/parser-engines').json()['data']}
+    assert engines['builtin']['Available'] and 'docx' in engines['builtin']['FileTypes']
+    assert not engines['mineru']['Available'] and engines['mineru']['UnavailableReason'].startswith('待实现')
+    rule = client.post(path + '/bases', json={'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
+                                              'settings': {'chunking_config': {'parser_engine_rules': [
+                                                  {'file_types': ['pdf'], 'engine': 'mineru'}]}}})
+    assert rule.status_code == 422 and rule.json()['error']['code'] == 'capability_planned'

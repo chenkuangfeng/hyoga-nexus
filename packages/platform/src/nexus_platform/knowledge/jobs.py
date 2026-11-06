@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from nexus_core.platform import new_id, utc_now
 from nexus_knowledge.index import IndexRow, collection_name
-from nexus_knowledge.ingest.chunk import chunk_sections
+from nexus_knowledge.ingest.chunk import ChunkConfig, chunk_document
 from nexus_knowledge.ingest.parse import ParseError, parse_document
 from nexus_knowledge.text import tokenize
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
@@ -169,19 +169,28 @@ async def _parse(factory, job_id: UUID) -> None:
     with factory() as db:
         _, version, doc, kb = _load(db, job_id)
         blob = stores.blob_store_for(db, kb)
-        key, filename, size, overlap = version.blob_key, doc.filename, kb.chunk_size, kb.chunk_overlap
+        key, filename = version.blob_key, doc.filename
+        try:
+            config = ChunkConfig.from_settings(kb.chunk_size, kb.chunk_overlap, (kb.settings or {}).get('chunking_config'))
+        except ValueError as exc:
+            raise JobFailed('invalid_chunking', str(exc)) from exc
     data = await blob.get(key)
     try:
-        chunks = chunk_sections(parse_document(filename, data), size=size, overlap=overlap)
+        chunks = chunk_document(parse_document(filename, data), config)
     except ParseError as exc:
         raise JobFailed(exc.code, str(exc)) from exc
     with factory() as db, db.begin():
         _, version, _, kb = _load(db, job_id)
         db.execute(KnowledgeChunkRecord.__table__.delete().where(KnowledgeChunkRecord.version_id == version.id))
-        db.add_all([KnowledgeChunkRecord(id=new_id(), kb_id=kb.id, version_id=version.id, ordinal=c.ordinal,
+        ids = [new_id() for _ in chunks]  # a child names its parent by ordinal; parents come first
+        db.add_all([KnowledgeChunkRecord(id=ids[c.ordinal], kb_id=kb.id, version_id=version.id, ordinal=c.ordinal,
                                          content=c.content, page=c.page, section=list(c.section),
-                                         char_start=c.char_start, char_end=c.char_end) for c in chunks])
-        version.state, version.chunk_count, version.indexed_count = 'parsed', len(chunks), 0
+                                         char_start=c.char_start, char_end=c.char_end,
+                                         parent_id=ids[c.parent] if c.parent is not None else None,
+                                         indexed=c.indexed) for c in chunks])
+        # chunk_count counts what readers see: ordinary chunks or parents, not children.
+        version.state, version.chunk_count, version.indexed_count = (
+            'parsed', sum(1 for c in chunks if c.parent is None), 0)
         version.error_code = version.error_message = None
         version.updated_at = utc_now()
 
@@ -190,9 +199,10 @@ async def _embed(factory, job_id: UUID) -> None:
     while True:
         with factory() as db:
             _, version, _, kb = _load(db, job_id)
+            # ``indexed_count`` counts the indexed rows (children or ordinary chunks) already written.
             rows = db.scalars(select(KnowledgeChunkRecord).where(
-                KnowledgeChunkRecord.version_id == version.id, KnowledgeChunkRecord.ordinal >= version.indexed_count)
-                .order_by(KnowledgeChunkRecord.ordinal).limit(BATCH)).all()
+                KnowledgeChunkRecord.version_id == version.id, KnowledgeChunkRecord.indexed.is_(True))
+                .order_by(KnowledgeChunkRecord.ordinal).offset(version.indexed_count).limit(BATCH)).all()
             batch = [(str(c.id), c.content, c.ordinal) for c in rows]
             index = stores.vector_index_for(db, kb)
             use_vectors = bool(kb.indexing.get('vector')) and kb.embedding_model_version_id is not None
@@ -225,7 +235,7 @@ async def _embed(factory, job_id: UUID) -> None:
             await index.close()
         with factory() as db, db.begin():
             _, version, _, kb = _load(db, job_id)
-            version.indexed_count = batch[-1][2] + 1
+            version.indexed_count += len(batch)
             version.updated_at = utc_now()
             if use_vectors and kb.embedding_dimension is None:
                 kb.embedding_dimension = dimension

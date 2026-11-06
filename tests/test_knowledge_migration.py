@@ -45,3 +45,15 @@ def test_faq_table_round_trip_on_sqlite(tmp_path):
     command.downgrade(config, 'd1e2f3a4b5c6')
     assert 'knowledge_faq_entries' not in set(inspect(engine).get_table_names())
     command.upgrade(config, 'head')
+
+
+def test_chunk_parent_columns_round_trip_on_sqlite(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'chunks.db')
+    config = Config('alembic.ini')
+    config.attributes['database_url'] = url
+    command.upgrade(config, 'head')
+    engine = create_engine(url)
+    assert {'parent_id', 'indexed'} <= {c['name'] for c in inspect(engine).get_columns('knowledge_chunks')}
+    command.downgrade(config, 'e2f3a4b5c6d7')
+    assert 'parent_id' not in {c['name'] for c in inspect(engine).get_columns('knowledge_chunks')}
+    command.upgrade(config, 'head')

@@ -138,7 +138,8 @@ async def read_document_for_run(factory: sessionmaker[Session], run_id: UUID, do
             return 'Document not found.'
         version = db.get(KnowledgeDocumentVersionRecord, doc.current_version_id)
         chunks = db.scalars(select(KnowledgeChunkRecord).where(
-            KnowledgeChunkRecord.version_id == doc.current_version_id, KnowledgeChunkRecord.ordinal >= max(0, start))
+            KnowledgeChunkRecord.version_id == doc.current_version_id, KnowledgeChunkRecord.ordinal >= max(0, start),
+            KnowledgeChunkRecord.parent_id.is_(None))
             .order_by(KnowledgeChunkRecord.ordinal).limit(max(1, min(count, 10)))).all()
         total = version.chunk_count if version else 0
         rows = [(str(c.id), c.content, {'kb_id': str(kb.id), 'document_id': str(doc.id), 'version_id': str(doc.current_version_id),
