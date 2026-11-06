@@ -18,7 +18,7 @@ GROUP_ORDER = ('base', 'memory', 'skills')
 TOOL_GROUPS: dict[str, str] = {
     'ask_user': 'base', 'todo': 'base', 'update_working_checkpoint': 'base', 'read_tool_output': 'base',
     'read_memory': 'memory', 'search_memory': 'memory', 'propose_memory_draft': 'memory',
-    'start_long_term_update': 'memory',
+    'start_long_term_update': 'memory', 'search_conversations': 'memory', 'read_conversation': 'memory',
     'load_skill': 'skills', 'read_skill_file': 'skills', 'run_skill_script': 'skills',
 }
 

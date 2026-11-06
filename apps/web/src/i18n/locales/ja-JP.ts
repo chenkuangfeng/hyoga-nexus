@@ -9174,6 +9174,14 @@ export default {
         label: "メモリを検索",
         desc: "公開済みのメモリをキーワードで検索します"
       },
+      search_conversations: {
+        label: "過去の会話を検索",
+        desc: "このユーザーとの過去の会話をキーワードで検索"
+      },
+      read_conversation: {
+        label: "過去の会話を読む",
+        desc: "過去の会話の特定メッセージ前後を読む"
+      },
       read_tool_output: {
         label: "ツール出力を読む",
         desc: "大きなツール出力をページごとに読みます"

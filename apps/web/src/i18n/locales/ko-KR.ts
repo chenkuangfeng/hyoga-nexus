@@ -9174,6 +9174,14 @@ export default {
         label: "메모리 검색",
         desc: "게시된 메모리를 키워드로 검색합니다"
       },
+      search_conversations: {
+        label: "이전 대화 검색",
+        desc: "이 사용자와의 이전 대화를 키워드로 검색"
+      },
+      read_conversation: {
+        label: "이전 대화 읽기",
+        desc: "이전 대화의 특정 메시지 전후를 읽기"
+      },
       read_tool_output: {
         label: "도구 출력 읽기",
         desc: "큰 도구 출력을 페이지 단위로 읽습니다"

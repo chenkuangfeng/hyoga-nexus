@@ -9163,6 +9163,14 @@ export default {
         label: "Search memory",
         desc: "Search published memory by keywords"
       },
+      search_conversations: {
+        label: "Search past conversations",
+        desc: "Search earlier conversations with this user by keywords"
+      },
+      read_conversation: {
+        label: "Read past conversation",
+        desc: "Read the messages around a point in an earlier conversation"
+      },
       read_tool_output: {
         label: "Read tool output",
         desc: "Read a large tool output page by page"

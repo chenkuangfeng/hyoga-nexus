@@ -14,7 +14,9 @@ from typing import Any, Literal, Mapping
 
 #: Builtin tools that read or write long-term memory. They are removed from a Run's tool definitions
 #: and refused by the gateway when memory is off, even if the agent version binds them.
-MEMORY_TOOL_NAMES = frozenset({'read_memory', 'search_memory', 'propose_memory_draft', 'start_long_term_update'})
+#: Includes the past-conversation tools (stage 4, decision 4): they follow the memory switches.
+MEMORY_TOOL_NAMES = frozenset({'read_memory', 'search_memory', 'propose_memory_draft', 'start_long_term_update',
+                               'search_conversations', 'read_conversation'})
 
 #: ``explicit`` keeps only drafts the model proposes; ``auto`` also lets members run automatic capture.
 WRITE_MODES = ('explicit', 'auto')

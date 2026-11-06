@@ -74,11 +74,13 @@
 
 ## 4. 第 4 阶段：历史会话检索（D1）
 
-- [ ] 4.1 迁移：SQLite `message_fts`（带版本探测）与分批回填；写消息时同步写入 FTS。
-- [ ] 4.2 平台查询：本人、本空间、排除当前会话、`histories_allowed` 过滤、回退路径。
-- [ ] 4.3 工具 `search_conversations`、`read_conversation`，加入 `MEMORY_TOOL_NAMES`，并写审计。
-- [ ] 4.4 pytest：授权（他人会话、无权 Run）、FTS 与回退路径一致、记忆关闭时拒绝、翻页上限。
-- [ ] 4.5 文档同步；路线图 3.11 节补充说明。
+- [x] 4.1 迁移：SQLite `message_fts`（带版本探测）与分批回填；写消息时同步写入 FTS。
+  - 调整：本阶段不建 `message_fts`。消息由三条路径写入（`add_message`、起始消息、会话分叉），且 `messages` 没有整数键，建 FTS 需要给消息表加 `search_id` 与分词列并回填。个人历史量小，先按设计中的回退路径实现：扫描本人最近 5000 条消息，要求全部分词命中，按出现次数与时间排序。接口契约不变，检索量增大后再加索引。
+- [x] 4.2 平台查询：本人、本空间、排除当前会话、`histories_allowed` 过滤、回退路径。
+- [x] 4.3 工具 `search_conversations`、`read_conversation`，加入 `MEMORY_TOOL_NAMES`，并写审计。
+- [x] 4.4 pytest：授权（他人会话、无权 Run）、FTS 与回退路径一致、记忆关闭时拒绝、翻页上限。
+  - `tests/test_memory_evolution_stage4.py`（4 项），全量 834 通过。工具加入 `BUILTIN_TOOL_NAMES` 与编辑器记忆分组，6 种语言补齐工具名称与说明。
+- [x] 4.5 文档同步；路线图 3.11 节补充说明。
 
 ## 5. 第 5 阶段：语义能力（D2、D3、D7）
 

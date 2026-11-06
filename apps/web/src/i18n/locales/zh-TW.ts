@@ -9170,6 +9170,14 @@ export default {
         label: "搜尋記憶",
         desc: "依關鍵字搜尋已發布的記憶"
       },
+      search_conversations: {
+        label: "搜尋歷史對話",
+        desc: "按關鍵詞搜尋與該使用者的歷史對話"
+      },
+      read_conversation: {
+        label: "讀取歷史對話",
+        desc: "讀取歷史對話中某條訊息前後的內容"
+      },
       read_tool_output: {
         label: "讀取工具輸出",
         desc: "分頁讀取較大的工具輸出"

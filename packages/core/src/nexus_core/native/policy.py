@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
-                      'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script')
+                      'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script')
 #: Builtin that pages through externalized tool output (P2). Its presence in a Run's bindings enables spilling.
 TOOL_OUTPUT_READER = 'read_tool_output'
 #: Hard cap on one externalized output; anything beyond it is not stored (keeps rows bounded).

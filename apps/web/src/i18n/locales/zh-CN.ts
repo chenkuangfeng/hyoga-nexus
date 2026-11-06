@@ -9156,6 +9156,14 @@ export default {
         label: "搜索记忆",
         desc: "按关键词搜索已发布的记忆"
       },
+      search_conversations: {
+        label: "搜索历史对话",
+        desc: "按关键词搜索与该用户的历史对话"
+      },
+      read_conversation: {
+        label: "读取历史对话",
+        desc: "读取历史对话中某条消息前后的内容"
+      },
       read_tool_output: {
         label: "读取工具输出",
         desc: "分页读取较大的工具输出"
