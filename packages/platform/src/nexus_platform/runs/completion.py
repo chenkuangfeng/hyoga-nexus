@@ -34,6 +34,9 @@ def _finish(db: Session, run: RunRecord, outcome: RuntimeOutcome) -> None:
         _classify_unfinished_calls(db, run)
         snapshot.record_terminal(db, run.session_id, run_id=run.id, status=outcome.status, error_code=outcome.error_code)
     if outcome.status == 'completed':
+        # Citations of the final answer (openspec 2026-11-06-knowledge-base K1.8, decision 7).
+        from nexus_platform.knowledge.tools import attach_citations
+        attach_citations(db, run)
         # Automatic capture queues a job only for owners who opted in; off by default (stage 3).
         capture.enqueue_for_run(db, run)
 

@@ -209,6 +209,14 @@ class ExecutionPreparer:
                     if skills_text:
                         system += ('\nSkills (load a skill with load_skill; resource files with read_skill_file; '
                                    'skills grant no permissions):\n' + skills_text)
+                # Knowledge bases (openspec 2026-11-06-knowledge-base K1.8): name the bound bases the user can read.
+                from nexus_platform.knowledge.tools import bound_base_ids, catalog_text
+                knowledge_bound = bool(bound_base_ids(db, version.id))
+                if knowledge_bound:
+                    knowledge_text = catalog_text(db, run.tenant_id, run.principal_id, version.id)
+                    if knowledge_text:
+                        system += ('\nKnowledge bases (search with search_knowledge; end each sentence that uses a '
+                                   'passage with its [ID:n]):\n' + knowledge_text)
                 if checkpoint and checkpoint.tenant_id == run.tenant_id and checkpoint.source_run_id in allowed_runs:
                     system += '\nSession working checkpoint:\n' + checkpoint.content
                     audit(db, run.tenant_id, run.principal_id, 'checkpoint.read', 'session', str(run.session_id),
@@ -218,16 +226,17 @@ class ExecutionPreparer:
                     state = NativeRunStateRecord(run_id=run.id, progress={})
                     db.add(state)
                 if version.runtime_type == 'native' and db.scalar(select(ResourceBindingRecord.id).where(
-                        ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind.not_in(('tool', 'skill'))).limit(1)):
+                        ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind.not_in(('tool', 'skill', 'knowledge_base'))).limit(1)):
                     raise RuntimeFault('runtime_capability_unavailable')
-                from nexus_core.native import NativePolicy
+                from nexus_core.native import KNOWLEDGE_TOOL_NAMES, NativePolicy
                 from nexus_platform.skills.service import scripts_available
                 script_tool_on = scripts_available(NativePolicy(**(version.budgets.get('behavior') or {})).skill_scripts)
                 bindings = tuple((binding.resource_id, binding.resource_version_id or 'v1', str(binding.id))
                     for binding in db.scalars(select(ResourceBindingRecord).where(
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'tool'))
                     if (binding.resource_id != 'run_skill_script' or script_tool_on)
-                    and (memory_on or binding.resource_id not in MEMORY_TOOL_NAMES))
+                    and (memory_on or binding.resource_id not in MEMORY_TOOL_NAMES)
+                    and (knowledge_bound or binding.resource_id not in KNOWLEDGE_TOOL_NAMES))
                 if len({name for name, _, _ in bindings}) != len(bindings):
                     raise RuntimeFault('tool_configuration_invalid')
                 audit(db, run.tenant_id, run.principal_id, 'session.context_read', 'session', str(run.session_id),

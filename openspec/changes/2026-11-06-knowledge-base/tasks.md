@@ -38,7 +38,8 @@
   - 接口 `/knowledge/vector-stores`（含 `builtin`、草稿连接测试）与 `/knowledge/storage-backends`。
 - [x] K1.7 Pre-Filter 与混合检索、降级、诊断；越权测试逐路径。
   - `search.resolve_scope` + `search.search`；命中后在平台库按范围再过滤一次。测试 `tests/test_knowledge_service.py`（去重、版本切换时机、跨空间/共享/撤权/绑定/删除、解析失败与重试、混合检索与向量降级审计）。
-- [ ] K1.8 工具 `search_knowledge`、`read_document`、`list_documents`；证据登记存 Run progress；Run 结束引用校验；智能体绑定与发布校验。
+- [x] K1.8 工具 `search_knowledge`、`read_document`、`list_documents`；证据登记存 Run progress；Run 结束引用校验；智能体绑定与发布校验。
+  - 工具与其他内置工具一样需在空间启用并绑定（编辑器选库时一并勾选）；未绑定知识库时准备阶段移除这三个工具，系统提示列出可读的已绑定库。发布时绑定了知识库却没绑 `search_knowledge` 返回 `knowledge_dependency_missing`。证据存 `progress.state['knowledge_evidence']`；Run 完成时有效编号写入助手消息 `runtime_metadata.citations`，无效编号记 `knowledge.citation_invalid` 事件。测试 `tests/test_knowledge_tools.py`；`tests/test_platform.py` 旧用例补绑 `search_knowledge`。
 - [ ] K1.9 前端：列表、创建/编辑（类型、索引策略、向量库、存储、模型、分块）、详情、上传、状态与重试、块预览、检索测试、共享、活动、引用渲染、智能体编辑器知识库分区。
 - [ ] K1.10 `evals/knowledge/` 与包文档（README、requirements、design）。
 

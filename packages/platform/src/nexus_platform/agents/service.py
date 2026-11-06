@@ -174,6 +174,7 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
                 resource_version_id=binding.resource_version_id, permission="use"
             )
         check_skill_dependencies(session, tenant_id, draft_bindings)
+        check_knowledge_dependencies(draft_bindings)
         version_number = agent.version_counter + 1
         snapshot = {
             "agent_id": str(agent.id), "version": version_number, "name": agent.name,
@@ -361,6 +362,17 @@ def check_skill_dependencies(session: Session, tenant_id: UUID, bindings: list[A
         for tool in version.tools:
             if tool not in bound_tools:
                 raise InvalidConfiguration(f"skill_dependency_missing:{tool}")
+
+
+def check_knowledge_dependencies(bindings: list[AgentDraftBindingRecord]) -> None:
+    """An agent that binds knowledge bases must bind ``search_knowledge`` (openspec 2026-11-06-knowledge-base).
+
+    The editor selects the knowledge tools together with the first knowledge base; this keeps a published
+    version from binding bases it can never search.
+    """
+    if any(binding.kind == "knowledge_base" for binding in bindings) and not any(
+            binding.kind == "tool" and binding.resource_id == "search_knowledge" for binding in bindings):
+        raise InvalidConfiguration("knowledge_dependency_missing:search_knowledge")
 
 
 def binding_snapshot(binding: AgentDraftBindingRecord | ResourceBindingRecord) -> dict[str, Any]:

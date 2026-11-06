@@ -479,6 +479,19 @@ class DurableRuntimeStore:
                 return 'Not created: the content matched prohibited instruction patterns: ' + ', '.join(outcome['rules'])
             return 'Not created: the owner previously rejected this content.'
 
+    async def search_knowledge(self, query: str, kb_ids: list[str], limit: int, state: dict) -> str:
+        """Pre-Filtered search over the agent's bound knowledge bases (openspec 2026-11-06-knowledge-base K1.8)."""
+        from nexus_platform.knowledge.tools import search_for_run
+        return await search_for_run(self.factory, self.context.run_id, query, kb_ids, limit, state)
+
+    async def read_document(self, document_id: str, chunk: int, count: int, state: dict) -> str:
+        from nexus_platform.knowledge.tools import read_document_for_run
+        return await read_document_for_run(self.factory, self.context.run_id, document_id, chunk, count, state)
+
+    async def list_documents(self, kb_id: str | None, keyword: str, offset: int, limit: int) -> str:
+        from nexus_platform.knowledge.tools import list_documents_for_run
+        return await list_documents_for_run(self.factory, self.context.run_id, kb_id, keyword, offset, limit)
+
     async def search_conversations(self, query: str, limit: int) -> str:
         """Keyword search over the principal's other sessions in this space (stage 4, D1); snippets only."""
         from nexus_platform.memory.conversations import search

@@ -149,6 +149,8 @@ def test_resource_grant_is_rechecked_for_each_run_operation(database):
             register_resource(
                 db, tenant_id=source.id, kind="knowledge_base", resource_id="kb-1", version_id="v1"
             )
+            # Agents that bind knowledge bases must bind search_knowledge (openspec 2026-11-06-knowledge-base).
+            register_resource(db, tenant_id=target.id, kind="tool", resource_id="search_knowledge", version_id="v1")
         grant = grant_resource(
             db, principal, source_tenant_id=source.id, target_tenant_id=target.id,
             kind="knowledge_base", resource_id="kb-1", permissions=["use"],
@@ -162,6 +164,9 @@ def test_resource_grant_is_rechecked_for_each_run_operation(database):
             bindings=[{
                 "kind": "knowledge_base", "resource_id": "kb-1", "resource_version_id": "v1",
                 "source_tenant_id": str(source.id), "config": {},
+            }, {
+                "kind": "tool", "resource_id": "search_knowledge", "resource_version_id": "v1",
+                "source_tenant_id": str(target.id), "config": {},
             }],
         )
         version = publish_agent(db, principal, target.id, agent.id)
