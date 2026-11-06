@@ -89,6 +89,11 @@ export default {
   planned: {
     title: 'Not available yet',
     body: 'This page belongs to a later phase. Only the menu entry exists in this version and it is not connected to the Nexus API yet.',
+    badge: 'Planned',
+    badgeStage: 'Planned · {stage}',
+    unverified: 'Unverified',
+    plannedTip: 'This feature is not implemented yet and cannot be submitted.',
+    unverifiedTip: 'Implemented but not yet verified against a real service.',
   },
   modelCatalog: {
     "title": "Model catalog",

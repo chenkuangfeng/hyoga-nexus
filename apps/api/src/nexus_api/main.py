@@ -14,6 +14,7 @@ from nexus_api.http.memberships import router as memberships_router
 from nexus_api.http.shared_spaces import router as shared_spaces_router
 from nexus_api.http.agent_shares import router as agent_shares_router
 from nexus_platform.errors import PlatformError
+from nexus_knowledge.capabilities import CapabilityPlanned
 from nexus_platform.configuration import DatabaseConfigurationError
 from nexus_platform.bootstrap import ensure_default_enterprise
 from nexus_platform.persistence.database import create_database_engine, session_factory
@@ -68,6 +69,8 @@ from nexus_api.http.roles import router as roles_router
 app.include_router(roles_router)
 from nexus_api.http.auth import router as auth_router
 app.include_router(auth_router)
+from nexus_api.http.knowledge import router as knowledge_router
+app.include_router(knowledge_router)
 
 
 @app.middleware("http")
@@ -83,6 +86,17 @@ async def platform_error_handler(request: Request, exc: PlatformError):
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": str(exc), "request_id": request.state.request_id}},
+    )
+
+
+@app.exception_handler(CapabilityPlanned)
+async def capability_planned_handler(request: Request, exc: CapabilityPlanned):
+    # A write chose a cataloged knowledge feature that is not implemented yet (openspec 2026-11-06-knowledge-base).
+    return JSONResponse(
+        status_code=422,
+        content={"error": {"code": "capability_planned", "message": str(exc),
+                            "details": {"group": exc.item.group, "key": exc.item.key, "stage": exc.item.stage},
+                            "request_id": request.state.request_id}},
     )
 
 

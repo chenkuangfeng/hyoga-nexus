@@ -8,13 +8,15 @@
 - [x] 0.2 梳理 WeKnora 知识库功能面（库类型、索引策略、向量库、存储后端、解析引擎、FAQ、Wiki、图谱、数据源、标签、文件夹、图片、共享、活动）。
 - [x] 0.3 阅读 RAGFlow `service/graph/`（GraphRAG 检索）。
 - [x] 0.4 用户确认决定 1–8（2026-11-06）。
-- [ ] 0.5 更新文档：`docs/architecture.md` 2.10（向量库注册、图谱存储、GraphRAG、引用处理）、路线图第 6 步子计划改为 K0–K7、`2026-11-02-weknora-parity` 第 3 阶段指向本变更。
+- [x] 0.5 更新文档：`docs/architecture.md` 2.10（向量库注册、图谱存储、GraphRAG、引用处理）、路线图第 6 步子计划改为 K0–K7、`2026-11-02-weknora-parity` 第 3 阶段指向本变更。
 
 ## K0 前端全量接入与能力目录
 
-- [ ] K0.1 `nexus_knowledge.capabilities`：能力项清单（库类型、索引策略、向量引擎、存储后端、解析引擎、数据源类型、库设置项），每项 `available | planned` 与阶段；接口与单元测试。
-- [ ] K0.2 前端能力目录 store 与 `PlannedBadge`、禁用提交的通用处理。
-- [ ] K0.3 `api/knowledge-base`、向量库、存储后端、解析引擎、检索设置的接口模块改接 Nexus；Nexus 未提供的调用短路为「待实现」。
+- [x] K0.1 `nexus_knowledge.capabilities`：能力项清单（库类型、索引策略、向量引擎、存储后端、解析引擎、数据源类型、库设置项），每项 `available | planned` 与阶段；接口与单元测试。
+  - `GET /api/v1/tenants/{tenant_id}/knowledge/capabilities`（空间成员）；`mark_available(group, key, verified=)` 由实现模块调用，`require_available` 抛 `CapabilityPlanned`，API 统一转 422 `capability_planned`。另含图存储、图谱模式两组。测试 `tests/test_knowledge_capabilities.py`；全量 930 通过。
+- [x] K0.2 前端能力目录 store 与 `PlannedBadge`、禁用提交的通用处理。
+  - `api/nexus-knowledge-capabilities.ts`（纯解析，`capabilityState`、`isAvailable`，目录未加载时一律按待实现处理）与单元测试、`api/nexus-knowledge.ts`、`stores/knowledgeCapabilities.ts`、`components/knowledge/CapabilityBadge.vue`，六种语言新增 `planned.badge*` 文案。本机内存不足，未运行 `vue-tsc` 与 `pnpm build`。
+- [ ] K0.3（与 K1.9 合并实施：页面需要 K1 的库与文档接口才能不 404，目前知识库路由仍渲染 PlannedPage）`api/knowledge-base`、向量库、存储后端、解析引擎、检索设置的接口模块改接 Nexus；Nexus 未提供的调用短路为「待实现」。
 - [ ] K0.4 逐页核对：知识库列表与详情、FAQ、Wiki、图谱、标签、文件夹、图片库、数据源、共享、活动、设置页四项；无 404，未实现项均有标记。
 
 ## K1 文档库核心

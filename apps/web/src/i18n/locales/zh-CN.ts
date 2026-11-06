@@ -89,6 +89,11 @@ export default {
   planned: {
     title: '该功能尚未接入',
     body: '此页面属于后续阶段，当前版本只保留菜单入口，尚未对接 Nexus 接口。',
+    badge: '待实现',
+    badgeStage: '待实现 · {stage}',
+    unverified: '未验证',
+    plannedTip: '该功能尚未实现，暂不能提交。',
+    unverifiedTip: '已实现，尚未在真实环境验证。',
   },
   modelCatalog: {
     "title": "模型目录",

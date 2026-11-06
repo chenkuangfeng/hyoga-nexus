@@ -8959,7 +8959,12 @@ export default {
   },
   planned: {
     title: "まだ利用できません",
-    body: "このページは後のフェーズのものです。このバージョンではメニュー項目のみ存在し、Nexus API にはまだ接続されていません。"
+    body: "このページは後のフェーズのものです。このバージョンではメニュー項目のみ存在し、Nexus API にはまだ接続されていません。",
+    badge: '未実装',
+    badgeStage: '未実装 · {stage}',
+    unverified: '未検証',
+    plannedTip: 'この機能はまだ実装されていないため、送信できません。',
+    unverifiedTip: '実装済みですが、実環境では未検証です。',
   },
   joinLink: {
     joining: "スペースに参加しています…",

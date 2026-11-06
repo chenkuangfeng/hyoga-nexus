@@ -8955,7 +8955,12 @@ export default {
   },
   planned: {
     title: "尚未開放",
-    body: "此頁面屬於後續階段。此版本只有選單項目，尚未連接 Nexus API。"
+    body: "此頁面屬於後續階段。此版本只有選單項目，尚未連接 Nexus API。",
+    badge: '待實現',
+    badgeStage: '待實現 · {stage}',
+    unverified: '未驗證',
+    plannedTip: '該功能尚未實現，暫不能提交。',
+    unverifiedTip: '已實現，尚未在真實環境驗證。',
   },
   joinLink: {
     joining: "正在加入空間…",

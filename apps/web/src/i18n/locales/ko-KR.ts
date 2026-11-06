@@ -8959,7 +8959,12 @@ export default {
   },
   planned: {
     title: "아직 사용할 수 없습니다",
-    body: "이 페이지는 이후 단계에 제공됩니다. 이 버전에는 메뉴 항목만 있으며 Nexus API에는 아직 연결되어 있지 않습니다."
+    body: "이 페이지는 이후 단계에 제공됩니다. 이 버전에는 메뉴 항목만 있으며 Nexus API에는 아직 연결되어 있지 않습니다.",
+    badge: '구현 예정',
+    badgeStage: '구현 예정 · {stage}',
+    unverified: '미검증',
+    plannedTip: '이 기능은 아직 구현되지 않아 제출할 수 없습니다.',
+    unverifiedTip: '구현되었지만 실제 환경에서 아직 검증되지 않았습니다.',
   },
   joinLink: {
     joining: "스페이스에 참여하는 중…",
