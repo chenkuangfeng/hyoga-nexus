@@ -13,7 +13,7 @@
 
 - `vector_stores(id, tenant_id, name, engine, connection_config, index_config, status)`：密钥字段用模型 Key 同一套加密主密钥加密；`POST .../vector-stores/{id}/test` 做连接与维度探测。内置两条不可删除的记录：`sqlite`（本地）与 `postgres`（当前数据库，需 pgvector）。
 - `VectorIndex` 端口：`upsert(version_id, chunks, vectors)`、`delete(version_ids)`、`search(query_vec, version_ids, k)`；`version_ids` 是 Pre-Filter 的结果，每个引擎必须把它作为服务端过滤条件，测试套件对每个实现跑同一组越权用例。
-- 图谱（决定 2）：`knowledge_graph_entities`、`knowledge_graph_relations`、`knowledge_graph_communities`、`knowledge_graph_reports`，均带 `kb_id`、`build_version`、来源块；实体、关系、报告的向量存入同一 `VectorIndex`（以 `kind` 区分）。`knowledge_bases.graph_build_version` 指向可见版本。
+- 图谱（决定 2）：`graph_stores(id, tenant_id, name, engine, connection_config, status)`，内置一条不可删除的 `builtin`；`GraphStore` 端口：`write_build(kb_id, build_version, entities, relations, communities, reports)`、`activate(kb_id, build_version)`、`drop_build(...)`、`neighbors(seed_ids, scope, hops, limit)`、`search_entities / relations / reports(query_vec, scope, k)`；`scope` 为 Pre-Filter 结果（库与文档版本）。`builtin` 实现用下列表；`neo4j` 实现把同样字段写为节点和边属性。`knowledge_graph_entities`、`knowledge_graph_relations`、`knowledge_graph_communities`、`knowledge_graph_reports`，均带 `kb_id`、`build_version`、来源块；实体、关系、报告的向量存入同一 `VectorIndex`（以 `kind` 区分）。`knowledge_bases.graph_build_version` 指向可见版本。
 
 ## 1. 包结构与依赖方向
 
