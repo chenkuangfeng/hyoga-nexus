@@ -12,7 +12,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import CapabilityBadge from '@/components/knowledge/CapabilityBadge.vue'
 import KnowledgeGraphBrowser from '@/components/knowledge/KnowledgeGraphBrowser.vue'
 import { listModels } from '@/api/model'
-import { fetchGraphStatus, listGraphStores, rebuildGraph, type GraphStatus, type GraphStoreEngine } from '@/api/nexus-knowledge'
+import { createGraphStore, fetchGraphStatus, listGraphStores, rebuildGraph, testGraphStore, type GraphStatus, type GraphStoreItem } from '@/api/nexus-knowledge'
 import { useAuthStore } from '@/stores/auth'
 import { useKnowledgeCapabilitiesStore } from '@/stores/knowledgeCapabilities'
 
@@ -31,10 +31,14 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: GraphForm): void }>()
 const auth = useAuthStore()
 const capabilities = useKnowledgeCapabilitiesStore()
 const models = ref<Array<{ id: string, name: string }>>([])
-const stores = ref<GraphStoreEngine[]>([])
+const stores = ref<GraphStoreItem[]>([])
+const plannedEngines = ref<Array<{ engine: string, name: string, status: string }>>([])
 const status = ref<GraphStatus | null>(null)
 const showBrowser = ref(false)
 const rebuilding = ref(false)
+const registering = ref(false)
+const draft = ref({ name: '', url: '', username: 'neo4j', password: '', database: 'neo4j' })
+const draftBusy = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
 const MODES = [
@@ -53,6 +57,40 @@ async function refresh() {
   try {
     status.value = await fetchGraphStatus(tenant(), props.kbId)
   } catch { status.value = null }
+}
+
+async function loadStores() {
+  const listed = await listGraphStores(tenant())
+  stores.value = listed.items
+  plannedEngines.value = listed.engines.filter(item => item.status === 'planned')
+}
+
+function draftBody() {
+  return { name: draft.value.name.trim(), engine: 'neo4j', connection_config: {
+    url: draft.value.url.trim(), username: draft.value.username.trim(), password: draft.value.password,
+    database: draft.value.database.trim() || 'neo4j' } }
+}
+
+async function testDraft() {
+  draftBusy.value = true
+  try {
+    const result = await testGraphStore(tenant(), draftBody())
+    if (result.ok) MessagePlugin.success('连接成功')
+    else MessagePlugin.error(result.message || '连接失败')
+  } catch (error) { MessagePlugin.error((error as Error)?.message || '连接失败') } finally { draftBusy.value = false }
+}
+
+async function saveDraft() {
+  if (!draft.value.name.trim() || !draft.value.url.trim()) { MessagePlugin.warning('请填写名称和地址'); return }
+  draftBusy.value = true
+  try {
+    const created: any = await createGraphStore(tenant(), draftBody())
+    await loadStores()
+    patch({ store: created.id })
+    registering.value = false
+    draft.value = { name: '', url: '', username: 'neo4j', password: '', database: 'neo4j' }
+    MessagePlugin.success('已登记')
+  } catch (error) { MessagePlugin.error((error as Error)?.message || '登记失败') } finally { draftBusy.value = false }
 }
 
 async function rebuild() {
@@ -78,7 +116,7 @@ function stateText(build: GraphStatus['latest']): string {
 onMounted(async () => {
   void capabilities.ensureLoaded()
   try { models.value = (await listModels('KnowledgeQA')).map(m => ({ id: m.id || '', name: m.display_name || m.name })) } catch { models.value = [] }
-  try { stores.value = await listGraphStores(tenant()) } catch { stores.value = [] }
+  try { await loadStores() } catch { stores.value = [] }
   await refresh()
   timer = setInterval(() => { if (building.value) void refresh() }, 5000)
 })
@@ -112,11 +150,26 @@ const parseTypes = (text: string) => text.split(/[、,，\n]/).map(item => item.
     <div class="setting-row">
       <label>图存储</label>
       <t-select :value="modelValue.store" :disabled="disabled" style="max-width: 320px" @change="(v: string) => patch({ store: v })">
-        <t-option v-for="item in stores" :key="item.engine" :value="item.builtin ? 'builtin' : item.engine"
-          :label="item.name" :disabled="item.status === 'planned'">
+        <t-option v-for="item in stores" :key="item.id" :value="item.id" :label="item.name">
+          {{ item.name }}<CapabilityBadge group="graph_store" :capability="item.engine" />
+        </t-option>
+        <t-option v-for="item in plannedEngines" :key="item.engine" :value="item.engine" :label="item.name" disabled>
           {{ item.name }}<CapabilityBadge group="graph_store" :capability="item.engine" />
         </t-option>
       </t-select>
+      <p class="muted">外部图存储（Neo4j）由空间管理员登记，连接信息加密保存。
+        <t-link theme="primary" @click="registering = true">登记 Neo4j</t-link></p>
+      <t-dialog v-model:visible="registering" header="登记 Neo4j 图存储" :confirm-btn="{ content: '保存', loading: draftBusy }"
+        @confirm="saveDraft">
+        <t-form label-align="top">
+          <t-form-item label="名称"><t-input v-model="draft.name" /></t-form-item>
+          <t-form-item label="地址（HTTP）"><t-input v-model="draft.url" placeholder="http://host:7474" /></t-form-item>
+          <t-form-item label="用户名"><t-input v-model="draft.username" /></t-form-item>
+          <t-form-item label="密码"><t-input v-model="draft.password" type="password" /></t-form-item>
+          <t-form-item label="数据库"><t-input v-model="draft.database" /></t-form-item>
+          <t-button variant="outline" size="small" :loading="draftBusy" @click="testDraft">测试连接</t-button>
+        </t-form>
+      </t-dialog>
     </div>
 
     <div class="setting-row">

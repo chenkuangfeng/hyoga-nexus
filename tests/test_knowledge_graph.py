@@ -193,12 +193,15 @@ def test_failed_model_marks_the_build_failed_without_touching_the_visible_graph(
 
 
 def test_graph_api_status_rebuild_and_browse(graph_env):
-    from cryptography.fernet import Fernet  # noqa: F401
+    from cryptography.fernet import Fernet
     from fastapi.testclient import TestClient
     from nexus_api.dependencies.platform import get_database_session, get_principal
     from nexus_api.main import app
 
+    from pathlib import Path
     factory, tenant_id, owner, member, model = graph_env
+    config = Path('configs/nexus.toml')  # the deployment key encrypts graph store credentials
+    config.write_text(config.read_text() + f'\n[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n')
     kb_id = make_graph_kb(factory, tenant_id, owner)
     for name, text in TEXTS.items():
         upload(factory, tenant_id, owner, kb_id, name, text.encode())
@@ -217,8 +220,19 @@ def test_graph_api_status_rebuild_and_browse(graph_env):
             status = client.get(f'{path}/bases/{kb_id}/graph').json()
             assert status['enabled'] and status['ready']['entity_count'] == 4
             assert status['config']['mode'] == 'graphrag_light'
-            stores = {s['engine']: s for s in client.get(f'{path}/graph-stores').json()['items']}
-            assert stores['builtin']['status'] == 'available' and stores['neo4j']['status'] == 'planned'
+            listing = client.get(f'{path}/graph-stores').json()
+            assert [item['id'] for item in listing['items']] == ['builtin']
+            engines = {s['engine']: s for s in listing['engines']}
+            assert engines['builtin']['status'] == 'available'
+            assert (engines['neo4j']['status'], engines['neo4j']['verified']) == ('available', False)
+            created = client.post(f'{path}/graph-stores', json={
+                'name': 'Neo4j 测试', 'engine': 'neo4j',
+                'connection_config': {'url': 'http://127.0.0.1:1', 'username': 'neo4j', 'password': 'secret-pass'}})
+            assert created.status_code == 201 and created.json()['connection_config']['password'] == '******'
+            probe = client.post(f"{path}/graph-stores/{created.json()['id']}/test").json()
+            assert probe['ok'] is False and probe['code'] == 'connection_failed'
+            assert client.post(f'{path}/graph-stores', json={'name': 'x', 'engine': 'builtin'}).status_code == 422
+            assert client.delete(f"{path}/graph-stores/{created.json()['id']}").status_code == 204
             top = client.get(f'{path}/bases/{kb_id}/graph/overview').json()
             assert {n['name'] for n in top['nodes']} == {'甲公司', '张三', '乙产品', '丙团队'} and top['edges']
             named = client.get(f'{path}/bases/{kb_id}/graph/overview', params={'names': '张三', 'hops': 1}).json()
@@ -226,3 +240,38 @@ def test_graph_api_status_rebuild_and_browse(graph_env):
             assert client.post(f'{path}/bases/{kb_id}/graph/rebuild').status_code == 202
     finally:
         app.dependency_overrides.clear()
+
+
+def test_neo4j_store_speaks_the_http_transaction_api():
+    """The Neo4j store is verified against a fake server only: request shape and row mapping."""
+    import httpx
+    from nexus_platform.knowledge.graph.neo4j import Neo4jError, Neo4jGraphStore
+
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        statement = body['statements'][0]
+        seen.append((request.url.path, statement['statement'], statement['parameters']))
+        if 'RETURN e.id AS id' in statement['statement']:
+            columns = ['id', 'name', 'type', 'description', 'sources', 'degree']
+            row = ['e1', '甲公司', '组织', '一家公司', json.dumps([['c1', 'v1']]), 2]
+            return httpx.Response(200, json={'results': [{'columns': columns, 'data': [{'row': row}]}], 'errors': []})
+        if 'boom' in statement['statement']:
+            return httpx.Response(200, json={'results': [], 'errors': [{'code': 'Neo.ClientError', 'message': 'bad'}]})
+        return httpx.Response(200, json={'results': [{'columns': [], 'data': []}], 'errors': []})
+
+    store = Neo4jGraphStore({'url': 'http://neo4j.test:7474', 'username': 'u', 'password': 'p', 'database': 'kg'})
+    store._client = httpx.AsyncClient(base_url='http://neo4j.test:7474', transport=httpx.MockTransport(handler))
+
+    async def scenario():
+        found = await store.entities('b1', ['e1'])
+        assert [(e.name, e.type, e.versions, e.degree) for e in found] == [('甲公司', '组织', ('v1',), 2)]
+        await store.delete('b1')
+        with pytest.raises(Neo4jError) as error:
+            await store.run('boom')
+        assert error.value.code == 'Neo.ClientError'
+        await store.close()
+    asyncio.run(scenario())
+    assert seen[0][0] == '/db/kg/tx/commit' and seen[0][2] == {'build': 'b1', 'ids': ['e1']}
+    assert 'DETACH DELETE' in seen[1][1] and seen[1][2] == {'build': 'b1'}

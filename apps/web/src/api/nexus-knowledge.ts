@@ -62,6 +62,9 @@ export interface GraphStoreEngine {
   builtin: boolean
 }
 
+/** A graph store a base can use: the builtin one or a store registered in the space. */
+export interface GraphStoreItem { id: string, name: string, engine: string, builtin: boolean }
+
 function basesPath(tenantId: string, kbId: string): string {
   return `${knowledgePath(tenantId)}/bases/${encodeURIComponent(kbId)}`
 }
@@ -80,7 +83,15 @@ export function fetchGraphOverview(tenantId: string, kbId: string, names: string
   return get(`${basesPath(tenantId, kbId)}/graph/overview?${query}`) as unknown as Promise<GraphOverview>
 }
 
-export async function listGraphStores(tenantId: string): Promise<GraphStoreEngine[]> {
+export async function listGraphStores(tenantId: string): Promise<{ items: GraphStoreItem[], engines: GraphStoreEngine[] }> {
   const res: any = await get(`${knowledgePath(tenantId)}/graph-stores`)
-  return res.items || []
+  return { items: res.items || [], engines: res.engines || [] }
+}
+
+export function createGraphStore(tenantId: string, body: { name: string, engine: string, connection_config: Record<string, unknown> }) {
+  return post(`${knowledgePath(tenantId)}/graph-stores`, body)
+}
+
+export function testGraphStore(tenantId: string, body: { name: string, engine: string, connection_config: Record<string, unknown> }) {
+  return post(`${knowledgePath(tenantId)}/graph-stores/test`, body) as unknown as Promise<{ ok: boolean, message?: string }>
 }

@@ -28,7 +28,8 @@ from nexus_platform.configuration import knowledge_settings
 from nexus_platform.errors import Conflict, NotFound, ServiceUnavailable
 from nexus_platform.identity.service import require_membership
 from nexus_platform.models.provider_settings import cipher
-from nexus_platform.persistence.models import KnowledgeBaseRecord, StorageBackendRecord, VectorStoreRecord
+from nexus_platform.persistence.models import (GraphStoreRecord, KnowledgeBaseRecord, StorageBackendRecord,
+                                               VectorStoreRecord)
 from nexus_platform.tenants.service import ADMIN_ROLES
 
 BUILTIN = 'builtin'
@@ -242,6 +243,52 @@ def storage_backend_of_tenant(db: Session, tenant_id: UUID, backend_id: str | No
     if row is None or row.tenant_id != tenant_id:
         raise NotFound('Storage backend not found')
     return row
+
+
+# ---------------------------------------------------------------- graph stores (openspec 2026-11-06-knowledge-base K2.7)
+
+def graph_store_view(row: GraphStoreRecord) -> dict[str, Any]:
+    return {'id': str(row.id), 'name': row.name, 'engine': row.engine, 'builtin': False,
+            'connection_config': masked_config(row.connection_config), 'created_at': row.created_at.isoformat(),
+            'updated_at': row.updated_at.isoformat()}
+
+
+def list_graph_stores(db: Session, tenant_id: UUID, user_id: UUID) -> list[dict[str, Any]]:
+    """Selectable graph stores: the builtin one first, then the space's registered stores."""
+    require_membership(db, tenant_id, user_id)
+    rows = db.scalars(select(GraphStoreRecord).where(GraphStoreRecord.tenant_id == tenant_id)
+                      .order_by(GraphStoreRecord.created_at)).all()
+    return [{'id': BUILTIN, 'name': '内置图存储', 'engine': 'builtin', 'builtin': True, 'connection_config': {}},
+            *(graph_store_view(row) for row in rows)]
+
+
+def create_graph_store(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, engine: str,
+                       connection_config: dict[str, Any]) -> GraphStoreRecord:
+    require_membership(db, tenant_id, user_id, roles=ADMIN_ROLES)
+    if engine == 'builtin':
+        raise ValueError('the builtin graph store is always available and cannot be registered')
+    capabilities.require_available('graph_store', engine)
+    store_id, now = new_id(), utc_now()
+    sealed = seal_config(store_id, connection_config)
+    row = GraphStoreRecord(id=store_id, tenant_id=tenant_id, name=_validate_name(name), engine=engine,
+                           connection_config=sealed, created_by=user_id, created_at=now, updated_at=now)
+    db.add(row)
+    db.flush()
+    audit(db, tenant_id, user_id, 'graph_store.created', 'graph_store', str(row.id), {'engine': engine})
+    return row
+
+
+def delete_graph_store(db: Session, tenant_id: UUID, user_id: UUID, store_id: UUID) -> None:
+    require_membership(db, tenant_id, user_id, roles=ADMIN_ROLES)
+    row = db.get(GraphStoreRecord, store_id)
+    if row is None or row.tenant_id != tenant_id:
+        raise NotFound('Graph store not found')
+    for kb in db.scalars(select(KnowledgeBaseRecord).where(KnowledgeBaseRecord.tenant_id == tenant_id,
+                                                           KnowledgeBaseRecord.status == 'active')):
+        if (kb.settings or {}).get('graph', {}).get('store') == str(store_id):
+            raise Conflict('Graph store is used by a knowledge base')
+    db.delete(row)
+    audit(db, tenant_id, user_id, 'graph_store.deleted', 'graph_store', str(store_id), {})
 
 
 capabilities.mark_available('kb_feature', 'vector_store_registry')

@@ -76,8 +76,13 @@ async def overview(factory: sessionmaker[Session], db: Session, tenant_id: UUID,
                          .order_by(GraphEntityRecord.degree.desc(), GraphEntityRecord.id).limit(limits.max_entities)).all()
         seeds = [str(e.id) for e in top]
         found = graph_search.GraphResult(str(kb.id))
-        found = await graph_search._expand(store_for(factory, build.store), str(build.id), found, seeds, [], allowed,
-                                           Limits(hops=1, max_entities=limits.max_entities, max_relations=limits.max_relations))
+        graph_store = store_for(factory, build.store, kb.tenant_id)
+        try:
+            found = await graph_search._expand(graph_store, str(build.id), found, seeds, [], allowed,
+                                               Limits(hops=1, max_entities=limits.max_entities,
+                                                      max_relations=limits.max_relations))
+        finally:
+            await graph_store.close()
     return {'nodes': [{'id': e.id, 'name': e.name, 'type': e.type, 'description': e.description, 'degree': e.degree}
                       for e in found.entities],
             'edges': [{'id': r.id, 'source': r.source_id, 'target': r.target_id, 'description': r.description,

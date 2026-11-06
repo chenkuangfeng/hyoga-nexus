@@ -62,7 +62,7 @@ async def search_graph(factory: sessionmaker[Session], db: Session, kb: Knowledg
                        query_cache: dict | None = None) -> GraphResult:
     """Graph context for ``query`` in one base. ``allowed_versions`` are the base's readable current versions."""
     result = GraphResult(str(kb.id))
-    graph_store = store_for(factory, build.store)
+    graph_store = store_for(factory, build.store, kb.tenant_id)
     collection = graph_collection(str(kb.id))
     scope = Scope(str(kb.id), (str(build.id),))
     tokens = query_tokens(query)
@@ -70,6 +70,7 @@ async def search_graph(factory: sessionmaker[Session], db: Session, kb: Knowledg
         index = stores.vector_index_for(db, kb)
     except Exception:
         result.degraded = 'store_unavailable'
+        await graph_store.close()
         return result
     vector_lists, keyword_lists = [], []
     try:
@@ -82,6 +83,7 @@ async def search_graph(factory: sessionmaker[Session], db: Session, kb: Knowledg
                 vector_lists.append(await index.search_vector(collection, vector, scope, CANDIDATES))
     except VectorStoreError as exc:
         result.degraded = exc.code
+        await graph_store.close()
         return result
     finally:
         await index.close()
@@ -91,10 +93,17 @@ async def search_graph(factory: sessionmaker[Session], db: Session, kb: Knowledg
     community_ids = [i[2:] for i in ranked if i.startswith('c:')][:COMMUNITIES]
     seeds = list(entity_ids)
     if relation_ids:
-        for relation in await graph_store.relations(str(build.id), relation_ids):
-            if _visible(relation, allowed_versions):
-                seeds += [i for i in (relation.source_id, relation.target_id) if i not in seeds]
-    return await _expand(graph_store, str(build.id), result, seeds[:SEEDS * 2], community_ids, allowed_versions, limits)
+        try:
+            for relation in await graph_store.relations(str(build.id), relation_ids):
+                if _visible(relation, allowed_versions):
+                    seeds += [i for i in (relation.source_id, relation.target_id) if i not in seeds]
+        except Exception:
+            await graph_store.close()
+            raise
+    try:
+        return await _expand(graph_store, str(build.id), result, seeds[:SEEDS * 2], community_ids, allowed_versions, limits)
+    finally:
+        await graph_store.close()
 
 
 async def _expand(graph_store, build_id: str, result: GraphResult, seeds: list[str], community_ids: list[str],
@@ -139,9 +148,12 @@ async def lookup_entities(factory: sessionmaker[Session], db: Session, kb: Knowl
                           limits: retrieve.Limits) -> GraphResult:
     """``query_knowledge_graph``: exact normalized-name lookup, then bounded expansion."""
     result = GraphResult(str(kb.id))
-    graph_store = store_for(factory, build.store)
-    matches = await graph_store.match_names(str(build.id), [norm(n) for n in names if norm(n)], limits.max_entities)
-    seeds = [e.id for e in matches if _visible(e, allowed_versions)]
-    if not seeds:
-        return result
-    return await _expand(graph_store, str(build.id), result, seeds, [], allowed_versions, limits)
+    graph_store = store_for(factory, build.store, kb.tenant_id)
+    try:
+        matches = await graph_store.match_names(str(build.id), [norm(n) for n in names if norm(n)], limits.max_entities)
+        seeds = [e.id for e in matches if _visible(e, allowed_versions)]
+        if not seeds:
+            return result
+        return await _expand(graph_store, str(build.id), result, seeds, [], allowed_versions, limits)
+    finally:
+        await graph_store.close()

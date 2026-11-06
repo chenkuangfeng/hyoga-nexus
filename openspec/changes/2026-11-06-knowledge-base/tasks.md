@@ -58,7 +58,9 @@
 - [x] K2.3 `graphrag_general`（实体归并、社区划分、社区报告）。
 - [x] K2.4 `entity` 模式（WeKnora ExtractConfig）与 `query_knowledge_graph` 工具。
 - [x] K2.5 库级构建任务、重建、版本切换；有界图检索、截断提示、降级。
-- [ ] K2.7 `neo4j` 图存储实现与越权测试（需 Neo4j 测试环境）。
+- [x] K2.7 `neo4j` 图存储实现（代码完成，未经真实 Neo4j 验证）；越权与连接测试待 Neo4j 测试环境（K2.7b）。
+  - `Neo4jGraphStore` 走 HTTP 事务接口（无驱动依赖），节点/关系/社区均带 `build_id`，查询一律按构建过滤；图存储可在空间内登记（`graph_stores` 表、密钥加密、草稿连接测试、被库使用时不可删除），库的图配置里 `store` 选内置或登记的存储。能力目录标 `verified=false`。测试用假 HTTP 服务器验证请求形状与行映射。
+- [ ] K2.7b 真实 Neo4j 验收：连接、写入/删除、越权与降级用例（需用户提供环境）。
 - [x] K2.6 前端图存储管理、图谱设置、任务状态、图谱浏览。
 
 > K2.6 进度：接口 `GET /knowledge/graph-stores`、`/bases/{id}/graph`、`/graph/rebuild`、`/graph/overview`；前端 `KBGraphConfig.vue`（模式、图存储、抽取模型、实体/关系类型、补充说明、构建状态、重新构建）、`KnowledgeGraphBrowser.vue`（列表式浏览，含社区报告与截断提示）已替换编辑器里的 WeKnora 抽取演练场；`updateKBConfig` 改为更新 Nexus 库的 Embedding 与分块。图存储注册表只列出引擎（neo4j 待实现），自定义图存储的增删待 K2.7。浏览器验证与整体 `pnpm build` 待在内存充足的环境执行。

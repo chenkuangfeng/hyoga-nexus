@@ -32,9 +32,9 @@ from nexus_knowledge.graph import community as community_rules
 from nexus_knowledge.graph import extract, merge
 from nexus_knowledge.index import IndexRow
 from nexus_knowledge.text import tokenize
-from nexus_platform.errors import PlatformError
+from nexus_platform.errors import NotFound, PlatformError
 from nexus_platform.knowledge import embedding, stores
-from nexus_platform.persistence.models import (GraphBuildRecord, GraphExtractionCacheRecord, KnowledgeBaseRecord,
+from nexus_platform.persistence.models import (GraphBuildRecord, GraphStoreRecord, GraphExtractionCacheRecord, KnowledgeBaseRecord,
                                                KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord)
 from . import config as graph_config
@@ -81,11 +81,24 @@ def schedule(db: Session, kb: KnowledgeBaseRecord, user_id: UUID, *, delay: time
     return build
 
 
-def store_for(factory: sessionmaker[Session], store: str) -> GraphStore:
+def store_for(factory: sessionmaker[Session], store: str, tenant_id: UUID | None = None) -> GraphStore:
+    """The graph store a base writes to: ``builtin`` or a registered store of the same space."""
     if store == 'builtin':
         return SqlGraphStore(factory)
-    capabilities.require_available('graph_store', 'neo4j')
-    raise NotImplementedError('external graph stores are registered by their engine module')
+    try:
+        store_id = UUID(store)
+    except ValueError:
+        raise ValueError('unknown graph store') from None
+    with factory() as db:
+        row = db.get(GraphStoreRecord, store_id)
+        if row is None or (tenant_id is not None and row.tenant_id != tenant_id):
+            raise NotFound('Graph store not found')
+        engine, config = row.engine, stores.reveal_config(row.id, row.connection_config)
+    capabilities.require_available('graph_store', engine)
+    if engine == 'neo4j':
+        from .neo4j import Neo4jGraphStore
+        return Neo4jGraphStore(config)
+    raise NotImplementedError(f'graph store engine {engine} has no implementation')
 
 
 def claim(factory: sessionmaker[Session], limit: int = 1) -> list[UUID]:
@@ -227,8 +240,11 @@ async def _build(factory, build_id: UUID) -> None:
 
     # 4. write, 5. index
     _progress(factory, build_id, 'write')
-    graph_store = store_for(factory, config.store)
-    await graph_store.write(str(build_id), str(kb_id), written)
+    graph_store = store_for(factory, config.store, tenant_id)
+    try:
+        await graph_store.write(str(build_id), str(kb_id), written)
+    finally:
+        await graph_store.close()
     _progress(factory, build_id, 'index')
     await _index(factory, build_id, written)
 
@@ -247,11 +263,15 @@ async def _build(factory, build_id: UUID) -> None:
         current.entity_count, current.relation_count = len(written.entities), len(written.relations)
         current.community_count, current.updated_at = len(written.communities), utc_now()
     for old_id in superseded:
-        await _drop(factory, kb_id, old_id, config.store)
+        await _drop(factory, kb_id, old_id, config.store, tenant_id)
 
 
-async def _drop(factory, kb_id: UUID, build_id: UUID, store: str) -> None:
-    await store_for(factory, store).delete(str(build_id))
+async def _drop(factory, kb_id: UUID, build_id: UUID, store: str, tenant_id: UUID) -> None:
+    graph_store = store_for(factory, store, tenant_id)
+    try:
+        await graph_store.delete(str(build_id))
+    finally:
+        await graph_store.close()
     with factory() as db:
         kb = db.get(KnowledgeBaseRecord, kb_id)
         index = stores.vector_index_for(db, kb) if kb else None

@@ -139,14 +139,78 @@ def rebuild_base(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(ge
 
 # ---------------------------------------------------------------- graph
 
+class GraphStoreInput(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    engine: str = Field(min_length=1, max_length=32)
+    connection_config: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get('/graph-stores')
 def list_graph_stores(tenant_id: UUID, principal: Principal = Depends(get_principal),
                       db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    """Graph store engines with their catalog state; ``neo4j`` is planned until K2.7."""
-    _user(db, principal, tenant_id)
-    return {'items': [{'engine': row['key'], 'name': row['label'], 'status': row['status'], 'stage': row['stage'],
-                       'verified': row['verified'], 'builtin': row['key'] == 'builtin'}
-                      for row in capabilities.snapshot() if row['group'] == 'graph_store']}
+    """``items``: stores a base can use (builtin + registered); ``engines``: catalog of graph store engines."""
+    user = _user(db, principal, tenant_id)
+    return {'items': stores.list_graph_stores(db, tenant_id, user.id),
+            'engines': [{'engine': row['key'], 'name': row['label'], 'status': row['status'], 'stage': row['stage'],
+                         'verified': row['verified'], 'builtin': row['key'] == 'builtin'}
+                        for row in capabilities.snapshot() if row['group'] == 'graph_store']}
+
+
+@router.post('/graph-stores', status_code=201)
+def create_graph_store(tenant_id: UUID, body: GraphStoreInput, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        row = stores.create_graph_store(db, tenant_id, user.id, name=body.name, engine=body.engine,
+                                        connection_config=body.connection_config)
+    return stores.graph_store_view(row)
+
+
+@router.delete('/graph-stores/{store_id}', status_code=204)
+def delete_graph_store(tenant_id: UUID, store_id: UUID, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)) -> Response:
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        stores.delete_graph_store(db, tenant_id, user.id, store_id)
+    return Response(status_code=204)
+
+
+@router.post('/graph-stores/test')
+async def test_graph_store_draft(tenant_id: UUID, body: GraphStoreInput, principal: Principal = Depends(get_principal),
+                                 db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Connection test of an unsaved graph store configuration (space admins)."""
+    from nexus_platform.tenants.service import ADMIN_ROLES
+    user = resolve_user(db, principal)
+    require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
+    capabilities.require_available('graph_store', body.engine)
+    return await _ping_graph_store(body.engine, body.connection_config)
+
+
+@router.post('/graph-stores/{store_id}/test')
+async def test_graph_store(tenant_id: UUID, store_id: str, principal: Principal = Depends(get_principal),
+                           db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    user = _user(db, principal, tenant_id)
+    if store_id == stores.BUILTIN:
+        return {'ok': True, 'details': {'engine': 'builtin'}}
+    from nexus_platform.persistence.models import GraphStoreRecord
+    row = db.get(GraphStoreRecord, UUID(store_id))
+    if row is None or row.tenant_id != tenant_id:
+        raise NotFound('Graph store not found')
+    return await _ping_graph_store(row.engine, stores.reveal_config(row.id, row.connection_config))
+
+
+async def _ping_graph_store(engine: str, config: dict[str, Any]) -> dict[str, Any]:
+    if engine != 'neo4j':
+        return {'ok': False, 'code': 'unsupported', 'message': engine}
+    from nexus_platform.knowledge.graph.neo4j import Neo4jError, Neo4jGraphStore
+    try:
+        store = Neo4jGraphStore(config)
+        try:
+            return {'ok': True, 'details': await store.ping()}
+        finally:
+            await store.close()
+    except Neo4jError as exc:
+        return {'ok': False, 'code': exc.code, 'message': str(exc)[:300]}
 
 
 @router.get('/bases/{kb_id}/graph')

@@ -106,6 +106,9 @@ class GraphStore(ABC):
 
     engine = ''
 
+    async def close(self) -> None:
+        """Release connections; the builtin store holds none."""
+
     @abstractmethod
     async def write(self, build_id: str, kb_id: str, graph: WrittenGraph) -> None: ...
 

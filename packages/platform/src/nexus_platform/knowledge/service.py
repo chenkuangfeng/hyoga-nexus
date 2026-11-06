@@ -116,6 +116,14 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
     if normalized['graph']:
         # Graph building calls a chat model with the creator's key (decision 6) and needs a valid configuration.
         config = graph_config.parse(settings)
+        if config.store != 'builtin':
+            from nexus_platform.persistence.models import GraphStoreRecord
+            try:
+                row = db.get(GraphStoreRecord, UUID(config.store))
+            except ValueError:
+                row = None
+            if row is None or row.tenant_id != tenant_id:
+                raise NotFound('Graph store not found')
         if user_id is not None:
             _authorize_chat_model(db, tenant_id, user_id, config.model_id)
     validate_chunking(chunk_size, chunk_overlap)
@@ -448,6 +456,7 @@ for _feature in ('documents', 'upload', 'chunking', 'embedding_model'):
 capabilities.mark_available('indexing', 'graph')
 for _mode in graph_config.MODES:
     capabilities.mark_available('graph_mode', _mode)
+from .graph import neo4j as _neo4j  # noqa: E402,F401  (registers the neo4j graph store in the catalog)
 capabilities.mark_available('graph_store', 'builtin')
 for _feature in ('graph_settings', 'graph_browser'):
     capabilities.mark_available('kb_feature', _feature)
