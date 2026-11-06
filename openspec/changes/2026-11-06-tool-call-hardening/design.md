@@ -1,6 +1,6 @@
 # 设计：工具调用加固
 
-草案，按提案中各决定的推荐方案编写；决定变更时同步修改本文件。
+已确认（2026-11-06），决定 1–5 全部采用推荐方案。尚未实施，等待用户指令后开始。
 
 ## 1. 网关执行管线
 
@@ -73,17 +73,18 @@
 
 ### 存储
 
-新表 `tool_approval_grants`：
+新表 `action_grants`（架构 2.11 的 ActionGrant）：
 
 | 列 | 说明 |
 | --- | --- |
 | `id` | UUID 主键 |
-| `tenant_id`、`session_id`、`principal_id` | 外键；会话删除时级联删除 |
-| `agent_version_id` | 放行时 Run 的智能体版本 |
-| `tool_name` | 工具名 |
-| `created_at`、`revoked_at` | 撤销是软删除，便于审计 |
+| `tenant_id`、`principal_id` | 外键；会话删除时由服务层一并删除该会话的放行 |
+| `scope`、`scope_id` | 作用域；本变更只使用 `scope='session'`，`scope_id` 为会话 ID。架构规划的 `automation` 作用域留待渠道与定时任务 |
+| `agent_version_id` | 放行时 Run 的智能体版本，作为配置绑定（版本不可变，等价于配置哈希） |
+| `tool_name`、`risk` | 工具名与放行时的风险等级 |
+| `created_at`、`expires_at`、`revoked_at` | `expires_at` 本变更不设置（会话内有效）；撤销是软删除，便于审计 |
 
-唯一约束：`(session_id, agent_version_id, tool_name)`，只对未撤销的行生效；SQLite 和 PostgreSQL 都用部分索引实现。
+唯一约束：`(scope, scope_id, agent_version_id, tool_name)`，只对未撤销的行生效；SQLite 和 PostgreSQL 都用部分索引实现。
 
 ### 流程
 

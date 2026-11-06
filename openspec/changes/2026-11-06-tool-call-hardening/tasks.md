@@ -1,13 +1,14 @@
 # 实施任务
 
-状态：草案，待确认（2026-11-06）。确认前不编码。
+状态：已确认（2026-11-06），决定 1–5 全部采用推荐方案。暂不实施，等待用户指令后开始。
 
 ## 0. 准备
 
 - [x] 0.1 阅读 WeKnora `registry.go`、`param_cast.go`、`param_validate.go`、`json_repair.go`、`truncate.go`、`policy/policy.go`、`approval/grants.go`。
 - [x] 0.2 阅读 hermes `arg_coercion.py`、`agent/tool_guardrails.py`、`tool_result_storage.py`、`approval_floors.py`、`threat_patterns.py`。
 - [x] 0.3 阅读 octop-harness `tool_guard`、`tool_order`，Octop `hitl_session.py`，deepseek `repeat-tool-reminder`。
-- [ ] 0.4 用户确认决定 1–5。
+- [x] 0.4 用户确认决定 1–5（全部采用推荐方案）。
+- [x] 0.5 先更新文档：`docs/architecture.md` 2.5、2.7、2.9、2.11 标注计划与约束；`docs/roadmap.md` 新增 3.26，并在 7.2、8 写入决定 3 的约束。
 
 ## 1. 参数容错（`nexus_tools`）
 
@@ -37,7 +38,7 @@
 
 ## 5. 会话放行
 
-- [ ] 5.1 迁移：`tool_approval_grants` 表、`action_approvals.reason` 列；测试升级和降级。
+- [ ] 5.1 迁移：`action_grants` 表（架构 2.11 的 ActionGrant）、`action_approvals.reason` 列；测试升级和降级。
 - [ ] 5.2 `resolve` 支持 `remember`；`destructive` 或守卫触发的审批拒绝 `session`（422）。
 - [ ] 5.3 `DurableRuntimeStore.approval(call, reason)` 与 `grant` 查询；`approval.grant_used` 审计。
 - [ ] 5.4 `GET/DELETE sessions/{session_id}/tool-grants` 接口（404、审计）。

@@ -1,6 +1,6 @@
 # 规格：工具调用加固
 
-来源：`openspec/changes/2026-11-06-tool-call-hardening`（草案，待确认）。
+来源：`openspec/changes/2026-11-06-tool-call-hardening`（已确认 2026-11-06，未实施）。
 
 ## 需求
 

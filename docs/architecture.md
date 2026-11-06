@@ -200,6 +200,11 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **ToolGateway（单调守卫）**：每次调用依次经过 schema 校验、当前授权查询（查数据库，不读快照）、风险分级、审批（如需）、执行、结果投影、审计。守卫只能收紧权限；模型不能通过参数选择主体、空间或 Run。
 - **结果投影与 Spill**：工具作者提供公开结果投影。未绑定 `read_tool_output` 时，结果最多 4000 字符进入模型与事件并截断。绑定后，超过 `tool_output_inline_limit` 的公开结果写入 Run 级 `tool_outputs` 表，模型只看到预览与句柄；`read_tool_output` 按句柄与 offset 分页读取，只能读取同一 Run 的输出，每次读取写入审计。引擎在视图层裁剪更早的工具结果（只改模型视图，不改源消息）。截断与外置必须显式标注。
 - **内置工具**：平台类（知识检索、记忆读取、检查点、待办、询问用户）；领域类（观澜，由领域包注册）；受控执行类（代码、文件、Web），仅在沙箱后端通过验收后开放（见 2.9）。
+- **计划：工具调用加固**（提案 `openspec/changes/2026-11-06-tool-call-hardening`，已确认，未实施）。借鉴 WeKnora `registry.go`、`param_cast.go`、`json_repair.go`、`truncate.go`、`policy/`；hermes `arg_coercion.py`、`agent/tool_guardrails.py`、`enforce_turn_budget`、`approval_floors.py`、`threat_patterns.py`；octop-harness `tool_guard`、`tool_order`；deepseek `repeat-tool-reminder`。
+  - 执行顺序：授权 → 访问级别判断 → 参数预处理（JSON 修复、按 schema 保守转换类型、校验并返回字段级错误）→ 参数守卫 → 审批（会话放行只覆盖访问级别和 `requires_approval` 带来的审批）→ 执行 → 注入扫描 → 外置（计入每轮总预算）→ 头尾截断。
+  - 工具定义按名称排序；风险改为 `read` / `probe` / `write` / `destructive`，智能体访问级别 `read_only` / `standard`（默认）/ `strict`。
+  - 参数守卫：随包 YAML 规则，`CRITICAL` 硬拒绝（任何放行都不能绕过），`HIGH` 必须审批，`MEDIUM` 只记录。
+  - 循环检测在引擎侧：相同（工具、参数、结果）或周期 2–4 的循环先提醒，达到阈值以 `tool_loop_detected` 结束 Run。
 
 ### 2.6 技能（Skill）
 
@@ -220,6 +225,12 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **客户端**：连接外部 MCP 服务，发现工具，按工具启用，不默认开放整个服务；凭据以引用保存。
 - **服务端**：平台对外暴露已授权工具，供 Codex、Claude 等 Runtime 调用。
 - **运行令牌**：短时令牌，与 Run 生命周期一致，单 Run 有效，撤销即失效；服务端每次调用复核权限。
+- **客户端接入约束**（提案 `2026-11-06-tool-call-hardening` 决定 3，随第 7.2 步实现）：
+  - 注册名用 `sha256(server_id \0 tool_name)` 加可读前缀，同名先注册者保留（WeKnora `mcp_exposure.go`）。
+  - 风险取「工作区显式设置 > 曾观察到的最高声明 > 当前声明」，服务端自行降级需工作区确认（WeKnora `approval/mcp_risk.go`）。
+  - 每次执行前复核目录与开关；按用户缓存工具定义，用连接参数指纹判断失效（Octop `mcp_tool_cache.py`）。
+  - `McpError` 提示修正参数，输出 schema 失败提示不要改参数重试（octop-harness `mcp_tool_error.py`）。
+  - 工具描述带外部数据前缀；按供应商清洗 schema（hermes `schema_sanitizer.py`）；工具较多时用 `tool_search` 渐进加载（octop-harness `tool_search.py`）。
 - **高风险工具**：按风险等级要求审批，结果记录为 `action_approvals`。
 
 ### 2.8 记忆
@@ -262,6 +273,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **产物**：记录为 Artifact，关联 Run 与来源；下载走授权检查。
 - **门禁**：只有通过隔离验收的后端才能注册任意代码、shell、文件写入工具。验收项：CPU、内存、时间、输出大小限制；网络隔离；用户隔离；清理；崩溃后残留检查。未通过时工具不出现在工具列表中，而不是返回错误。
 - **部署环境**：候选后端的部署条件（容器运行时或远程执行环境）待确定。
+- **执行类工具约束**（提案 `2026-11-06-tool-call-hardening` 决定 3，随第 8 步实现）：工具可按参数声明能否并行（deepseek `isConcurrencySafe`）；同一路径的写入串行化（WeKnora `file_mutation_queue.go`）；shell 类工具必须经过参数守卫。
 
 ### 2.10 知识库
 
@@ -317,6 +329,8 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 **执行时复核**：每次工具调用、检索和资源读取都重新查询成员、资源状态、绑定与授权。撤权在下一次调用时生效。
 
 **审批流程**：高风险调用生成 `approval.requested`，进入 `waiting_approval`；决定后经 `approval.resolved` 继续或拒绝；决定与依据写入审计。
+
+**计划：会话放行**（提案 `2026-11-06-tool-call-hardening`，已确认，未实施）：审批时可选「本会话允许」，在 `action_grants` 写入 `scope='session'` 的 ActionGrant，绑定会话、智能体版本和工具名。`destructive` 工具和参数守卫触发的审批不能放行；放行在每次调用时查询，撤销立即生效。
 
 **危险命令检测**：作为审批触发条件，不作为唯一防线；检测结果与授权共同决定。
 

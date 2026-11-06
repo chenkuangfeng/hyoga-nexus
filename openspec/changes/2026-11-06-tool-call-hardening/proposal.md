@@ -2,7 +2,7 @@
 
 ## 状态
 
-草案，待确认（2026-11-06）。需要确认的决定见文末「待确认的决定」，确认前不编码。
+已确认（2026-11-06）：决定 1–5 全部采用推荐方案。按用户要求先更新文档，暂不实施，等待用户指令后再编码。
 
 ## 原因
 
@@ -71,7 +71,7 @@
 
 **E. 审批「本会话放行」（持久化、API、界面变化）**
 13. 审批决定增加 `remember`：`once`（默认，与现在相同）或 `session`。选 `session` 后，同一会话、同一智能体版本里同名工具的后续调用不再询问。放行只覆盖访问级别和 `requires_approval` 带来的审批，不覆盖参数守卫和硬拒绝底线。`destructive` 工具不允许会话放行。
-14. 新表 `tool_approval_grants`，智能体版本变化即失效。新增接口 `GET /sessions/{session_id}/tool-grants` 和 `DELETE /sessions/{session_id}/tool-grants/{grant_id}`，只允许会话所有者访问，授予和撤销都写审计。
+14. 新表 `action_grants`（架构 2.11 的 ActionGrant），智能体版本变化即失效。新增接口 `GET /sessions/{session_id}/tool-grants` 和 `DELETE /sessions/{session_id}/tool-grants/{grant_id}`，只允许会话所有者访问，授予和撤销都写审计。
 15. 界面：审批卡增加「本会话允许」按钮（`destructive` 工具不显示）。对话页增加「已放行的工具」列表，可以撤销。
 
 **F. 参数守卫（Runtime 行为变化）**
@@ -93,7 +93,7 @@
 - 管理员在线编辑守卫规则（Octop 存控制面）：本次只用随包规则。
 - 外部 Runtime（Codex、Claude Code）的工具调用。
 
-## 待确认的决定
+## 已确认的决定（全部采用推荐方案）
 
 1. **类型转换的范围**
    - 推荐：采用 hermes 的完整保守规则，即标量转换、JSON 字符串转容器、单值包数组，任何不确定都保留原值。
