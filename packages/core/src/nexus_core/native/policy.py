@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
                       'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script')
+#: Agent tool access levels (tool-call-hardening D11).
+TOOL_ACCESS_LEVELS = ('read_only', 'standard', 'strict')
 #: Builtin that pages through externalized tool output (P2). Its presence in a Run's bindings enables spilling.
 TOOL_OUTPUT_READER = 'read_tool_output'
 #: Hard cap on one externalized output; anything beyond it is not stored (keeps rows bounded).
@@ -60,6 +62,18 @@ class NativePolicy:
     # Streaming text is persisted as deltas in batches (P6). 0 ms restores one event per chunk.
     delta_flush_ms: int = 150
     delta_flush_chars: int = 256
+    # Tool-call hardening (openspec 2026-11-06-tool-call-hardening, G18).
+    #: `read_only` hides write/destructive tools; `standard` asks for destructive ones; `strict` asks for writes too.
+    tool_access: str = 'standard'
+    #: Public tool output allowed per model turn before later results are externalized; 0 turns it off.
+    tool_turn_budget_chars: int = 20000
+    #: Repeated identical tool calls: remind at this count, end the Run at the stop count; 0 turns each off.
+    tool_repeat_warn_at: int = 3
+    tool_repeat_stop_at: int = 8
+    #: Consecutive failures of one tool that end the Run; 0 turns it off.
+    tool_failure_stop_at: int = 5
+    #: Warn (never block) when tool output looks like an injected instruction.
+    tool_injection_scan: bool = True
 
     def __post_init__(self):
         if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
@@ -94,6 +108,16 @@ class NativePolicy:
         _check_int(self.summary_max_chars, 500, 32000, 'summary_max_chars')
         _check_int(self.delta_flush_ms, 0, 5000, 'delta_flush_ms')
         _check_int(self.delta_flush_chars, 1, 10000, 'delta_flush_chars')
+        if self.tool_access not in TOOL_ACCESS_LEVELS:
+            raise ValueError('tool_access must be read_only, standard or strict')
+        if self.tool_turn_budget_chars != 0:
+            _check_int(self.tool_turn_budget_chars, 2000, 500000, 'tool_turn_budget_chars')
+        for name in ('tool_repeat_warn_at', 'tool_repeat_stop_at', 'tool_failure_stop_at'):
+            _check_int(getattr(self, name), 0, 50, name)
+        if self.tool_repeat_warn_at and self.tool_repeat_stop_at and self.tool_repeat_warn_at >= self.tool_repeat_stop_at:
+            raise ValueError('tool_repeat_warn_at must be below tool_repeat_stop_at')
+        if type(self.tool_injection_scan) is not bool:
+            raise ValueError('Native switches must be boolean')
         for name in ('compact_high_ratio', 'compact_low_ratio'):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.1 <= value <= 1.0:

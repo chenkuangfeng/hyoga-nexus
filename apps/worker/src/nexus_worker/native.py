@@ -72,11 +72,16 @@ def configured_model(context, resolver):
 
 class ToolAccess:
     def __init__(self, store):
+        self._store = store
         self.authorize, self.start, self.denied = store.authorize, store.start, store.denied
         self.finish = store.finish_tool
         self.progress = store.tool_progress
         self.approval = store.approval
         self.spill = store.spill_tool_output
+
+    async def observe(self, invocation_id: str, kind: str, payload: dict) -> None:
+        """Run event about one tool call (`tool.injection_suspected`, `tool.guard_finding`)."""
+        await self._store.emit(kind, {**payload, 'invocation_id': invocation_id})
 
 
 #: Delay before a deferred delivery is offered again. Other sessions are not affected.
@@ -165,7 +170,8 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         gateway = AuthorizedToolGateway(registry, ToolAccess(store),
             {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
             session_id=str(context.session_id), tenant_id=str(context.tenant_id),
-            services=RunServices(store, context.progress.state), spill=spill)
+            services=RunServices(store, context.progress.state), spill=spill,
+            turn_budget=policy.tool_turn_budget_chars, injection_scan=policy.tool_injection_scan)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

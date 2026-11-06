@@ -28,6 +28,9 @@ LABELS = {
     'compact_low_ratio': '压缩后的目标上下文比例', 'summary_max_chars': '单条摘要字符上限',
     'compaction_model_profile_version_id': '压缩摘要使用的模型（空为智能体模型）',
     'delta_flush_ms': '流式文本合并时间窗口（毫秒，0 为逐块写入）', 'delta_flush_chars': '流式文本合并字符数',
+    'tool_access': '工具访问级别（read_only / standard / strict）', 'tool_turn_budget_chars': '每轮工具输出总上限（字符，0 为不限）',
+    'tool_repeat_warn_at': '重复工具调用提醒次数（0 为关闭）', 'tool_repeat_stop_at': '重复工具调用停止次数（0 为关闭）',
+    'tool_failure_stop_at': '同一工具连续失败停止次数（0 为关闭）', 'tool_injection_scan': '扫描工具输出中的疑似指令注入',
 }
 
 

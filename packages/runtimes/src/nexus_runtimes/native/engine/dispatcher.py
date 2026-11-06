@@ -36,6 +36,8 @@ class ToolDispatcher:
         Raises RuntimeFault for an invalid exit status or when the error budget is exhausted, as the engine did before.
         """
         continuations: list[str] = []
+        if hasattr(self.gateway, 'begin_turn'):
+            self.gateway.begin_turn()  # per-turn tool output budget (tool-call-hardening B6)
         async for index, result in execute_batch(calls, definitions, self.gateway, token, hook, turn, self.parallel):
             call = calls[index]
             if result.disposition == ToolDisposition.WAIT_APPROVAL:

@@ -20,10 +20,11 @@
 
 ## 2. 输出控制
 
-- [ ] 2.1 `definitions()` 按名排序；测试：绑定顺序不同，输出字节相同。
-- [ ] 2.2 `output.truncate` 头尾截断，用于截断上限与外置预览。
-- [ ] 2.3 每轮总预算：`begin_turn()`、`tool_turn_budget_chars`，引擎每轮调用；测试超预算外置并能分页读回。
-- [ ] 2.4 `threats.scan` 与告警标记、`tool.injection_suspected` 事件；开关 `tool_injection_scan`。
+- [x] 2.1 `definitions()` 按名排序；测试：绑定顺序不同，输出字节相同。
+- [x] 2.2 `output.truncate` 头尾截断，用于截断上限与外置预览。
+- [x] 2.3 每轮总预算：`begin_turn()`、`tool_turn_budget_chars`，引擎每轮调用；测试超预算外置并能分页读回。
+- [x] 2.4 `threats.scan` 与告警标记、`tool.injection_suspected` 事件；开关 `tool_injection_scan`。
+  - `nexus_tools.output`、`nexus_tools.threats`（另加两条中文特征），网关 `begin_turn` 由 `ToolDispatcher` 每轮调用；worker 的 `ToolAccess.observe` 写 Run 事件。`NativePolicy` 一次加入 G18 的全部字段（含第 3、4 节用到的阈值与访问级别）并补齐设置页标签。预览长度不足 400 字符时只保留头部。全量 879 通过。
 
 ## 3. 循环检测（`nexus_runtimes`）
 
