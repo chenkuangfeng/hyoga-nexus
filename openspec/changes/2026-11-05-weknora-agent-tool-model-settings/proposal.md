@@ -10,7 +10,7 @@
 - 设置页的 `models` 分区不在 `config/phase1.ts` 的已实现集合中，显示占位页；`ModelSettings.vue` 与 `ModelEditorDialog.vue` 调用 WeKnora 的 `/api/v1/models`，而 Nexus 的模型接口是 `/api/v1/tenants/{tenant_id}/model-settings`（供应商 + 模型档案，见 `openspec/specs/model-management/spec.md`）。
 - 用户只能通过对话页选择已发布智能体，无法在界面上创建、编辑智能体，也无法为智能体选择工具和生成参数。
 
-参考源码：WeKnora `frontend/`，固定版本 `e1f9a6166`（本地副本 `/project/opensource/knowledge-base/WeKnora`）。
+参考源码：WeKnora `frontend/`，固定版本 `e1f9a6166`（本地副本 `/project/opensource/general-agents/WeKnora`）。
 - 智能体：`views/agent/AgentList.vue`、`views/agent/AgentEditorModal.vue`、`api/agent/index.ts`；后端 `internal/handler/custom_agent.go`（`GET /agents/tools` 的目录形态）。
 - 模型：`views/settings/ModelSettings.vue`、`components/ModelEditorDialog.vue`、`api/model/index.ts`。
 

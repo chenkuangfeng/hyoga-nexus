@@ -12,7 +12,7 @@
 - `apps/web/src/views/chat/` 已是 WeKnora 前端副本（`index.vue` 与 `components/` 与参考版本仅相差 Fork 键名、工具卡片等少量差异），但它只被助手面板引用，且调用的是 WeKnora 接口（`/api/v1/sessions`、`/api/v1/agent-chat`、`api/chat/*` 等），Nexus 后端不提供这些接口。
 - 已实现的 `/platform/native` 是纯文本运行页（见 `2026-11-04-native-run-workbench`），与 WeKnora 的对话交互不一致。用户决定：主聊天路由改为 WeKnora 风格的对话页，接入 Nexus 的会话与 Run API。
 
-参考源码：WeKnora `frontend/`，固定版本 `e1f9a6166`（本地副本 `/project/opensource/knowledge-base/WeKnora`，远端 https://github.com/Tencent/WeKnora/tree/e1f9a6166/frontend）。
+参考源码：WeKnora `frontend/`，固定版本 `e1f9a6166`（本地副本 `/project/opensource/general-agents/WeKnora`，远端 https://github.com/Tencent/WeKnora/tree/e1f9a6166/frontend）。
 
 ## 范围
 

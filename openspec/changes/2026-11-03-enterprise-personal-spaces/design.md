@@ -301,7 +301,7 @@ tenant_memberships (tenant_id, user_id, role, source=manual)   ← 空间身份
 
 ## 9. WeKnora 对应关系（第 1 阶段）
 
-参考版本：WeKnora `e1f9a6166`（`/project/opensource/knowledge-base/WeKnora`）。本节优先于第 1–8 节中与之冲突的表述（登录标识、角色名、手机号、组织名），见 `proposal.md` 的"确认结果"。
+参考版本：WeKnora `e1f9a6166`（`/project/opensource/general-agents/WeKnora`）。本节优先于第 1–8 节中与之冲突的表述（登录标识、角色名、手机号、组织名），见 `proposal.md` 的"确认结果"。
 
 命名约定：WeKnora 的 `organization`（跨空间共享组）在本仓库统一称为**共享空间**（`shared_space`）。表、接口、路由、代码名都使用 `shared_space`，不沿用 WeKnora 的 `organization`。这是对"严格遵从 WeKnora"的明确偏离，见 9.5。本仓库的部门树沿用 `org_units`，界面名称为"部门架构"。
 
