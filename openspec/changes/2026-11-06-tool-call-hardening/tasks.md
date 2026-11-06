@@ -28,8 +28,9 @@
 
 ## 3. 循环检测（`nexus_runtimes`）
 
-- [ ] 3.1 `tool_guardrails` 纯状态机与单元测试（连续相同、周期 2–4、失败计数、写类工具成功清零、用户输入清零、阈值为 0 关闭）。
-- [ ] 3.2 接入 `ToolDispatcher`：提醒作为 continuation，停止抛 `tool_loop_detected`；状态随进度持久化，恢复后继续计数。
+- [x] 3.1 `tool_guardrails` 纯状态机与单元测试（连续相同、周期 2–4、失败计数、写类工具成功清零、用户输入清零、阈值为 0 关闭）。
+- [x] 3.2 接入 `ToolDispatcher`：提醒作为 continuation，停止抛 `tool_loop_detected`；状态随进度持久化，恢复后继续计数。
+  - 提醒在相同签名第 `warn_at` 次及其后两次时各发一次（默认第 3、5 次），第 `stop_at` 次停止；同一工具连续失败第 `warn_at` 次提醒、第 `failure_stop_at` 次停止。用户追加指令（steer）或带用户答复恢复时清零。审批恢复路径（`recovery.resume_tools`）只执行挂起的调用，不计入检测。测试见 `tests/test_tool_call_hardening.py` 第 3 节（含 8 次相同调用以 `tool_loop_detected` 结束的端到端用例）。
 
 ## 4. 风险与访问级别
 

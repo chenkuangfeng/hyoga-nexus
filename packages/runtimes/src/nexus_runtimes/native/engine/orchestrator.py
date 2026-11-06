@@ -62,7 +62,10 @@ class RunOrchestrator:
         self.transforms = transforms or HookRegistry()
         # Builds the configured compaction model per summary call (P3); None means the Run's own model.
         self.compaction_model_factory = compaction_model_factory
-        self.dispatcher = ToolDispatcher(tools, parallel=self.policy.parallel_reads)
+        self.dispatcher = ToolDispatcher(tools, parallel=self.policy.parallel_reads,
+                                         repeat_warn_at=self.policy.tool_repeat_warn_at,
+                                         repeat_stop_at=self.policy.tool_repeat_stop_at,
+                                         failure_stop_at=self.policy.tool_failure_stop_at)
         self.turn_executor = TurnExecutor(self.model, self.store, self.policy)
         self.context = ContextAssembler(self.model, self.store, self.policy, compaction_model_factory=compaction_model_factory)
 
@@ -101,6 +104,8 @@ class RunOrchestrator:
         started, previous_seconds = time.monotonic(), progress.active_seconds
         state = progress.state
         history = list(messages) if state.get('pending_calls') else list(resolve_incomplete_exchanges(messages))
+        if history and history[-1].role == 'user':
+            state.pop('tool_guard', None)  # resumed with the user's answer: earlier repeats no longer count
         judge = CompletionJudge(self.policy, state)
         working = WorkingMemory(state, self.policy)
         done = list(state.get('done_prompts', []))
@@ -156,6 +161,8 @@ class RunOrchestrator:
                     if hasattr(self.store, 'drain_steer'):
                         for message in await self.store.drain_steer():
                             history.append(message)
+                            # New user direction clears tool-loop counts (tool-call-hardening C).
+                            state.pop('tool_guard', None)
                     history, removed = await self.context.compact(history, token=token, budget=budget, progress=progress)
                     progress.turns += 1
                     turn = active_turn = progress.turns

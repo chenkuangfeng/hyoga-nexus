@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, ToolDisposition
 
+from .tool_guardrails import ToolLoopGuard
 from .tools import execute_batch
 
 
@@ -26,9 +27,18 @@ class DispatchResult:
 class ToolDispatcher:
     """Execute one turn's tool calls in model order and project each result into the transcript."""
 
-    def __init__(self, gateway, *, parallel: bool):
+    def __init__(self, gateway, *, parallel: bool, repeat_warn_at: int = 0, repeat_stop_at: int = 0,
+                 failure_stop_at: int = 0):
         self.gateway = gateway
         self.parallel = parallel
+        #: Loop detection thresholds (tool-call-hardening C); all 0 turns the guard off.
+        self.limits = (repeat_warn_at, repeat_stop_at, failure_stop_at)
+
+    def guard(self, state) -> ToolLoopGuard | None:
+        warn_at, stop_at, failure_stop_at = self.limits
+        if not (warn_at or stop_at or failure_stop_at):
+            return None
+        return ToolLoopGuard(state, warn_at=warn_at, stop_at=stop_at, failure_stop_at=failure_stop_at)
 
     async def dispatch(self, calls, definitions, token, hook, turn, *, append, state, progress, budget, working) -> DispatchResult:
         """Run the batch; stop at the first terminal disposition and mark the remaining calls as not executed.
@@ -38,6 +48,8 @@ class ToolDispatcher:
         continuations: list[str] = []
         if hasattr(self.gateway, 'begin_turn'):
             self.gateway.begin_turn()  # per-turn tool output budget (tool-call-hardening B6)
+        guard = self.guard(state)
+        side_effects = {definition.name: definition.side_effects for definition in definitions}
         async for index, result in execute_batch(calls, definitions, self.gateway, token, hook, turn, self.parallel):
             call = calls[index]
             if result.disposition == ToolDisposition.WAIT_APPROVAL:
@@ -65,6 +77,13 @@ class ToolDispatcher:
                 return DispatchResult(terminal=True, outcome=outcome)
             if result.continuation:
                 continuations.append(result.continuation)
+            if guard is not None:
+                decision = guard.observe(call.name, call.arguments, result.data, failed=bool(result.error_code),
+                                         side_effects=side_effects.get(call.name, True))
+                if decision.stop:
+                    raise RuntimeFault(decision.stop)
+                if decision.notice:
+                    continuations.append(decision.notice)
             if progress.errors >= budget.max_errors:
                 raise RuntimeFault('budget_exhausted')
         return DispatchResult(terminal=False, continuations=continuations)

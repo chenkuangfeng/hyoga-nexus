@@ -17,6 +17,11 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
+TOOL_RISKS = ('read', 'probe', 'write', 'destructive')
+RISK_LEVELS = {'read': 'low', 'probe': 'low', 'write': 'medium', 'destructive': 'high'}
+
+
+@dataclass(frozen=True)
 class ToolDefinition:
     """Authorized tool schema and execution properties exposed for one model turn.
 
@@ -31,8 +36,11 @@ class ToolDefinition:
     read_only: bool = False
     idempotent: bool = False
     requires_approval: bool = False
-    # Coarse impact class shown to reviewers and used by the gateway; it never widens access.
-    risk_level: Literal['low', 'medium', 'high'] = 'medium'
+    #: Impact class (openspec 2026-11-06-tool-call-hardening D10; WeKnora `policy.go`): `read` / `probe` change
+    #: nothing outside the Run, `write` changes data, `destructive` may destroy data or run arbitrary code.
+    #: Combined with the agent's access level by `nexus_tools.policy.decide`; it never widens access.
+    #: Omitted means `read` for a read-only tool and `write` otherwise.
+    risk: Literal['read', 'probe', 'write', 'destructive'] | None = None
     # Capabilities the executing backend must provide (for example 'sandbox'); empty means none.
     required_capabilities: tuple[str, ...] = ()
 
@@ -41,8 +49,17 @@ class ToolDefinition:
         # so it must not carry side effects or require approval.
         if self.read_only and (self.side_effects or self.requires_approval):
             raise ValueError(f'Read-only tool {self.name!r} must not declare side effects or approval')
-        if self.risk_level not in ('low', 'medium', 'high'):
-            raise ValueError(f'Tool {self.name!r} has unknown risk level {self.risk_level!r}')
+        if self.risk is None:
+            object.__setattr__(self, 'risk', 'read' if self.read_only else 'write')
+        if self.risk not in TOOL_RISKS:
+            raise ValueError(f'Tool {self.name!r} has unknown risk {self.risk!r}')
+        if self.read_only and self.risk not in ('read', 'probe'):
+            raise ValueError(f'Read-only tool {self.name!r} must be read or probe risk')
+
+    @property
+    def risk_level(self) -> str:
+        """Legacy three-level label derived from `risk` (kept one release for catalog clients)."""
+        return RISK_LEVELS[self.risk]
 
 
 class ToolDisposition(StrEnum):
