@@ -203,6 +203,23 @@
         </div>
       </div>
 
+      <!-- 知识库（openspec 2026-11-06-knowledge-base K1.9）：绑定后智能体获得 search_knowledge 等工具 -->
+      <div v-show="currentSection === 'knowledge'" class="section">
+        <div class="section-header">
+          <h2>知识库</h2>
+          <p class="section-description">选择智能体可检索的知识库。保存时会一并绑定知识库检索工具；每次检索仍按使用者此刻的权限过滤。</p>
+        </div>
+        <t-checkbox-group :value="form.knowledge_bases.map(kb => kb.id)" class="kb-bind-list"
+          @change="onKnowledgeChange">
+          <t-checkbox v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
+            {{ kb.name }}
+            <span v-if="kb.shared" class="kb-bind-tag">共享</span>
+            <span class="kb-bind-desc">{{ kb.description || `${kb.knowledge_count} 个文档` }}</span>
+          </t-checkbox>
+        </t-checkbox-group>
+        <p v-if="!knowledgeBases.length" class="section-description">当前空间还没有知识库，可在「知识库」页面创建。</p>
+      </div>
+
       <!-- 工具配置 -->
       <div v-show="currentSection === 'tools'" class="section">
         <div class="section-header">
@@ -333,6 +350,7 @@ import {
   updateNexusAgent, type AgentToolCatalog, type AgentToolEntry, type NativeDefaults, type NexusAgent,
 } from '@/api/nexus-agents'
 import { getModelSettings, type ModelSettingsView } from '@/api/nexus-models'
+import { listKnowledgeBases } from '@/api/knowledge-base'
 import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@/views/settings/nexusModelCards'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_TIMEOUT_SECONDS, MAX_OUTPUT_TOKENS_LIMIT, MAX_ROUNDS_LIMIT, REASONING_EFFORTS,
@@ -371,9 +389,29 @@ const navGroups = computed(() => [
   {
     key: 'capability', label: t('agentEditor.navGroups.capability'), items: [
       { key: 'tools', icon: 'tools', label: t('agent.editor.toolsConfig'), badge: form.allowed_tools.length || undefined },
+      { key: 'knowledge', icon: 'folder', label: '知识库', badge: form.knowledge_bases.length || undefined },
     ],
   },
 ])
+
+// Knowledge bases the agent may bind: the space's own and those shared into it.
+const knowledgeBases = ref<Array<{ id: string, name: string, description: string, shared: boolean, tenant_id: string,
+  knowledge_count: number }>>([])
+async function loadKnowledgeBases() {
+  try {
+    const res: any = await listKnowledgeBases()
+    knowledgeBases.value = res?.data || []
+  } catch {
+    knowledgeBases.value = []
+  }
+}
+void loadKnowledgeBases()
+
+function onKnowledgeChange(ids: Array<string | number | boolean>) {
+  const chosen = new Set(ids.map(String))
+  form.knowledge_bases = knowledgeBases.value.filter(kb => chosen.has(kb.id))
+    .map(kb => ({ id: kb.id, source_tenant_id: kb.tenant_id }))
+}
 
 // WeKnora's "default / custom" radio for max tokens; 0 in the form means "default".
 const maxTokensMode = computed<'default' | 'custom'>({
@@ -894,6 +932,10 @@ async function save() {
 
 // 推荐问题列表
 
+.kb-bind-list { display: flex; flex-direction: column; gap: 10px; }
+.kb-bind-tag { margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 12px;
+  color: var(--td-brand-color); background: var(--td-brand-color-1); }
+.kb-bind-desc { margin-left: 8px; color: var(--td-text-color-secondary); font-size: 12px; }
 .tools-overview {
   display: flex;
   flex-direction: column;

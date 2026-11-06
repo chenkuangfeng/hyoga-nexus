@@ -92,3 +92,16 @@ test('tool access is read from behavior and written only when set', () => {
   assert.deepEqual(draft.budgets.behavior, { tool_access: 'read_only', x: 1 })
   assert.equal(draftFromForm(formFromAgent(agent({ budgets: {} })), agent({ budgets: {} }), null, TENANT).budgets.behavior, undefined)
 })
+
+test('knowledge bases are bound together with the knowledge tools', () => {
+  const base = agent()
+  const form = { ...formFromAgent(base), knowledge_bases: [{ id: 'kb-1', source_tenant_id: TENANT }] }
+  const draft = draftFromForm(form, base, null, TENANT)
+  const ids = draft.resource_bindings.map(b => `${b.kind}:${b.resource_id}`)
+  assert.deepEqual(ids.filter(id => id.startsWith('knowledge_base')), ['knowledge_base:kb-1'])
+  assert.ok(['search_knowledge', 'read_document', 'list_documents'].every(name => ids.includes(`tool:${name}`)))
+  const back = formFromAgent({ ...base, resource_bindings: draft.resource_bindings as never })
+  assert.deepEqual(back.knowledge_bases, [{ id: 'kb-1', source_tenant_id: TENANT }])
+  const cleared = draftFromForm({ ...back, knowledge_bases: [] }, { ...base, resource_bindings: draft.resource_bindings as never }, null, TENANT)
+  assert.equal(cleared.resource_bindings.some(b => b.kind === 'knowledge_base'), false)
+})

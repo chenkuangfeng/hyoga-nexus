@@ -34,6 +34,8 @@ export interface AgentEditorForm {
   /** Seconds; null means "follow the default". */
   llm_call_timeout: number | null
   allowed_tools: string[]
+  /** Bound knowledge bases (openspec 2026-11-06-knowledge-base K1.9); `source_tenant_id` is the base's space. */
+  knowledge_bases: KnowledgeBinding[]
   /** `budgets.memory.enabled`: false turns long-term memory off for this agent; true inherits. */
   memory_enabled: boolean
   /** `budgets.memory.recall`: false stops per-turn memory recall (openspec 2026-11-06-memory-evolution D3). */
@@ -41,6 +43,11 @@ export interface AgentEditorForm {
   /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
   tool_access: ToolAccess
 }
+
+export interface KnowledgeBinding { id: string, source_tenant_id: string }
+
+/** Knowledge tools bound together with the first knowledge base (publishing requires `search_knowledge`). */
+export const KNOWLEDGE_TOOLS = ['search_knowledge', 'read_document', 'list_documents'] as const
 
 export const TOOL_ACCESS_LEVELS = ['read_only', 'standard', 'strict'] as const
 export type ToolAccess = (typeof TOOL_ACCESS_LEVELS)[number]
@@ -89,6 +96,8 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: typeof budgets.model_timeout_seconds === 'number' ? budgets.model_timeout_seconds : null,
     allowed_tools: (agent.resource_bindings || []).filter(b => b.kind === 'tool').map(b => b.resource_id),
+    knowledge_bases: (agent.resource_bindings || []).filter(b => b.kind === 'knowledge_base')
+      .map(b => ({ id: b.resource_id, source_tenant_id: b.source_tenant_id })),
     memory_enabled: memoryOf(budgets).enabled !== false,
     memory_recall: memoryOf(budgets).recall !== false,
     tool_access: accessOf(budgets),
@@ -109,6 +118,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: null,
     allowed_tools: [...defaultTools],
+    knowledge_bases: [],
     memory_enabled: true,
     memory_recall: true,
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
@@ -162,9 +172,17 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   if (form.tool_access !== 'standard' || 'tool_access' in behavior) behavior.tool_access = form.tool_access
   if (Object.keys(behavior).length) budgets.behavior = behavior
 
-  const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool')
-  const tools: AgentDraftInput['resource_bindings'] = [...new Set(form.allowed_tools)].map(name => ({
+  const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool' && b.kind !== 'knowledge_base')
+  // Binding a knowledge base needs search_knowledge (the server refuses to publish otherwise); the other
+  // knowledge tools are added with it so the agent can read and list what it finds.
+  const toolNames = form.knowledge_bases.length
+    ? [...new Set([...form.allowed_tools, ...KNOWLEDGE_TOOLS])]
+    : [...new Set(form.allowed_tools)]
+  const tools: AgentDraftInput['resource_bindings'] = toolNames.map(name => ({
     kind: 'tool', resource_id: name, resource_version_id: 'v1', source_tenant_id: tenantId, config: {},
+  }))
+  const bases: AgentDraftInput['resource_bindings'] = form.knowledge_bases.map(kb => ({
+    kind: 'knowledge_base', resource_id: kb.id, resource_version_id: '', source_tenant_id: kb.source_tenant_id, config: {},
   }))
   return {
     name: form.name.trim(),
@@ -173,6 +191,6 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
     instructions: form.system_prompt,
     model_profile_version_id: form.model_id,
     budgets,
-    resource_bindings: [...kept.map((b: AgentResourceBinding) => ({ ...b })), ...tools],
+    resource_bindings: [...kept.map((b: AgentResourceBinding) => ({ ...b })), ...tools, ...bases],
   }
 }

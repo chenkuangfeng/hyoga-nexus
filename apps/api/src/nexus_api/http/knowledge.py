@@ -263,7 +263,7 @@ async def search(tenant_id: UUID, body: SearchInput, request: Request, principal
 
 class ShareInput(BaseModel):
     target_tenant_id: UUID
-    permissions: list[Literal['read', 'use']] = Field(default_factory=lambda: ['read'])
+    permissions: list[Literal['read', 'use']] = Field(default_factory=lambda: ['read', 'use'])
 
 
 @router.get('/bases/{kb_id}/shares')

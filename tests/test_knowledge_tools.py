@@ -121,3 +121,35 @@ def test_knowledge_tools_need_a_bound_base_and_bases_need_the_search_tool(kb_env
     with pytest.raises(InvalidConfiguration):
         _agent(factory, tenant, [bound], tools=['list_documents'])
     assert {e.name: e.group for e in builtin_catalog()}['search_knowledge'] == 'knowledge'
+
+
+def test_shared_base_can_be_bound_by_another_space_and_loses_access_on_revoke(kb_env):
+    from nexus_platform.authz.resources import grant_resource, revoke_resource_grant
+    from nexus_platform.knowledge import search as ksearch
+
+    factory, tenant, user_id, bound, _ = kb_env
+    with factory() as db:
+        target = create_tenant(db, OWNER, 'Consumer space')
+    with factory() as db:
+        grant = grant_resource(db, OWNER, source_tenant_id=tenant.id, target_tenant_id=target.id,
+                               kind='knowledge_base', resource_id=str(bound), permissions=['read', 'use'])
+    with factory() as db:
+        with db.begin():
+            for name in TOOLS:
+                register_resource(db, tenant_id=target.id, kind='tool', resource_id=name, version_id='v1')
+        _, model = create_model_profile(db, OWNER, target.id, name=f'm-{uuid4()}', provider='test', model_name='fake', options={})
+        bindings = [{'kind': 'tool', 'resource_id': n, 'resource_version_id': 'v1', 'source_tenant_id': str(target.id),
+                     'config': {}} for n in TOOLS]
+        bindings.append({'kind': 'knowledge_base', 'resource_id': str(bound), 'resource_version_id': '',
+                         'source_tenant_id': str(tenant.id), 'config': {}})
+        agent = create_agent(db, OWNER, target.id, name=f'Shared {uuid4()}', description='', runtime_type='native',
+                             instructions='x', model_profile_version_id=model.id, budgets={'max_tokens': 1000},
+                             bindings=bindings)
+    with factory() as db:
+        version = publish_agent(db, OWNER, target.id, agent.id)
+    _, context, store = _run(factory, target, version)
+    assert '[ID:1]' in asyncio.run(store.search_knowledge('安装', [], 5, context.progress.state))
+    with factory() as db:
+        revoke_resource_grant(db, OWNER, grant.id)
+    assert 'No relevant passages' in asyncio.run(store.search_knowledge('安装', [], 5, {})) \
+        or 'No knowledge base' in asyncio.run(store.search_knowledge('安装', [], 5, {}))
