@@ -11,7 +11,7 @@
 - 前端设置页的「记忆」（空间）和「我的记忆」（个人）是 WeKnora 副本（`MemoryWorkspaceSettings.vue`、`MemorySettings.vue`），调用的是 Nexus 不提供的 `/api/v1/memory/*`。它们不在 `config/phase1.ts` 的已实现分区里，所以只显示占位页。
 - 路由使用的智能体编辑器 `NexusAgentEditorModal.vue` 没有记忆开关。WeKnora 副本 `AgentEditorModal.vue` 有 `memory_enabled` 开关，但不在路由上，后端也不读取这个值。
 
-参考源码：WeKnora 固定版本 `e1f9a6166`（本地副本 `/project/opensource/general-agents/WeKnora`）。
+参考源码：WeKnora 固定版本 `e1f9a6166`（本地副本 `/project/opensource/agents/WeKnora`）。
 - 三级开关：`internal/types/memory.go`（`MemoryConfig.Enabled`、`WriteMode`、`MemorySubject.Enabled`、`ApplyAgentMemoryPreference`）、`internal/types/agent.go:121`（`MemoryEnabled *bool`，`nil` 表示继承）。
 - 生效判断：`internal/application/service/memory/service.go` `enabledScope`。依次检查空间、智能体、个人，任一项关闭就视为不可用。
 - 工具跟随开关：`internal/application/service/agent_service.go:1325`。记忆可用时才注册 `search_memory`；即使工具允许列表里还写着它，记忆关闭时也会被移除。
