@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { RunEvent } from '../api/native-run-types.ts'
-import { toAgentEventStream } from './nexusAgentEvents.ts'
+import { toAgentEventStream, usedMemoriesFromEvents } from './nexusAgentEvents.ts'
 
 let seq = 0
 function ev(event_type: string, payload: Record<string, unknown> = {}): RunEvent {
@@ -102,4 +102,38 @@ test('a failed run ends with its failure text as the answer, like WeKnora run er
   assert.equal(last.content, 'failed: model_timeout')
   assert.equal(last.done, true)
   assert.equal(toAgentEventStream(failed, 'failed').length, 1)
+})
+
+test('a proposed memory draft becomes a reviewable card and closes the open answer', () => {
+  const stream = toAgentEventStream([
+    ev('message.delta', { text: '我记一下', turn: 0 }),
+    ev('memory.draft_proposed', {
+      draft_id: 'd1', kind: 'memory', diff: '构建改用 bazel', topic: '构建',
+      base_entry: { id: 'm1', title: '构建', version: 2 },
+      annotations: { conflict: [{ entry_id: 'm9', title: '旧构建方式' }] },
+    }),
+  ], 'running')
+  assert.equal((stream[0] as { done: boolean }).done, true)
+  assert.deepEqual(stream[1], {
+    type: 'memory_draft', draft_id: 'd1', kind: 'memory', diff: '构建改用 bazel', topic: '构建',
+    base_entry: { id: 'm1', title: '构建', version: 2 }, conflicts: ['旧构建方式'],
+  })
+})
+
+test('a new-entry draft has no base entry and malformed hints are ignored', () => {
+  const [card] = toAgentEventStream([ev('memory.draft_proposed', { draft_id: 'd2', diff: 'x', annotations: { conflict: 'no' } })], 'running')
+  assert.deepEqual(card, { type: 'memory_draft', draft_id: 'd2', kind: 'memory', diff: 'x', topic: '', base_entry: null, conflicts: [] })
+})
+
+test('memory.used events are collected per entry and stay out of the timeline', () => {
+  const events = [
+    ev('memory.used', { source: 'resident', entries: [{ id: 'p1', title: '风格', kind: 'profile', version: 1 }] }),
+    ev('memory.used', { source: 'read', entries: [{ id: 'm1', title: '构建', kind: 'memory', version: 2 }] }),
+    ev('memory.used', { source: 'search', entries: [{ id: 'm1', title: '构建', kind: 'memory', version: 2 }, null] }),
+  ]
+  assert.deepEqual(toAgentEventStream(events, 'running'), [])
+  assert.deepEqual(usedMemoriesFromEvents(events), [
+    { id: 'p1', kind: 'profile', content: '风格' },
+    { id: 'm1', kind: 'memory', content: '构建' },
+  ])
 })

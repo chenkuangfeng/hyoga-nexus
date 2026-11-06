@@ -66,7 +66,7 @@ class Extractor(Protocol):
 
     def __call__(self, *, messages: list[rules.Message], related: list[dict[str, Any]], model_version_id: UUID,
                  tenant_id: UUID, owner_id: UUID, context: list[rules.Message],
-                 rejected_topics: list[str]) -> Any: ...
+                 rejected_topics: list[str], instructions: str) -> Any: ...
 
 
 def _message(row: MessageRecord) -> rules.Message:
@@ -277,6 +277,8 @@ class _Plan:
     owner_id: UUID
     context: list[rules.Message] = field(default_factory=list)
     rejected_topics: list[str] = field(default_factory=list)
+    #: The space's custom extraction rules (stage 2, B6), '' when none.
+    instructions: str = ''
 
 
 def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
@@ -309,7 +311,9 @@ def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
     related = rules.rank_related(sources, candidates)
     rejected = repo.rejected_topics(job.tenant_id, job.owner_user_id, utc_now() - rules.REJECTED_TOPIC_WINDOW,
                                     rules.REJECTED_TOPIC_LIMIT)
-    return _Plan(None, sources, related, version_id, job.tenant_id, job.owner_user_id, read_only, rejected)
+    from .switches import extract_instructions
+    return _Plan(None, sources, related, version_id, job.tenant_id, job.owner_user_id, read_only, rejected,
+                 extract_instructions(db, job.tenant_id))
 
 
 def _extraction_step(factory: Callable[[], Session], job_id: UUID, extractor: Extractor, now: datetime) -> str:
@@ -324,7 +328,7 @@ def _extraction_step(factory: Callable[[], Session], job_id: UUID, extractor: Ex
     try:
         raw = extractor(messages=plan.messages, related=plan.related, model_version_id=plan.version_id,
                         tenant_id=plan.tenant_id, owner_id=plan.owner_id, context=plan.context,
-                        rejected_topics=plan.rejected_topics)
+                        rejected_topics=plan.rejected_topics, instructions=plan.instructions)
     except PlatformError:
         # The owner's key or the model stopped being usable between planning and the call.
         return _complete_skipped(factory, job_id, 'model_unavailable', now)
@@ -419,7 +423,7 @@ def _shortfall(outcome: dict[str, Any]) -> int:
 
 
 def _evict_capture_entries(db: Session, job: MemoryCaptureJobRecord, *, needed: int) -> int:
-    """Archive the owner's oldest capture-origin entries until `needed` characters are freed.
+    """Archive the owner's least useful capture-origin entries until `needed` characters are freed.
 
     Only entries whose current version came from a capture draft are candidates; hand-written
     entries are never evicted. Archiving keeps the immutable history. Returns characters freed.
@@ -435,7 +439,9 @@ def _evict_capture_entries(db: Session, job: MemoryCaptureJobRecord, *, needed: 
         .join(MemoryDraftRecord, MemoryDraftRecord.id == MemoryVersionRecord.source_draft_id)
         .where(MemoryEntryRecord.tenant_id == job.tenant_id, MemoryEntryRecord.owner_user_id == job.owner_user_id,
                MemoryEntryRecord.active.is_(True), MemoryDraftRecord.origin == 'capture')
-        .order_by(MemoryVersionRecord.created_at)).scalars().all()
+        # Stage 2 (B4): least important first, then least recently used (never used first), then oldest.
+        .order_by(MemoryEntryRecord.importance, MemoryEntryRecord.last_used_at.is_not(None),
+                  MemoryEntryRecord.last_used_at, MemoryVersionRecord.created_at)).scalars().all()
     freed = 0
     for entry_id in candidates:
         if freed >= needed:

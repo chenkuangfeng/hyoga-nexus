@@ -54,3 +54,14 @@ test('copy as markdown lists turns under the title', () => {
   const rows = buildChatRows([msg('user', 'Q', 'r1'), msg('assistant', 'A', 'r1')], new Map())
   assert.equal(transcriptMarkdown('T', rows, { user: 'User', assistant: 'Assistant' }), '# T\n\n## User\n\nQ\n\n## Assistant\n\nA\n')
 })
+
+test('assistant rows carry the memories their Run used', () => {
+  const messages = [msg('user', '你好', 'r1'), msg('assistant', '好的', 'r1')]
+  const events = new Map([['r1', [
+    ev('r1', 'memory.used', { source: 'resident', entries: [{ id: 'p1', title: '风格', kind: 'profile', version: 1 }] }, 1),
+    ev('r1', 'run.completed', {}, 2),
+  ]]])
+  const [, row] = buildChatRows(messages, events)
+  assert.equal(row.role, 'assistant')
+  assert.deepEqual(row.role === 'assistant' ? row.used_memories : null, [{ id: 'p1', kind: 'profile', content: '风格' }])
+})

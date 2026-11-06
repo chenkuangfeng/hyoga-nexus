@@ -164,7 +164,7 @@ class ExecutionPreparer:
                         tuple(ToolCall(**call) for call in metadata.get('tool_calls', [])), metadata.get('tool_call_id'), row['id']))
                 checkpoint = db.get(WorkingCheckpointRecord, run.session_id)
                 system = version.instructions
-                from nexus_platform.memory.snapshots import session_index
+                from nexus_platform.memory.snapshots import session_snapshot
                 from nexus_platform.memory.switches import memory_state
                 from nexus_memory.switches import MEMORY_TOOL_NAMES
                 # Memory switches (openspec 2026-11-05-memory-switches): when the space, the member or the
@@ -172,10 +172,12 @@ class ExecutionPreparer:
                 # snapshot is kept so turning memory back on reuses it.
                 memory_on = memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
                                          agent_budgets=version.budgets).available
-                published_index = session_index(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
-                    session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', '')) if memory_on else ''
+                snapshot = session_snapshot(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                    session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', '')) if memory_on else None
+                published_index = snapshot.index_text if snapshot is not None else ''
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
+
                 if db.scalar(select(ResourceBindingRecord.id).where(
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'skill').limit(1)):
                     from nexus_platform.skills.service import session_index as skill_index
@@ -211,6 +213,9 @@ class ExecutionPreparer:
                 run.started_at = run.started_at or utc_now()
                 run.lease_owner, run.lease_until = worker_id, task.lease_until
                 append_event(db, run.id, 'run.started', {'status': 'running', 'attempt': run.attempt})
+                if snapshot is not None and snapshot.resident_entries:
+                    # Stage 2 (B5): every Run that injects the resident profile block reports the entries it carried.
+                    append_event(db, run.id, 'memory.used', {'source': 'resident', 'entries': list(snapshot.resident_entries)})
                 return ExecutionContext(run.id, run.session_id, run.tenant_id, run.principal_id,
                     principal_for_user(db, user.id), version.runtime_type, profile.provider, model.model_name,
                     merged_model_options(model.options, version.budgets), credential, (ModelMessage('system', system), *history), bindings,

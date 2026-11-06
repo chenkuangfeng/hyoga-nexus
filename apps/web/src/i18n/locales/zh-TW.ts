@@ -2437,6 +2437,23 @@ export default {
       collapse: '收起',
       expand: '展開'
     },
+    memoryDraft: {
+      title: '記憶草稿',
+      newEntry: '新記憶',
+      editsEntry: '更新既有記憶：{title}',
+      conflictHint: '可能與以下記憶衝突：{titles}',
+      titleLabel: '標題',
+      titlePlaceholder: '為這條記憶取一個標題',
+      publish: '發布',
+      reject: '不保存',
+      published: '已發布',
+      rejected: '未保存',
+      handled: '已在別處處理',
+      checking: '正在讀取狀態…',
+      failed: '操作失敗，請重試',
+      titleRequired: '請填寫標題',
+      kinds: { memory: '記憶', sop: '操作步驟', profile: '畫像' },
+    },
     toolApproval: {
       title: '人工審核',
       toolDescription: '工具說明',

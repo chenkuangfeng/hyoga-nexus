@@ -3,7 +3,10 @@
 The published-memory index in the system prompt is frozen per session: the first Run stores it and every
 later Run in that session reuses the stored text, so the prompt prefix does not change when memory changes.
 New published entries reach the session only after an explicit refresh, which deletes the stored row.
-Bodies are never frozen; the model still reads them by ID through `read_memory`.
+Since openspec 2026-11-06-memory-evolution stage 2 the snapshot also carries a capacity line and the
+bodies of `profile` entries (the resident block, at most 1000 characters); other bodies are still read
+by ID through `read_memory`. The resident entries are stored with the snapshot so each Run can report
+them in a `memory.used` event.
 
 All functions take the caller's transaction and never commit.
 """
@@ -21,22 +24,45 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.errors import NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.memory.repository import SqlMemoryRepository
-from nexus_platform.memory.service import index as memory_index
+from nexus_memory import service as memory_rules
 from nexus_platform.persistence.models import SessionMemorySnapshotRecord, SessionRecord
 
 
 def version_key(db: Session, tenant_id: UUID, owner_id: UUID) -> str:
-    """Fingerprint of the owner's published entries (id, current version, enabled, validity end).
+    """Fingerprint of the owner's published entries (id, current version, enabled, validity end, kind,
+    importance).
 
     Sorted so the key does not depend on query order. Changes when an entry is published, edited,
-    disabled, or given a validity end; it is informational only and never refreshes a snapshot.
+    disabled, given a validity end, moved to another kind or given another importance (both change the
+    resident block or the index order); it is informational only and never refreshes a snapshot.
     """
     entries = SqlMemoryRepository(db).published_entries(tenant_id, owner_id, '')
     parts = sorted(
         f'{row.id}:{row.current_version}:{row.enabled}:{row.valid_until.isoformat() if row.valid_until else ""}'
+        f':{row.kind}:{row.importance}'
         for row in entries
     )
     return hashlib.sha256('\n'.join(parts).encode('utf-8')).hexdigest()
+
+
+def session_snapshot(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id: UUID, project: str = '',
+                     now: datetime | None = None) -> SessionMemorySnapshotRecord:
+    """Return the session's frozen snapshot row, creating it on the first call (see `session_index`)."""
+    row = db.get(SessionMemorySnapshotRecord, session_id)
+    if row is not None and row.tenant_id == tenant_id and row.owner_user_id == owner_id:
+        return row
+    built = memory_rules.snapshot(SqlMemoryRepository(db), tenant_id, owner_id, project, now=now or utc_now())
+    key = version_key(db, tenant_id, owner_id)
+    row = SessionMemorySnapshotRecord(
+        session_id=session_id, tenant_id=tenant_id, owner_user_id=owner_id,
+        index_text=built.text, version_key=key, created_at=now or utc_now(),
+        resident_entries=[dict(item) for item in built.resident],
+    )
+    db.add(row)
+    db.flush()
+    audit(db, tenant_id, owner_id, 'memory.snapshot_created', 'session', str(session_id),
+          {'version_key': key, 'resident': len(built.resident)})
+    return row
 
 
 def session_index(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id: UUID, project: str = '',
@@ -46,18 +72,8 @@ def session_index(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id: U
     Called from the Run preparation path. Runs in one session are admitted one at a time, so two
     creators cannot race here; a duplicate would raise and abort the Run instead of corrupting the snapshot.
     """
-    row = db.get(SessionMemorySnapshotRecord, session_id)
-    if row is not None and row.tenant_id == tenant_id and row.owner_user_id == owner_id:
-        return row.index_text
-    text = memory_index(db, tenant_id, owner_id, project)
-    key = version_key(db, tenant_id, owner_id)
-    db.add(SessionMemorySnapshotRecord(
-        session_id=session_id, tenant_id=tenant_id, owner_user_id=owner_id,
-        index_text=text, version_key=key, created_at=now or utc_now(),
-    ))
-    db.flush()
-    audit(db, tenant_id, owner_id, 'memory.snapshot_created', 'session', str(session_id), {'version_key': key})
-    return text
+    return session_snapshot(db, tenant_id=tenant_id, owner_id=owner_id, session_id=session_id,
+                            project=project, now=now).index_text
 
 
 def _owned_session(db: Session, principal: Principal, tenant_id: UUID, session_id: UUID):

@@ -22,6 +22,15 @@ export interface NexusChatActions {
   answerPrompt(pendingId: string, response: Record<string, unknown>): Promise<void>
   /** A WeKnora entry whose backend Nexus does not have yet: show the "not available yet" notice. */
   planned(feature: string): void
+  /**
+   * Publish or reject a memory draft the model proposed (openspec 2026-11-06-memory-evolution E1).
+   * Resolves `handled` when the draft was already reviewed elsewhere (HTTP 409).
+   */
+  reviewMemoryDraft(draftId: string, approve: boolean, title: string): Promise<'published' | 'rejected' | 'handled'>
+  /** Whether a draft still awaits review; null when the state cannot be read. */
+  isMemoryDraftPending(draftId: string): Promise<boolean | null>
+  /** Archive a published memory from the "used memories" row (it leaves future conversations). */
+  forgetMemory(entryId: string): Promise<void>
 }
 
 const nexusChatActionsKey: InjectionKey<NexusChatActions> = Symbol('nexusChatActions')

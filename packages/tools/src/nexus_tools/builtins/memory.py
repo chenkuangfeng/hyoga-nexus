@@ -31,7 +31,7 @@ def memory_tools():
         store = _store(context)
         return ToolResult(await store.search_memory(arguments['query'], arguments.get('limit', 5)))
     draft_schema = {'type': 'object', 'properties': {
-        'kind': {'enum': ['memory', 'sop']},
+        'kind': {'enum': ['memory', 'sop', 'profile']},
         'diff': {'type': 'string', 'minLength': 1, 'maxLength': 8000},
         'entry_id': {'type': 'string', 'maxLength': 36},
         'base_version': {'type': 'integer', 'minimum': 1},
@@ -42,7 +42,9 @@ def memory_tools():
     yield RegisteredTool(ToolDefinition('propose_memory_draft',
         'Propose verified memory/SOP changes for review. Pass entry_id and base_version to propose an edit of an existing entry. '
         'Give a short topic; a draft whose topic matches a published entry becomes an edit of that entry. '
-        'importance is 1-5; valid_until (YYYY-MM-DD) only for time-bound notes.',
+        'importance is 1-5; valid_until (YYYY-MM-DD) only for time-bound notes. '
+        'Use kind profile for who the user is and how they like to work (shown at the start of new conversations), '
+        'memory for environment facts and conventions, sop for verified procedures.',
         draft_schema), draft, lambda r: r.data)
     yield RegisteredTool(ToolDefinition('start_long_term_update', 'Read the memory index and consolidate reusable findings.',
         {'type': 'object', 'properties': {}, 'additionalProperties': False}), start, lambda r: r.data)

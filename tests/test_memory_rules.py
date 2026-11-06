@@ -71,9 +71,16 @@ class FakeRepo:
         rows = [e for e in self.entries.values() if e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active]
         # Most recently changed first: later versions were appended later in these tests.
         rows.sort(key=lambda e: self.order.get(e.id, 0), reverse=True)
-        return [LiveEntry(entry=e, content=self.versions[(e.id, e.current_version)].content) for e in rows]
+        return [LiveEntry(entry=e, content=getattr(self.versions.get((e.id, e.current_version)), 'content', ''))
+                for e in rows]
 
     order: dict = {}
+
+    def touch(self, entry_ids, now):
+        for entry_id in entry_ids:
+            if entry_id in self.entries:
+                e = self.entries[entry_id]
+                self.entries[entry_id] = replace(e, use_count=e.use_count + 1, last_used_at=now)
 
     def sized_entries(self, tenant_id, owner_id):
         out = []
@@ -94,7 +101,8 @@ class FakeRepo:
             haystack = memtext.tokenize(v.content)
             if all(f' {t} ' in f' {haystack} ' or (memtext.is_single_cjk(t) and t in v.content) for t in tokens):
                 rows.append(SearchRow(entry_id=e.id, title=e.title, kind=e.kind, version=v.version,
-                                      content=v.content, score=1.0))
+                                      content=v.content, score=1.0, importance=e.importance,
+                                      last_used_at=e.last_used_at))
         return rows[:limit]
 
     def published_entries(self, tenant_id, owner_id, project):

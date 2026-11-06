@@ -10,7 +10,8 @@
  * Pure module (no Vue, no network) so the grouping rules are unit tested.
  */
 import { TERMINAL_RUN_STATUSES, type ConversationMessage, type RunEvent } from '../api/native-run-types'
-import { toAgentEventStream, type AgentEventStreamOptions, type AgentStreamEvent } from './nexusAgentEvents'
+import { toAgentEventStream, usedMemoriesFromEvents, type AgentEventStreamOptions, type AgentStreamEvent,
+  type UsedMemoryRef } from './nexusAgentEvents'
 
 export interface ChatUserRow {
   role: 'user'
@@ -36,6 +37,8 @@ export interface ChatAssistantRow {
   is_completed: boolean
   /** Status used to close the timeline (terminal Runs close open answers and cards). */
   run_status: string
+  /** Memories the Run injected or read, for WeKnora's "used N memories" row (`memory.used` events). */
+  used_memories: UsedMemoryRef[]
 }
 
 export type ChatRow = ChatUserRow | ChatAssistantRow
@@ -75,6 +78,7 @@ function assistantRow(runId: string | null, key: string, content: string, create
     knowledge_references: [],
     is_completed: !live,
     run_status: status,
+    used_memories: events ? usedMemoriesFromEvents(events) : [],
   }
 }
 

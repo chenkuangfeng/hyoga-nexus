@@ -2571,6 +2571,23 @@ export default {
       collapse: '收起',
       expand: '展开'
     },
+    memoryDraft: {
+      title: '记忆草稿',
+      newEntry: '新记忆',
+      editsEntry: '更新已有记忆：{title}',
+      conflictHint: '可能与以下记忆冲突：{titles}',
+      titleLabel: '标题',
+      titlePlaceholder: '为这条记忆取一个标题',
+      publish: '发布',
+      reject: '不保存',
+      published: '已发布',
+      rejected: '未保存',
+      handled: '已在别处处理',
+      checking: '正在读取状态…',
+      failed: '操作失败，请重试',
+      titleRequired: '请填写标题',
+      kinds: { memory: '记忆', sop: '操作步骤', profile: '画像' },
+    },
     toolApproval: {
       title: '人工审核',
       toolDescription: '工具说明',

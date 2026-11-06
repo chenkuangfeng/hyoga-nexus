@@ -11,6 +11,9 @@
  *   事件不携带工具参数（只对 Run 所有者通过审批接口开放），参数由调用方经 `approvalArgs` 传入。
  * - `input.requested` / `input.received`：映射为 `agent_prompt_required`（kind = ask_user），由 `AskUserCard` 渲染；
  *   候选项作为选项，并允许自由输入。
+ * - `memory.draft_proposed`：模型在对话中提出的记忆草稿，映射为 `memory_draft`，由 `MemoryDraftCard` 渲染，
+ *   所有者可在对话内发布或拒绝（openspec 2026-11-06-memory-evolution E1）。
+ * - `memory.used` 不进入时间线，由 `usedMemoriesFromEvents` 汇总为 WeKnora 的“本次使用了 N 条记忆”行（B5）。
  * - 运行被取消时追加 `stop`，与 WeKnora 的用户停止事件一致。
  * - 运行失败或中断时，与 WeKnora 处理运行级 error 一致：把错误说明作为一段已完成的回答追加（需传入 `failureMessage`）。
  * - 其他事件（进度、模型调用等）不进入时间线。
@@ -64,7 +67,43 @@ export interface AgentStreamPrompt {
   canceled?: boolean
 }
 
-export type AgentStreamEvent = AgentStreamAnswer | AgentStreamToolCall | AgentStreamStop | AgentStreamApproval | AgentStreamPrompt
+/** A memory draft the model proposed in this Run; the owner reviews it in the conversation. */
+export interface AgentStreamMemoryDraft {
+  type: 'memory_draft'
+  draft_id: string
+  kind: string
+  diff: string
+  topic: string
+  /** Entry the draft edits, or null for a new entry. */
+  base_entry: { id: string; title: string; version: number } | null
+  /** Titles of entries the draft may conflict with (review hint only). */
+  conflicts: string[]
+}
+
+export type AgentStreamEvent = AgentStreamAnswer | AgentStreamToolCall | AgentStreamStop | AgentStreamApproval
+  | AgentStreamPrompt | AgentStreamMemoryDraft
+
+/** One memory the turn used, in the shape of WeKnora's `used_memories` (content shows the entry title). */
+export interface UsedMemoryRef {
+  id: string
+  kind: string
+  content: string
+}
+
+/** Memories a Run injected or read (`memory.used`), de-duplicated by entry id in first-use order. */
+export function usedMemoriesFromEvents(events: readonly RunEvent[]): UsedMemoryRef[] {
+  const seen = new Map<string, UsedMemoryRef>()
+  for (const event of events) {
+    if (event.event_type !== 'memory.used' || !Array.isArray(event.payload.entries)) continue
+    for (const entry of event.payload.entries) {
+      if (!entry || typeof entry !== 'object') continue
+      const { id, kind, title } = entry as Record<string, unknown>
+      if (typeof id !== 'string' || seen.has(id)) continue
+      seen.set(id, { id, kind: typeof kind === 'string' ? kind : 'memory', content: typeof title === 'string' ? title : '' })
+    }
+  }
+  return [...seen.values()]
+}
 
 export interface AgentEventStreamOptions {
   /** Arguments of pending approvals by approval id, from `GET .../approvals`. */
@@ -174,6 +213,34 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
         }
         promptById.set(id, card)
         stream.push(card)
+        break
+      }
+      case 'memory.draft_proposed': {
+        closeAnswer()
+        const id = typeof payload.draft_id === 'string' ? payload.draft_id : ''
+        if (!id) break
+        const base = payload.base_entry
+        const baseEntry = base && typeof base === 'object' && typeof (base as Record<string, unknown>).id === 'string'
+          ? {
+              id: (base as Record<string, unknown>).id as string,
+              title: String((base as Record<string, unknown>).title ?? ''),
+              version: Number((base as Record<string, unknown>).version ?? 0),
+            }
+          : null
+        const hints = payload.annotations && typeof payload.annotations === 'object'
+          ? (payload.annotations as Record<string, unknown>).conflict : undefined
+        stream.push({
+          type: 'memory_draft',
+          draft_id: id,
+          kind: typeof payload.kind === 'string' ? payload.kind : 'memory',
+          diff: typeof payload.diff === 'string' ? payload.diff : '',
+          topic: typeof payload.topic === 'string' ? payload.topic : '',
+          base_entry: baseEntry,
+          conflicts: Array.isArray(hints)
+            ? hints.map(hint => (hint && typeof hint === 'object' ? String((hint as Record<string, unknown>).title ?? '') : ''))
+              .filter(Boolean)
+            : [],
+        })
         break
       }
       case 'input.received': {

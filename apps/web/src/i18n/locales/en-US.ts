@@ -6838,6 +6838,23 @@ export default {
       collapse: 'Collapse',
       expand: 'Expand'
     },
+    memoryDraft: {
+      title: 'Memory draft',
+      newEntry: 'New memory',
+      editsEntry: 'Updates memory: {title}',
+      conflictHint: 'May conflict with: {titles}',
+      titleLabel: 'Title',
+      titlePlaceholder: 'Give this memory a title',
+      publish: 'Save',
+      reject: 'Discard',
+      published: 'Saved',
+      rejected: 'Discarded',
+      handled: 'Already handled elsewhere',
+      checking: 'Checking status…',
+      failed: 'Action failed, try again',
+      titleRequired: 'Enter a title',
+      kinds: { memory: 'Memory', sop: 'Procedure', profile: 'Profile' },
+    },
     toolApproval: {
       title: 'Approval',
       toolDescription: 'Tool description',

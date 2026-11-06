@@ -2435,6 +2435,23 @@ export default {
       collapse: '접기',
       expand: '펼치기'
     },
+    memoryDraft: {
+      title: '메모리 초안',
+      newEntry: '새 메모리',
+      editsEntry: '기존 메모리 업데이트: {title}',
+      conflictHint: '충돌 가능: {titles}',
+      titleLabel: '제목',
+      titlePlaceholder: '이 메모리의 제목',
+      publish: '저장',
+      reject: '저장 안 함',
+      published: '저장됨',
+      rejected: '저장하지 않음',
+      handled: '다른 곳에서 처리됨',
+      checking: '상태 확인 중…',
+      failed: '작업에 실패했습니다. 다시 시도하세요',
+      titleRequired: '제목을 입력하세요',
+      kinds: { memory: '메모리', sop: '절차', profile: '프로필' },
+    },
     toolApproval: {
       title: '승인',
       toolDescription: '도구 설명',

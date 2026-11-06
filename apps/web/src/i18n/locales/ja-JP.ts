@@ -6775,6 +6775,23 @@ export default {
       collapse: '折りたたむ',
       expand: '展開'
     },
+    memoryDraft: {
+      title: 'メモリ下書き',
+      newEntry: '新しいメモリ',
+      editsEntry: '既存メモリを更新：{title}',
+      conflictHint: '競合の可能性：{titles}',
+      titleLabel: 'タイトル',
+      titlePlaceholder: 'このメモリのタイトル',
+      publish: '保存',
+      reject: '保存しない',
+      published: '保存済み',
+      rejected: '保存しませんでした',
+      handled: '他の場所で処理済み',
+      checking: '状態を確認中…',
+      failed: '操作に失敗しました。再試行してください',
+      titleRequired: 'タイトルを入力してください',
+      kinds: { memory: 'メモリ', sop: '手順', profile: 'プロフィール' },
+    },
     toolApproval: {
       title: '承認',
       toolDescription: 'ツールの説明',

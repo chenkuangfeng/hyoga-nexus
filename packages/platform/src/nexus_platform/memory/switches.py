@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, utc_now
 from nexus_memory import switches as rules
+from nexus_memory import text as memtext
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Forbidden
 from nexus_platform.models.provider_settings import context
@@ -50,11 +51,26 @@ def space_settings(db: Session, principal: Principal, tenant_id: UUID) -> dict[s
         return _space_view(row, can_edit=membership.role in ADMIN_ROLES)
 
 
+#: Longest custom extraction rules a space may set (openspec 2026-11-06-memory-evolution B6).
+EXTRACT_INSTRUCTIONS_LIMIT = 1000
+
+
 def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, enabled: bool,
-                       write_mode: str) -> dict[str, Any]:
-    """Change the space switch and write mode. Only owners and admins; non-members get 404 from `context`."""
+                       write_mode: str, extract_instructions: str | None = None) -> dict[str, Any]:
+    """Change the space switch, write mode and, when given, the custom extraction rules.
+
+    Only owners and admins; non-members get 404 from `context`. The rules are added to every extraction
+    prompt as fenced data, so they are screened like memory content: a threat pattern is refused (422).
+    `None` keeps the current rules; an empty string clears them.
+    """
     if write_mode not in rules.WRITE_MODES:
         raise ValueError('Memory write mode is invalid')
+    if extract_instructions is not None:
+        extract_instructions = extract_instructions.strip()
+        if len(extract_instructions) > EXTRACT_INSTRUCTIONS_LIMIT:
+            raise ValueError('Extraction rules are too long')
+        if memtext.screen(extract_instructions).threats:
+            raise ValueError('Extraction rules contain disallowed instructions')
     with db.begin():
         user, membership = context(db, principal, tenant_id)
         if membership.role not in ADMIN_ROLES:
@@ -64,18 +80,27 @@ def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, en
             row = MemorySpaceSettingsRecord(tenant_id=tenant_id)
             db.add(row)
         row.enabled, row.write_mode = enabled, write_mode
+        if extract_instructions is not None:
+            row.extract_instructions = extract_instructions
         row.updated_by, row.updated_at = user.id, utc_now()
         audit(db, tenant_id, user.id, 'memory.space_settings', 'tenant', str(tenant_id),
-              {'enabled': enabled, 'write_mode': write_mode})
+              {'enabled': enabled, 'write_mode': write_mode,
+               'extract_instructions_chars': len(row.extract_instructions or '')})
         return _space_view(row, can_edit=True)
 
 
 def _space_view(row: MemorySpaceSettingsRecord | None, *, can_edit: bool) -> dict[str, Any]:
     if row is None:
         return {'enabled': rules.DEFAULT_SPACE_ENABLED, 'write_mode': rules.DEFAULT_WRITE_MODE,
-                'can_edit': can_edit, 'updated_at': None}
-    return {'enabled': row.enabled, 'write_mode': row.write_mode, 'can_edit': can_edit,
-            'updated_at': row.updated_at.isoformat() if row.updated_at else None}
+                'extract_instructions': '', 'can_edit': can_edit, 'updated_at': None}
+    return {'enabled': row.enabled, 'write_mode': row.write_mode, 'extract_instructions': row.extract_instructions or '',
+            'can_edit': can_edit, 'updated_at': row.updated_at.isoformat() if row.updated_at else None}
+
+
+def extract_instructions(db: Session, tenant_id: UUID) -> str:
+    """The space's custom extraction rules, '' when none; caller transaction."""
+    row = db.get(MemorySpaceSettingsRecord, tenant_id)
+    return (row.extract_instructions or '') if row else ''
 
 
 # ---------------------------------------------------------------- member preference

@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, bindparam, func, literal, select, text
+from sqlalchemy import DateTime, bindparam, func, literal, select, text, update
 from sqlalchemy import Uuid as SqlUuid
 from sqlalchemy.orm import Session
 
@@ -129,14 +129,22 @@ class SqlMemoryRepository:
 
     def live_entries(self, tenant_id: UUID, owner_id: UUID) -> list[LiveEntry]:
         rows = self.db.execute(
-            select(MemoryEntryRecord, MemoryVersionRecord.content)
+            select(MemoryEntryRecord, MemoryVersionRecord.content, MemoryVersionRecord.created_at)
             .join(MemoryVersionRecord, (MemoryVersionRecord.entry_id == MemoryEntryRecord.id)
                   & (MemoryVersionRecord.version == MemoryEntryRecord.current_version))
             .where(MemoryEntryRecord.tenant_id == tenant_id, MemoryEntryRecord.owner_user_id == owner_id,
                    MemoryEntryRecord.active.is_(True))
             .order_by(MemoryVersionRecord.created_at.desc(), MemoryEntryRecord.id)
         ).all()
-        return [LiveEntry(entry=_entry(row), content=content) for row, content in rows]
+        return [LiveEntry(entry=_entry(row), content=content, updated_at=_aware(created)) for row, content, created in rows]
+
+    def touch(self, entry_ids: list[UUID], now: datetime) -> None:
+        if not entry_ids:
+            return
+        self.db.execute(
+            update(MemoryEntryRecord).where(MemoryEntryRecord.id.in_(list(entry_ids)))
+            .values(use_count=MemoryEntryRecord.use_count + 1, last_used_at=now)
+            .execution_options(synchronize_session=False))
 
     def sized_entries(self, tenant_id: UUID, owner_id: UUID) -> list[SizedEntry]:
         rows = self.db.execute(
@@ -269,7 +277,8 @@ class SqlMemoryRepository:
             params[f'single{index}'] = '%' + _like_escape(char) + '%'
         sql = text(
             'SELECT e.id AS entry_id, e.title AS title, e.kind AS kind, v.version AS version,'
-            ' v.content AS content, -bm25(memory_fts) AS score'
+            ' v.content AS content, -bm25(memory_fts) AS score, e.importance AS importance,'
+            ' e.last_used_at AS last_used_at, v.created_at AS updated_at'
             ' FROM memory_fts'
             ' JOIN memory_versions v ON v.search_id = memory_fts.rowid'
             ' JOIN memory_entries e ON e.id = v.entry_id'
@@ -280,13 +289,16 @@ class SqlMemoryRepository:
                      bindparam('now', type_=DateTime()))
         rows = self.db.execute(sql, params).all()
         return [SearchRow(entry_id=_as_uuid(r.entry_id), title=r.title, kind=r.kind, version=r.version,
-                          content=r.content, score=float(r.score)) for r in rows]
+                          content=r.content, score=float(r.score), importance=int(r.importance or 3),
+                          last_used_at=_parse_time(r.last_used_at), updated_at=_parse_time(r.updated_at))
+                for r in rows]
 
     def _search_like(self, tenant_id: UUID, owner_id: UUID, tokens: list[str], now: datetime,
                      limit: int) -> list[SearchRow]:
         query = (
             select(MemoryEntryRecord.id, MemoryEntryRecord.title, MemoryEntryRecord.kind,
-                   MemoryVersionRecord.version, MemoryVersionRecord.content, MemoryVersionRecord.created_at)
+                   MemoryVersionRecord.version, MemoryVersionRecord.content, MemoryVersionRecord.created_at,
+                   MemoryEntryRecord.importance, MemoryEntryRecord.last_used_at)
             .join(MemoryVersionRecord, (MemoryVersionRecord.entry_id == MemoryEntryRecord.id)
                   & (MemoryVersionRecord.version == MemoryEntryRecord.current_version))
             .where(
@@ -305,7 +317,8 @@ class SqlMemoryRepository:
                 query = query.where(haystack.contains(f' {token} ', autoescape=True))
         rows = self.db.execute(query.order_by(MemoryVersionRecord.created_at.desc()).limit(limit)).all()
         return [SearchRow(entry_id=row.id, title=row.title, kind=row.kind, version=row.version,
-                          content=row.content, score=1.0) for row in rows]
+                          content=row.content, score=1.0, importance=row.importance,
+                          last_used_at=_aware(row.last_used_at), updated_at=_aware(row.created_at)) for row in rows]
 
 
 def _like_escape(value: str) -> str:
@@ -318,6 +331,13 @@ def _bind_uuid(value: UUID) -> Any:
 
 def _as_uuid(value: Any) -> UUID:
     return value if isinstance(value, UUID) else UUID(str(value))
+
+
+def _parse_time(value: Any) -> datetime | None:
+    """Raw-SQL timestamps arrive as text on SQLite; parse and mark them UTC like `_aware`."""
+    if value is None or isinstance(value, datetime):
+        return _aware(value)
+    return _aware(datetime.fromisoformat(str(value)))
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -333,6 +353,7 @@ def _entry(row: MemoryEntryRecord) -> EntryView:
         title=row.title, project=row.project, active=row.active, current_version=row.current_version,
         enabled=bool(row.enabled), valid_until=_aware(row.valid_until),
         topic=row.topic or '', importance=row.importance if row.importance is not None else 3,
+        last_used_at=_aware(row.last_used_at), use_count=row.use_count or 0,
     )
 
 

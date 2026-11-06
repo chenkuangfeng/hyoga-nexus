@@ -170,7 +170,7 @@ def _scripted(outputs):
     """Extractor that returns the scripted outputs in order and records each call."""
     calls = []
 
-    def extractor(*, messages, related, model_version_id, tenant_id, owner_id, context, rejected_topics):
+    def extractor(*, messages, related, model_version_id, tenant_id, owner_id, context, rejected_topics, instructions):
         calls.append(len(messages))
         item = outputs[len(calls) - 1] if len(calls) <= len(outputs) else outputs[-1]
         if isinstance(item, Exception):
@@ -242,8 +242,8 @@ def test_capture_model_is_called_without_tools_and_gets_the_window(database):  #
         seen['keys'] = sorted(kwargs)
         return []
     capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1))
-    assert seen['keys'] == ['context', 'messages', 'model_version_id', 'owner_id', 'rejected_topics', 'related',
-                            'tenant_id']
+    assert seen['keys'] == ['context', 'instructions', 'messages', 'model_version_id', 'owner_id', 'rejected_topics',
+                            'related', 'tenant_id']
 
 
 def test_crash_after_extraction_does_not_call_the_model_again(database, monkeypatch):  # noqa: F811

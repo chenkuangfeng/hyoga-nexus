@@ -130,6 +130,12 @@
                   :expires-at="event.expires_at" :abandoned="event.abandoned" v-bind="embedAuthProps" />
               </div>
 
+              <!-- Nexus: memory draft proposed in this Run (openspec 2026-11-06-memory-evolution E1) -->
+              <div v-else-if="event.type === 'memory_draft'" class="tool-event">
+                <MemoryDraftCard :draft-id="event.draft_id" :kind="event.kind" :diff="event.diff" :topic="event.topic"
+                  :base-entry="event.base_entry" :conflicts="event.conflicts" />
+              </div>
+
               <!-- Question the agent asked the user (ask_user) -->
               <div v-else-if="event.type === 'agent_prompt_required' && event.kind === 'ask_user'" class="tool-event">
                 <AskUserCard :pending-id="event.pending_id" :request="event.request"
@@ -406,6 +412,12 @@
                 :approved="event.approved" :canceled="event.canceled" :resolve-reason="event.resolve_reason" :suspendable="event.suspendable"
                 :hot-wait-seconds="event.hot_wait_seconds" :suspended="event.suspended" :expires-at="event.expires_at"
                 :abandoned="event.abandoned" v-bind="embedAuthProps" />
+            </div>
+
+            <!-- Nexus: memory draft proposed in this Run (openspec 2026-11-06-memory-evolution E1) -->
+            <div v-else-if="event.type === 'memory_draft'" class="tool-event">
+              <MemoryDraftCard :draft-id="event.draft_id" :kind="event.kind" :diff="event.diff" :topic="event.topic"
+                :base-entry="event.base_entry" :conflicts="event.conflicts" />
             </div>
 
             <!-- Question the agent asked the user (ask_user) -->
@@ -754,6 +766,7 @@ import OpenPageCard from './OpenPageCard.vue';
 import PageEditCard from './PageEditCard.vue';
 import { isAssistantPageLink } from '@/utils/assistantPageLink';
 import AskUserCard from './AskUserCard.vue';
+import MemoryDraftCard from './MemoryDraftCard.vue';
 import ChatActionIcon from '@/components/ChatActionIcon.vue';
 import ChatTimelineIcon from '@/components/ChatTimelineIcon.vue';
 import ChatRequestInfoButton from '@/components/ChatRequestInfoButton.vue';
@@ -2388,6 +2401,9 @@ const getEventKey = (event: any, index: number): string => {
   }
   if (event.type === 'agent_prompt_required' && event.pending_id) {
     return `prompt-${event.pending_id}`;
+  }
+  if (event.type === 'memory_draft' && event.draft_id) {
+    return `memory-draft-${event.draft_id}`;
   }
   if (event.tool_call_id) return `tool-${event.tool_call_id}`;
   return `event-${index}-${event.type || 'unknown'}`;

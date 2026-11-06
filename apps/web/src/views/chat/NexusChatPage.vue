@@ -158,6 +158,7 @@ import {
 } from '@/api/native-runs'
 import { useNativeRun } from '@/composables/useNativeRun'
 import { provideNexusChatActions } from '@/composables/nexusChatActions'
+import { archiveMemoryEntry, listPendingDraftIds, reviewMemoryDraft } from '@/api/nexus-memory'
 import { providePromptDock } from '@/composables/usePromptDock'
 import { canSteer, failureCode, isActive, isTerminal } from '@/views/native/nativeRunState'
 import InputField from '@/components/Input-field.vue'
@@ -434,6 +435,8 @@ function promptRequest(pendingId: string): AskUserQuestion {
   }
   return { question: '' } as AskUserQuestion
 }
+/** Pending draft ids of the caller (memory draft cards); reset after a review so the next read is fresh. */
+let pendingDrafts: Promise<Set<string>> | null = null
 
 provideNexusChatActions({
   async resolveApproval(pendingId, decision, args) {
@@ -448,6 +451,32 @@ provideNexusChatActions({
     await native.answerInput(text)
   },
   planned,
+  async reviewMemoryDraft(draftId, approve, title) {
+    if (!tenantId.value) throw new Error(t('nativeRuns.loadError'))
+    try {
+      const result = await reviewMemoryDraft(tenantId.value, draftId, approve, title)
+      pendingDrafts = null
+      return result.status
+    } catch (error) {
+      if ((error as { status?: number })?.status === 409) return 'handled'
+      throw error
+    }
+  },
+  async isMemoryDraftPending(draftId) {
+    if (!tenantId.value) return null
+    try {
+      // One request serves every card rendered together; a draft proposed after the last read refetches.
+      if (!pendingDrafts || !(await pendingDrafts).has(draftId)) pendingDrafts = listPendingDraftIds(tenantId.value)
+      return (await pendingDrafts).has(draftId)
+    } catch {
+      pendingDrafts = null
+      return null
+    }
+  },
+  async forgetMemory(entryId) {
+    if (!tenantId.value) throw new Error(t('nativeRuns.loadError'))
+    await archiveMemoryEntry(tenantId.value, entryId)
+  },
 })
 
 function copyMarkdown() {

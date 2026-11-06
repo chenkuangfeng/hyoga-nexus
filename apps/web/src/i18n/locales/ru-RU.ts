@@ -2435,6 +2435,23 @@ export default {
       collapse: 'Свернуть',
       expand: 'Развернуть'
     },
+    memoryDraft: {
+      title: 'Черновик памяти',
+      newEntry: 'Новая запись',
+      editsEntry: 'Обновляет запись: {title}',
+      conflictHint: 'Возможен конфликт с: {titles}',
+      titleLabel: 'Заголовок',
+      titlePlaceholder: 'Заголовок записи',
+      publish: 'Сохранить',
+      reject: 'Не сохранять',
+      published: 'Сохранено',
+      rejected: 'Не сохранено',
+      handled: 'Уже обработано',
+      checking: 'Проверка состояния…',
+      failed: 'Не удалось, повторите попытку',
+      titleRequired: 'Введите заголовок',
+      kinds: { memory: 'Память', sop: 'Процедура', profile: 'Профиль' },
+    },
     toolApproval: {
       title: 'Подтверждение',
       toolDescription: 'Описание инструмента',

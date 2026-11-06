@@ -53,6 +53,9 @@ class EntryView:
     topic: str = ''
     #: 1 (trivial) to 5 (essential); copied from the draft on publish, editable by the owner.
     importance: int = 3
+    #: Usage statistics (stage 2): last model read, search hit or resident injection, and how many.
+    last_used_at: datetime | None = None
+    use_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,8 @@ class LiveEntry:
     """An active entry with its current content, for topic matching and overlap checks."""
     entry: EntryView
     content: str
+    #: When the current version was published.
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +129,10 @@ class SearchRow:
     version: int
     content: str
     score: float
+    importance: int = 3
+    last_used_at: datetime | None = None
+    #: When the current version was published; the recency factor uses the later of this and `last_used_at`.
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -192,6 +201,9 @@ class MemoryRepository(Protocol):
                        source_draft_id: UUID | None, reviewer_id: UUID | None, fingerprint: str,
                        source_message_ids: tuple[str, ...]) -> None:
         """Append an immutable version and update the keyword index in the same transaction."""
+
+    def touch(self, entry_ids: list[UUID], now: datetime) -> None:
+        """Record that these entries were used now: `use_count + 1`, `last_used_at = now`. Unknown ids are ignored."""
 
     def search(self, tenant_id: UUID, owner_id: UUID, tokens: list[str], now: datetime, limit: int) -> list[SearchRow]:
         """Keyword candidates within the owner's enabled, active, unexpired current versions. Every token must match."""

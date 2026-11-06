@@ -21,6 +21,7 @@ from nexus_platform.persistence.models import (
     ToolInvocationRecord,
     WorkingCheckpointRecord,
     MemoryDraftRecord,
+    MemoryEntryRecord,
     ContextSummaryRecord,
     ToolOutputRecord,
 )
@@ -395,7 +396,12 @@ class DurableRuntimeStore:
             db = work.session
             run = self._run(db)
             require_membership(db, run.tenant_id, run.principal_id)
-            return read_for_run(db, run.tenant_id, run.principal_id, UUID(entry_id), run.id)
+            result = read_for_run(db, run.tenant_id, run.principal_id, UUID(entry_id), run.id)
+            entry = db.get(MemoryEntryRecord, UUID(entry_id))
+            # Stage 2 (B5): the timeline shows which memory this turn read.
+            append_event(db, run.id, 'memory.used', {'source': 'read', 'entries': [
+                {'id': str(entry.id), 'title': entry.title, 'kind': entry.kind, 'version': entry.current_version}]})
+            return result
 
     async def checkpoint(self, content: str) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -419,7 +425,7 @@ class DurableRuntimeStore:
         """
         from nexus_platform.memory.service import propose as propose_draft
         from nexus_platform.errors import Conflict, NotFound
-        if kind not in ('memory', 'sop') or scope != 'session':
+        if kind not in ('memory', 'sop', 'profile') or scope != 'session':
             raise RuntimeFault('memory_scope_invalid')
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
@@ -435,6 +441,15 @@ class DurableRuntimeStore:
             status = outcome['status']
             if status == 'pending':
                 append_event(db, run.id, 'memory.draft_created', {'draft_id': outcome['id'], 'kind': kind, 'scope': 'session'})
+                # Stage 2 (E1): enough for the owner to publish or reject the draft from the conversation.
+                base_entry = None
+                if outcome.get('target_entry_id'):
+                    target = db.get(MemoryEntryRecord, UUID(outcome['target_entry_id']))
+                    base_entry = {'id': str(target.id), 'title': target.title, 'version': outcome['base_version']}
+                draft_row = db.get(MemoryDraftRecord, UUID(outcome['id']))
+                append_event(db, run.id, 'memory.draft_proposed', {
+                    'draft_id': outcome['id'], 'kind': kind, 'diff': draft_row.diff[:500], 'topic': draft_row.topic or '',
+                    'base_entry': base_entry, 'annotations': outcome.get('annotations', {})})
                 line = 'Draft pending review: ' + outcome['id']
                 if outcome.get('target_entry_id') and not entry_id:
                     line += f" (proposed as an edit of existing entry {outcome['target_entry_id']} with the same topic or content)"
@@ -461,4 +476,6 @@ class DurableRuntimeStore:
             hits = search_entries(db, run.tenant_id, run.principal_id, query, limit)
             if not hits:
                 return 'No matching published memory.'
+            append_event(db, run.id, 'memory.used', {'source': 'search', 'entries': [
+                {'id': h['id'], 'title': h['title'], 'kind': h['kind'], 'version': h['version']} for h in hits]})
             return '\n'.join(f"[{h['id']}] {h['kind']} | {h['title']} | v{h['version']} | {h['snippet']}" for h in hits)

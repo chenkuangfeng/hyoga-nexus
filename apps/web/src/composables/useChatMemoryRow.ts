@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { deleteMemoryItem } from '@/api/memory'
+import { useNexusChatActions } from '@/composables/nexusChatActions'
 
 export type UsedMemory = { id: string; kind: string; content: string }
 
@@ -14,6 +15,9 @@ export type UsedMemory = { id: string; kind: string; content: string }
  */
 export function useChatMemoryRow(getUsedMemories: () => UsedMemory[] | undefined) {
   const { t } = useI18n()
+  // On the Nexus chat page "forget" archives the entry through the platform API (B5); the copied
+  // WeKnora views keep WeKnora's delete endpoint.
+  const nexusActions = useNexusChatActions()
 
   const expanded = ref(false)
   const forgettingId = ref('')
@@ -36,7 +40,8 @@ export function useChatMemoryRow(getUsedMemories: () => UsedMemory[] | undefined
   const forget = async (memory: { id: string }) => {
     forgettingId.value = memory.id
     try {
-      await deleteMemoryItem(memory.id)
+      if (nexusActions) await nexusActions.forgetMemory(memory.id)
+      else await deleteMemoryItem(memory.id)
       forgottenIds.value = [...forgottenIds.value, memory.id]
       MessagePlugin.success(t('chat.memoryForgotten'))
     } catch (error: any) {

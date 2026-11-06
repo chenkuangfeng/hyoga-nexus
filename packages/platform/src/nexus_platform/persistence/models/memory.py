@@ -79,6 +79,10 @@ class MemoryEntryRecord(Base):
     topic: Mapped[str] = mapped_column(String(160), nullable=False, default='', server_default='')
     #: 1 (trivial) to 5 (essential); orders the index and eviction.
     importance: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default='3')
+    #: Usage statistics (stage 2): bumped by model reads, search hits and resident injection. Order the
+    #: index and automatic eviction; never shown to the model.
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    use_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
 
 
 class MemoryVersionRecord(Base):
@@ -171,6 +175,9 @@ class SessionMemorySnapshotRecord(Base):
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     index_text: Mapped[str] = mapped_column(Text, nullable=False)
     version_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: `[{id, title, kind, version}]` of the profile entries whose bodies the snapshot carries (stage 2).
+    #: Reported in a `memory.used` event by every Run that injects the snapshot. NULL for older snapshots.
+    resident_entries: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -205,6 +212,8 @@ class MemorySpaceSettingsRecord(Base):
     write_mode: Mapped[str] = mapped_column(String(16), nullable=False, default='auto', server_default='auto')
     updated_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Space rules added to every extraction prompt as fenced data (stage 2, B6); at most 1000 characters.
+    extract_instructions: Mapped[str] = mapped_column(Text, nullable=False, default='', server_default='')
 
 
 class MemoryCaptureCursorRecord(Base):

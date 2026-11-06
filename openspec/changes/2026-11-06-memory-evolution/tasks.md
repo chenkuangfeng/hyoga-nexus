@@ -41,16 +41,21 @@
 
 ## 2. 第 2 阶段：注入与展示（B1–B6、E1）
 
-- [ ] 2.1 迁移：`memory_entries` 新增 `last_used_at`、`use_count`，`kind` 允许 `profile`；`memory_space_settings` 新增 `extract_instructions`。
-- [ ] 2.2 `snapshot_text`：容量头、`profile` 常驻块（1000 字）、新的索引排序；更新 `version_key`（B1、B2、B3）。
-- [ ] 2.3 检索打分加时效和重要度因子（B3）。
-- [ ] 2.4 使用统计更新与 `evict_auto` 新的淘汰顺序（B4）。
-- [ ] 2.5 Run 事件 `memory.used`、`memory.draft_proposed`，以及事件可见性（B5、E1）。
-- [ ] 2.6 空间设置 `extract_instructions`：校验、威胁扫描、写入抽取提示（B6）。
-- [ ] 2.7 前端：事件映射，时间线"引用了 N 条记忆"，对话内草稿确认卡片（发布、拒绝、已处理），历史回放状态校正（E1、B5）。
+- [x] 2.1 迁移：`memory_entries` 新增 `last_used_at`、`use_count`，`kind` 允许 `profile`；`memory_space_settings` 新增 `extract_instructions`。
+  - 追加：`session_memory_snapshots.resident_entries` 记录常驻块中的条目，供每个 Run 发 `memory.used`。
+- [x] 2.2 `snapshot_text`：容量头、`profile` 常驻块（1000 字）、新的索引排序；更新 `version_key`（B1、B2、B3）。
+- [x] 2.3 检索打分加时效和重要度因子（B3）。
+- [x] 2.4 使用统计更新与 `evict_auto` 新的淘汰顺序（B4）。
+- [x] 2.5 Run 事件 `memory.used`、`memory.draft_proposed`，以及事件可见性（B5、E1）。
+- [x] 2.6 空间设置 `extract_instructions`：校验、威胁扫描、写入抽取提示（B6）。
+- [x] 2.7 前端：事件映射，时间线"引用了 N 条记忆"，对话内草稿确认卡片（发布、拒绝、已处理），历史回放状态校正（E1、B5）。
+  - `memory.used` 汇总进 WeKnora 原有的 `ChatMemoryStep` 行（显示条目标题）；该行的"删除"在 Nexus 页面改为归档条目。卡片 `MemoryDraftCard.vue` 经 `useNexusChatActions` 调用审核接口，409 显示"已在别处处理"；历史回放时读 `GET /memory` 的待审草稿判断状态。
 - [ ] 2.8 前端：空间记忆设置页增加自定义规则；我的记忆页增加 `profile` 类型、重要度、使用次数显示。
-- [ ] 2.9 文案：所有语言包补齐。
-- [ ] 2.10 pytest 与前端单元测试；文档同步。
+  - 阻塞：依赖 `2026-11-05-memory-switches` 前端第 2 节（两个设置页尚未接入 Nexus 接口）。接口已就绪：`GET/PUT /native/memory-settings` 返回并接受 `extract_instructions`；`GET /memory` 返回 `topic`、`importance`，审核可传 `importance`。
+- [x] 2.9 文案：所有语言包补齐（`agentStream.memoryDraft.*`，6 种语言）。设置页文案随 2.8。
+- [x] 2.10 pytest 与前端单元测试；文档同步。
+  - 后端：`tests/test_memory_evolution_stage2.py`（11 项），全量 819 通过。前端：`nexusAgentEvents.test.ts`、`nexusChatTranscript.test.ts` 新增用例，语言包键一致性通过。
+  - `pnpm build` 在本机因内存不足（1.8 GB，vite 进程被 OOM 终止）未能完成；已用 `@vue/compiler-sfc` 编译改动的三个组件，并对改动的 TS 模块做 `tsc` 类型检查，均无错误。需在内存充足的环境补跑 `pnpm build` 与 `pnpm test:browser`。
 
 ## 3. 第 3 阶段：去重与维护（C1–C4）
 

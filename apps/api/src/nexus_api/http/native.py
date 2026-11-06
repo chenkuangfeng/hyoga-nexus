@@ -100,6 +100,8 @@ class MemorySpaceSettingsUpdate(BaseModel):
     """Space-wide long-term memory switch and write mode (`explicit` never queues automatic capture)."""
     enabled: bool
     write_mode: Literal['explicit', 'auto'] = 'auto'
+    #: Custom extraction rules (at most 1000 characters); omitted keeps the current rules, '' clears them.
+    extract_instructions: str | None = Field(default=None, max_length=1000)
 
 
 class MemoryPreferencesUpdate(BaseModel):
@@ -118,7 +120,8 @@ def get_memory_settings(tenant_id: UUID, principal: Principal = Depends(get_prin
 def update_memory_settings(tenant_id: UUID, body: MemorySpaceSettingsUpdate, principal: Principal = Depends(get_principal),
                            db: Session = Depends(get_database_session)):
     """Turn long-term memory on or off for the whole space and choose the write mode (owners and admins)."""
-    return memory_switches.set_space_settings(db, principal, tenant_id, enabled=body.enabled, write_mode=body.write_mode)
+    return memory_switches.set_space_settings(db, principal, tenant_id, enabled=body.enabled, write_mode=body.write_mode,
+                                             extract_instructions=body.extract_instructions)
 
 
 @router.get('/memory-preferences')
