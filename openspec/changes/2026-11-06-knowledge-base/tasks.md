@@ -43,7 +43,8 @@
 - [x] K1.8 工具 `search_knowledge`、`read_document`、`list_documents`；证据登记存 Run progress；Run 结束引用校验；智能体绑定与发布校验。
   - 工具与其他内置工具一样需在空间启用并绑定（编辑器选库时一并勾选）；未绑定知识库时准备阶段移除这三个工具，系统提示列出可读的已绑定库。发布时绑定了知识库却没绑 `search_knowledge` 返回 `knowledge_dependency_missing`。证据存 `progress.state['knowledge_evidence']`；Run 完成时有效编号写入助手消息 `runtime_metadata.citations`，无效编号记 `knowledge.citation_invalid` 事件。测试 `tests/test_knowledge_tools.py`；`tests/test_platform.py` 旧用例补绑 `search_knowledge`。
 - [ ] K1.9 前端（进行中）：列表、创建/编辑（类型、索引策略、向量库、存储、模型、分块）、详情、上传、状态与重试、块预览、检索测试、共享、活动、引用渲染、智能体编辑器知识库分区。
-- [ ] K1.10 `evals/knowledge/` 与包文档（README、requirements、design）。
+- [x] K1.10 `evals/knowledge/` 与包文档（README、requirements、design）。
+  - 评估门禁 `tests/test_knowledge_eval.py`（关键词通道命中率 ≥ 0.85、越权泄漏 0、引用解析）；向量与混合通道指标待真实 Embedding 模型。
 
 ## K2 图谱与 GraphRAG
 
