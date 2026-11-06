@@ -220,6 +220,21 @@
         </div>
 
         <div class="settings-group">
+          <!-- Access level (openspec 2026-11-06-tool-call-hardening D11): tightens what bound tools may do. -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusAgent.toolAccess.label') }}</label>
+              <p class="desc">{{ $t(`nexusAgent.toolAccess.${form.tool_access}Desc`) }}</p>
+            </div>
+            <div class="setting-control">
+              <t-radio-group v-model="form.tool_access">
+                <t-radio-button value="read_only">{{ $t('nexusAgent.toolAccess.read_only') }}</t-radio-button>
+                <t-radio-button value="standard">{{ $t('nexusAgent.toolAccess.standard') }}</t-radio-button>
+                <t-radio-button value="strict">{{ $t('nexusAgent.toolAccess.strict') }}</t-radio-button>
+              </t-radio-group>
+            </div>
+          </div>
+
           <div class="setting-row setting-row-vertical">
             <div class="setting-info">
               <label>{{ $t('agent.editor.allowedTools') }}</label>
@@ -245,6 +260,7 @@
                           </span>
                           <span v-if="tool.requires_approval" class="tool-card-badge">{{ $t('nexusAgent.requiresApproval') }}</span>
                           <span v-if="tool.read_only" class="tool-card-badge tool-card-badge--muted">{{ $t('nexusAgent.readOnly') }}</span>
+                          <span class="tool-card-badge tool-card-badge--muted">{{ $t(`nexusAgent.risk.${tool.risk || 'write'}`) }}</span>
                         </div>
                         <span class="tool-card-desc">{{ toolDescription(tool) }}</span>
                         <span v-if="!tool.enabled_in_tenant" class="tool-card-hint">

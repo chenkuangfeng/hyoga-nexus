@@ -36,3 +36,4 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 - 最后一个允许回合（`progress.turns >= max_rounds`）：模型请求的工具定义为空，视图追加"工具已禁用"提示，发出 `turn.tools_disabled`；模型仍返回的工具调用不执行，记为未执行。
 - 模型请求计数：编排器在 Run 开始时把 `AttemptCounter` 绑定到 `RetryModel`（`bind_attempts`）。每次真实请求（含传输重试）先调用 `begin_attempt`，计数写入 `progress.model_attempts` 并发出 `model.attempt`；超过 `max_model_attempts`（0 时为 `max_rounds * (model_retries + 1)`）则不发送并以 `budget_exhausted` 结束。
 - 待办工具 `todo` 通过 `RunServices.run_state` 访问 `progress.state`（与进度同一对象）；工具权限仍由网关每次复核。
+- 工具循环检测（提案 2026-11-06-tool-call-hardening C，`engine/tool_guardrails.py`）：`ToolDispatcher` 对每个结果计算签名（工具名、规范化参数、结果前 2000 字符），相同签名连续出现或周期 2–4 循环时在第 `tool_repeat_warn_at` 次及其后两次各追加一次提醒，第 `tool_repeat_stop_at` 次以 `tool_loop_detected` 结束 Run；同一工具连续失败第 `tool_repeat_warn_at` 次提醒、第 `tool_failure_stop_at` 次结束，该工具成功或其他副作用工具成功时清零。状态在 `progress.state['tool_guard']`，用户追加指令或带答复恢复时清零；阈值为 0 关闭。审批恢复路径不计入。`ToolDispatcher` 每轮开始调用网关 `begin_turn()`。

@@ -1,0 +1,54 @@
+# 工具包设计
+
+`nexus_tools` 负责工具注册、内置工具与授权网关。网关不授予权限：绑定、实时授权与审批是工具可用的唯一途径。工具调用加固见提案 `openspec/changes/archive/2026-11-06-tool-call-hardening`。
+
+## 模块
+
+| 模块 | 职责 |
+| --- | --- |
+| `registry` | `RegisteredTool`、`ToolRegistry`、调用适配 |
+| `builtins` | 内置工具与编辑器目录（`catalog.py`，返回 `risk` 与派生的 `risk_level`） |
+| `gateway` | `AuthorizedToolGateway`：执行管线、外置、截断、审批与放行接入 |
+| `arguments` | 参数容错：`repair_json`、`coerce`、`describe_errors` |
+| `output` | 头尾截断 `truncate` |
+| `threats` | 工具输出注入特征扫描 |
+| `policy` | 风险 × 访问级别 → `allow` / `ask` / `deny` |
+| `guard` | 参数守卫：随包 JSON 规则、去混淆匹配 |
+
+## 执行管线（`AuthorizedToolGateway.execute`）
+
+1. 查找绑定与注册；实时授权（`ToolAccessPort.authorize`），之后按访问级别判断，`deny` 返回 `tool_authorization_denied`。
+2. 参数预处理（`prepare_arguments`）：解析失败时尝试 `repair_json`；需要补齐未闭合字符串或括号即视为截断，返回 `tool_arguments_truncated`，不执行。再按 schema 保守转换类型（`coerce`），校验失败返回带字段路径与原因的 `tool_arguments_invalid`（最多 5 条、1000 字符，不回显参数值）。规范化后的参数写回 `ToolCall.arguments`。
+3. 参数守卫（`guard.scan`）：`CRITICAL` 返回 `tool_guard_denied`，任何放行都不能绕过；`HIGH` 以 `reason='guard'` 进入审批，会话放行不适用；所有命中写事件 `tool.guard_finding`。
+4. 审批：访问级别为 `ask`（含工具声明的 `requires_approval`）或守卫要求时进入。策略触发且非 `destructive` 的审批先查会话放行（`ToolAccessPort.grant`）。审批人修改的参数重新预处理。
+5. 执行（超时、取消、副作用工具的 `interrupted` 语义不变）。
+6. 输出：公开投影 → 注入扫描（命中时加告警标记并写事件 `tool.injection_suspected`，不拦截；`ask_user` 与 `read_tool_output` 不扫描）→ 外置（单条超过阈值，或本轮累计超过 `tool_turn_budget_chars`，且绑定了 `read_tool_output`）→ 头尾截断（70% 头、30% 尾，带原长度标记）。
+
+`definitions()` 过滤掉访问级别为 `deny` 的工具，并按工具名排序，使绑定顺序不同的智能体版本得到字节相同的工具块。引擎每轮调用 `begin_turn()` 清零每轮输出计数。
+
+## 风险与访问级别
+
+`ToolDefinition.risk`：`read` / `probe` / `write` / `destructive`；省略时只读工具为 `read`，其余为 `write`；只读工具只能是 `read` 或 `probe`。`risk_level` 是派生属性（read/probe → low，write → medium，destructive → high），保留一个版本。
+
+| access \ risk | read / probe | write | destructive |
+| --- | --- | --- | --- |
+| `read_only` | allow | deny | deny |
+| `standard`（默认） | allow | allow | ask |
+| `strict` | allow | ask | ask |
+
+声明 `requires_approval` 的工具把 `allow` 提升为 `ask`。内置工具中 `run_skill_script` 为 `destructive`，`propose_memory_draft` 为 `write`，其余为 `read`。
+
+## 参数守卫规则
+
+规则文件在 `guard/rules/`，字段沿用 octop-harness 的 YAML（`id`、`tools`、`params`、`severity`、`patterns`、`exclude_patterns`、`description`、`remediation`），以 JSON 存放以免引入 YAML 依赖。`params` 为顶层参数名，`*` 表示任意深度的全部字符串值。匹配前生成去掉拆词引号与反斜杠的变体。规则加载失败抛 `GuardRuleError`，网关不能启动。
+
+- `dangerous_shell_commands.json`：octop-harness 危险 shell 命令规则，作用于将来的 `shell` / `execute` / `bash` 工具。
+- `skill_scripts.json`：作用于 `run_skill_script` 参数，`CRITICAL` 包括格式化磁盘、写裸设备、删除根目录、下载后管道执行、反向 shell。
+
+## 端口
+
+`ToolAccessPort` 必需 `authorize`、`start`、`finish`、`denied`；可选 `approval(call, reason, risk, rules)`、`grant(call)`、`observe(invocation_id, kind, payload)`、`spill`、`progress`。缺少可选方法时按「不支持」处理：不放行、不写事件，向严格一侧回退。
+
+## 测试
+
+`tests/test_tool_call_hardening.py`（参数容错、输出控制、循环检测、风险与访问级别、守卫）、`tests/test_tool_grants.py`（会话放行）、`tests/test_tool_output_spill.py`（外置）。

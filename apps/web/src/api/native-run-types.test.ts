@@ -39,3 +39,10 @@ test('isRunEvent requires a positive integer sequence and an object payload', ()
   assert.equal(isRunEvent({ ...event, payload: 'text' }), false)
   assert.equal(isRunEvent({ ...event, event_type: undefined }), false)
 })
+
+test('tool grants are validated and malformed items dropped', async () => {
+  const { toolGrantsFromResponse } = await import('./native-run-types.ts')
+  assert.deepEqual(toolGrantsFromResponse([{ id: 'g1', tool_name: 'write', risk: 'write', created_at: 't' }, { id: 2 }]),
+    [{ id: 'g1', tool_name: 'write', risk: 'write', created_at: 't' }])
+  assert.throws(() => toolGrantsFromResponse({}))
+})

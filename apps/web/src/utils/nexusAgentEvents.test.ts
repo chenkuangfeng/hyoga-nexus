@@ -139,3 +139,15 @@ test('memory.used events are collected per entry and stay out of the timeline', 
     { id: 'm1', kind: 'memory', content: '构建' },
   ])
 })
+
+test('approvals that may be remembered offer the session option and guard rules become the description', () => {
+  const stream = toAgentEventStream([
+    ev('approval.requested', { approval_id: 'a1', tool_name: 'write', reason: 'policy', rememberable: true }),
+    ev('approval.requested', { approval_id: 'a2', tool_name: 'bash', reason: 'guard', rememberable: false,
+      guard_rules: [{ id: 'TOOL_CMD_DANGEROUS_RM', description: '可能删除文件' }] }),
+  ], 'waiting_approval')
+  const [policy, guarded] = stream as Array<Record<string, unknown>>
+  assert.equal(policy.grant_scope, 'write')
+  assert.equal(guarded.grant_scope, undefined)
+  assert.equal(guarded.description, '- 可能删除文件')
+})

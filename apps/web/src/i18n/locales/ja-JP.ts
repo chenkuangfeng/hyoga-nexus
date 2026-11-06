@@ -9049,6 +9049,7 @@ export default {
     suggestionsPlanned: 'おすすめの質問はまだ利用できません。下に質問を入力してください'
   },
   nativeRuns: {
+    toolGrants: { title: "このセッションで許可したツール", hint: "このセッション内では確認なしで実行されます。取り消すと次回から再び承認が必要です。", revoke: "取り消す", revoked: "取り消しました" },
     title: 'Native 実行',
     subtitle: '公開済みの Native エージェントを実行し、処理の進み具合を確認します。',
     newSession: '新しいセッション',
@@ -9161,6 +9162,8 @@ export default {
     origin: { capture: "自動抽出", background: "整理", foreground: "会話で提案" },
   },
   nexusAgent: {
+    toolAccess: { label: "ツールのアクセスレベル", read_only: "読み取りのみ", standard: "標準", strict: "厳格", read_onlyDesc: "読み取り専用ツールのみ。書き込み・高リスクのツールは使えません。", standardDesc: "書き込みツールはそのまま実行、高リスクのツールは承認が必要です。", strictDesc: "書き込みと高リスクのツールはどちらも承認が必要です。" },
+    risk: { read: "読み取り", probe: "調査", write: "書き込み", destructive: "高リスク" },
     basicInfoDesc: "エージェントの名前と説明を設定します",
     promptsConfigDesc: "エージェントのシステムプロンプトを設定します",
     modelConfigDesc: "チャットモデルと生成パラメータを設定します",

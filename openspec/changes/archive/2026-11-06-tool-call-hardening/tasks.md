@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：已确认（2026-11-06），决定 1–5 全部采用推荐方案。2026-11-06 用户指令开始实施，按节提交。
+状态：已完成并归档（2026-11-06）。
 
 ## 0. 准备
 
@@ -58,14 +58,15 @@
 
 ## 7. 前端
 
-- [ ] 7.1 `api/native-runs.ts`：`resolveApproval` 支持 `remember`；新增放行列表与撤销接口及映射测试。
-- [ ] 7.2 审批卡「本会话允许」按钮（`destructive` 和守卫触发时隐藏），守卫审批显示命中的规则。
-- [ ] 7.3 对话页「已放行的工具」列表与撤销。
-- [ ] 7.4 智能体编辑器工具分区：访问级别选项；工具列表显示 `risk`。
-- [ ] 7.5 文案：所有语言包补齐新增键。
+- [x] 7.1 `api/native-runs.ts`：`resolveApproval` 支持 `remember`；新增放行列表与撤销接口及映射测试。
+- [x] 7.2 审批卡「本会话允许」按钮（`destructive` 和守卫触发时隐藏），守卫审批显示命中的规则。
+- [x] 7.3 对话页「已放行的工具」列表与撤销。
+- [x] 7.4 智能体编辑器工具分区：访问级别选项；工具列表显示 `risk`。
+- [x] 7.5 文案：所有语言包补齐新增键。
+  - 审批卡复用 WeKnora 原有的"本会话内同类操作都允许"复选框（事件带 `rememberable` 时显示），守卫规则作为卡片说明显示；放行列表放在对话页顶栏（`nativeRuns.toolGrants.*`）；编辑器工具分区加访问级别与风险标签（`nexusAgent.toolAccess.*`、`nexusAgent.risk.*`）。前端单测 1649 项通过；本机内存不足无法运行 `pnpm build` 与 `pnpm test:browser`，已做组件编译与局部类型检查。
 
 ## 8. 文档与规格
 
-- [ ] 8.1 新建 `packages/tools/docs/design.md`（执行管线、容错、输出、风险、守卫）；更新 `packages/runtimes/docs/design.md`（循环检测）、`packages/platform/docs/design.md`（会话放行）。
-- [ ] 8.2 `docs/architecture.md` 工具网关一节；路线图第 7.2、8 步写入决定 3 的约束。
-- [ ] 8.3 新增规格 `openspec/specs/tool-call-hardening/spec.md`（由本变更的 `specs/` 归档生成）。
+- [x] 8.1 新建 `packages/tools/docs/design.md`（执行管线、容错、输出、风险、守卫）；更新 `packages/runtimes/docs/design.md`（循环检测）、`packages/platform/docs/design.md`（会话放行）。
+- [x] 8.2 `docs/architecture.md` 工具网关一节；路线图第 7.2、8 步写入决定 3 的约束。
+- [x] 8.3 新增规格 `openspec/specs/tool-call-hardening/spec.md`（由本变更的 `specs/` 归档生成）。

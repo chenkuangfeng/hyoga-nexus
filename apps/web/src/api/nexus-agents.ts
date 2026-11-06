@@ -50,6 +50,8 @@ export interface AgentToolEntry {
   name: string
   description: string
   group: string
+  /** `read` / `probe` / `write` / `destructive` (tool-call-hardening D10). */
+  risk?: 'read' | 'probe' | 'write' | 'destructive'
   risk_level: 'low' | 'medium' | 'high'
   read_only: boolean
   requires_approval: boolean

@@ -393,7 +393,8 @@ const submit = async (decision: 'approve' | 'reject') => {
       }
     }
     if (nexusActions) {
-      await nexusActions.resolveApproval(props.pendingId, decision, decision === 'approve' ? modified : undefined)
+      await nexusActions.resolveApproval(props.pendingId, decision, decision === 'approve' ? modified : undefined,
+        allowForSession(decision) === true)
       markPromptSubmitted(props.pendingId, { approved: decision === 'approve' })
       MessagePlugin.success(t('agentStream.toolApproval.submitted'))
       return

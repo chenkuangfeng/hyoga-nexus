@@ -16,8 +16,12 @@ export interface NexusAgentOption {
 }
 
 export interface NexusChatActions {
-  /** Approve or reject a pending tool call; `pendingId` is the Nexus approval id. */
-  resolveApproval(pendingId: string, decision: 'approve' | 'reject', args?: Record<string, unknown>): Promise<void>
+  /**
+   * Approve or reject a pending tool call; `pendingId` is the Nexus approval id. `rememberForSession` also
+   * allows later calls of the tool in this session (openspec 2026-11-06-tool-call-hardening E).
+   */
+  resolveApproval(pendingId: string, decision: 'approve' | 'reject', args?: Record<string, unknown>,
+    rememberForSession?: boolean): Promise<void>
   /** Answer the Run's question; `response` is WeKnora's ask_user answer object. */
   answerPrompt(pendingId: string, response: Record<string, unknown>): Promise<void>
   /** A WeKnora entry whose backend Nexus does not have yet: show the "not available yet" notice. */

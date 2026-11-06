@@ -200,10 +200,10 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **ToolGateway（单调守卫）**：每次调用依次经过 schema 校验、当前授权查询（查数据库，不读快照）、风险分级、审批（如需）、执行、结果投影、审计。守卫只能收紧权限；模型不能通过参数选择主体、空间或 Run。
 - **结果投影与 Spill**：工具作者提供公开结果投影。未绑定 `read_tool_output` 时，结果最多 4000 字符进入模型与事件并截断。绑定后，超过 `tool_output_inline_limit` 的公开结果写入 Run 级 `tool_outputs` 表，模型只看到预览与句柄；`read_tool_output` 按句柄与 offset 分页读取，只能读取同一 Run 的输出，每次读取写入审计。引擎在视图层裁剪更早的工具结果（只改模型视图，不改源消息）。截断与外置必须显式标注。
 - **内置工具**：平台类（知识检索、记忆读取、检查点、待办、询问用户）；领域类（观澜，由领域包注册）；受控执行类（代码、文件、Web），仅在沙箱后端通过验收后开放（见 2.9）。
-- **计划：工具调用加固**（提案 `openspec/changes/2026-11-06-tool-call-hardening`，已确认，未实施）。借鉴 WeKnora `registry.go`、`param_cast.go`、`json_repair.go`、`truncate.go`、`policy/`；hermes `arg_coercion.py`、`agent/tool_guardrails.py`、`enforce_turn_budget`、`approval_floors.py`、`threat_patterns.py`；octop-harness `tool_guard`、`tool_order`；deepseek `repeat-tool-reminder`。
+- **工具调用加固**（提案 `openspec/changes/archive/2026-11-06-tool-call-hardening`，已实施，设计见 `packages/tools/docs/design.md`）。借鉴 WeKnora `registry.go`、`param_cast.go`、`json_repair.go`、`truncate.go`、`policy/`；hermes `arg_coercion.py`、`agent/tool_guardrails.py`、`enforce_turn_budget`、`approval_floors.py`、`threat_patterns.py`；octop-harness `tool_guard`、`tool_order`；deepseek `repeat-tool-reminder`。
   - 执行顺序：授权 → 访问级别判断 → 参数预处理（JSON 修复、按 schema 保守转换类型、校验并返回字段级错误）→ 参数守卫 → 审批（会话放行只覆盖访问级别和 `requires_approval` 带来的审批）→ 执行 → 注入扫描 → 外置（计入每轮总预算）→ 头尾截断。
   - 工具定义按名称排序；风险改为 `read` / `probe` / `write` / `destructive`，智能体访问级别 `read_only` / `standard`（默认）/ `strict`。
-  - 参数守卫：随包 YAML 规则，`CRITICAL` 硬拒绝（任何放行都不能绕过），`HIGH` 必须审批，`MEDIUM` 只记录。
+  - 参数守卫：随包规则（字段沿用 octop-harness YAML，以 JSON 存放），`CRITICAL` 硬拒绝（任何放行都不能绕过），`HIGH` 必须审批，`MEDIUM` 只记录。
   - 循环检测在引擎侧：相同（工具、参数、结果）或周期 2–4 的循环先提醒，达到阈值以 `tool_loop_detected` 结束 Run。
 
 ### 2.6 技能（Skill）
@@ -341,7 +341,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 **审批流程**：高风险调用生成 `approval.requested`，进入 `waiting_approval`；决定后经 `approval.resolved` 继续或拒绝；决定与依据写入审计。
 
-**计划：会话放行**（提案 `2026-11-06-tool-call-hardening`，已确认，未实施）：审批时可选「本会话允许」，在 `action_grants` 写入 `scope='session'` 的 ActionGrant，绑定会话、智能体版本和工具名。`destructive` 工具和参数守卫触发的审批不能放行；放行在每次调用时查询，撤销立即生效。
+**会话放行**（提案 `2026-11-06-tool-call-hardening`，已实施）：审批时可选「本会话允许」，在 `action_grants` 写入 `scope='session'` 的 ActionGrant，绑定会话、智能体版本和工具名。`destructive` 工具和参数守卫触发的审批不能放行；放行在每次调用时查询，撤销立即生效。接口 `GET/DELETE /api/v1/tenants/{tenant_id}/native/sessions/{session_id}/tool-grants`，只允许会话所有者访问；对话页顶栏列出已放行的工具并可撤销。
 
 **危险命令检测**：作为审批触发条件，不作为唯一防线；检测结果与授权共同决定。
 

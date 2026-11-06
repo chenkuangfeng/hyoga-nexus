@@ -125,3 +125,20 @@ export function isRunEvent(value: unknown): value is RunEvent {
     && isRecord(value.payload)
     && isString(value.occurred_at)
 }
+
+/** A tool the owner allowed for the rest of a session (openspec 2026-11-06-tool-call-hardening E). */
+export interface ToolGrant {
+  id: string
+  tool_name: string
+  risk: string
+  created_at: string
+}
+
+/** Validate `GET .../tool-grants`; malformed items are dropped. */
+export function toolGrantsFromResponse(data: unknown): ToolGrant[] {
+  if (!Array.isArray(data)) throw new Error('Unexpected tool grant response')
+  return data.filter(isRecord).filter(item => isString(item.id) && isString(item.tool_name)).map(item => ({
+    id: item.id as string, tool_name: item.tool_name as string,
+    risk: isString(item.risk) ? item.risk : 'write', created_at: isString(item.created_at) ? item.created_at : '',
+  }))
+}

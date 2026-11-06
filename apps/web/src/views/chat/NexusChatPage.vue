@@ -45,7 +45,25 @@
   <div v-else class="chat" :class="{ 'is-embedded': compact }">
     <div v-if="!compact" class="chat-topbar">
       <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
-      <div class="sandbox-header-toggle">
+      <!-- Nexus: tools allowed for the rest of this session (openspec 2026-11-06-tool-call-hardening 7.3). -->
+      <t-popup v-if="toolGrants.length" trigger="click" placement="bottom-right" overlay-class-name="wk-popover">
+        <button type="button" class="tool-grants-toggle" :aria-label="$t('nativeRuns.toolGrants.title')">
+          <t-icon name="secured" /> {{ toolGrants.length }}
+        </button>
+        <template #content>
+          <div class="tool-grants-panel">
+            <p class="tool-grants-title">{{ $t('nativeRuns.toolGrants.title') }}</p>
+            <p class="tool-grants-hint">{{ $t('nativeRuns.toolGrants.hint') }}</p>
+            <div v-for="grant in toolGrants" :key="grant.id" class="tool-grants-row">
+              <span class="tool-grants-name">{{ grant.tool_name }}</span>
+              <t-button size="small" variant="text" theme="danger" @click="revokeGrant(grant.id)">
+                {{ $t('nativeRuns.toolGrants.revoke') }}
+              </t-button>
+            </div>
+          </div>
+        </template>
+      </t-popup>
+      <div class="sandbox-header-toggle" :class="{ 'after-grants': toolGrants.length }">
         <t-tooltip placement="bottom">
           <template #content>{{ $t('chatHeader.toggleSandboxPanel') }}</template>
           <button type="button" class="sandbox-header-toggle__btn" :aria-label="$t('chatHeader.toggleSandboxPanel')"
@@ -152,6 +170,9 @@ import {
   listRunEvents,
   listSessions,
   resolveApproval,
+  listToolGrants,
+  revokeToolGrant,
+  type ToolGrant,
   type AgentView,
   type ConversationMessage,
   type RunEvent,
@@ -438,11 +459,40 @@ function promptRequest(pendingId: string): AskUserQuestion {
 /** Pending draft ids of the caller (memory draft cards); reset after a review so the next read is fresh. */
 let pendingDrafts: Promise<Set<string>> | null = null
 
+/** Session grants of the open conversation (tool-call-hardening E); reloaded on session change and after an approval. */
+const toolGrants = ref<ToolGrant[]>([])
+
+async function loadToolGrants() {
+  const tenant = tenantId.value, session = activeSessionId.value
+  if (!tenant || !session) { toolGrants.value = []; return }
+  try {
+    const grants = await listToolGrants(tenant, session)
+    if (activeSessionId.value === session) toolGrants.value = grants
+  } catch {
+    toolGrants.value = []
+  }
+}
+
+async function revokeGrant(grantId: string) {
+  const tenant = tenantId.value, session = activeSessionId.value
+  if (!tenant || !session) return
+  try {
+    await revokeToolGrant(tenant, session, grantId)
+    MessagePlugin.success(t('nativeRuns.toolGrants.revoked'))
+  } catch (error) {
+    MessagePlugin.error(error instanceof Error && error.message ? error.message : t('nativeRuns.loadError'))
+  }
+  await loadToolGrants()
+}
+
+watch(() => activeSessionId.value, () => { void loadToolGrants() }, { immediate: true })
+
 provideNexusChatActions({
-  async resolveApproval(pendingId, decision, args) {
+  async resolveApproval(pendingId, decision, args, rememberForSession) {
     const current = run.value
     if (!tenantId.value || !current) throw new Error(t('nativeRuns.loadError'))
-    await resolveApproval(tenantId.value, current.id, pendingId, decision === 'approve', args)
+    await resolveApproval(tenantId.value, current.id, pendingId, decision === 'approve', args, rememberForSession)
+    if (rememberForSession) void loadToolGrants()
     await native.resume()
   },
   async answerPrompt(pendingId, response) {
@@ -709,6 +759,59 @@ defineExpose({ sendText })
     align-items: center;
     flex-shrink: 0;
     margin-left: auto;
+
+    &.after-grants {
+        margin-left: 8px;
+    }
+}
+
+.tool-grants-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 0 6px;
+    height: 24px;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: transparent;
+    color: var(--td-text-color-secondary);
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--td-bg-color-container-hover);
+        color: var(--td-text-color-primary);
+    }
+}
+
+.tool-grants-panel {
+    min-width: 220px;
+    max-width: 320px;
+    padding: 8px 4px;
+}
+
+.tool-grants-title {
+    margin: 0 0 4px;
+    font-weight: 500;
+}
+
+.tool-grants-hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--td-text-color-secondary);
+}
+
+.tool-grants-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.tool-grants-name {
+    font-family: var(--app-font-mono, monospace);
+    font-size: 13px;
 }
 
 .sandbox-header-toggle__btn {

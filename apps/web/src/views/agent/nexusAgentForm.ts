@@ -38,6 +38,17 @@ export interface AgentEditorForm {
   memory_enabled: boolean
   /** `budgets.memory.recall`: false stops per-turn memory recall (openspec 2026-11-06-memory-evolution D3). */
   memory_recall: boolean
+  /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
+  tool_access: ToolAccess
+}
+
+export const TOOL_ACCESS_LEVELS = ['read_only', 'standard', 'strict'] as const
+export type ToolAccess = (typeof TOOL_ACCESS_LEVELS)[number]
+
+function accessOf(budgets: Record<string, unknown> | undefined): ToolAccess {
+  const behavior = budgets?.behavior
+  const value = behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).tool_access : undefined
+  return (TOOL_ACCESS_LEVELS as readonly string[]).includes(value as string) ? (value as ToolAccess) : 'standard'
 }
 
 function memoryOf(budgets: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -80,6 +91,7 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     allowed_tools: (agent.resource_bindings || []).filter(b => b.kind === 'tool').map(b => b.resource_id),
     memory_enabled: memoryOf(budgets).enabled !== false,
     memory_recall: memoryOf(budgets).recall !== false,
+    tool_access: accessOf(budgets),
   }
 }
 
@@ -99,6 +111,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     allowed_tools: [...defaultTools],
     memory_enabled: true,
     memory_recall: true,
+    tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
   }
 }
 
@@ -144,6 +157,10 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   if (!form.memory_recall) memory.recall = false
   if (Object.keys(memory).length) budgets.memory = memory
   else delete budgets.memory
+
+  const behavior = budgets.behavior && typeof budgets.behavior === 'object' ? { ...(budgets.behavior as Record<string, unknown>) } : {}
+  if (form.tool_access !== 'standard' || 'tool_access' in behavior) behavior.tool_access = form.tool_access
+  if (Object.keys(behavior).length) budgets.behavior = behavior
 
   const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool')
   const tools: AgentDraftInput['resource_bindings'] = [...new Set(form.allowed_tools)].map(name => ({

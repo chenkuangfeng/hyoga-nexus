@@ -54,6 +54,10 @@ export interface AgentStreamApproval {
   resolved: boolean
   approved?: boolean
   canceled?: boolean
+  /** Set when the approval may be remembered for the session: WeKnora's card then offers "allow in session". */
+  grant_scope?: string
+  /** Guard rules that asked for this approval (tool-call-hardening F), shown as the card description. */
+  description?: string
 }
 
 /** WeKnora `agent_prompt_required` (ask_user); `pending_id` is the Nexus input request id. */
@@ -184,6 +188,12 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
           service_name: '',
           args_json: args ? JSON.stringify(args, null, 2) : '',
           resolved: false,
+        }
+        if (payload.rememberable === true) card.grant_scope = card.mcp_tool_name
+        if (Array.isArray(payload.guard_rules) && payload.guard_rules.length) {
+          card.description = payload.guard_rules
+            .map(rule => (rule && typeof rule === 'object' ? String((rule as Record<string, unknown>).description ?? '') : ''))
+            .filter(Boolean).map(text => `- ${text}`).join('\n')
         }
         approvalById.set(id, card)
         stream.push(card)

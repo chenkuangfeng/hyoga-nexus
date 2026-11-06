@@ -9,7 +9,7 @@
  * uses `@microsoft/fetch-event-source` with the same auth headers.
  */
 import { fetchEventSource } from '@microsoft/fetch-event-source'
-import { get, post } from '@/utils/request'
+import { del, get, post } from '@/utils/request'
 import { getApiBaseUrl } from '@/utils/api-base'
 import {
   isRecord,
@@ -23,6 +23,8 @@ import {
   type RunEvent,
   type RunView,
   type SessionView,
+  type ToolGrant,
+  toolGrantsFromResponse,
 } from './native-run-types'
 
 export * from './native-run-types'
@@ -135,9 +137,17 @@ export async function listPendingApprovals(tenantId: string, runId: string): Pro
 
 /** Approve or reject one tool call; approval may carry corrected arguments (revalidated by the server). */
 export async function resolveApproval(tenantId: string, runId: string, approvalId: string, approve: boolean,
-  args?: Record<string, unknown>): Promise<void> {
+  args?: Record<string, unknown>, rememberForSession = false): Promise<void> {
   await post(`${tenantPath(tenantId)}/native/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(approvalId)}`,
-    { approve, arguments: approve ? args ?? null : null })
+    { approve, arguments: approve ? args ?? null : null, remember: approve && rememberForSession ? 'session' : 'once' })
+}
+
+export async function listToolGrants(tenantId: string, sessionId: string): Promise<ToolGrant[]> {
+  return toolGrantsFromResponse(await get(`${tenantPath(tenantId)}/native/sessions/${encodeURIComponent(sessionId)}/tool-grants`))
+}
+
+export async function revokeToolGrant(tenantId: string, sessionId: string, grantId: string): Promise<void> {
+  await del(`${tenantPath(tenantId)}/native/sessions/${encodeURIComponent(sessionId)}/tool-grants/${encodeURIComponent(grantId)}`)
 }
 
 /** "Keep waiting" on a watchdog alert. Does not change the Run's execution. */

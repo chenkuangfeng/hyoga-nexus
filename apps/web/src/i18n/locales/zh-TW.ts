@@ -9045,6 +9045,7 @@ export default {
     suggestionsPlanned: '推薦問題尚未開放，可直接在下方輸入問題'
   },
   nativeRuns: {
+    toolGrants: { title: "本會話已放行的工具", hint: "這些工具在本會話內呼叫時不再詢問；撤銷後下次呼叫重新審批。", revoke: "撤銷", revoked: "已撤銷" },
     title: 'Native 執行',
     subtitle: '執行已發布的 Native 智慧代理，並查看執行過程。',
     newSession: '新增會話',
@@ -9157,6 +9158,8 @@ export default {
     origin: { capture: "自動提煉", background: "背景整理", foreground: "對話中提出" },
   },
   nexusAgent: {
+    toolAccess: { label: "工具存取級別", read_only: "唯讀", standard: "標準", strict: "嚴格", read_onlyDesc: "只提供唯讀工具，寫入和高危工具不可用。", standardDesc: "寫入類工具直接執行，高危工具需要審批。", strictDesc: "寫入類和高危工具都需要審批。" },
+    risk: { read: "唯讀", probe: "探查", write: "寫入", destructive: "高危" },
     basicInfoDesc: "設定智慧體的名稱與描述",
     promptsConfigDesc: "設定智慧體的系統提示詞",
     modelConfigDesc: "設定對話模型與生成參數",

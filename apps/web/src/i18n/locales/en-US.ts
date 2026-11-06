@@ -9038,6 +9038,7 @@ export default {
     suggestionsPlanned: 'Suggested questions are not available yet. Type your question below'
   },
   nativeRuns: {
+    toolGrants: { title: "Tools allowed in this session", hint: "These tools run without asking in this session; after revoking, the next call asks again.", revoke: "Revoke", revoked: "Revoked" },
     title: 'Native runs',
     subtitle: 'Run a published Native agent and follow what it does.',
     newSession: 'New session',
@@ -9150,6 +9151,8 @@ export default {
     origin: { capture: "Extracted", background: "Consolidation", foreground: "Proposed in chat" },
   },
   nexusAgent: {
+    toolAccess: { label: "Tool access level", read_only: "Read only", standard: "Standard", strict: "Strict", read_onlyDesc: "Only read-only tools are offered; write and destructive tools are unavailable.", standardDesc: "Write tools run directly; destructive tools need approval.", strictDesc: "Write and destructive tools both need approval." },
+    risk: { read: "Read", probe: "Probe", write: "Write", destructive: "Destructive" },
     basicInfoDesc: "Configure the agent name and description",
     promptsConfigDesc: "Configure the agent system prompt",
     modelConfigDesc: "Configure the chat model and generation parameters",

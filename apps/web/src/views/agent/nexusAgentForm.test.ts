@@ -83,3 +83,12 @@ test('memory switches are stored only when turned off and read back', () => {
   assert.equal(read.memory_enabled, true)
   assert.equal(read.memory_recall, false)
 })
+
+test('tool access is read from behavior and written only when set', () => {
+  assert.equal(formFromAgent(agent({ budgets: {} })).tool_access, 'standard')
+  const strict = formFromAgent(agent({ budgets: { behavior: { tool_access: 'strict' } } }))
+  assert.equal(strict.tool_access, 'strict')
+  const draft = draftFromForm({ ...strict, tool_access: 'read_only' }, agent({ budgets: { behavior: { tool_access: 'strict', x: 1 } } }), null, TENANT)
+  assert.deepEqual(draft.budgets.behavior, { tool_access: 'read_only', x: 1 })
+  assert.equal(draftFromForm(formFromAgent(agent({ budgets: {} })), agent({ budgets: {} }), null, TENANT).budgets.behavior, undefined)
+})

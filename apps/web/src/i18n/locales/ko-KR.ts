@@ -9049,6 +9049,7 @@ export default {
     suggestionsPlanned: '추천 질문은 아직 제공되지 않습니다. 아래에 질문을 입력하세요'
   },
   nativeRuns: {
+    toolGrants: { title: "이 세션에서 허용한 도구", hint: "이 세션에서는 묻지 않고 실행됩니다. 취소하면 다음 호출부터 다시 승인합니다.", revoke: "취소", revoked: "취소했습니다" },
     title: 'Native 실행',
     subtitle: '게시된 Native 에이전트를 실행하고 진행 상황을 확인합니다.',
     newSession: '새 세션',
@@ -9161,6 +9162,8 @@ export default {
     origin: { capture: "자동 추출", background: "정리", foreground: "대화에서 제안" },
   },
   nexusAgent: {
+    toolAccess: { label: "도구 접근 수준", read_only: "읽기 전용", standard: "표준", strict: "엄격", read_onlyDesc: "읽기 전용 도구만 제공되며 쓰기·고위험 도구는 사용할 수 없습니다.", standardDesc: "쓰기 도구는 바로 실행하고 고위험 도구는 승인이 필요합니다.", strictDesc: "쓰기와 고위험 도구 모두 승인이 필요합니다." },
+    risk: { read: "읽기", probe: "탐색", write: "쓰기", destructive: "고위험" },
     basicInfoDesc: "에이전트 이름과 설명을 설정합니다",
     promptsConfigDesc: "에이전트 시스템 프롬프트를 설정합니다",
     modelConfigDesc: "채팅 모델과 생성 매개변수를 설정합니다",
