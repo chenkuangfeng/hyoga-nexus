@@ -137,6 +137,51 @@ def rebuild_base(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(ge
     return {'documents': count}
 
 
+# ---------------------------------------------------------------- graph
+
+@router.get('/graph-stores')
+def list_graph_stores(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Graph store engines with their catalog state; ``neo4j`` is planned until K2.7."""
+    _user(db, principal, tenant_id)
+    return {'items': [{'engine': row['key'], 'name': row['label'], 'status': row['status'], 'stage': row['stage'],
+                       'verified': row['verified'], 'builtin': row['key'] == 'builtin'}
+                      for row in capabilities.snapshot() if row['group'] == 'graph_store']}
+
+
+@router.get('/bases/{kb_id}/graph')
+def get_graph_status(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.knowledge.graph import views
+    user = _user(db, principal, tenant_id)
+    return views.status(db, access.readable_base(db, kb_id, tenant_id, user.id))
+
+
+@router.post('/bases/{kb_id}/graph/rebuild', status_code=202)
+def rebuild_graph(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.knowledge.graph import views
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        kb = access.writable_base(db, kb_id, tenant_id, user.id)
+        build = views.request_rebuild(db, kb, user.id)
+    return build
+
+
+@router.get('/bases/{kb_id}/graph/overview')
+async def graph_overview(tenant_id: UUID, kb_id: UUID, request: Request, names: str = Query('', max_length=500),
+                         hops: int = Query(1, ge=1, le=3), limit: int = Query(60, ge=5, le=200),
+                         principal: Principal = Depends(get_principal),
+                         db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Nodes and edges for the graph browser: entities named in ``names`` (comma separated) with neighbours."""
+    from nexus_platform.knowledge.graph import views
+    user = _user(db, principal, tenant_id)
+    factory = getattr(request.app.state, 'session_factory', None) or sessionmaker(
+        bind=db.get_bind(), expire_on_commit=False, autoflush=False)
+    wanted = [name.strip() for name in names.split(',') if name.strip()][:10]
+    return await views.overview(factory, db, tenant_id, user.id, kb_id, names=wanted, hops=hops, limit=limit)
+
+
 # ---------------------------------------------------------------- documents
 
 @router.get('/bases/{kb_id}/documents')

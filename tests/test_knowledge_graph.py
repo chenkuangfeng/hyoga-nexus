@@ -190,3 +190,39 @@ def test_failed_model_marks_the_build_failed_without_touching_the_visible_graph(
         failed = db.scalar(select(GraphBuildRecord).where(GraphBuildRecord.state == 'failed'))
         assert failed is not None and 'RuntimeError' in failed.error
         assert db.scalar(select(GraphBuildRecord).where(GraphBuildRecord.state == 'ready')) is not None
+
+
+def test_graph_api_status_rebuild_and_browse(graph_env):
+    from cryptography.fernet import Fernet  # noqa: F401
+    from fastapi.testclient import TestClient
+    from nexus_api.dependencies.platform import get_database_session, get_principal
+    from nexus_api.main import app
+
+    factory, tenant_id, owner, member, model = graph_env
+    kb_id = make_graph_kb(factory, tenant_id, owner)
+    for name, text in TEXTS.items():
+        upload(factory, tenant_id, owner, kb_id, name, text.encode())
+    drain(factory)
+    run_builds(factory)
+
+    def session():
+        with factory() as db:
+            yield db
+    who = [OWNER]
+    app.dependency_overrides[get_database_session] = session
+    app.dependency_overrides[get_principal] = lambda: who[0]
+    try:
+        with TestClient(app) as client:
+            path = f'/api/v1/tenants/{tenant_id}/knowledge'
+            status = client.get(f'{path}/bases/{kb_id}/graph').json()
+            assert status['enabled'] and status['ready']['entity_count'] == 4
+            assert status['config']['mode'] == 'graphrag_light'
+            stores = {s['engine']: s for s in client.get(f'{path}/graph-stores').json()['items']}
+            assert stores['builtin']['status'] == 'available' and stores['neo4j']['status'] == 'planned'
+            top = client.get(f'{path}/bases/{kb_id}/graph/overview').json()
+            assert {n['name'] for n in top['nodes']} == {'甲公司', '张三', '乙产品', '丙团队'} and top['edges']
+            named = client.get(f'{path}/bases/{kb_id}/graph/overview', params={'names': '张三', 'hops': 1}).json()
+            assert {n['name'] for n in named['nodes']} == {'张三', '甲公司'}
+            assert client.post(f'{path}/bases/{kb_id}/graph/rebuild').status_code == 202
+    finally:
+        app.dependency_overrides.clear()
