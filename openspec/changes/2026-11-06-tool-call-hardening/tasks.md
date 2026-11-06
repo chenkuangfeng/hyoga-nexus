@@ -42,11 +42,12 @@
 
 ## 5. 会话放行
 
-- [ ] 5.1 迁移：`action_grants` 表（架构 2.11 的 ActionGrant）、`action_approvals.reason` 列；测试升级和降级。
-- [ ] 5.2 `resolve` 支持 `remember`；`destructive` 或守卫触发的审批拒绝 `session`（422）。
-- [ ] 5.3 `DurableRuntimeStore.approval(call, reason)` 与 `grant` 查询；`approval.grant_used` 审计。
-- [ ] 5.4 `GET/DELETE sessions/{session_id}/tool-grants` 接口（404、审计）。
-- [ ] 5.5 pytest：放行生效、版本变化失效、撤销后立即生效、非所有者 404、`destructive` 不可放行。
+- [x] 5.1 迁移：`action_grants` 表（架构 2.11 的 ActionGrant）、`action_approvals.reason` 列；测试升级和降级。
+- [x] 5.2 `resolve` 支持 `remember`；`destructive` 或守卫触发的审批拒绝 `session`（422）。
+- [x] 5.3 `DurableRuntimeStore.approval(call, reason)` 与 `grant` 查询；`approval.grant_used` 审计。
+- [x] 5.4 `GET/DELETE sessions/{session_id}/tool-grants` 接口（404、审计）。
+- [x] 5.5 pytest：放行生效、版本变化失效、撤销后立即生效、非所有者 404、`destructive` 不可放行。
+  - `action_approvals` 另记 `risk`（判断能否放行）；待审列表与 `approval.requested` 事件带 `reason`、`rememberable` 供界面决定是否显示按钮。网关对 `destructive` 工具不查放行；端口的 `approval` 不接受 `reason` 时按旧签名调用。会话删除时清理放行未做：平台目前没有删除会话的入口。测试 `tests/test_tool_grants.py`，全量 918 通过。
 
 ## 6. 参数守卫
 

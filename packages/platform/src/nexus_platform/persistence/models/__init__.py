@@ -38,7 +38,7 @@ from .memory import (
     ContextSummaryRecord,
 )
 from .skill import SkillRecord, SkillVersionRecord, SkillVersionFileRecord, SessionSkillSnapshotRecord
-from .approval import InputRequestRecord, ActionApprovalRecord
+from .approval import InputRequestRecord, ActionApprovalRecord, ActionGrantRecord
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
 from .space import AgentShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
@@ -104,6 +104,7 @@ __all__ = [
     'ContextSummaryRecord',
     'InputRequestRecord',
     'ActionApprovalRecord',
+    'ActionGrantRecord',
     'OrgUnitRecord',
     'UserOrgUnitRecord',
     

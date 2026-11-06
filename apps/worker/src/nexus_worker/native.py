@@ -77,6 +77,7 @@ class ToolAccess:
         self.finish = store.finish_tool
         self.progress = store.tool_progress
         self.approval = store.approval
+        self.grant = store.grant
         self.spill = store.spill_tool_output
 
     async def observe(self, invocation_id: str, kind: str, payload: dict) -> None:

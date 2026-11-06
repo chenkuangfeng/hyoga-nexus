@@ -226,12 +226,22 @@ class DurableRuntimeStore:
                 'signature': tool_signature(call.name, call.arguments)})
             return str(invocation_id)
 
-    async def approval(self, call: ToolCall):
-        """Persist/consume a per-call action decision after current resource authorization."""
+    async def approval(self, call: ToolCall, reason: str = 'policy', risk: str | None = None):
+        """Persist/consume a per-call action decision after current resource authorization.
+
+        `reason` and `risk` (tool-call-hardening E) decide whether the owner may remember the decision.
+        """
         from .approvals import request
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
-            return request(db, self._run(db), call)
+            return request(db, self._run(db), call, reason=reason, risk=risk)
+
+    async def grant(self, call: ToolCall) -> bool:
+        """Whether an active session grant lets this call skip a policy approval (queried on every call)."""
+        from .approvals import grant_for_call
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            return grant_for_call(db, self._run(db), call)
 
     async def tool_progress(self, invocation_id: str, text: str) -> None:
         """Persist only the registered tool's public projection of intermediate output."""

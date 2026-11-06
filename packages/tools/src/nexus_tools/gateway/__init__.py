@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from dataclasses import dataclass, replace
 from typing import Protocol
@@ -112,6 +113,13 @@ class AuthorizedToolGateway:
         definition = tool.definition
         return tool_policy.decide(definition.risk, self.tool_access, definition.requires_approval)
 
+    async def _approval(self, call: ToolCall, reason: str, risk: str):
+        """Ask the port for approval, passing `reason` and `risk` when the port accepts them."""
+        parameters = inspect.signature(self.access.approval).parameters
+        if 'reason' in parameters:
+            return await self.access.approval(call, reason=reason, risk=risk)
+        return await self.access.approval(call)
+
     def begin_turn(self) -> None:
         """Called by the engine before each turn's tool calls: resets the per-turn output budget."""
         self.turn_used = 0
@@ -178,10 +186,14 @@ class AuthorizedToolGateway:
             arguments, invalid = prepare_arguments(tool, call.arguments)
             if arguments is not None:
                 call = replace(call, arguments=json.dumps(arguments, ensure_ascii=False))
-        if not error and invalid is None and self._decide(tool) == 'ask':
+        needs_approval = not error and invalid is None and self._decide(tool) == 'ask'
+        if needs_approval and tool.definition.risk != 'destructive' and hasattr(self.access, 'grant'):
+            # A session grant (tool-call-hardening E) covers approvals asked for by policy, never destructive tools.
+            needs_approval = not await self.access.grant(call)
+        if needs_approval:
             if not hasattr(self.access, 'approval'):
                 return ToolResult('Action approval is unavailable', error_code='tool_approval_unavailable')
-            decision = await self.access.approval(call)
+            decision = await self._approval(call, 'policy', tool.definition.risk)
             if isinstance(decision, ToolResult):
                 return decision
             # The approver may edit the arguments: prepare them again.

@@ -225,6 +225,8 @@ class ApprovalDecision(BaseModel):
     """A per-call human decision with optional schema-revalidated argument corrections."""
     approve: bool
     arguments: dict[str, Any] | None = None
+    #: `session` also allows later calls of this tool in this session (not for destructive or guarded calls).
+    remember: Literal['once', 'session'] = 'once'
 
 
 @router.get('/runs/{run_id}/approvals')
@@ -239,7 +241,23 @@ def resolve_approval(tenant_id: UUID, run_id: UUID, approval_id: UUID, body: App
                      principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Resolve and requeue once; the worker rechecks resource authorization before invocation."""
     from nexus_platform.runs.approvals import resolve
-    return resolve(db, principal, tenant_id, run_id, approval_id, body.approve, body.arguments)
+    return resolve(db, principal, tenant_id, run_id, approval_id, body.approve, body.arguments, body.remember)
+
+
+@router.get('/sessions/{session_id}/tool-grants')
+def get_tool_grants(tenant_id: UUID, session_id: UUID, principal: Principal = Depends(get_principal),
+                    db: Session = Depends(get_database_session)):
+    """Tools the caller allowed for the rest of this session (owner only)."""
+    from nexus_platform.runs.approvals import list_grants
+    return list_grants(db, principal, tenant_id, session_id)
+
+
+@router.delete('/sessions/{session_id}/tool-grants/{grant_id}')
+def delete_tool_grant(tenant_id: UUID, session_id: UUID, grant_id: UUID, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)):
+    """Revoke a session grant; the next call of that tool asks again."""
+    from nexus_platform.runs.approvals import revoke_grant
+    return revoke_grant(db, principal, tenant_id, session_id, grant_id)
 
 
 class ModelBranch(BaseModel):
