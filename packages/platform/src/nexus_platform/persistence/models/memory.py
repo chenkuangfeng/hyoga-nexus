@@ -216,6 +216,23 @@ class MemorySpaceSettingsRecord(Base):
     extract_instructions: Mapped[str] = mapped_column(Text, nullable=False, default='', server_default='')
 
 
+class MemoryConsolidationStateRecord(Base):
+    """Consolidation schedule for one owner in one space (openspec 2026-11-06-memory-evolution stage 3).
+
+    `last_run_at` gates the daily background pass, `last_forced_at` the one-per-minute requested pass;
+    `requested_at` marks a requested pass waiting for a worker, and the lease keeps two workers from
+    reviewing the same store at once.
+    """
+    __tablename__ = 'memory_consolidation_state'
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_forced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class MemoryCaptureCursorRecord(Base):
     """Highest message sequence already turned into capture jobs for one session (the cursor of 4.1)."""
     __tablename__ = 'memory_capture_cursors'

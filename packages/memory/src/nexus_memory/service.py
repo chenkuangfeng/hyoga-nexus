@@ -45,7 +45,7 @@ RESIDENT_LIMIT = 1000
 CONSOLIDATE_PERCENT = 80
 #: Entries unused this long and without a validity end rank one importance step lower (stage 3, C4).
 STALE_AFTER = timedelta(days=45)
-STALE_ENABLED = False
+STALE_ENABLED = True
 #: Search reranking (stage 2, B3; octop-memory `rerank.py`): keyword relevance dominates, importance and
 #: recency break ties. Recency halves every `RECENCY_HALF_LIFE_DAYS` since the later of publish and last use.
 SEARCH_WEIGHTS = (0.6, 0.2, 0.2)
@@ -67,6 +67,8 @@ CONTAINMENT_MIN_CHARS = 6
 CONFLICT_OVERLAP = 0.3
 #: Most entries listed in one review hint.
 HINT_LIMIT = 3
+#: Overlap at which an existing entry is reported as a likely paraphrase (stage 3, C1).
+SIMILAR_OVERLAP = 0.6
 
 
 def utc(moment: datetime | None) -> datetime | None:
@@ -320,6 +322,63 @@ def _conflicts(entries: list[LiveEntry], content: str, exclude: UUID | None) -> 
     return out
 
 
+def _similar(entries: list[LiveEntry], content: str, exclude: UUID | None) -> list[dict[str, Any]]:
+    """Entries that likely say the same thing in other words (stage 3, C1): a hint to merge, never a block."""
+    scored = sorted(((text.jaccard(item.content, content), order, item) for order, item in enumerate(entries)
+                     if item.entry.id != exclude), key=lambda row: (-row[0], row[1]))
+    return [_hint(item, score=round(score, 2)) for score, _, item in scored if score >= SIMILAR_OVERLAP][:HINT_LIMIT]
+
+
+def merge_targets(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID) -> frozenset[str]:
+    """Entry ids named by pending merge drafts (kept or to be archived); consolidation skips them."""
+    out: set[str] = set()
+    for draft in repo.pending_drafts(tenant_id, owner_id):
+        merge = draft.annotations.get('merge')
+        if isinstance(merge, dict):
+            out.update(str(item.get('id')) for item in merge.get('archive', []) if isinstance(item, dict))
+            if draft.target_entry_id:
+                out.add(str(draft.target_entry_id))
+    return frozenset(out)
+
+
+def propose_merge(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, *, keep: LiveEntry,
+                  others: list[LiveEntry], merged: str, budget: int = MEMORY_BUDGET_CHARS) -> dict[str, Any]:
+    """Record a merge draft from consolidation (stage 3, C2): an edit of `keep` whose publication also
+    archives `others`. The draft is attributed to the Run that produced `keep`'s current version.
+
+    Outcomes: `rejected` (threat or tombstone), `skipped` (entries changed, mixed kinds, or the merged
+    text would not fit the budget), or `pending` with the draft id. Never publishes anything.
+    """
+    screened = text.screen(merged)
+    if screened.threats:
+        return {'status': 'rejected', 'reason': 'threat'}
+    content = screened.text[:CONTENT_LIMIT]
+    fp = text.fingerprint(content)
+    if repo.is_tombstoned(tenant_id, owner_id, fp):
+        return {'status': 'rejected', 'reason': 'previously_rejected'}
+    if not others or any(item.entry.kind != keep.entry.kind for item in others):
+        return {'status': 'skipped', 'reason': 'kind_mismatch'}
+    for item in (keep, *others):
+        current = repo.owned_entry(tenant_id, owner_id, item.entry.id)
+        if current is None or current.current_version != item.entry.current_version:
+            return {'status': 'skipped', 'reason': 'changed'}
+    sizes = {entry.id: entry.chars for entry in repo.sized_entries(tenant_id, owner_id)}
+    used = sum(sizes.values()) - sum(sizes.get(item.entry.id, 0) for item in (keep, *others))
+    if used + len(content) > budget:
+        return {'status': 'skipped', 'reason': 'budget'}
+    version = _version(repo, keep.entry.id, keep.entry.current_version)
+    meta = DraftMeta(topic=keep.entry.topic, importance=max(item.entry.importance for item in (keep, *others)),
+                     target_entry_id=keep.entry.id,
+                     annotations={'merge': {'archive': [{'id': str(item.entry.id), 'title': item.entry.title,
+                                                         'version': item.entry.current_version} for item in others]}})
+    draft_id = repo.create_draft(tenant_id=tenant_id, source_run_id=version.source_run_id, kind=keep.entry.kind,
+                                 diff=content, fingerprint=fp, base_version=keep.entry.current_version,
+                                 origin='background', source_message_ids=(), meta=meta)
+    repo.audit(tenant_id, owner_id, 'memory.draft_created', 'memory_draft', str(draft_id),
+               {'origin': 'background', 'merge': len(others) + 1, 'redacted': list(screened.redacted)})
+    return {'status': 'pending', 'id': str(draft_id)}
+
+
 def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_id: UUID, kind: str,
             diff: str, *, entry_id: UUID | None = None, base_version: int | None = None,
             origin: str = 'foreground', source_message_ids: tuple[str, ...] = (),
@@ -384,6 +443,9 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
     conflicts = _conflicts(same_kind, content, entry_id)
     if conflicts:
         annotations['conflict'] = (annotations.get('conflict', []) + conflicts)[:HINT_LIMIT]
+    similar = _similar(same_kind, content, entry_id)
+    if similar:
+        annotations['similar'] = similar
 
     replaced = 0
     if entry_id is not None:
@@ -471,9 +533,22 @@ def review(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, draft_id: UU
         replaced = 0
         new_version = 1
         target = None
+    # A merge draft (stage 3) also archives the other entries; each must still be at the version the merge read.
+    archived: list[EntryView] = []
+    merge = draft.annotations.get('merge') if isinstance(draft.annotations, dict) else None
+    if isinstance(merge, dict):
+        for item in merge.get('archive', []):
+            other = _owned(repo, tenant_id, owner_id, UUID(str(item['id'])), lock=True)
+            if other.current_version != item.get('version'):
+                raise MemoryConflict('A merged entry changed after the merge was proposed')
+            archived.append(other)
+            replaced += _current_chars(repo, tenant_id, owner_id, other.id)
     used = sum(item.chars for item in repo.sized_entries(tenant_id, owner_id)) - replaced
     if used + len(draft.diff) > budget:
         raise MemoryConflict('Memory budget would be exceeded; merge or remove entries first')
+    for other in archived:
+        repo.bump_entry(other.id, current_version=other.current_version, active=False)
+        repo.audit(tenant_id, owner_id, 'memory.archived', 'memory', str(other.id), {'merged_into': str(entry_id)})
     chosen = importance or draft.importance or (entry.importance if entry else DEFAULT_IMPORTANCE)
     topic = draft.topic or (entry.topic if entry else '')
     validity = draft.valid_until if draft.valid_until is not None else UNSET

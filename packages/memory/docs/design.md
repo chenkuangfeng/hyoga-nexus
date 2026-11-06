@@ -14,6 +14,12 @@
 - 开关：`switches.resolve()` 合并空间、成员、智能体三级开关，三者都允许时记忆才可用；任一级关闭时，平台不注入索引、移除 `MEMORY_TOOL_NAMES` 中的工具、拒绝记忆调用、不排队自动抓取。写入方式 `explicit` 只禁止自动抓取。关闭不删除任何数据。参考 WeKnora `enabledScope`。
 - 边界：不导入 SQLAlchemy 或平台包；不解析主体。调用方传入已解析的 `owner_id`。
 
+## 去重与维护（第 3 阶段）
+
+- 近似重复：提议时与同类型条目的分词 Jaccard ≥ 0.6，在草稿 `annotations.similar` 上标注，照常创建草稿。
+- 整理（`consolidate.py`）：同类型条目两两比较，Jaccard 超过阈值（后台 0.45，手动 0.3）的用并查集聚成簇（每簇最多 6 条，后台每次最多 3 簇，手动 8 簇），由模型判断是否同一件事并给出合并内容与保留条目；`service.propose_merge()` 生成合并草稿：对保留条目的编辑草稿（`origin='background'`），`annotations.merge.archive` 列出发布时归档的条目及其版本。发布时任一条目版本已变化即冲突；已在待审合并草稿中的条目不再参与整理。参考 octop-memory `consolidate.py`、WeKnora `consolidate.go`。
+- 久未使用：没有有效期、且 45 天内未使用（或未发布更新）的条目，在索引排序中重要度减 1。
+
 ## 自动抓取规则（`capture.py`）
 
 - 来源：`select_sources()` 只把用户本人写的消息作为来源（`role='user'` 且来源属于 `USER_ORIGINS`：起始消息、`user_input`、`user_steer`）；运行时补发的 `user` 消息（`origin='runtime'`）和工具消息排除，助手文字只作只读上下文。参考 WeKnora `collectSessionSegments`。

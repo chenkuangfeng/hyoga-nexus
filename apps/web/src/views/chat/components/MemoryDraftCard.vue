@@ -18,6 +18,9 @@
     <div v-if="conflicts.length" class="memory-draft-hint">
       {{ $t('agentStream.memoryDraft.conflictHint', { titles: conflicts.join('、') }) }}
     </div>
+    <div v-if="similar.length" class="memory-draft-hint">
+      {{ $t('agentStream.memoryDraft.similarHint', { titles: similar.join('、') }) }}
+    </div>
 
     <div v-if="state === 'pending'" class="memory-draft-actions">
       <label class="memory-draft-label" :for="`memory-draft-${draftId}`">{{ $t('agentStream.memoryDraft.titleLabel') }}</label>
@@ -51,6 +54,7 @@ const props = defineProps<{
   topic: string
   baseEntry: { id: string; title: string; version: number } | null
   conflicts: string[]
+  similar: string[]
 }>()
 
 const { t } = useI18n()

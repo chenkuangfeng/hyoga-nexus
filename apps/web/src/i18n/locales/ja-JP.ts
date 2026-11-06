@@ -6780,6 +6780,7 @@ export default {
       newEntry: '新しいメモリ',
       editsEntry: '既存メモリを更新：{title}',
       conflictHint: '競合の可能性：{titles}',
+      similarHint: '重複の可能性：{titles}',
       titleLabel: 'タイトル',
       titlePlaceholder: 'このメモリのタイトル',
       publish: '保存',

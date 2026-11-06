@@ -2440,6 +2440,7 @@ export default {
       newEntry: 'Новая запись',
       editsEntry: 'Обновляет запись: {title}',
       conflictHint: 'Возможен конфликт с: {titles}',
+      similarHint: 'Возможно, повторяет: {titles}',
       titleLabel: 'Заголовок',
       titlePlaceholder: 'Заголовок записи',
       publish: 'Сохранить',

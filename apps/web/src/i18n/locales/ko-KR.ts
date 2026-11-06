@@ -2440,6 +2440,7 @@ export default {
       newEntry: '새 메모리',
       editsEntry: '기존 메모리 업데이트: {title}',
       conflictHint: '충돌 가능: {titles}',
+      similarHint: '중복 가능: {titles}',
       titleLabel: '제목',
       titlePlaceholder: '이 메모리의 제목',
       publish: '저장',

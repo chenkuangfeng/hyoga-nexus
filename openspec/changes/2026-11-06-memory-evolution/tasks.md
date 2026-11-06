@@ -59,13 +59,18 @@
 
 ## 3. 第 3 阶段：去重与维护（C1–C4）
 
-- [ ] 3.1 迁移：`memory_drafts.kind` 允许 `merge`；新表 `memory_consolidation_state`。
-- [ ] 3.2 `propose` 中加入近似重复提示（C1）。
-- [ ] 3.3 `nexus_memory.consolidate`（候选、聚类、限额）与平台编排；`merge` 草稿的发布与冲突处理；`POST /native/memory/consolidate`；worker 空闲调度（C2）。
-- [ ] 3.4 `retention.run_retention` 与 worker 调度（C3）。
-- [ ] 3.5 排序中对久未使用条目降级（C4）。
+- [x] 3.1 迁移：`memory_drafts.kind` 允许 `merge`；新表 `memory_consolidation_state`。
+  - 调整：合并草稿不新增 `merge` 类型，沿用被保留条目的类型，`origin='background'`，`annotations.merge.archive` 列出发布时要归档的条目及其版本；草稿的 `source_run_id` 取被保留条目当前版本的来源 Run（该列非空）。状态表另含 `requested_at` 与租约列。
+- [x] 3.2 `propose` 中加入近似重复提示（C1）。
+- [x] 3.3 `nexus_memory.consolidate`（候选、聚类、限额）与平台编排；`merge` 草稿的发布与冲突处理；`POST /native/memory/consolidate`；worker 空闲调度（C2）。
+  - 接口为 `POST /native/memory-consolidation`（202 排队，由 worker 执行，接口进程不调用模型）；409 `memory_disabled` / `capture_model_required` / `too_soon`。模型调用复用 `capture_model_call`，新增 `require_enabled=False` 以支持关闭自动抓取时的手动整理，审计用途 `memory.consolidation`。
+- [x] 3.4 `retention.run_retention` 与 worker 调度（C3）。
+  - 不写逐行审计（与 octop-memory ADR-028 同理），删除数量写日志。
+- [x] 3.5 排序中对久未使用条目降级（C4）。
 - [ ] 3.6 前端：相似与合并草稿的展示，"整理记忆"按钮（替换现有占位）。
-- [ ] 3.7 pytest 与前端单元测试；文档同步。
+  - 已完成：对话内草稿卡片显示相似提示（`similarHint`，6 种语言）。阻塞：合并草稿列表与"整理记忆"按钮在"我的记忆"设置页，随 2.8 一并实施。
+- [x] 3.7 pytest 与前端单元测试；文档同步。
+  - `tests/test_memory_evolution_stage3.py`（11 项），全量 830 通过（另更新表数量断言）。
 
 ## 4. 第 4 阶段：历史会话检索（D1）
 

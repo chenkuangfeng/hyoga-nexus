@@ -133,7 +133,7 @@
               <!-- Nexus: memory draft proposed in this Run (openspec 2026-11-06-memory-evolution E1) -->
               <div v-else-if="event.type === 'memory_draft'" class="tool-event">
                 <MemoryDraftCard :draft-id="event.draft_id" :kind="event.kind" :diff="event.diff" :topic="event.topic"
-                  :base-entry="event.base_entry" :conflicts="event.conflicts" />
+                  :base-entry="event.base_entry" :conflicts="event.conflicts" :similar="event.similar" />
               </div>
 
               <!-- Question the agent asked the user (ask_user) -->
@@ -417,7 +417,7 @@
             <!-- Nexus: memory draft proposed in this Run (openspec 2026-11-06-memory-evolution E1) -->
             <div v-else-if="event.type === 'memory_draft'" class="tool-event">
               <MemoryDraftCard :draft-id="event.draft_id" :kind="event.kind" :diff="event.diff" :topic="event.topic"
-                :base-entry="event.base_entry" :conflicts="event.conflicts" />
+                :base-entry="event.base_entry" :conflicts="event.conflicts" :similar="event.similar" />
             </div>
 
             <!-- Question the agent asked the user (ask_user) -->

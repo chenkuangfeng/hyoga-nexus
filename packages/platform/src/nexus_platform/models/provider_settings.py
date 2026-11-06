@@ -120,7 +120,8 @@ class CaptureModelCall:
 
 
 def capture_model_call(factory: sessionmaker[Session], *, tenant_id: UUID, owner_id: UUID,
-                       version_id: UUID) -> CaptureModelCall:
+                       version_id: UUID, purpose: str = 'memory.capture',
+                       require_enabled: bool = True) -> CaptureModelCall:
     """Authorize the capture model and resolve the owner's own key for one extraction call.
 
     A Run checks its owner, membership and model grants while it is running. Capture has no running
@@ -133,7 +134,9 @@ def capture_model_call(factory: sessionmaker[Session], *, tenant_id: UUID, owner
         require_tenant(db, tenant_id)
         require_membership(db, tenant_id, owner_id)
         settings = db.get(MemoryCaptureSettingsRecord, (tenant_id, owner_id))
-        if settings is None or not settings.enabled or settings.model_profile_version_id != version_id:
+        # Consolidation a member asked for runs with the saved capture model even when automatic capture is off.
+        if (settings is None or (require_enabled and not settings.enabled)
+                or settings.model_profile_version_id != version_id):
             raise NotFound('Model unavailable')
         version = authorize_model(db, tenant_id, owner_id, version_id)
         ref = db.get(Credential, version.credential_reference_id) if version.credential_reference_id else None
@@ -145,7 +148,7 @@ def capture_model_call(factory: sessionmaker[Session], *, tenant_id: UUID, owner
         provider_access(db, tenant_id, owner_id, secret.provider_id)
         profile = db.get(Profile, version.profile_id)
         audit(db, tenant_id, owner_id, 'credential.resolved', 'credential_reference', str(ref.id),
-              {'purpose': 'memory.capture'})
+              {'purpose': purpose})
         return CaptureModelCall(model_name=version.model_name, provider=profile.provider,
                                 options=dict(version.options),
                                 lease=CredentialLease(decrypt(secret), utc_now() + timedelta(minutes=5)))

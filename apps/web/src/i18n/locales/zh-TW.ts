@@ -2442,6 +2442,7 @@ export default {
       newEntry: '新記憶',
       editsEntry: '更新既有記憶：{title}',
       conflictHint: '可能與以下記憶衝突：{titles}',
+      similarHint: '可能與以下記憶重複：{titles}',
       titleLabel: '標題',
       titlePlaceholder: '為這條記憶取一個標題',
       publish: '發布',

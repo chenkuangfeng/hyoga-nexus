@@ -455,6 +455,9 @@ class DurableRuntimeStore:
                     line += f" (proposed as an edit of existing entry {outcome['target_entry_id']} with the same topic or content)"
                 if outcome.get('annotations', {}).get('conflict'):
                     line += '; may conflict with: ' + ', '.join(h['title'] for h in outcome['annotations']['conflict'])
+                if outcome.get('annotations', {}).get('similar'):
+                    line += ('; looks similar to: ' + ', '.join(h['title'] for h in outcome['annotations']['similar'])
+                             + ' (consider proposing an edit of that entry instead)')
                 return line
             if status == 'duplicate':
                 return f"Not created: the same content already exists as {outcome['target']} {outcome['id']}."

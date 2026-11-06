@@ -6843,6 +6843,7 @@ export default {
       newEntry: 'New memory',
       editsEntry: 'Updates memory: {title}',
       conflictHint: 'May conflict with: {titles}',
+      similarHint: 'May repeat: {titles}',
       titleLabel: 'Title',
       titlePlaceholder: 'Give this memory a title',
       publish: 'Save',

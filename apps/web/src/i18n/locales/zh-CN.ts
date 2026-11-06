@@ -2576,6 +2576,7 @@ export default {
       newEntry: '新记忆',
       editsEntry: '更新已有记忆：{title}',
       conflictHint: '可能与以下记忆冲突：{titles}',
+      similarHint: '可能与以下记忆重复：{titles}',
       titleLabel: '标题',
       titlePlaceholder: '为这条记忆取一个标题',
       publish: '发布',

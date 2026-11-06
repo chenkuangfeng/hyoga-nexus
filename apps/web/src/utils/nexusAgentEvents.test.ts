@@ -116,13 +116,15 @@ test('a proposed memory draft becomes a reviewable card and closes the open answ
   assert.equal((stream[0] as { done: boolean }).done, true)
   assert.deepEqual(stream[1], {
     type: 'memory_draft', draft_id: 'd1', kind: 'memory', diff: '构建改用 bazel', topic: '构建',
-    base_entry: { id: 'm1', title: '构建', version: 2 }, conflicts: ['旧构建方式'],
+    base_entry: { id: 'm1', title: '构建', version: 2 }, conflicts: ['旧构建方式'], similar: [],
   })
 })
 
 test('a new-entry draft has no base entry and malformed hints are ignored', () => {
   const [card] = toAgentEventStream([ev('memory.draft_proposed', { draft_id: 'd2', diff: 'x', annotations: { conflict: 'no' } })], 'running')
-  assert.deepEqual(card, { type: 'memory_draft', draft_id: 'd2', kind: 'memory', diff: 'x', topic: '', base_entry: null, conflicts: [] })
+  const [similar] = toAgentEventStream([ev('memory.draft_proposed', { draft_id: 'd3', diff: 'y', annotations: { similar: [{ entry_id: 'm2', title: '构建', score: 0.7 }] } })], 'running')
+  assert.deepEqual((similar as { similar: string[] }).similar, ['构建'])
+  assert.deepEqual(card, { type: 'memory_draft', draft_id: 'd2', kind: 'memory', diff: 'x', topic: '', base_entry: null, conflicts: [], similar: [] })
 })
 
 test('memory.used events are collected per entry and stay out of the timeline', () => {

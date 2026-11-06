@@ -11,6 +11,7 @@ from nexus_core.platform import Principal
 from nexus_api.dependencies.platform import get_principal, get_database_session
 from nexus_platform.runs import settings, directives
 from nexus_platform.memory import capture as memory_capture
+from nexus_platform.memory import consolidation as memory_consolidation
 from nexus_platform.memory import service as memory
 from nexus_platform.memory import switches as memory_switches
 
@@ -174,6 +175,16 @@ def update_memory_availability(tenant_id: UUID, entry_id: UUID, body: MemoryAvai
     valid_until: Any = body.valid_until if 'valid_until' in body.model_fields_set else UNSET
     enabled = body.enabled if 'enabled' in body.model_fields_set else None
     return memory.set_availability(db, principal, tenant_id, entry_id, enabled=enabled, valid_until=valid_until)
+
+
+@router.post('/memory-consolidation', status_code=202)
+def request_memory_consolidation(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                                 db: Session = Depends(get_database_session)):
+    """Ask for a consolidation pass over the caller's memory; the worker records merge drafts for review.
+
+    409 `memory_disabled`, `capture_model_required` (no capture model saved) or `too_soon` (once a minute).
+    """
+    return memory_consolidation.request_consolidation(db, principal, tenant_id)
 
 
 @router.delete('/memory/{entry_id}')

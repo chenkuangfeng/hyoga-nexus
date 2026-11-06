@@ -78,6 +78,8 @@ export interface AgentStreamMemoryDraft {
   base_entry: { id: string; title: string; version: number } | null
   /** Titles of entries the draft may conflict with (review hint only). */
   conflicts: string[]
+  /** Titles of entries that likely say the same thing (review hint only). */
+  similar: string[]
 }
 
 export type AgentStreamEvent = AgentStreamAnswer | AgentStreamToolCall | AgentStreamStop | AgentStreamApproval
@@ -227,8 +229,12 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
               version: Number((base as Record<string, unknown>).version ?? 0),
             }
           : null
-        const hints = payload.annotations && typeof payload.annotations === 'object'
-          ? (payload.annotations as Record<string, unknown>).conflict : undefined
+        const annotations = payload.annotations && typeof payload.annotations === 'object'
+          ? payload.annotations as Record<string, unknown> : {}
+        const titles = (hints: unknown): string[] => (Array.isArray(hints)
+          ? hints.map(hint => (hint && typeof hint === 'object' ? String((hint as Record<string, unknown>).title ?? '') : ''))
+            .filter(Boolean)
+          : [])
         stream.push({
           type: 'memory_draft',
           draft_id: id,
@@ -236,10 +242,8 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
           diff: typeof payload.diff === 'string' ? payload.diff : '',
           topic: typeof payload.topic === 'string' ? payload.topic : '',
           base_entry: baseEntry,
-          conflicts: Array.isArray(hints)
-            ? hints.map(hint => (hint && typeof hint === 'object' ? String((hint as Record<string, unknown>).title ?? '') : ''))
-              .filter(Boolean)
-            : [],
+          conflicts: titles(annotations.conflict),
+          similar: titles(annotations.similar),
         })
         break
       }
