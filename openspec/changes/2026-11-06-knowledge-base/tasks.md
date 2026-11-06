@@ -21,8 +21,10 @@
 
 ## K1 文档库核心
 
-- [ ] K1.1 领域：`ingest.parse`（文本、Markdown、CSV、JSON、pypdf）、`ingest.chunk`（标题/页 + 定长重叠）、`retrieval.fuse`、`evidence`，移植参考项目测试样例。
-- [ ] K1.2 端口：`VectorIndex`（含范围过滤下推）、`KeywordIndex`、`BlobStore`；实现 sqlite（测试）、本地目录。
+- [x] K1.1 领域：`ingest.parse`（文本、Markdown、CSV、JSON、pypdf）、`ingest.chunk`（标题/页 + 定长重叠）、`retrieval.fuse`、`evidence`，移植参考项目测试样例。
+  - `nexus_knowledge.text`（与记忆相同的 CJK 二元分词，复制以免跨包依赖）、`ingest.parse`（Section 带页码与标题路径；docx 等返回 `unsupported_type`，扫描 PDF 返回 `empty_text`）、`ingest.chunk`（段内定长重叠，切点优先段落、句末、空白）、`retrieval.fuse`、`evidence.registry`（编号从 1 开始）。新依赖 `pypdf==6.21.4`。测试 `tests/test_knowledge_domain.py`。
+- [x] K1.2 端口：`VectorIndex`（含范围过滤下推）、`KeywordIndex`、`BlobStore`；实现 sqlite（测试）、本地目录。
+  - `VectorIndex` 按知识库分 collection，`search_vector/search_keyword` 必须带 `Scope`（版本 ID）并在引擎内过滤，空范围直接返回空。sqlite 引擎是独立文件（`connection_config.path`），FTS5 无内容表 + float32 向量 + 进程内余弦；`register_engine` 同时标记能力目录。`KeywordIndex` 不单独建端口，关键词通道由同一引擎提供（`supports_keyword`）。测试 `tests/test_knowledge_sqlite_index.py`。
 - [ ] K1.2b 引擎代码：postgres（pgvector + tsvector）、qdrant、elasticsearch、milvus；只实现不测试，能力目录标 `verified=false`，真实环境后补验收。
 - [ ] K1.3 持久化与迁移：`knowledge_bases`、`knowledge_documents`、`knowledge_document_versions`、`knowledge_chunks`、`knowledge_chunk_vectors`、`knowledge_jobs`、`vector_stores`、`storage_backends`；升降级测试。
 - [ ] K1.4 服务：库与文档增删改查、上传去重、版本切换、删除标记与清理、资源注册、共享、审计。
