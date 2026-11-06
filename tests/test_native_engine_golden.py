@@ -111,7 +111,7 @@ GOLDEN = {
         'events': ['run.queued', 'run.started', 'turn.started', 'model.started', 'model.completed', 'tool.started',
                    'tool.failed', 'tool.started', 'tool.completed', 'turn.completed', 'turn.started', 'model.started',
                    'message.delta', 'model.completed', 'turn.completed', 'run.completed'],
-        'status': 'completed', 'tools': [('failed', 'tool_arguments_invalid'), ('completed', None)]},
+        'status': 'completed', 'tools': [('failed', 'tool_arguments_truncated'), ('completed', None)]},
     'multi_tool_then_answer': {
         'events': ['run.queued', 'run.started', 'turn.started', 'model.started', 'model.completed', 'tool.started',
                    'tool.completed', 'tool.started', 'tool.completed', 'turn.completed', 'turn.started',

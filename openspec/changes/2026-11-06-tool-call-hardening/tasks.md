@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：已确认（2026-11-06），决定 1–5 全部采用推荐方案。暂不实施，等待用户指令后开始。
+状态：已确认（2026-11-06），决定 1–5 全部采用推荐方案。2026-11-06 用户指令开始实施，按节提交。
 
 ## 0. 准备
 
@@ -12,10 +12,11 @@
 
 ## 1. 参数容错（`nexus_tools`）
 
-- [ ] 1.1 `arguments.repair_json`（含截断判定）与单元测试，覆盖 WeKnora 测试中的典型样例。
-- [ ] 1.2 `arguments.coerce` 与单元测试（标量、容器、单值包数组、`$ref`、不确定时保留原值）。
-- [ ] 1.3 `arguments.describe_errors` 与单元测试（路径排序、条数和长度上限、不回显参数值）。
-- [ ] 1.4 网关接入：参数预处理提前到审批之前，规范化参数写回 `ToolCall.arguments`；新增错误码 `tool_arguments_truncated`。
+- [x] 1.1 `arguments.repair_json`（含截断判定）与单元测试，覆盖 WeKnora 测试中的典型样例。
+- [x] 1.2 `arguments.coerce` 与单元测试（标量、容器、单值包数组、`$ref`、不确定时保留原值）。
+- [x] 1.3 `arguments.describe_errors` 与单元测试（路径排序、条数和长度上限、不回显参数值）。
+- [x] 1.4 网关接入：参数预处理提前到审批之前，规范化参数写回 `ToolCall.arguments`；新增错误码 `tool_arguments_truncated`。
+  - `nexus_tools.arguments`（`repair_json`、`coerce`、`describe_errors`）与 `gateway.prepare_arguments`；审批人修改的参数重新预处理。单引号只在文本不含双引号时整体替换。测试 `tests/test_tool_call_hardening.py`；`{bad` 这类未闭合参数改为 `tool_arguments_truncated`（同步更新引擎黄金用例与 Runtime 测试），全量 873 通过。
 
 ## 2. 输出控制
 

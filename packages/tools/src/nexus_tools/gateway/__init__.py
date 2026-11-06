@@ -6,9 +6,9 @@ import json
 from dataclasses import dataclass, replace
 from typing import Protocol
 
-from jsonschema import Draft202012Validator, ValidationError
 from nexus_core.native.policy import TOOL_OUTPUT_READER, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import CancellationTokenPort, RuntimeFault, ToolCall, ToolResult
+from nexus_tools import arguments as tool_arguments
 from nexus_tools.registry import ToolContext, ToolRegistry
 from nexus_tools.registry.invocation import invoke
 
@@ -36,6 +36,37 @@ class OutputSpill:
     inline_limit: int
     preview_chars: int
     page_chars: int
+
+
+def prepare_arguments(tool, text: str) -> tuple[dict | None, ToolResult | None]:
+    """Parse, repair, coerce and validate one call's arguments (openspec 2026-11-06-tool-call-hardening A).
+
+    Returns `(arguments, None)` when the call may proceed, or `(None, error)` with a model-facing result:
+    `tool_arguments_truncated` when the JSON was cut off (never repaired), `tool_arguments_invalid` with
+    field paths and reasons otherwise.
+    """
+    try:
+        parsed = json.loads(text or '{}')
+    except (ValueError, RecursionError):
+        repaired, truncated = tool_arguments.repair_json(text)
+        if truncated:
+            return None, ToolResult('参数 JSON 不完整（可能被截断），工具未执行。请用更短的参数重新调用。',
+                                    error_code='tool_arguments_truncated')
+        try:
+            parsed = json.loads(repaired)
+        except (ValueError, RecursionError):
+            return None, ToolResult('参数不是合法的 JSON 对象，工具未执行。', error_code='tool_arguments_invalid')
+    if not isinstance(parsed, dict):
+        return None, ToolResult('参数必须是 JSON 对象，工具未执行。', error_code='tool_arguments_invalid')
+    schema = tool.definition.parameters
+    try:
+        parsed = tool_arguments.coerce(parsed, schema)
+        problems = tool_arguments.describe_errors(schema, parsed)
+    except RecursionError:
+        return None, ToolResult('参数嵌套过深，工具未执行。', error_code='tool_arguments_invalid')
+    if problems:
+        return None, ToolResult('参数校验失败，工具未执行：\n' + problems, error_code='tool_arguments_invalid')
+    return parsed, None
 
 
 async def _controlled(operation, token):
@@ -108,36 +139,39 @@ class AuthorizedToolGateway:
                 error = exc.code if exc.code in DENIAL_CODES else 'tool_authorization_denied'
         if error:
             await self.access.denied(call.name)
-        if not error and tool.definition.requires_approval:
+        # Arguments are prepared before approval so the approval card, the invocation record and the
+        # execution all see the same normalized arguments.
+        arguments, invalid = (None, None)
+        if not error:
+            arguments, invalid = prepare_arguments(tool, call.arguments)
+            if arguments is not None:
+                call = replace(call, arguments=json.dumps(arguments, ensure_ascii=False))
+        if not error and invalid is None and tool.definition.requires_approval:
             if not hasattr(self.access, 'approval'):
                 return ToolResult('Action approval is unavailable', error_code='tool_approval_unavailable')
             decision = await self.access.approval(call)
             if isinstance(decision, ToolResult):
                 return decision
-            call = replace(call, arguments=decision)
+            # The approver may edit the arguments: prepare them again.
+            arguments, invalid = prepare_arguments(tool, decision)
+            call = replace(call, arguments=json.dumps(arguments, ensure_ascii=False) if arguments is not None else decision)
         invocation_id = await self.access.start(call, binding_id)
         invoked = False
         try:
             if error:
                 result = ToolResult(error, error_code=error)
+            elif invalid is not None:
+                result = invalid
             else:
-                try:
-                    arguments = json.loads(call.arguments)
-                    if not isinstance(arguments, dict):
-                        raise ValueError()
-                    Draft202012Validator(tool.definition.parameters).validate(arguments)
-                except (ValueError, ValidationError, RecursionError):
-                    result = ToolResult('tool_arguments_invalid', error_code='tool_arguments_invalid')
-                else:
-                    context = ToolContext(invocation_id, self.run_id, self.session_id, self.tenant_id, cancellation, self.services)
-                    invoked = True
-                    async with asyncio.timeout(tool.definition.timeout_seconds):
-                        async def progress(text):
-                            if hasattr(self.access, 'progress'):
-                                await self.access.progress(invocation_id, text)
-                        result = await _controlled(invoke(tool, arguments, context, progress), cancellation)
-                    if not isinstance(result, ToolResult):
-                        raise RuntimeFault('tool_result_invalid')
+                context = ToolContext(invocation_id, self.run_id, self.session_id, self.tenant_id, cancellation, self.services)
+                invoked = True
+                async with asyncio.timeout(tool.definition.timeout_seconds):
+                    async def progress(text):
+                        if hasattr(self.access, 'progress'):
+                            await self.access.progress(invocation_id, text)
+                    result = await _controlled(invoke(tool, arguments, context, progress), cancellation)
+                if not isinstance(result, ToolResult):
+                    raise RuntimeFault('tool_result_invalid')
             # The public projection is the only output allowed in events, model context or history.
             public = (result.error_code or 'Tool finished') if error else tool.public_result(result)
             public = str(public)

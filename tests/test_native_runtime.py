@@ -115,7 +115,9 @@ def test_multitool_bad_arguments_hooks_and_session_history(database):
     with database() as db:
         invocations = list(db.scalars(select(ToolInvocationRecord).where(ToolInvocationRecord.run_id == run.id).order_by(ToolInvocationRecord.started_at)))
         assert [row.status for row in invocations] == ['failed', 'failed', 'completed', 'completed']
-        assert invocations[0].error_code == 'tool_arguments_invalid'
+        # '{bad' is cut off (unclosed): refused as truncated, never repaired (tool-call-hardening A).
+        assert invocations[0].error_code == 'tool_arguments_truncated'
+        assert invocations[1].error_code == 'tool_arguments_invalid'
     with database() as db:
         events = list_events(db, principal, tenant.id, run.id, 0)
         assert [event.sequence for event in events] == list(range(1, len(events) + 1))
