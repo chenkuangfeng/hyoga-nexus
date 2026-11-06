@@ -140,3 +140,28 @@ def test_organization_api(env):
             assert client.delete(f'{base}/bases/{kb_id}/tags/{tag["id"]}?force=true').json() == {'removed_from': 1}
     finally:
         app.dependency_overrides.clear()
+
+
+def test_synonym_groups_widen_the_keyword_query(env):
+    from nexus_knowledge.retrieval import synonyms
+    assert synonyms.parse([['退货', '退款', '退货'], ['单独'], ['a', 'b']]) == [['退货', '退款'], ['a', 'b']]
+    assert synonyms.expand('怎么退货', [['退货', '退款']]) == ['退款'] and synonyms.expand('你好', [['退货', '退款']]) == []
+    with pytest.raises(ValueError):
+        synonyms.parse('x')
+    with pytest.raises(ValueError):
+        synonyms.parse([['t'] * 1 + [str(i) for i in range(20)]])
+    factory, tenant_id, _, owner, member, _ = env
+    kb_id = create_kb(factory, tenant_id, owner, name='同义', settings={'synonyms': [['退货', '退款']]})
+    upload(factory, tenant_id, owner, kb_id, 'a.md', '七天内可以申请退款，三个工作日到账'.encode())
+    drain(factory)
+    assert find(factory, tenant_id, member, '退货').hits  # the document only says 退款
+    plain = create_kb(factory, tenant_id, owner, name='无同义')
+    upload(factory, tenant_id, owner, plain, 'b.md', '七天内可以申请退款，三个工作日到账'.encode())
+    drain(factory)
+    with factory() as db:
+        import asyncio
+        result = asyncio.run(search.search(factory, db, tenant_id, member, '退货', requested=[plain]))
+    assert result.hits == []
+    with factory() as db, db.begin():
+        with pytest.raises(ValueError):
+            service.update_base(db, tenant_id, owner, kb_id, {'settings': {'synonyms': 'bad'}})

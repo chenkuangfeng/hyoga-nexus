@@ -21,16 +21,42 @@ def knowledge_tools():
 
     async def read(arguments, context):
         return ToolResult(await _store(context).read_document(
-            arguments['document_id'], arguments.get('chunk', 0), arguments.get('count', 4), run_state_of(context)))
+            arguments['document_id'], arguments.get('chunk', 0), arguments.get('count', 4), run_state_of(context),
+            arguments.get('section')))
 
     async def listing(arguments, context):
         return ToolResult(await _store(context).list_documents(
             arguments.get('kb_id'), arguments.get('keyword', ''), arguments.get('offset', 0), arguments.get('limit', 30)))
 
+    async def grep(arguments, context):
+        return ToolResult(await _store(context).grep_chunks(
+            arguments['pattern'], arguments.get('kb_id'), arguments.get('document_id'),
+            arguments.get('ignore_case', True), arguments.get('limit', 10), run_state_of(context)))
+
+    async def outline(arguments, context):
+        return ToolResult(await _store(context).document_outline(arguments['document_id']))
+
     async def graph(arguments, context):
         return ToolResult(await _store(context).query_knowledge_graph(
             arguments['entities'], arguments.get('kb_id'), arguments.get('hops', 2), run_state_of(context)))
 
+    yield RegisteredTool(ToolDefinition(
+        'grep_chunks',
+        'Find chunks that contain an exact piece of text (a name, number, code, clause) in the bound knowledge bases. '
+        'Use it when search_knowledge is too fuzzy. Matches show a snippet around the text and are labelled [ID:n].',
+        {'type': 'object', 'properties': {
+            'pattern': {'type': 'string', 'minLength': 1, 'maxLength': 200},
+            'kb_id': {'type': 'string', 'maxLength': 36}, 'document_id': {'type': 'string', 'maxLength': 36},
+            'ignore_case': {'type': 'boolean'}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 30}},
+         'required': ['pattern'], 'additionalProperties': False},
+        read_only=True, idempotent=True), grep, lambda r: r.data)
+    yield RegisteredTool(ToolDefinition(
+        'document_outline',
+        'Show the heading structure of a knowledge document (headings or pages with their chunk numbers), so you can '
+        'read one section with read_document(section=...).',
+        {'type': 'object', 'properties': {'document_id': {'type': 'string', 'maxLength': 36}},
+         'required': ['document_id'], 'additionalProperties': False},
+        read_only=True, idempotent=True), outline, lambda r: r.data)
     yield RegisteredTool(ToolDefinition(
         'query_knowledge_graph',
         'Look up entities by exact name in the knowledge graphs of the bound knowledge bases and return them with '
@@ -67,7 +93,9 @@ def knowledge_tools():
         {'type': 'object', 'properties': {
             'document_id': {'type': 'string', 'maxLength': 36},
             'chunk': {'type': 'integer', 'minimum': 0},
-            'count': {'type': 'integer', 'minimum': 1, 'maximum': 10}},
+            'count': {'type': 'integer', 'minimum': 1, 'maximum': 10},
+            'section': {'type': 'string', 'maxLength': 500,
+                        'description': 'Read the chunks under this heading path instead (see document_outline), e.g. "第一章 > 1.1".'}},
          'required': ['document_id'], 'additionalProperties': False},
         read_only=True, idempotent=True), read, lambda r: r.data)
     yield RegisteredTool(ToolDefinition(

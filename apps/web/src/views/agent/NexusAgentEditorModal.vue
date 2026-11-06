@@ -354,7 +354,7 @@ import { listKnowledgeBases } from '@/api/knowledge-base'
 import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@/views/settings/nexusModelCards'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_TIMEOUT_SECONDS, MAX_OUTPUT_TOKENS_LIMIT, MAX_ROUNDS_LIMIT, REASONING_EFFORTS,
-  draftFromForm, formForNewAgent, formFromAgent, validateForm, type AgentEditorForm,
+  KNOWLEDGE_TOOLS, draftFromForm, formForNewAgent, formFromAgent, validateForm, type AgentEditorForm,
 } from './nexusAgentForm'
 
 const props = defineProps<{ visible: boolean; tenantId: string; agentId: string | null }>()
@@ -411,6 +411,13 @@ function onKnowledgeChange(ids: Array<string | number | boolean>) {
   const chosen = new Set(ids.map(String))
   form.knowledge_bases = knowledgeBases.value.filter(kb => chosen.has(kb.id))
     .map(kb => ({ id: kb.id, source_tenant_id: kb.tenant_id }))
+  // Offer the knowledge tools together with the first base: those the space has enabled are added to the selection.
+  if (form.knowledge_bases.length) {
+    const enabled = new Set((catalog.value?.tools || []).filter(tool => tool.enabled_in_tenant).map(tool => tool.name))
+    for (const name of KNOWLEDGE_TOOLS) {
+      if (enabled.has(name) && !form.allowed_tools.includes(name)) form.allowed_tools.push(name)
+    }
+  }
 }
 
 // WeKnora's "default / custom" radio for max tokens; 0 in the form means "default".

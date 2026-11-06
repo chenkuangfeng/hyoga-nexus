@@ -564,6 +564,12 @@
                     @update:profile-config="(value) => { if (formData) formData.profileConfig = value }"
           @update:table-metadata-instructions="(value: string) => { if (formData) formData.chunkingConfig.tableMetadataInstructions = value }"
         />
+        <!-- 同义词（openspec 2026-11-06-knowledge-base K5）：每行一组，用逗号分隔，关键词检索时互相扩展 -->
+        <div v-if="formData" class="synonyms-setting">
+          <label class="synonyms-setting__label">同义词 <CapabilityBadge group="kb_feature" capability="synonyms" /></label>
+          <p class="synonyms-setting__desc">每行一组等价词，用逗号分隔，例如「退货，退款」。查询包含其中一个词时，关键词检索也会匹配其他词。</p>
+          <t-textarea v-model="formData.synonymsText" :autosize="{ minRows: 3, maxRows: 10 }" placeholder="退货，退款，返还" />
+        </div>
       </div>
 
       <!-- 数据源管理（仅编辑模式） -->
@@ -1004,6 +1010,7 @@ const initFormData = (type: 'document' | 'faq' = 'document') => {
       modelId: '',
       language: ''
     },
+    synonymsText: '',
     nexusGraph: { mode: 'graphrag_light', store: 'builtin', model_id: '', entity_types: [] as string[],
       relation_types: [] as string[], instructions: '' },
     nodeExtractConfig: {
@@ -1177,6 +1184,7 @@ const loadKBData = async (
         modelId: kb.asr_config?.model_id || '',
         language: kb.asr_config?.language || ''
       },
+      synonymsText: (kb.synonyms || []).map((group: string[]) => group.join('，')).join('\n'),
       nexusGraph: {
         mode: kb.graph?.mode || 'graphrag_light', store: kb.graph?.store || 'builtin', model_id: kb.graph?.model_id || '',
         entity_types: kb.graph?.entity_types || [], relation_types: kb.graph?.relation_types || [],
@@ -1703,6 +1711,11 @@ const buildSubmitData = () => {
     }
   }
 
+  // Synonym groups: one group per line, terms separated by commas.
+  data.synonyms = String(formData.value.synonymsText || '').split('\n')
+    .map((line: string) => line.split(/[,，、]/).map((term: string) => term.trim()).filter(Boolean))
+    .filter((group: string[]) => group.length >= 2)
+
   // Nexus graph configuration (mode, store, model, types); sent whenever the graph strategy is on.
   if (formData.value.indexingStrategy?.graphEnabled) {
     data.graph = { ...formData.value.nexusGraph }
@@ -1821,6 +1834,7 @@ const doSubmit = async () => {
       if (data.graph) {
         updateConfig.graph = data.graph
       }
+      updateConfig.synonyms = data.synonyms
       await updateKnowledgeBase(kbId, {
         name: data.name,
         description: data.description,
@@ -2382,6 +2396,9 @@ watch(() => chatResources.allModels, (list) => {
 
 // 过渡动画
 // 多模态配置内联样式（与子组件 KBStorageSettings/KBAdvancedSettings 一致）
+.synonyms-setting { margin-top: 24px; display: flex; flex-direction: column; gap: 6px; }
+.synonyms-setting__label { font-weight: 500; }
+.synonyms-setting__desc { margin: 0; color: var(--td-text-color-secondary); font-size: var(--app-text-xs); }
 .kb-multimodal-settings {
   width: 100%;
 

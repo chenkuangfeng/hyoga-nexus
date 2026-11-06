@@ -180,3 +180,23 @@ def test_history_api_returns_citations(kb_env):
         app.dependency_overrides.clear()
     answer = next(m for m in body['messages'] if m['role'] == 'assistant')
     assert answer['citations'][0]['filename'] == '安装.md'
+
+
+def test_structure_tools_grep_outline_and_section_reading(kb_env):
+    factory, tenant, user_id, bound, other = kb_env
+    version = _agent(factory, tenant, [bound], tools=['search_knowledge', 'read_document', 'list_documents',
+                                                       'grep_chunks', 'document_outline'])
+    _, context, store = _run(factory, tenant, version)
+    state = context.progress.state
+    found = asyncio.run(store.grep_chunks('控制面板', None, None, True, 10, state))
+    assert '<knowledge_matches>' in found and '[ID:1]' in found and '控制面板' in found and '安装.md' in found
+    assert asyncio.run(store.grep_chunks('预算', None, None, True, 10, state)) == 'No chunk contains "预算".'  # unbound base
+    assert 'No chunk contains' in asyncio.run(store.grep_chunks('不存在的文字', None, None, True, 10, state))
+    listing = asyncio.run(store.list_documents(None, '', 0, 20))
+    doc_id = listing.split('document_id=')[1].split(' ')[0]
+    outline = asyncio.run(store.document_outline(doc_id))
+    assert '安装' in outline and '卸载' in outline and 'read_document' in outline
+    section = asyncio.run(store.read_document(doc_id, 0, 4, state, '卸载'))
+    assert '控制面板' in section and '双击' not in section
+    assert 'No section' in asyncio.run(store.read_document(doc_id, 0, 4, state, '不存在'))
+    assert asyncio.run(store.document_outline(str(uuid4()))) == 'Document not found.'

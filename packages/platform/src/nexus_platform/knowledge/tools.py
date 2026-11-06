@@ -131,7 +131,7 @@ def _degraded_note(result: search.SearchResult) -> str:
 
 
 async def read_document_for_run(factory: sessionmaker[Session], run_id: UUID, document_id: str, start: int,
-                                count: int, state: dict) -> str:
+                                count: int, state: dict, section: str | None = None) -> str:
     try:
         doc_uuid = UUID(document_id)
     except ValueError:
@@ -146,10 +146,17 @@ async def read_document_for_run(factory: sessionmaker[Session], run_id: UUID, do
         if kb is None or not access.can_read(db, kb, run.tenant_id, run.principal_id):
             return 'Document not found.'
         version = db.get(KnowledgeDocumentVersionRecord, doc.current_version_id)
-        chunks = db.scalars(select(KnowledgeChunkRecord).where(
-            KnowledgeChunkRecord.version_id == doc.current_version_id, KnowledgeChunkRecord.ordinal >= max(0, start),
-            KnowledgeChunkRecord.parent_id.is_(None))
-            .order_by(KnowledgeChunkRecord.ordinal).limit(max(1, min(count, 10)))).all()
+        query = select(KnowledgeChunkRecord).where(KnowledgeChunkRecord.version_id == doc.current_version_id,
+                                                   KnowledgeChunkRecord.parent_id.is_(None))
+        if section:
+            wanted = _path(section)
+            rows_all = db.scalars(query.order_by(KnowledgeChunkRecord.ordinal)).all()
+            chunks = [c for c in rows_all if list(c.section)[:len(wanted)] == wanted][:max(1, min(count, 10))]
+            if not chunks:
+                return f'No section "{section}" in this document; call document_outline to see its headings.'
+        else:
+            chunks = db.scalars(query.where(KnowledgeChunkRecord.ordinal >= max(0, start))
+                                .order_by(KnowledgeChunkRecord.ordinal).limit(max(1, min(count, 10)))).all()
         total = version.chunk_count if version else 0
         rows = [(str(c.id), c.content, {'kb_id': str(kb.id), 'document_id': str(doc.id), 'version_id': str(doc.current_version_id),
                                          'filename': doc.filename, 'page': c.page, 'section': list(c.section),
@@ -342,3 +349,105 @@ async def query_graph_for_run(factory: sessionmaker[Session], run_id: UUID, name
         text = _render_graph(db, results, registry) if results else ''
         _save(state, registry)
     return text or 'No matching entities in the knowledge graphs of the bound knowledge bases.'
+
+
+# ---------------------------------------------------------------- structure tools (K5)
+
+def _path(text: str) -> list[str]:
+    return [part.strip() for part in text.replace('/', '>').split('>') if part.strip()]
+
+
+def _snippet(content: str, start: int, length: int, radius: int = 80) -> str:
+    a, b = max(0, start - radius), min(len(content), start + length + radius)
+    return ('…' if a else '') + content[a:b].replace('\n', ' ') + ('…' if b < len(content) else '')
+
+
+async def grep_for_run(factory: sessionmaker[Session], run_id: UUID, pattern: str, kb_id: str | None,
+                       document_id: str | None, ignore_case: bool, limit: int, state: dict) -> str:
+    """Exact-text search over the current chunks of readable, bound documents (no ranking; document order)."""
+    needle = pattern.strip()
+    if not needle:
+        return 'The pattern is empty.'
+    requested = []
+    if kb_id:
+        try:
+            requested = [UUID(kb_id)]
+        except ValueError:
+            return 'Knowledge base not found.'
+    with factory() as db:
+        run = _run(db, run_id)
+        bound = bound_base_ids(db, UUID(run.config_snapshot['agent_version_id']))
+        scoped, _ = search.resolve_scope(db, run.tenant_id, run.principal_id, bound=bound, requested=requested or None)
+        allowed = {v for item in scoped if item.kb.kb_type != 'faq' for v in item.version_ids}
+        if not allowed:
+            return 'No readable document is available in the bound knowledge bases.'
+        query = select(KnowledgeChunkRecord, KnowledgeDocumentRecord).join(
+            KnowledgeDocumentVersionRecord, KnowledgeDocumentVersionRecord.id == KnowledgeChunkRecord.version_id).join(
+            KnowledgeDocumentRecord, KnowledgeDocumentRecord.id == KnowledgeDocumentVersionRecord.document_id).where(
+            KnowledgeChunkRecord.version_id.in_([UUID(v) for v in allowed]), KnowledgeChunkRecord.parent_id.is_(None))
+        if document_id:
+            try:
+                query = query.where(KnowledgeDocumentRecord.id == UUID(document_id))
+            except ValueError:
+                return 'Document not found.'
+        escaped = needle.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        column = KnowledgeChunkRecord.content
+        query = query.where(column.ilike(f'%{escaped}%', escape='\\') if ignore_case else column.like(f'%{escaped}%', escape='\\'))
+        rows = db.execute(query.order_by(KnowledgeDocumentRecord.filename, KnowledgeChunkRecord.ordinal)
+                          .limit(max(1, min(limit, 30)) + 1)).all()
+        shown = rows[:max(1, min(limit, 30))]
+        registry = _registry(state)
+        lines = []
+        for chunk, doc in shown:
+            ref = {'kb_id': str(doc.kb_id), 'document_id': str(doc.id), 'version_id': str(chunk.version_id),
+                   'filename': doc.filename, 'page': chunk.page, 'section': list(chunk.section), 'ordinal': chunk.ordinal}
+            handle = registry.stamp(str(chunk.id), ref)
+            haystack = chunk.content.casefold() if ignore_case else chunk.content
+            at = haystack.find(needle.casefold() if ignore_case else needle)
+            lines.append(f'[ID:{handle}] {_position(ref)}\n{html.escape(_snippet(chunk.content, max(at, 0), len(needle)), quote=False)}')
+        _save(state, registry)
+    if not shown:
+        return f'No chunk contains "{needle}".'
+    more = '\nMore matches exist; narrow the pattern or pass document_id.' if len(rows) > len(shown) else ''
+    return f'<knowledge_matches>\n{_FENCE_NOTE}\n' + '\n\n'.join(lines) + f'\n</knowledge_matches>{more}'
+
+
+async def outline_for_run(factory: sessionmaker[Session], run_id: UUID, document_id: str) -> str:
+    """Headings (or pages) of a document with chunk ranges, from the stored section paths."""
+    try:
+        doc_uuid = UUID(document_id)
+    except ValueError:
+        return 'Document not found.'
+    with factory() as db:
+        run = _run(db, run_id)
+        bound = bound_base_ids(db, UUID(run.config_snapshot['agent_version_id']))
+        doc = db.get(KnowledgeDocumentRecord, doc_uuid)
+        if doc is None or doc.status != 'active' or doc.kb_id not in bound or doc.current_version_id is None:
+            return 'Document not found.'
+        kb = db.get(KnowledgeBaseRecord, doc.kb_id)
+        if kb is None or not access.can_read(db, kb, run.tenant_id, run.principal_id):
+            return 'Document not found.'
+        rows = db.execute(select(KnowledgeChunkRecord.ordinal, KnowledgeChunkRecord.section, KnowledgeChunkRecord.page)
+                          .where(KnowledgeChunkRecord.version_id == doc.current_version_id,
+                                 KnowledgeChunkRecord.parent_id.is_(None))
+                          .order_by(KnowledgeChunkRecord.ordinal)).all()
+    if not rows:
+        return 'The document has no readable chunks.'
+    entries: dict[tuple[str, ...], list[int]] = {}
+    pages: dict[tuple[str, ...], set[int]] = {}
+    for ordinal, section, page in rows:
+        key = tuple(section or ())
+        entries.setdefault(key, []).append(ordinal)
+        if page:
+            pages.setdefault(key, set()).add(page)
+    if list(entries) == [()]:
+        by_page = sorted({p for s in pages.values() for p in s})
+        where = f'pages {by_page[0]}-{by_page[-1]}' if by_page else 'no headings'
+        return f'《{doc.filename}》 has {len(rows)} chunks (0-{rows[-1][0]}) and {where}; read it with read_document(chunk=...).'
+    lines = [f'《{doc.filename}》 — {len(rows)} chunks']
+    for key, ordinals in entries.items():
+        label = ' > '.join(key) if key else '(before the first heading)'
+        page = f', pages {min(pages[key])}-{max(pages[key])}' if key in pages else ''
+        lines.append(f'{"  " * max(len(key) - 1, 0)}- {label}: chunks {ordinals[0]}-{ordinals[-1]}{page}')
+    lines.append('Read a section with read_document(document_id, section="<heading path>").')
+    return '\n'.join(lines)

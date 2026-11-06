@@ -485,9 +485,19 @@ class DurableRuntimeStore:
         from nexus_platform.knowledge.tools import search_for_run
         return await search_for_run(self.factory, self.context.run_id, query, kb_ids, limit, state, filters or {})
 
-    async def read_document(self, document_id: str, chunk: int, count: int, state: dict) -> str:
+    async def read_document(self, document_id: str, chunk: int, count: int, state: dict,
+                            section: str | None = None) -> str:
         from nexus_platform.knowledge.tools import read_document_for_run
-        return await read_document_for_run(self.factory, self.context.run_id, document_id, chunk, count, state)
+        return await read_document_for_run(self.factory, self.context.run_id, document_id, chunk, count, state, section)
+
+    async def grep_chunks(self, pattern: str, kb_id: str | None, document_id: str | None, ignore_case: bool,
+                          limit: int, state: dict) -> str:
+        from nexus_platform.knowledge.tools import grep_for_run
+        return await grep_for_run(self.factory, self.context.run_id, pattern, kb_id, document_id, ignore_case, limit, state)
+
+    async def document_outline(self, document_id: str) -> str:
+        from nexus_platform.knowledge.tools import outline_for_run
+        return await outline_for_run(self.factory, self.context.run_id, document_id)
 
     async def query_knowledge_graph(self, entities: list[str], kb_id: str | None, hops: int, state: dict) -> str:
         from nexus_platform.knowledge.tools import query_graph_for_run

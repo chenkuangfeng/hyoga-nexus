@@ -47,7 +47,11 @@ export interface AgentEditorForm {
 export interface KnowledgeBinding { id: string, source_tenant_id: string }
 
 /** Knowledge tools bound together with the first knowledge base (publishing requires `search_knowledge`). */
-export const KNOWLEDGE_TOOLS = ['search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph'] as const
+export const KNOWLEDGE_TOOLS = ['search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph',
+  'grep_chunks', 'document_outline'] as const
+
+/** The one knowledge tool a published agent with knowledge bases must bind; the rest are optional extras. */
+export const REQUIRED_KNOWLEDGE_TOOL = 'search_knowledge'
 
 export const TOOL_ACCESS_LEVELS = ['read_only', 'standard', 'strict'] as const
 export type ToolAccess = (typeof TOOL_ACCESS_LEVELS)[number]
@@ -173,10 +177,10 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   if (Object.keys(behavior).length) budgets.behavior = behavior
 
   const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool' && b.kind !== 'knowledge_base')
-  // Binding a knowledge base needs search_knowledge (the server refuses to publish otherwise); the other
-  // knowledge tools are added with it so the agent can read and list what it finds.
+  // Binding a knowledge base needs search_knowledge (the server refuses to publish otherwise). The other knowledge
+  // tools are chosen in the editor (only those the space has enabled are offered).
   const toolNames = form.knowledge_bases.length
-    ? [...new Set([...form.allowed_tools, ...KNOWLEDGE_TOOLS])]
+    ? [...new Set([...form.allowed_tools, REQUIRED_KNOWLEDGE_TOOL])]
     : [...new Set(form.allowed_tools)]
   const tools: AgentDraftInput['resource_bindings'] = toolNames.map(name => ({
     kind: 'tool', resource_id: name, resource_version_id: 'v1', source_tenant_id: tenantId, config: {},

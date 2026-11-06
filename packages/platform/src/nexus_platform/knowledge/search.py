@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from nexus_knowledge.index import Scope, VectorStoreError, collection_name
 from nexus_knowledge.retrieval.fuse import Candidate, fuse
+from nexus_knowledge.retrieval import synonyms
 from nexus_knowledge.text import query_tokens
 from nexus_platform.authz.audit import audit
 from nexus_platform.persistence.models import (FaqEntryRecord, KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
@@ -131,15 +132,21 @@ async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, u
             continue
         scope = Scope(str(kb.id), item.version_ids)
         collection = collection_name(str(kb.id))
+        # The base's synonym groups widen the keyword query only (the vector query is the user's own text).
+        try:
+            extra = synonyms.expand(query, synonyms.parse((kb.settings or {}).get('synonyms')))
+        except ValueError:
+            extra = []
+        kb_tokens = query_tokens(query + ' ' + ' '.join(extra)) if extra else tokens
         try:
             index = stores.vector_index_for(db, kb)
         except Exception as exc:  # unusable store configuration: nothing can be searched in this base
             _degrade(db, result, tenant_id, user_id, kb, 'all', 'store_unavailable', exc)
             continue
         try:
-            if kb.indexing.get('keyword') and index.supports_keyword and tokens:
+            if kb.indexing.get('keyword') and index.supports_keyword and kb_tokens:
                 try:
-                    keyword_lists.append(await index.search_keyword(collection, tokens, scope, CANDIDATES_PER_CHANNEL))
+                    keyword_lists.append(await index.search_keyword(collection, kb_tokens, scope, CANDIDATES_PER_CHANNEL))
                 except VectorStoreError as exc:
                     _degrade(db, result, tenant_id, user_id, kb, 'keyword', exc.code, exc)
             if kb.indexing.get('vector'):

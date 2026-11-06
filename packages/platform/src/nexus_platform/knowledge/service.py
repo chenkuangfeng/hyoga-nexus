@@ -35,6 +35,7 @@ from nexus_platform.identity.service import require_membership
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
 from . import access, stores
+from nexus_knowledge.retrieval import synonyms as synonym_rules
 from .graph import config as graph_config
 from . import faq as faq_rules
 
@@ -140,6 +141,7 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
         if user_id is not None:
             _authorize_chat_model(db, tenant_id, user_id, config.model_id)
     ChunkConfig.from_settings(chunk_size, chunk_overlap, (settings or {}).get('chunking_config'))
+    synonym_rules.parse((settings or {}).get('synonyms'))  # rejects malformed synonym groups
     for rule in ((settings or {}).get('chunking_config') or {}).get('parser_engine_rules') or []:
         if isinstance(rule, dict) and rule.get('engine'):
             capabilities.require_available('parser_engine', str(rule['engine']))  # external engines are planned
@@ -479,7 +481,7 @@ def cancel_graph_builds(db: Session, kb_id: UUID) -> None:
 # Implemented here (capability catalog, decision 5).
 capabilities.mark_available('kb_type', 'document')
 capabilities.mark_available('kb_type', 'faq')
-for _org_feature in ('tags', 'folders', 'pin'):
+for _org_feature in ('tags', 'folders', 'pin', 'synonyms', 'structure_tools'):
     capabilities.mark_available('kb_feature', _org_feature)
 for _chunk_feature in ('chunking_strategy', 'parent_child', 'chunking_debug'):
     capabilities.mark_available('kb_feature', _chunk_feature)
