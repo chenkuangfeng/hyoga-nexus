@@ -121,13 +121,14 @@ const router = createRouter({
         {
           path: "knowledge-bases",
           name: "knowledgeBaseList",
-          component: PlannedPage,
+          // openspec 2026-11-06-knowledge-base K1: WeKnora pages on the Nexus API; planned features are marked.
+          component: () => import("../views/knowledge/KnowledgeBaseList.vue"),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "knowledge-bases/:kbId",
           name: "knowledgeBaseDetail",
-          component: PlannedPage,
+          component: () => import("../views/knowledge/KnowledgeBase.vue"),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {

@@ -34,7 +34,15 @@
                 data-guide="kb-create-type"
               >
                 <t-radio-button value="document">{{ $t('knowledgeEditor.basic.typeDocument') }}</t-radio-button>
-                <t-radio-button value="faq">{{ $t('knowledgeEditor.basic.typeFAQ') }}</t-radio-button>
+                <!-- 待实现的类型可见但不可选（能力目录驱动，openspec 2026-11-06-knowledge-base K0） -->
+                <t-radio-button value="faq" :disabled="!capabilities.available('kb_type', 'faq')">
+                  {{ $t('knowledgeEditor.basic.typeFAQ') }}
+                  <CapabilityBadge group="kb_type" capability="faq" />
+                </t-radio-button>
+                <t-radio-button value="wiki" :disabled="!capabilities.available('kb_type', 'wiki')">
+                  Wiki
+                  <CapabilityBadge group="kb_type" capability="wiki" />
+                </t-radio-button>
               </t-radio-group>
               <p class="form-tip">{{ $t('knowledgeEditor.basic.typeDescription') }}</p>
             </div>
@@ -57,6 +65,24 @@
                   >{{ $t('knowledgeEditor.indexing.searchTitle') }}</t-checkbox>
                   <p class="indexing-check-desc">{{ $t('knowledgeEditor.indexing.searchDesc') }}</p>
                 </div>
+                <!-- 知识图谱 / GraphRAG：K2 实现，现在可见但不可选 -->
+                <div
+                  class="indexing-check-item"
+                  :class="{ 'is-checked': formData.indexingStrategy.graphEnabled, 'is-disabled': isIndexingLocked || !capabilities.available('indexing', 'graph') }"
+                  @click="toggleGraphIndexing"
+                >
+                  <t-checkbox
+                    :checked="formData.indexingStrategy.graphEnabled"
+                    :disabled="isIndexingLocked || !capabilities.available('indexing', 'graph')"
+                    class="indexing-check-box"
+                  >
+                    <span class="indexing-check-title">
+                      知识图谱（GraphRAG）
+                      <CapabilityBadge group="indexing" capability="graph" />
+                    </span>
+                  </t-checkbox>
+                  <p class="indexing-check-desc">抽取实体与关系，支持 Neo4j 或内置图存储，以及 GraphRAG 检索。</p>
+                </div>
                 <div
                   class="indexing-check-item"
                   :class="{ 'is-checked': formData.indexingStrategy.wikiEnabled, 'is-disabled': isIndexingLocked }"
@@ -64,12 +90,12 @@
                 >
                   <t-checkbox
                     :checked="formData.indexingStrategy.wikiEnabled"
-                    :disabled="isIndexingLocked"
+                    :disabled="isIndexingLocked || !capabilities.available('indexing', 'wiki')"
                     class="indexing-check-box"
                   >
                     <span class="indexing-check-title">
                       {{ $t('knowledgeEditor.indexing.wikiTitle') }}
-                      <span class="indexing-new-badge">NEW</span>
+                      <CapabilityBadge group="indexing" capability="wiki" />
                     </span>
                   </t-checkbox>
                   <p class="indexing-check-desc">{{ $t('knowledgeEditor.indexing.wikiDesc') }}</p>
@@ -592,6 +618,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import KbCreateContextualGuide from '@/components/KbCreateContextualGuide.vue'
+import CapabilityBadge from '@/components/knowledge/CapabilityBadge.vue'
+import { useKnowledgeCapabilitiesStore } from '@/stores/knowledgeCapabilities'
 import { KB_EDITOR_FOCUS_SECTION_EVENT, markContextualGuideDone } from '@/config/contextualGuides'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useModalShell } from '@/composables/useModalShell'
@@ -678,7 +706,7 @@ const props = defineProps<{
   visible: boolean
   mode: 'create' | 'edit'
   kbId?: string
-  initialType?: 'document' | 'faq'
+  initialType?: 'document' | 'faq' | 'wiki'
 }>()
 
 // Emits
@@ -1265,6 +1293,9 @@ const handleGranularityChange = (value: string | number | boolean) => {
   }
 }
 
+const capabilities = useKnowledgeCapabilitiesStore()
+void capabilities.ensureLoaded()
+
 const isIndexingLocked = computed(() => editorMode.value === 'edit' && hasFiles.value)
 
 const toggleVectorIndexing = () => {
@@ -1275,9 +1306,15 @@ const toggleVectorIndexing = () => {
   formData.value.indexingStrategy.keywordEnabled = next
 }
 
+const toggleGraphIndexing = () => {
+  if (!formData.value || isIndexingLocked.value || !capabilities.available('indexing', 'graph')) return
+  formData.value.indexingStrategy.graphEnabled = !formData.value.indexingStrategy.graphEnabled
+}
+
 const toggleWikiIndexing = () => {
   if (!formData.value) return
   if (isIndexingLocked.value) return
+  if (!capabilities.available('indexing', 'wiki')) return
   formData.value.indexingStrategy.wikiEnabled = !formData.value.indexingStrategy.wikiEnabled
 }
 

@@ -345,6 +345,24 @@ class StorageBackendInput(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+@router.get('/vector-store-types')
+def list_vector_store_types(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Every cataloged vector engine with its form fields, ``status`` and ``verified`` (planned: no fields)."""
+    from nexus_knowledge.index.schemas import CONNECTION_FIELDS, INDEX_FIELDS
+    _user(db, principal, tenant_id)
+    items = []
+    for row in capabilities.snapshot():
+        if row['group'] != 'vector_engine':
+            continue
+        available = row['status'] == 'available'
+        items.append({'type': row['key'], 'display_name': row['label'], 'status': row['status'],
+                      'stage': row['stage'], 'verified': row['verified'],
+                      'connection_fields': CONNECTION_FIELDS.get(row['key'], []) if available else [],
+                      'index_fields': INDEX_FIELDS.get(row['key'], []) if available else []})
+    return {'items': items}
+
+
 @router.get('/vector-stores')
 def list_vector_stores(tenant_id: UUID, principal: Principal = Depends(get_principal),
                        db: Session = Depends(get_database_session)) -> dict[str, Any]:

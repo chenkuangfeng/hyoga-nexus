@@ -221,12 +221,17 @@
             <div class="form-item">
               <label class="form-label required">{{ t('vectorStoreSettings.engineTypeLabel') }}</label>
               <t-select v-model="form.engine_type" @change="onEngineTypeChange">
+                <!-- Nexus 能力目录：待实现的引擎可见但不可选；已实现未经真实环境验证的标「未验证」 -->
                 <t-option
                   v-for="st in storeTypes"
                   :key="st.type"
                   :value="st.type"
                   :label="st.display_name"
-                />
+                  :disabled="st.status === 'planned'"
+                >
+                  {{ st.display_name }}
+                  <CapabilityBadge group="vector_engine" :capability="st.type" />
+                </t-option>
               </t-select>
             </div>
 
@@ -350,6 +355,7 @@
 </template>
 
 <script setup lang="ts">
+import CapabilityBadge from '@/components/knowledge/CapabilityBadge.vue'
 import { ref, computed, onMounted, watch, type WritableComputedRef } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -607,7 +613,7 @@ const openAddDialog = () => {
   showAdvanced.value = false
   form.value = {
     name: '',
-    engine_type: storeTypes.value[0]?.type || '',
+    engine_type: storeTypes.value.find(st => st.status !== 'planned')?.type || '',
     connection_config: {},
     index_config: {},
   }

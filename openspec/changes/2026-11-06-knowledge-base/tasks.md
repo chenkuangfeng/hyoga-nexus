@@ -16,10 +16,12 @@
   - `GET /api/v1/tenants/{tenant_id}/knowledge/capabilities`（空间成员）；`mark_available(group, key, verified=)` 由实现模块调用，`require_available` 抛 `CapabilityPlanned`，API 统一转 422 `capability_planned`。另含图存储、图谱模式两组。测试 `tests/test_knowledge_capabilities.py`；全量 930 通过。
 - [x] K0.2 前端能力目录 store 与 `PlannedBadge`、禁用提交的通用处理。
   - `api/nexus-knowledge-capabilities.ts`（纯解析，`capabilityState`、`isAvailable`，目录未加载时一律按待实现处理）与单元测试、`api/nexus-knowledge.ts`、`stores/knowledgeCapabilities.ts`、`components/knowledge/CapabilityBadge.vue`，六种语言新增 `planned.badge*` 文案。本机内存不足，未运行 `vue-tsc` 与 `pnpm build`。
-- [ ] K0.3（与 K1.9 合并实施：页面需要 K1 的库与文档接口才能不 404，目前知识库路由仍渲染 PlannedPage）`api/knowledge-base`、向量库、存储后端、解析引擎、检索设置的接口模块改接 Nexus；Nexus 未提供的调用短路为「待实现」。
+- [x] K0.3（与 K1.9 合并实施：页面需要 K1 的库与文档接口才能不 404，目前知识库路由仍渲染 PlannedPage）`api/knowledge-base`、向量库、存储后端、解析引擎、检索设置的接口模块改接 Nexus；Nexus 未提供的调用短路为「待实现」。
 - [ ] K0.4 逐页核对：知识库列表与详情、FAQ、Wiki、图谱、标签、文件夹、图片库、数据源、共享、活动、设置页四项；无 404，未实现项均有标记。
 
 ## K1 文档库核心
+
+> K1.9 进度：API 模块与适配层、向量库/存储后端/检索设置的 API、设置页向量库引擎选择器（待实现禁用 + 徽标）、编辑器的库类型/索引策略（FAQ、Wiki、图谱标待实现）、知识库路由已切到真实页面。本机内存不足，`.vue` 文件未做 vue-tsc 与 `pnpm build`，需在内存充足的环境验证。仍待：创建流程选择向量库、详情页各入口逐页核对、对话引用渲染、智能体编辑器知识库分区。
 
 - [x] K1.1 领域：`ingest.parse`（文本、Markdown、CSV、JSON、pypdf）、`ingest.chunk`（标题/页 + 定长重叠）、`retrieval.fuse`、`evidence`，移植参考项目测试样例。
   - `nexus_knowledge.text`（与记忆相同的 CJK 二元分词，复制以免跨包依赖）、`ingest.parse`（Section 带页码与标题路径；docx 等返回 `unsupported_type`，扫描 PDF 返回 `empty_text`）、`ingest.chunk`（段内定长重叠，切点优先段落、句末、空白）、`retrieval.fuse`、`evidence.registry`（编号从 1 开始）。新依赖 `pypdf==6.21.4`。测试 `tests/test_knowledge_domain.py`。
@@ -40,7 +42,7 @@
   - `search.resolve_scope` + `search.search`；命中后在平台库按范围再过滤一次。测试 `tests/test_knowledge_service.py`（去重、版本切换时机、跨空间/共享/撤权/绑定/删除、解析失败与重试、混合检索与向量降级审计）。
 - [x] K1.8 工具 `search_knowledge`、`read_document`、`list_documents`；证据登记存 Run progress；Run 结束引用校验；智能体绑定与发布校验。
   - 工具与其他内置工具一样需在空间启用并绑定（编辑器选库时一并勾选）；未绑定知识库时准备阶段移除这三个工具，系统提示列出可读的已绑定库。发布时绑定了知识库却没绑 `search_knowledge` 返回 `knowledge_dependency_missing`。证据存 `progress.state['knowledge_evidence']`；Run 完成时有效编号写入助手消息 `runtime_metadata.citations`，无效编号记 `knowledge.citation_invalid` 事件。测试 `tests/test_knowledge_tools.py`；`tests/test_platform.py` 旧用例补绑 `search_knowledge`。
-- [ ] K1.9 前端：列表、创建/编辑（类型、索引策略、向量库、存储、模型、分块）、详情、上传、状态与重试、块预览、检索测试、共享、活动、引用渲染、智能体编辑器知识库分区。
+- [ ] K1.9 前端（进行中）：列表、创建/编辑（类型、索引策略、向量库、存储、模型、分块）、详情、上传、状态与重试、块预览、检索测试、共享、活动、引用渲染、智能体编辑器知识库分区。
 - [ ] K1.10 `evals/knowledge/` 与包文档（README、requirements、design）。
 
 ## K2 图谱与 GraphRAG

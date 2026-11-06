@@ -136,3 +136,12 @@ def test_capabilities_reflect_implemented_features(api):
     assert items[('vector_engine', 'milvus')]['verified'] is False
     assert items[('kb_type', 'wiki')]['status'] == 'planned'
     assert items[('kb_feature', 'retrieval_test')]['status'] == 'available'
+
+
+def test_vector_store_types_list_every_engine(api):
+    client, path, _, _ = api
+    items = {item['type']: item for item in client.get(path + '/vector-store-types').json()['items']}
+    assert {'sqlite', 'postgres', 'qdrant', 'elasticsearch', 'milvus', 'weaviate'} <= set(items)
+    assert items['milvus']['status'] == 'available' and items['milvus']['verified'] is False
+    assert any(field['name'] == 'token' and field['sensitive'] for field in items['milvus']['connection_fields'])
+    assert items['weaviate']['status'] == 'planned' and items['weaviate']['connection_fields'] == []
