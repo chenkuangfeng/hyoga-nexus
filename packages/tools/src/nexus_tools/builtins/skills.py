@@ -39,4 +39,4 @@ def skills_tools():
             'script': {'type': 'string', 'pattern': r'^[a-z][a-z0-9_-]{0,63}$'},
             'args': {'type': 'object'}},
          'required': ['name', 'script'], 'additionalProperties': False},
-        requires_approval=True, risk_level='high', side_effects=True, timeout_seconds=320), run_script, lambda r: r.data)
+        requires_approval=True, risk='destructive', side_effects=True, timeout_seconds=320), run_script, lambda r: r.data)

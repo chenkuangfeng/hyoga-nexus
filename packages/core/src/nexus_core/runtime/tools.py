@@ -16,7 +16,6 @@ class ToolCall:
     arguments: str
 
 
-@dataclass(frozen=True)
 TOOL_RISKS = ('read', 'probe', 'write', 'destructive')
 RISK_LEVELS = {'read': 'low', 'probe': 'low', 'write': 'medium', 'destructive': 'high'}
 

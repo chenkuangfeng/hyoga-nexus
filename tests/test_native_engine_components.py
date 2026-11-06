@@ -47,18 +47,21 @@ def test_run_request_and_context_are_frozen_inputs():
 
 def test_tool_definition_risk_and_capabilities_have_safe_defaults():
     definition = ToolDefinition('lookup', 'Read a value', {'type': 'object'})
-    assert definition.risk_level == 'medium'
+    assert definition.risk_level == 'medium' and definition.risk == 'write'
     assert definition.required_capabilities == ()
 
 
-@pytest.mark.parametrize('level', ['low', 'medium', 'high'])
-def test_tool_definition_accepts_the_three_risk_levels(level):
-    assert ToolDefinition('t', 'd', {}, risk_level=level).risk_level == level
+@pytest.mark.parametrize('risk, level', [('read', 'low'), ('probe', 'low'), ('write', 'medium'), ('destructive', 'high')])
+def test_tool_definition_risk_derives_the_legacy_level(risk, level):
+    assert ToolDefinition('t', 'd', {}, risk=risk).risk_level == level
 
 
-def test_tool_definition_rejects_unknown_risk_level():
-    with pytest.raises(ValueError, match='unknown risk level'):
-        ToolDefinition('t', 'd', {}, risk_level='critical')  # type: ignore[arg-type]
+def test_tool_definition_rejects_unknown_risk_and_write_risk_on_read_only_tools():
+    with pytest.raises(ValueError, match='unknown risk'):
+        ToolDefinition('t', 'd', {}, risk='critical')  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match='read or probe'):
+        ToolDefinition('t', 'd', {}, read_only=True, risk='write')
+    assert ToolDefinition('t', 'd', {}, read_only=True).risk == 'read'
 
 
 # ---------- 3.7 completion judge ----------
