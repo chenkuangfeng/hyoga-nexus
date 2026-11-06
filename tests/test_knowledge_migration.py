@@ -18,3 +18,18 @@ def test_knowledge_tables_round_trip_on_sqlite(tmp_path):
     assert not TABLES & set(inspect(engine).get_table_names())
     assert 'memory_fts' in set(inspect(engine).get_table_names())
     command.upgrade(config, 'head')
+
+
+def test_graph_tables_round_trip_on_sqlite(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'graph.db')
+    config = Config('alembic.ini')
+    config.attributes['database_url'] = url
+    command.upgrade(config, 'head')
+    engine = create_engine(url)
+    graph = {'graph_stores', 'knowledge_graph_builds', 'knowledge_graph_entities', 'knowledge_graph_relations',
+             'knowledge_graph_communities', 'knowledge_graph_extractions'}
+    assert graph <= set(inspect(engine).get_table_names())
+    command.downgrade(config, 'c8d9e0f1a2b3')
+    assert not graph & set(inspect(engine).get_table_names())
+    assert 'knowledge_bases' in set(inspect(engine).get_table_names())
+    command.upgrade(config, 'head')

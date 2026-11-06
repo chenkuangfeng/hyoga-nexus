@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import (JSON, BigInteger, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text,
+from sqlalchemy import (JSON, BigInteger, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text,
                         UniqueConstraint, Uuid, text)
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -183,4 +183,119 @@ class KnowledgeJobRecord(Base):
 
 
 __all__ = ['VectorStoreRecord', 'StorageBackendRecord', 'KnowledgeBaseRecord', 'KnowledgeDocumentRecord',
-           'KnowledgeDocumentVersionRecord', 'KnowledgeChunkRecord', 'KnowledgeJobRecord']
+           'KnowledgeDocumentVersionRecord', 'KnowledgeChunkRecord', 'KnowledgeJobRecord', 'GraphStoreRecord',
+           'GraphBuildRecord', 'GraphEntityRecord', 'GraphRelationRecord', 'GraphCommunityRecord',
+           'GraphExtractionCacheRecord']
+
+
+# ---------------------------------------------------------------- graph (openspec 2026-11-06-knowledge-base K2)
+
+class GraphStoreRecord(Base):
+    """A registered graph store of a space (``builtin`` rows live in the tables below; ``neo4j`` is external).
+
+    Secret fields of ``connection_config`` are stored encrypted, like vector stores.
+    """
+
+    __tablename__ = 'graph_stores'
+    __table_args__ = (UniqueConstraint('tenant_id', 'name', name='uq_graph_stores_name'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    engine: Mapped[str] = mapped_column(String(32), nullable=False)
+    connection_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GraphBuildRecord(Base):
+    """One graph build of a knowledge base; also the resumable job that produces it.
+
+    ``state``: pending → running → ready (the newest ready build is the visible one), or failed. A build is
+    never visible before it is ready; the previous ready build stays searchable until then. ``stage`` and
+    ``progress`` report where a running build is (``extract`` n/total chunks, ``merge``, ``communities``,
+    ``reports``, ``index``).
+    """
+
+    __tablename__ = 'knowledge_graph_builds'
+    __table_args__ = (
+        CheckConstraint("state IN ('pending','running','ready','failed','superseded','cancelled')",
+                        name='ck_graph_builds_state'),
+        Index('ix_graph_builds_kb', 'kb_id', 'state'),
+        Index('ix_graph_builds_due', 'state', 'available_at'),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    mode: Mapped[str] = mapped_column(String(24), nullable=False)
+    store: Mapped[str] = mapped_column(String(36), nullable=False, default='builtin')
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')
+    stage: Mapped[str] = mapped_column(String(16), nullable=False, default='')
+    progress: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    #: Document versions the build covers; elements are visible only through versions still current.
+    version_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    entity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    relation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    community_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GraphEntityRecord(Base):
+    __tablename__ = 'knowledge_graph_entities'
+    __table_args__ = (Index('ix_graph_entities_build', 'build_id'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    build_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_graph_builds.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    norm: Mapped[str] = mapped_column(String(255), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False, default='')
+    description: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    #: ``[{"chunk_id", "version_id"}]`` where the entity was extracted.
+    sources: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False, default=list)
+    degree: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class GraphRelationRecord(Base):
+    __tablename__ = 'knowledge_graph_relations'
+    __table_args__ = (Index('ix_graph_relations_build', 'build_id'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    build_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_graph_builds.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    keywords: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    sources: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False, default=list)
+
+
+class GraphCommunityRecord(Base):
+    """A community of entities (``graphrag_general``) with its report."""
+
+    __tablename__ = 'knowledge_graph_communities'
+    __table_args__ = (Index('ix_graph_communities_build', 'build_id'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    build_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_graph_builds.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    entity_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default='')
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    sources: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False, default=list)
+
+
+class GraphExtractionCacheRecord(Base):
+    """Extraction result of one chunk text under one schema and model, reused by later builds."""
+
+    __tablename__ = 'knowledge_graph_extractions'
+    __table_args__ = (UniqueConstraint('kb_id', 'cache_key', name='uq_graph_extraction_key'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    kb_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    cache_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
