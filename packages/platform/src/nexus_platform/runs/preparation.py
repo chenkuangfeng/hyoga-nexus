@@ -175,6 +175,21 @@ class ExecutionPreparer:
                 snapshot = session_snapshot(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
                     session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', '')) if memory_on else None
                 published_index = snapshot.index_text if snapshot is not None else ''
+                recalled = None
+                if snapshot is not None:
+                    # Stage 5 (D3): memory relevant to this turn's question, placed just before the last user
+                    # message. The system prefix and earlier history stay byte-identical; nothing is persisted.
+                    from nexus_memory import service as memory_rules
+                    from nexus_memory.switches import recall_enabled
+                    from nexus_platform.memory.repository import SqlMemoryRepository
+                    last_user = next((index for index in range(len(history) - 1, -1, -1)
+                                      if history[index].role == 'user'), None)
+                    if last_user is not None and recall_enabled(version.budgets):
+                        resident = frozenset(item['id'] for item in (snapshot.resident_entries or []))
+                        recalled = memory_rules.recall(SqlMemoryRepository(db), run.tenant_id, run.principal_id,
+                                                       history[last_user].content, exclude=resident, now=utc_now())
+                        if recalled.text:
+                            history.insert(last_user, ModelMessage('user', recalled.text))
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
 
@@ -216,6 +231,8 @@ class ExecutionPreparer:
                 if snapshot is not None and snapshot.resident_entries:
                     # Stage 2 (B5): every Run that injects the resident profile block reports the entries it carried.
                     append_event(db, run.id, 'memory.used', {'source': 'resident', 'entries': list(snapshot.resident_entries)})
+                if recalled is not None and recalled.entries:
+                    append_event(db, run.id, 'memory.used', {'source': 'recall', 'entries': list(recalled.entries)})
                 return ExecutionContext(run.id, run.session_id, run.tenant_id, run.principal_id,
                     principal_for_user(db, user.id), version.runtime_type, profile.provider, model.model_name,
                     merged_model_options(model.options, version.budgets), credential, (ModelMessage('system', system), *history), bindings,

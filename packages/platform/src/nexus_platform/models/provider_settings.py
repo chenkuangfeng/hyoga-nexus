@@ -119,6 +119,35 @@ class CaptureModelCall:
     lease: CredentialLease
 
 
+def owner_model_call(factory: sessionmaker[Session], *, tenant_id: UUID, owner_id: UUID, version_id: UUID,
+                     purpose: str, model_type: str | None = None) -> CaptureModelCall:
+    """Authorize a model for its owner and resolve the owner's own key for one background call.
+
+    Same checks as `capture_model_call` without the capture settings: active membership, current access
+    to the model and its provider, an active encrypted key reference, and, when given, the model type
+    (for example `embedding`). Used by memory embeddings (openspec 2026-11-06-memory-evolution D2).
+    Audited as `credential.resolved` with `purpose`. Failures are sanitized NotFound.
+    """
+    with factory() as db, db.begin():
+        require_tenant(db, tenant_id)
+        require_membership(db, tenant_id, owner_id)
+        version = authorize_model(db, tenant_id, owner_id, version_id)
+        profile = db.get(Profile, version.profile_id)
+        if model_type is not None and profile.model_type != model_type:
+            raise NotFound('Model unavailable')
+        ref = db.get(Credential, version.credential_reference_id) if version.credential_reference_id else None
+        if not ref or ref.backend != 'encrypted' or ref.status != 'active' or ref.tenant_id != tenant_id:
+            raise NotFound('Model credential unavailable')
+        secret = db.get(StoredKey, ref.id)
+        if not secret:
+            raise NotFound('Model credential unavailable')
+        provider_access(db, tenant_id, owner_id, secret.provider_id)
+        audit(db, tenant_id, owner_id, 'credential.resolved', 'credential_reference', str(ref.id), {'purpose': purpose})
+        return CaptureModelCall(model_name=version.model_name, provider=profile.provider,
+                                options=dict(version.options),
+                                lease=CredentialLease(decrypt(secret), utc_now() + timedelta(minutes=5)))
+
+
 def capture_model_call(factory: sessionmaker[Session], *, tenant_id: UUID, owner_id: UUID,
                        version_id: UUID, purpose: str = 'memory.capture',
                        require_enabled: bool = True) -> CaptureModelCall:

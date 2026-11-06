@@ -507,11 +507,18 @@ class DurableRuntimeStore:
     async def search_memory(self, query: str, limit: int) -> str:
         """Keyword search over the principal's live published memory; pointers and snippets only."""
         from nexus_platform.memory.service import search as search_entries
+        from nexus_platform.memory.vectors import vector_ranking
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
             require_membership(db, run.tenant_id, run.principal_id)
-            hits = search_entries(db, run.tenant_id, run.principal_id, query, limit)
+            tenant_id, owner_id = run.tenant_id, run.principal_id
+        # Stage 5 (D2): the query is embedded outside any transaction; None means keyword search only.
+        ranking = await vector_ranking(self.factory, tenant_id=tenant_id, owner_id=owner_id, query=query)
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            hits = search_entries(db, run.tenant_id, run.principal_id, query, limit, vector_ranking=ranking)
             if not hits:
                 return 'No matching published memory.'
             append_event(db, run.id, 'memory.used', {'source': 'search', 'entries': [

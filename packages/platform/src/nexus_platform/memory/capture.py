@@ -115,6 +115,30 @@ def capture_settings(db: Session, principal: Principal, tenant_id: UUID) -> dict
         return _view(row)
 
 
+#: Window of the usage summary shown in "my memory" (stage 5, D7).
+USAGE_WINDOW = timedelta(days=30)
+
+
+def capture_usage(db: Session, principal: Principal, tenant_id: UUID) -> dict[str, Any]:
+    """Token usage of the caller's extraction calls over the last 30 days, summed per usage key."""
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        rows = db.scalars(select(MemoryCaptureJobRecord.usage).where(
+            MemoryCaptureJobRecord.tenant_id == tenant_id, MemoryCaptureJobRecord.owner_user_id == user.id,
+            MemoryCaptureJobRecord.created_at >= utc_now() - USAGE_WINDOW,
+            MemoryCaptureJobRecord.usage.is_not(None)))
+        totals: dict[str, int] = {}
+        calls = 0
+        for usage in rows:
+            if not isinstance(usage, dict):
+                continue
+            calls += 1
+            for key, value in usage.items():
+                if isinstance(value, int):
+                    totals[key] = totals.get(key, 0) + value
+        return {'days': USAGE_WINDOW.days, 'calls': calls, 'usage': totals}
+
+
 def _view(row: MemoryCaptureSettingsRecord) -> dict[str, Any]:
     return {'enabled': row.enabled,
             'model_profile_version_id': str(row.model_profile_version_id) if row.model_profile_version_id else None,
@@ -355,6 +379,9 @@ def _record_extraction(db: Session, job: MemoryCaptureJobRecord, raw: Any, plan:
     Validation needs the plan: `update` targets index the related entries the model was shown, and
     every action's evidence must quote one of the source messages.
     """
+    if isinstance(raw, rules.ExtractorReply):
+        job.usage = {key: int(value) for key, value in raw.usage.items() if isinstance(value, int)} or None
+        raw = raw.actions
     verdict = rules.validate_actions(raw, unattended=True, related=plan.related, sources=plan.messages, now=now)
     job.actions = [_serialize(action) for action in verdict.actions]
     job.state = 'extracted'

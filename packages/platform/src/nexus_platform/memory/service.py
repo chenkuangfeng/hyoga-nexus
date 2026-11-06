@@ -51,9 +51,12 @@ def propose(db, tenant_id: UUID, owner_id: UUID, run_id: UUID, kind: str, diff: 
 
 
 @_translate
-def search(db, tenant_id: UUID, owner_id: UUID, query: str, limit: int = rules.SEARCH_LIMIT_DEFAULT) -> list[dict[str, Any]]:
-    """Keyword search over the owner's live published entries; caller transaction, no commit."""
-    return rules.search(SqlMemoryRepository(db), tenant_id, owner_id, query, limit=limit, now=utc_now())
+def search(db, tenant_id: UUID, owner_id: UUID, query: str, limit: int = rules.SEARCH_LIMIT_DEFAULT,
+           vector_ranking: list[UUID] | None = None) -> list[dict[str, Any]]:
+    """Keyword search over the owner's live published entries, fused with `vector_ranking` when given
+    (stage 5, D2); caller transaction, no commit."""
+    return rules.search(SqlMemoryRepository(db), tenant_id, owner_id, query, limit=limit, now=utc_now(),
+                        vector_ranking=vector_ranking)
 
 
 @_translate

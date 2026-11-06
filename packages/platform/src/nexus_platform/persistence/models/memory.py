@@ -214,6 +214,26 @@ class MemorySpaceSettingsRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     #: Space rules added to every extraction prompt as fenced data (stage 2, B6); at most 1000 characters.
     extract_instructions: Mapped[str] = mapped_column(Text, nullable=False, default='', server_default='')
+    #: Embedding model for semantic memory recall (stage 5, D2); NULL means keyword search only.
+    embedding_model_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+
+
+class MemoryEmbeddingRecord(Base):
+    """Vector of one published version under one embedding model (openspec 2026-11-06-memory-evolution D2).
+
+    Derived data: rebuilt by the worker for current versions; vectors of older versions or of another
+    model are ignored at query time. Compared in process against the owner's own vectors (decision 5).
+    """
+    __tablename__ = 'memory_embeddings'
+    __table_args__ = (Index('ix_memory_embeddings_owner_model', 'tenant_id', 'owner_user_id', 'model_version_id'),)
+    entry_id: Mapped[UUID] = mapped_column(ForeignKey('memory_entries.id', ondelete='CASCADE'), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    model_version_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    dims: Mapped[int] = mapped_column(Integer, nullable=False)
+    vector: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class MemoryConsolidationStateRecord(Base):
@@ -273,3 +293,5 @@ class MemoryCaptureJobRecord(Base):
     stored_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Token usage reported by the extraction call (stage 5, D7): `{input_tokens, output_tokens, cached_tokens}`.
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

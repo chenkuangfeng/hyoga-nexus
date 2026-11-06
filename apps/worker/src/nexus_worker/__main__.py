@@ -47,7 +47,8 @@ def _worker_loop() -> asyncio.AbstractEventLoop:
     return _LOOP
 
 
-from nexus_worker.memory_capture import capture_tick, consolidation_tick, retention_tick
+from nexus_worker.memory_capture import (capture_tick, consolidation_tick, embedding_tick, install_embedder,
+                                         retention_tick)
 
 
 def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> bool:
@@ -70,6 +71,7 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     engine = create_database_engine(database_url)
     factory = session_factory(engine)
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
+    install_embedder()
     stopped = threading.Event()
     epoch = start_process_epoch(factory, worker_id)
 
@@ -91,6 +93,8 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
                     # Consolidation (one owner per tick) and retention (hourly) are maintenance: idle time only.
                     processed = consolidation_tick(factory, worker_id)
                     retention_tick(factory)
+                if not processed:
+                    processed = embedding_tick(factory, _worker_loop()) > 0
             except Exception:
                 logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id})
                 processed = False

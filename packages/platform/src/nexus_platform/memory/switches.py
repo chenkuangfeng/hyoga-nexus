@@ -23,8 +23,9 @@ from nexus_memory import switches as rules
 from nexus_memory import text as memtext
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Forbidden
-from nexus_platform.models.provider_settings import context
-from nexus_platform.persistence.models import MemoryCaptureSettingsRecord, MemorySpaceSettingsRecord
+from nexus_platform.models.provider_settings import authorize_model, context
+from nexus_memory.ports import UNSET
+from nexus_platform.persistence.models import MemoryCaptureSettingsRecord, MemorySpaceSettingsRecord, ModelProfileRecord
 from nexus_platform.tenants.service import ADMIN_ROLES
 
 
@@ -56,12 +57,16 @@ EXTRACT_INSTRUCTIONS_LIMIT = 1000
 
 
 def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, enabled: bool,
-                       write_mode: str, extract_instructions: str | None = None) -> dict[str, Any]:
+                       write_mode: str, extract_instructions: str | None = None,
+                       embedding_model_version_id: Any = UNSET) -> dict[str, Any]:
     """Change the space switch, write mode and, when given, the custom extraction rules.
 
     Only owners and admins; non-members get 404 from `context`. The rules are added to every extraction
     prompt as fenced data, so they are screened like memory content: a threat pattern is refused (422).
     `None` keeps the current rules; an empty string clears them.
+
+    `embedding_model_version_id` (stage 5, D2) chooses the embedding model for semantic memory recall:
+    it must be an `embedding` model the caller may use; `None` turns semantic recall off; omitted keeps it.
     """
     if write_mode not in rules.WRITE_MODES:
         raise ValueError('Memory write mode is invalid')
@@ -82,18 +87,26 @@ def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, en
         row.enabled, row.write_mode = enabled, write_mode
         if extract_instructions is not None:
             row.extract_instructions = extract_instructions
+        if embedding_model_version_id is not UNSET:
+            if embedding_model_version_id is not None:
+                version = authorize_model(db, tenant_id, user.id, embedding_model_version_id)
+                if db.get(ModelProfileRecord, version.profile_id).model_type != 'embedding':
+                    raise ValueError('The memory embedding model must be an embedding model')
+            row.embedding_model_version_id = embedding_model_version_id
         row.updated_by, row.updated_at = user.id, utc_now()
         audit(db, tenant_id, user.id, 'memory.space_settings', 'tenant', str(tenant_id),
               {'enabled': enabled, 'write_mode': write_mode,
-               'extract_instructions_chars': len(row.extract_instructions or '')})
+               'extract_instructions_chars': len(row.extract_instructions or ''),
+               'embedding_model_version_id': str(row.embedding_model_version_id) if row.embedding_model_version_id else None})
         return _space_view(row, can_edit=True)
 
 
 def _space_view(row: MemorySpaceSettingsRecord | None, *, can_edit: bool) -> dict[str, Any]:
     if row is None:
         return {'enabled': rules.DEFAULT_SPACE_ENABLED, 'write_mode': rules.DEFAULT_WRITE_MODE,
-                'extract_instructions': '', 'can_edit': can_edit, 'updated_at': None}
+                'extract_instructions': '', 'embedding_model_version_id': None, 'can_edit': can_edit, 'updated_at': None}
     return {'enabled': row.enabled, 'write_mode': row.write_mode, 'extract_instructions': row.extract_instructions or '',
+            'embedding_model_version_id': str(row.embedding_model_version_id) if row.embedding_model_version_id else None,
             'can_edit': can_edit, 'updated_at': row.updated_at.isoformat() if row.updated_at else None}
 
 

@@ -73,7 +73,7 @@ def test_space_settings_default_on_and_only_admins_change_them(settings_client, 
     client, path, identity, owner, member, tenant_id = settings_client
     root = path.removesuffix('/model-settings') + '/native'
     assert client.get(root + '/memory-settings').json() == {
-        'enabled': True, 'write_mode': 'auto', 'extract_instructions': '', 'can_edit': True, 'updated_at': None}
+        'enabled': True, 'write_mode': 'auto', 'extract_instructions': '', 'embedding_model_version_id': None, 'can_edit': True, 'updated_at': None}
 
     identity[0] = member
     assert client.get(root + '/memory-settings').json()['can_edit'] is False

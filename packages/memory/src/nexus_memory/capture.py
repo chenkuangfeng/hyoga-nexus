@@ -125,6 +125,14 @@ def backoff_seconds(attempt: int) -> int:
     return int(min((2 ** attempt) * BACKOFF_BASE, BACKOFF_CAP).total_seconds())
 
 
+@dataclass(frozen=True)
+class ExtractorReply:
+    """What a model-backed extractor may return instead of the bare parsed output: the output plus the
+    token usage the provider reported (stage 5, D7). Bare outputs (scripted extractors) carry no usage."""
+    actions: Any
+    usage: dict[str, int] = field(default_factory=dict)
+
+
 @dataclass
 class Validation:
     """Accepted actions, the number of raw items that were rejected, and low-value items skipped.

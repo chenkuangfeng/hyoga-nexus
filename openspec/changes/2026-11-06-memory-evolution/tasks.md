@@ -84,12 +84,19 @@
 
 ## 5. 第 5 阶段：语义能力（D2、D3、D7）
 
-- [ ] 5.1 迁移：`memory_embeddings`；`memory_space_settings.embedding_model_version_id`；`memory_capture_jobs.usage`；`memory_capture_settings.review_mode`。
-- [ ] 5.2 向量生成任务（发布后异步执行、更换模型后补齐）与应用内余弦检索；RRF 融合与退化路径（D2）。
-- [ ] 5.3 `nexus_memory.recall` 与 `ContextAssembler` 第一回合注入；智能体 `budgets.memory.recall` 的校验与冻结；断言系统前缀不变（D3）。
+- [x] 5.1 迁移：`memory_embeddings`；`memory_space_settings.embedding_model_version_id`；`memory_capture_jobs.usage`；`memory_capture_settings.review_mode`。
+  - `review_mode` 未加，随 5.4 的"同模型复盘"一起处理。
+- [x] 5.2 向量生成任务（发布后异步执行、更换模型后补齐）与应用内余弦检索；RRF 融合与退化路径（D2）。
+  - Embedding 客户端在 `nexus_runtimes.native.models.embeddings`（OpenAI 兼容 `/embeddings`，复用固定地址的传输层），由 worker 启动时注入平台（`vectors.set_embedder_factory`）；凭据经新增的 `owner_model_call`（用途 `memory.embedding`，校验模型类型）。worker 空闲时每次最多补 32 条，失败的所有者跳过 1 小时。检索失败只写日志并退回关键词结果。
+- [x] 5.3 `nexus_memory.recall` 与 `ContextAssembler` 第一回合注入；智能体 `budgets.memory.recall` 的校验与冻结；断言系统前缀不变（D3）。
+  - 实现位置改为 Run 准备阶段（`runs/preparation.py`）：每个 Run 对应一轮用户提问，召回块插在最后一条用户消息之前，不写消息表；`memory.used` 来源为 `recall`。准备阶段是同步代码，主动召回只用关键词通道，向量通道只用于 `search_memory`。
 - [ ] 5.4 抓取用量记录与"我的记忆"页统计；`same_model` 复盘模式（D7）。
+  - 已完成：抽取调用的 token 用量写入 `memory_capture_jobs.usage`，`GET /native/memory-capture/usage` 返回最近 30 天合计。
+  - 未做：`same_model` 模式。要命中提示缓存，抓取需要逐字节重建该 Run 的系统提示、工具定义和完整历史，并改用 Run 的模型；这与第 1 阶段"只以用户原话为来源"的抽取输入冲突。建议先积累用量数据，再决定是否需要（需用户确认后实施或删除本项）。
 - [ ] 5.5 前端：空间设置中的 Embedding 模型、智能体编辑器中的主动召回开关、我的记忆中的复盘模式与用量。
-- [ ] 5.6 pytest（向量用假 Embedding）与前端单元测试；比较两种复盘模式并写入 `design.md` 6.3 节；文档同步。
+  - 阻塞：三处都在 `2026-11-05-memory-switches` 前端第 2 节（设置页 2.2/2.3、智能体编辑器 2.4）尚未接入的页面上。接口已就绪：`memory-settings` 的 `embedding_model_version_id`、`budgets.memory.recall`、`memory-capture/usage`。
+- [x] 5.6 pytest（向量用假 Embedding）与前端单元测试；比较两种复盘模式并写入 `design.md` 6.3 节；文档同步。
+  - `tests/test_memory_evolution_stage5.py`（11 项），全量 845 通过。两种复盘模式的比较随 5.4 未做。
 
 ## 6. 第 6 阶段：依赖外部条件的能力（D4、D5、D6）
 

@@ -60,6 +60,12 @@ def agent_preference(budgets: Mapping[str, Any] | None) -> bool | None:
     return None
 
 
+def recall_enabled(budgets: Mapping[str, Any] | None) -> bool:
+    """Per-turn recall (stage 5, D3) is on unless the agent version sets ``budgets.memory.recall`` to false."""
+    group = (budgets or {}).get(AGENT_BUDGET_KEY)
+    return not (isinstance(group, dict) and group.get('recall') is False)
+
+
 def resolve(*, space_enabled: bool, write_mode: str, user_enabled: bool,
             agent_enabled: bool | None = None) -> MemoryState:
     """Combine the three switches. ``agent_enabled=None`` means no agent context or the agent inherits."""
@@ -74,7 +80,9 @@ def resolve(*, space_enabled: bool, write_mode: str, user_enabled: bool,
 
 
 def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
-    """Reject anything but ``{"enabled": <bool>}`` in ``budgets['memory']``; a missing group is valid.
+    """Reject anything but ``{"enabled": <bool>, "recall": <bool>}`` in ``budgets['memory']``; a missing group is valid.
+
+    ``recall`` (openspec 2026-11-06-memory-evolution D3) turns per-turn memory recall off for the agent.
 
     Raises ``ValueError`` (reported as 422) without echoing the submitted value.
     """
@@ -83,7 +91,9 @@ def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
         return
     if not isinstance(group, dict):
         raise ValueError('Agent memory settings must be an object')
-    if set(group) - {'enabled'}:
+    if set(group) - {'enabled', 'recall'}:
         raise ValueError('Unknown agent memory setting')
     if 'enabled' in group and not isinstance(group['enabled'], bool):
         raise ValueError('Agent memory enabled must be a boolean')
+    if 'recall' in group and not isinstance(group['recall'], bool):
+        raise ValueError('Agent memory recall must be a boolean')

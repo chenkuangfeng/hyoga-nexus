@@ -20,6 +20,13 @@
 - 整理（`consolidate.py`）：同类型条目两两比较，Jaccard 超过阈值（后台 0.45，手动 0.3）的用并查集聚成簇（每簇最多 6 条，后台每次最多 3 簇，手动 8 簇），由模型判断是否同一件事并给出合并内容与保留条目；`service.propose_merge()` 生成合并草稿：对保留条目的编辑草稿（`origin='background'`），`annotations.merge.archive` 列出发布时归档的条目及其版本。发布时任一条目版本已变化即冲突；已在待审合并草稿中的条目不再参与整理。参考 octop-memory `consolidate.py`、WeKnora `consolidate.go`。
 - 久未使用：没有有效期、且 45 天内未使用（或未发布更新）的条目，在索引排序中重要度减 1。
 
+## 语义与主动召回（第 5 阶段）
+
+- `semantic.py`：余弦、最近邻（阈值 0.5，最多 25 条）、倒数名次融合（k=60）、嵌入文本（"主题：正文"）。向量在应用内与本人的向量比较，不依赖向量服务。
+- `search()` 可接收向量排名，与关键词排名融合；只出现在向量通道的条目也必须是可用条目。
+- `recall()`：按本轮用户消息与 `memory` 类条目的共有分词（至少 2 个）挑选，最多 5 条、600 字，排除常驻块已有条目，结果用 `<user_memory source="recall">` 包裹；不调用模型。
+- 抽取器可返回 `ExtractorReply(actions, usage)`，平台把用量写入抓取任务。
+
 ## 自动抓取规则（`capture.py`）
 
 - 来源：`select_sources()` 只把用户本人写的消息作为来源（`role='user'` 且来源属于 `USER_ORIGINS`：起始消息、`user_input`、`user_steer`）；运行时补发的 `user` 消息（`origin='runtime'`）和工具消息排除，助手文字只作只读上下文。参考 WeKnora `collectSessionSegments`。

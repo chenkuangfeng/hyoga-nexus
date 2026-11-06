@@ -115,15 +115,30 @@ def parse_output(text: str) -> Any:
 
 
 async def _collect(model: ChatModelPort, request: ModelRequest) -> str:
+    text, _ = await _collect_with_usage(model, request)
+    return text
+
+
+async def _collect_with_usage(model: ChatModelPort, request: ModelRequest) -> tuple[str, dict[str, int]]:
+    """Answer text and the provider's reported usage (summed over usage items; stage 5, D7)."""
     parts: list[str] = []
+    usage: dict[str, int] = {}
     try:
         async for chunk in model.stream(request):
-            # Tool calls are not offered, so only text is kept; usage and done carry no answer text.
-            if isinstance(chunk, ModelChunk) and chunk.kind == 'text':
+            # Tool calls are not offered, so only text is kept; done carries no answer text.
+            if not isinstance(chunk, ModelChunk):
+                continue
+            if chunk.kind == 'text':
                 parts.append(chunk.text)
+            elif chunk.kind == 'usage':
+                for key, value in (chunk.usage or {}).items():
+                    if isinstance(value, int):
+                        usage[key] = usage.get(key, 0) + value
+                if chunk.total_tokens and 'total_tokens' not in (chunk.usage or {}):
+                    usage['total_tokens'] = usage.get('total_tokens', 0) + chunk.total_tokens
     finally:
         await model.close()
-    return ''.join(parts)
+    return ''.join(parts), usage
 
 
 def make_extractor(model: ChatModelPort) -> Callable[..., Any]:
@@ -154,7 +169,8 @@ def owner_extractor(factory: sessionmaker[Session]) -> Callable[..., Any]:
                              share_connections=True)
         request = build_request(messages, related, context=context, rejected_topics=rejected_topics,
                                 instructions=instructions)
-        return parse_output(asyncio.run(_collect(model, request)))
+        text, usage = asyncio.run(_collect_with_usage(model, request))
+        return rules.ExtractorReply(parse_output(text), usage)
     return extractor
 
 
@@ -217,3 +233,27 @@ def retention_tick(factory: sessionmaker[Session], *, interval_seconds: float = 
     _LAST_RETENTION[:] = [now]
     with factory() as db, db.begin():
         run_retention(db)
+
+
+# ---------------------------------------------------------------- embeddings (stage 5, D2)
+
+def owner_embedder(factory, tenant_id: UUID, owner_id: UUID, model_version_id: UUID):
+    """Embedding client for one owner and the space's embedding model, with the owner's own key."""
+    from nexus_platform.models.provider_settings import owner_model_call
+    from nexus_runtimes.native.models.embeddings import create_embedder
+    call = owner_model_call(factory, tenant_id=tenant_id, owner_id=owner_id, version_id=model_version_id,
+                            purpose='memory.embedding', model_type='embedding')
+    return create_embedder(model=call.model_name, api_key=call.lease.reveal_for_call(), options=call.options,
+                           share_connections=True)
+
+
+def install_embedder() -> None:
+    """Composition root: let platform memory search and the embedding tick build embedding clients."""
+    from nexus_platform.memory.vectors import set_embedder_factory
+    set_embedder_factory(owner_embedder)
+
+
+def embedding_tick(factory: sessionmaker[Session], loop) -> int:
+    """Embed published versions that lack a vector (idle time only); returns vectors stored."""
+    from nexus_platform.memory.vectors import embedding_tick as tick
+    return loop.run_until_complete(tick(factory))

@@ -85,6 +85,13 @@ def get_memory_capture(tenant_id: UUID, principal: Principal = Depends(get_princ
     return memory_capture.capture_settings(db, principal, tenant_id)
 
 
+@router.get('/memory-capture/usage')
+def get_memory_capture_usage(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                             db: Session = Depends(get_database_session)):
+    """Token usage of the caller's automatic extraction calls over the last 30 days."""
+    return memory_capture.capture_usage(db, principal, tenant_id)
+
+
 @router.put('/memory-capture')
 def update_memory_capture(tenant_id: UUID, body: MemoryCaptureUpdate, principal: Principal = Depends(get_principal),
                           db: Session = Depends(get_database_session)):
@@ -103,6 +110,8 @@ class MemorySpaceSettingsUpdate(BaseModel):
     write_mode: Literal['explicit', 'auto'] = 'auto'
     #: Custom extraction rules (at most 1000 characters); omitted keeps the current rules, '' clears them.
     extract_instructions: str | None = Field(default=None, max_length=1000)
+    #: Embedding model for semantic memory recall; null turns it off, omitted keeps the current choice.
+    embedding_model_version_id: UUID | None = None
 
 
 class MemoryPreferencesUpdate(BaseModel):
@@ -121,8 +130,11 @@ def get_memory_settings(tenant_id: UUID, principal: Principal = Depends(get_prin
 def update_memory_settings(tenant_id: UUID, body: MemorySpaceSettingsUpdate, principal: Principal = Depends(get_principal),
                            db: Session = Depends(get_database_session)):
     """Turn long-term memory on or off for the whole space and choose the write mode (owners and admins)."""
+    from nexus_memory.ports import UNSET
+    embedding = body.embedding_model_version_id if 'embedding_model_version_id' in body.model_fields_set else UNSET
     return memory_switches.set_space_settings(db, principal, tenant_id, enabled=body.enabled, write_mode=body.write_mode,
-                                             extract_instructions=body.extract_instructions)
+                                             extract_instructions=body.extract_instructions,
+                                             embedding_model_version_id=embedding)
 
 
 @router.get('/memory-preferences')
