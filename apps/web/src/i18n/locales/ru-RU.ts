@@ -9168,7 +9168,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "Уровень доступа к инструментам", read_only: "Только чтение", standard: "Стандартный", strict: "Строгий", read_onlyDesc: "Доступны только инструменты чтения; запись и опасные действия недоступны.", standardDesc: "Запись выполняется сразу; опасные действия требуют одобрения.", strictDesc: "И запись, и опасные действия требуют одобрения." },
-    risk: { read: "Чтение", probe: "Проверка", write: "Запись", destructive: "Опасно" },
+    risk: { read: "Чтение", probe: "Проверка", write: "Запись", destructive: "Опасно", low: "Низкий риск", medium: "Средний риск", high: "Высокий риск" },
     basicInfoDesc: "Укажите имя и описание агента",
     promptsConfigDesc: "Настройте системный промпт агента",
     modelConfigDesc: "Настройте модель чата и параметры генерации",
@@ -9181,12 +9181,8 @@ export default {
     toolGroups: {
       base: "Базовые",
       memory: "Память",
+      knowledge: "Знания",
       skills: "Навыки"
-    },
-    risk: {
-      low: "Низкий риск",
-      medium: "Средний риск",
-      high: "Высокий риск"
     },
     requiresApproval: "Нужно одобрение",
     readOnly: "Только чтение",

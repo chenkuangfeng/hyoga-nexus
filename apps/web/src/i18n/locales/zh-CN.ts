@@ -9150,7 +9150,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "工具访问级别", read_only: "只读", standard: "标准", strict: "严格", read_onlyDesc: "只提供只读工具，写入和高危工具不可用。", standardDesc: "写入类工具直接执行，高危工具需要审批。", strictDesc: "写入类和高危工具都需要审批。" },
-    risk: { read: "只读", probe: "探查", write: "写入", destructive: "高危" },
+    risk: { read: "只读", probe: "探查", write: "写入", destructive: "高危", low: "低风险", medium: "中风险", high: "高风险" },
     basicInfoDesc: "配置智能体的名称与描述",
     promptsConfigDesc: "配置智能体的系统提示词",
     modelConfigDesc: "配置对话模型与生成参数",
@@ -9163,12 +9163,8 @@ export default {
     toolGroups: {
       base: "基础",
       memory: "记忆",
+      knowledge: "知识库",
       skills: "技能"
-    },
-    risk: {
-      low: "低风险",
-      medium: "中风险",
-      high: "高风险"
     },
     requiresApproval: "需审批",
     readOnly: "只读",

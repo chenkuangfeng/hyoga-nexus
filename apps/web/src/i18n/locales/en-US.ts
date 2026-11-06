@@ -9157,7 +9157,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "Tool access level", read_only: "Read only", standard: "Standard", strict: "Strict", read_onlyDesc: "Only read-only tools are offered; write and destructive tools are unavailable.", standardDesc: "Write tools run directly; destructive tools need approval.", strictDesc: "Write and destructive tools both need approval." },
-    risk: { read: "Read", probe: "Probe", write: "Write", destructive: "Destructive" },
+    risk: { read: "Read", probe: "Probe", write: "Write", destructive: "Destructive", low: "Low risk", medium: "Medium risk", high: "High risk" },
     basicInfoDesc: "Configure the agent name and description",
     promptsConfigDesc: "Configure the agent system prompt",
     modelConfigDesc: "Configure the chat model and generation parameters",
@@ -9170,12 +9170,8 @@ export default {
     toolGroups: {
       base: "Basic",
       memory: "Memory",
+      knowledge: "Knowledge",
       skills: "Skills"
-    },
-    risk: {
-      low: "Low risk",
-      medium: "Medium risk",
-      high: "High risk"
     },
     requiresApproval: "Approval",
     readOnly: "Read-only",

@@ -9168,7 +9168,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "도구 접근 수준", read_only: "읽기 전용", standard: "표준", strict: "엄격", read_onlyDesc: "읽기 전용 도구만 제공되며 쓰기·고위험 도구는 사용할 수 없습니다.", standardDesc: "쓰기 도구는 바로 실행하고 고위험 도구는 승인이 필요합니다.", strictDesc: "쓰기와 고위험 도구 모두 승인이 필요합니다." },
-    risk: { read: "읽기", probe: "탐색", write: "쓰기", destructive: "고위험" },
+    risk: { read: "읽기", probe: "탐색", write: "쓰기", destructive: "고위험", low: "낮은 위험", medium: "중간 위험", high: "높은 위험" },
     basicInfoDesc: "에이전트 이름과 설명을 설정합니다",
     promptsConfigDesc: "에이전트 시스템 프롬프트를 설정합니다",
     modelConfigDesc: "채팅 모델과 생성 매개변수를 설정합니다",
@@ -9181,12 +9181,8 @@ export default {
     toolGroups: {
       base: "기본",
       memory: "메모리",
+      knowledge: "지식",
       skills: "스킬"
-    },
-    risk: {
-      low: "낮은 위험",
-      medium: "중간 위험",
-      high: "높은 위험"
     },
     requiresApproval: "승인 필요",
     readOnly: "읽기 전용",

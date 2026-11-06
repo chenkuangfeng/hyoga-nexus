@@ -9168,7 +9168,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "ツールのアクセスレベル", read_only: "読み取りのみ", standard: "標準", strict: "厳格", read_onlyDesc: "読み取り専用ツールのみ。書き込み・高リスクのツールは使えません。", standardDesc: "書き込みツールはそのまま実行、高リスクのツールは承認が必要です。", strictDesc: "書き込みと高リスクのツールはどちらも承認が必要です。" },
-    risk: { read: "読み取り", probe: "調査", write: "書き込み", destructive: "高リスク" },
+    risk: { read: "読み取り", probe: "調査", write: "書き込み", destructive: "高リスク", low: "低リスク", medium: "中リスク", high: "高リスク" },
     basicInfoDesc: "エージェントの名前と説明を設定します",
     promptsConfigDesc: "エージェントのシステムプロンプトを設定します",
     modelConfigDesc: "チャットモデルと生成パラメータを設定します",
@@ -9181,12 +9181,8 @@ export default {
     toolGroups: {
       base: "基本",
       memory: "メモリ",
+      knowledge: "ナレッジ",
       skills: "スキル"
-    },
-    risk: {
-      low: "低リスク",
-      medium: "中リスク",
-      high: "高リスク"
     },
     requiresApproval: "要承認",
     readOnly: "読み取り専用",

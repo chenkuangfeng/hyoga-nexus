@@ -1,7 +1,6 @@
-import { get, post, put, del, postUpload, getDown } from "../../utils/request";
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import type { AuditLog, AuditOutcome, ListAuditLogResponse } from '@/api/tenant/audit-log';
-import { buildListKnowledgeFilesQuery } from './knowledgeFileListQuery';
+import * as nexus from './nexusKnowledgeApi';
 
 export { buildListKnowledgeFilesQuery } from './knowledgeFileListQuery';
 
@@ -26,7 +25,10 @@ export async function listKnowledgeBaseActivity(
   if (params.outcome) query.set('outcome', params.outcome);
   if (params.actor) query.set('actor', params.actor);
   const qs = query.toString();
-  return (await get(`/api/v1/knowledge-bases/${id}/activity${qs ? `?${qs}` : ''}`)) as unknown as ListAuditLogResponse;
+  void qs;
+  // Nexus returns the newest records in one page; there is no older cursor page.
+  if (params.after_id) return { success: true, data: [] };
+  return (await nexus.listActivity(id, params.limit || 50)) as unknown as ListAuditLogResponse;
 }
 
 // 知识库管理 API（列表、创建、获取、更新、删除、复制）
@@ -48,7 +50,9 @@ export function listKnowledgeBases(params?: {
   if (params?.agent_source_tenant_id) query.set('agent_source_tenant_id', params.agent_source_tenant_id);
   if (params?.creator && params.creator !== 'all') query.set('creator', params.creator);
   const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge-bases?${qs}` : '/api/v1/knowledge-bases');
+  // Nexus lists the space's own bases plus bases shared into it; agent/creator filters are not applied.
+  void qs;
+  return nexus.listBases();
 }
 
 // Read-only vector-store binding metadata enriched onto every KB
@@ -203,10 +207,8 @@ export async function fetchImageAttrSchema(kbId: string): Promise<ImageAttrSchem
   // (GET /api/v1/chunker/preview, GET /api/v1/system/parser-engines). kbId is
   // kept in the signature for callers that pass KB context.
   void kbId;
-  const res = await get<{ success: boolean; data: ImageAttrSchema }>(
-    `/api/v1/image-attrs/schema`,
-  );
-  return res.data;
+  // Image processing is planned (K4): the editor shows the builtin defaults.
+  return FALLBACK_IMAGE_ATTR_SCHEMA;
 }
 
 // Mirrors backend types.ImageProcessingConfig (snake_case JSON). The UI edits
@@ -291,21 +293,17 @@ export async function validateImagePipelines(
   pipelineId: string,
   params: Record<string, unknown>,
 ): Promise<{ valid: boolean; violations: ImagePipelineViolation[] }> {
-  const res = await post<{
-    success: boolean;
-    data: { valid: boolean; violations: ImagePipelineViolation[] };
-  }>(`/api/v1/image-pipelines/validate`, { pipeline_id: pipelineId, params });
-  return res.data;
+  // Image pipelines are planned (K4); nothing to validate yet.
+  void pipelineId; void params;
+  return { valid: true, violations: [] };
 }
 
 // Fetch every registered image pipeline. The backend owns the list, so a
 // pipeline added there shows up here as an option with no frontend change. The
 // registry is global, not per-KB, hence the top-level route.
 export async function fetchImagePipelines(): Promise<ImagePipelineSpec[]> {
-  const res = await get<{ success: boolean; data: ImagePipelineSpec[] }>(
-    `/api/v1/image-pipelines`,
-  );
-  return res.data;
+  // Image pipelines are planned (K4).
+  return [];
 }
 
 export type VectorStoreSource = 'env' | 'user' | 'shared' | 'unavailable';
@@ -365,7 +363,7 @@ export function createKnowledgeBase(data: {
     graph_enabled: boolean;
   };
 }) {
-  return post(`/api/v1/knowledge-bases`, data);
+  return nexus.createBase(data);
 }
 
 export function getKnowledgeBaseById(id: string, options?: { agent_id?: string; agent_source_tenant_id?: string }) {
@@ -373,7 +371,8 @@ export function getKnowledgeBaseById(id: string, options?: { agent_id?: string; 
   if (options?.agent_id) query.set('agent_id', options.agent_id);
   if (options?.agent_source_tenant_id) query.set('agent_source_tenant_id', options.agent_source_tenant_id);
   const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge-bases/${id}?${qs}` : `/api/v1/knowledge-bases/${id}`);
+  void qs;
+  return nexus.getBase(id);
 }
 
 export function updateKnowledgeBase(id: string, data: {
@@ -400,7 +399,7 @@ export function updateKnowledgeBase(id: string, data: {
     };
   }
 }) {
-  return put(`/api/v1/knowledge-bases/${id}`, data);
+  return nexus.updateBase(id, data);
 }
 
 /** Opt-in automatic generation of the knowledge-base description. */
@@ -443,28 +442,32 @@ export interface KnowledgeBaseProfile {
 
 /** Regenerates the AI description of a knowledge base synchronously. */
 export function generateKnowledgeBaseProfile(id: string) {
-  return post(`/api/v1/knowledge-bases/${id}/profile/generate`, {});
+  void id;
+  return nexus.planned('库画像生成', 'K5');
 }
 
 export function rebuildKBIndex(kbId: string) {
-  return post(`/api/v1/knowledge-bases/${kbId}/rebuild-index`, {});
+  return nexus.rebuildBase(kbId);
 }
 
 export function deleteKnowledgeBase(id: string) {
-  return del(`/api/v1/knowledge-bases/${id}`);
+  return nexus.deleteBase(id);
 }
 
 export function copyKnowledgeBase(data: { source_id: string; target_id?: string }) {
-  return post(`/api/v1/knowledge-bases/copy`, data);
+  void data;
+  return nexus.planned('复制知识库', 'K5');
 }
 
 export function duplicateKnowledgeBase(id: string) {
-  return post(`/api/v1/knowledge-bases/${id}/duplicate`);
+  void id;
+  return nexus.planned('复制知识库', 'K5');
 }
 
 // 获取可移动目标知识库列表（同类型、同Embedding模型）
 export function listMoveTargets(sourceKbId: string) {
-  return get(`/api/v1/knowledge-bases/${sourceKbId}/move-targets`);
+  void sourceKbId;
+  return nexus.plannedEmpty([]);
 }
 
 // 移动知识到其他知识库
@@ -474,16 +477,19 @@ export function moveKnowledge(data: {
   target_kb_id: string;
   mode: 'reuse_vectors' | 'reparse';
 }) {
-  return post('/api/v1/knowledge/move', data);
+  void data;
+  return nexus.planned('移动文档', 'K5');
 }
 
 // 获取知识移动进度
 export function getKnowledgeMoveProgress(taskId: string) {
-  return get(`/api/v1/knowledge/move/progress/${taskId}`);
+  void taskId;
+  return nexus.planned('移动文档', 'K5');
 }
 
 export function togglePinKnowledgeBase(id: string) {
-  return put(`/api/v1/knowledge-bases/${id}/pin`);
+  void id;
+  return nexus.planned('置顶', 'K5');
 }
 
 // 知识文件 API（基于具体知识库）
@@ -500,19 +506,8 @@ export function uploadKnowledgeFile(
   onProgress?: (progressEvent: any) => void,
   config?: { signal?: AbortSignal },
 ) {
-  const formData = new FormData();
-  Object.keys(data).forEach(key => {
-    const value = data[key];
-    if (value === undefined) return;
-    if (key === 'tag_ids' && Array.isArray(value)) {
-      formData.append(key, value.join(','));
-    } else if (key === 'process_config' && value && typeof value !== 'string') {
-      formData.append(key, JSON.stringify(value));
-    } else {
-      formData.append(key, value);
-    }
-  });
-  return postUpload(`/api/v1/knowledge-bases/${kbId}/knowledge/file`, formData, onProgress, config);
+  // Tags and per-upload process overrides are planned (K4/K5); Nexus stores the file and its name.
+  return nexus.uploadDocument(kbId, data.file, data.fileName, onProgress, config);
 }
 
 // 从URL创建知识
@@ -521,7 +516,8 @@ export function createKnowledgeFromURL(
   kbId: string,
   data: { url: string; enable_multimodel?: boolean; tag_ids?: string[]; process_config?: KnowledgeProcessOverrides },
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/knowledge/url`, data);
+  void kbId; void data;
+  return nexus.planned('从网址导入', 'K7');
 }
 
 // 手工创建知识
@@ -536,7 +532,8 @@ export function createManualKnowledge(
     process_config?: KnowledgeProcessOverrides
   },
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/knowledge/manual`, data);
+  void kbId; void data;
+  return nexus.planned('手动创建文档', 'K4');
 }
 
 export type KnowledgeListSortField = 'updated_at' | 'created_at' | 'file_name';
@@ -563,7 +560,7 @@ export interface ListKnowledgeFilesParams {
 }
 
 export function listKnowledgeFiles(kbId: string, params: ListKnowledgeFilesParams) {
-  return get(`/api/v1/knowledge-bases/${kbId}/knowledge?${buildListKnowledgeFilesQuery(params)}`);
+  return nexus.listDocuments(kbId, params);
 }
 
 /** One node of the knowledge base folder tree. */
@@ -588,7 +585,9 @@ export interface KnowledgeFolderTree {
 }
 
 export function listKnowledgeFolders(kbId: string) {
-  return get(`/api/v1/knowledge-bases/${kbId}/knowledge/folders`);
+  void kbId;
+  // Folders are planned (K5): one level, every document at the top.
+  return nexus.plannedEmpty({ root_document_count: 0, total_document_count: 0, folders: [] });
 }
 
 /**
@@ -597,16 +596,12 @@ export function listKnowledgeFolders(kbId: string) {
  * created by this call. Only the grouping changes; documents are not re-parsed.
  */
 export function moveKnowledgeToFolder(kbId: string, ids: string[], folderPath: string) {
-  return post('/api/v1/knowledge/folder', {
-    kb_id: kbId,
-    knowledge_ids: ids,
-    folder_path: folderPath,
-  });
+  return nexus.planned('移动到文件夹', 'K5');
 }
 
 /** Rename or move a folder together with everything below it. */
 export function renameKnowledgeFolder(kbId: string, from: string, to: string) {
-  return put(`/api/v1/knowledge-bases/${kbId}/knowledge/folders`, { from, to });
+  return nexus.planned('重命名文件夹', 'K5');
 }
 
 export function getKnowledgeDetails(id: string, options?: { agent_id?: string; agent_source_tenant_id?: string }) {
@@ -614,53 +609,55 @@ export function getKnowledgeDetails(id: string, options?: { agent_id?: string; a
   if (options?.agent_id) query.set('agent_id', options.agent_id);
   if (options?.agent_source_tenant_id) query.set('agent_source_tenant_id', options.agent_source_tenant_id);
   const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge/${id}?${qs}` : `/api/v1/knowledge/${id}`);
+  void qs;
+  return nexus.getDocument(id);
 }
 
 export function updateManualKnowledge(
   id: string,
   data: { title: string; content: string; status: string; process_config?: KnowledgeProcessOverrides },
 ) {
-  return put(`/api/v1/knowledge/manual/${id}`, data);
+  void id; void data;
+  return nexus.planned('编辑手动文档', 'K4');
 }
 
 export function reparseKnowledge(id: string, data?: { process_config?: KnowledgeProcessOverrides }) {
-  return post(`/api/v1/knowledge/${id}/reparse`, data);
+  void data;
+  return nexus.retryDocument(id);
 }
 
 export function cancelKnowledgeParse(id: string) {
-  return post(`/api/v1/knowledge/${id}/cancel-parse`);
+  void id;
+  return nexus.planned('取消解析', 'K4');
 }
 
 export function getKnowledgeSpans(id: string, attempt?: number) {
   const qs = attempt ? `?attempt=${attempt}` : '';
-  return get(`/api/v1/knowledge/${id}/spans${qs}`);
+  void id; void qs;
+  return nexus.plannedEmpty([]);
 }
 
 export function delKnowledgeDetails(id: string) {
-  return del(`/api/v1/knowledge/${id}`);
+  return nexus.deleteDocument(id);
 }
 
 // 批量删除（同一知识库内）。后端会校验所有 id 隶属于 kb_id 且具有编辑权限。
 export function batchDeleteKnowledge(kbId: string, ids: string[]) {
-  return post(`/api/v1/knowledge/batch-delete`, { kb_id: kbId, ids });
+  void kbId;
+  return Promise.all(ids.map(id => nexus.deleteDocument(id))).then(() => ({ success: true, data: null }));
 }
 
 export function downKnowledgeDetails(id: string) {
-  return getDown(`/api/v1/knowledge/${id}/download`);
+  return nexus.downloadDocument(id);
 }
 
 // 使用已有登录和租户请求头下载 ZIP，不将凭据放入下载链接。
 export function batchDownloadKnowledge(kbId: string, ids: string[], signal?: AbortSignal): Promise<Blob> {
-  return post<Blob>(`/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/knowledge/batch-download`, { ids }, {
-    responseType: 'blob',
-    timeout: 300000,
-    signal,
-  });
+  return nexus.planned('批量下载', 'K5');
 }
 
 export function previewKnowledgeFile(id: string) {
-  return getDown(`/api/v1/knowledge/${id}/preview`);
+  return nexus.downloadDocument(id);
 }
 
 /** @param idsQueryString - query string with ids (e.g. ids=xxx&ids=yyy) */
@@ -669,13 +666,16 @@ export function batchQueryKnowledge(idsQueryString: string, kbId?: string, agent
   if (kbId) qs += `&kb_id=${encodeURIComponent(kbId)}`;
   if (agentId) qs += `&agent_id=${encodeURIComponent(agentId)}`;
   if (agentSourceTenantId) qs += `&agent_source_tenant_id=${encodeURIComponent(agentSourceTenantId)}`;
-  return get(`/api/v1/knowledge/batch?${qs}`);
+  void qs;
+  const ids = new URLSearchParams(idsQueryString).getAll('ids');
+  return Promise.all(ids.map(id => nexus.getDocument(id).then(res => res.data, () => null)))
+    .then(rows => ({ success: true, data: rows.filter(Boolean) }));
 }
 
 export const KNOWLEDGE_CHUNK_PAGE_SIZE = 25;
 
 export function getKnowledgeDetailsCon(id: string, page: number) {
-  return get(`/api/v1/chunks/${id}?page=${page}&page_size=${KNOWLEDGE_CHUNK_PAGE_SIZE}`);
+  return nexus.listChunks(id, page, KNOWLEDGE_CHUNK_PAGE_SIZE);
 }
 
 export interface ChunkEditPayload {
@@ -685,51 +685,47 @@ export interface ChunkEditPayload {
 }
 
 export function updateDocumentChunk(knowledgeId: string, chunkId: string, data: ChunkEditPayload) {
-  return put(`/api/v1/chunks/${knowledgeId}/${chunkId}`, data);
+  void knowledgeId; void chunkId; void data;
+  return nexus.planned('编辑分块', 'K4');
 }
 
 export function listChunkRevisions(knowledgeId: string, chunkId: string) {
-  return get(`/api/v1/chunks/${knowledgeId}/${chunkId}/revisions`);
+  void knowledgeId; void chunkId;
+  return nexus.plannedEmpty([]);
 }
 
 export function revertDocumentChunk(knowledgeId: string, chunkId: string, revision: number, expectedRevision: number) {
-  return post(`/api/v1/chunks/${knowledgeId}/${chunkId}/revert`, {
-    revision,
-    expected_revision: expectedRevision,
-  });
+  return nexus.planned('分块版本回退', 'K4');
 }
 
 export function updateKnowledgeMetadata(knowledgeId: string, customMetadata: Record<string, unknown>) {
-  return put(`/api/v1/knowledge/${knowledgeId}`, { custom_metadata: customMetadata });
+  return nexus.planned('自定义元数据', 'K5');
 }
 
 export function updateKnowledgeSummary(knowledgeId: string, description: string) {
-  return put(`/api/v1/knowledge/${knowledgeId}`, { description });
+  return nexus.planned('文档摘要', 'K5');
 }
 
 export function regenerateKnowledgeSummary(knowledgeId: string) {
-  return post(`/api/v1/knowledge/${knowledgeId}/regenerate-summary`, {});
+  return nexus.planned('文档摘要', 'K5');
 }
 
 // Get chunk by chunk_id only (new endpoint - to be added to backend)
 export function getChunkByIdOnly(chunkId: string) {
-  return get(`/api/v1/chunks/by-id/${chunkId}`);
+  return nexus.planned('按 ID 读取分块', 'K5');
 }
 
 // Delete a single generated question from a chunk by question ID
 export function deleteGeneratedQuestion(chunkId: string, questionId: string) {
-  return del(`/api/v1/chunks/by-id/${chunkId}/questions`, { question_id: questionId });
+  return nexus.planned('提问生成', 'K5');
 }
 
 export function upsertGeneratedQuestion(chunkId: string, question: string, questionId?: string) {
-  return put(`/api/v1/chunks/by-id/${chunkId}/questions`, {
-    question_id: questionId || '',
-    question,
-  });
+  return nexus.planned('提问生成', 'K5');
 }
 
 export function regenerateGeneratedQuestions(chunkId: string) {
-  return post(`/api/v1/chunks/by-id/${chunkId}/questions/regenerate`, {});
+  return nexus.planned('提问生成', 'K5');
 }
 
 export function listKnowledgeTags(
@@ -737,14 +733,14 @@ export function listKnowledgeTags(
   params?: { page?: number; page_size?: number; keyword?: string },
 ) {
   const query = buildQuery(params);
-  return get(`/api/v1/knowledge-bases/${kbId}/tags${query}`);
+  return nexus.plannedEmpty([], { total: 0 });
 }
 
 export function createKnowledgeBaseTag(
   kbId: string,
   data: { name: string; color?: string; sort_order?: number },
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/tags`, data);
+  return nexus.planned('标签', 'K5');
 }
 
 export function updateKnowledgeBaseTag(
@@ -752,20 +748,20 @@ export function updateKnowledgeBaseTag(
   tagId: string,
   data: { name?: string; color?: string; sort_order?: number },
 ) {
-  return put(`/api/v1/knowledge-bases/${kbId}/tags/${tagId}`, data);
+  return nexus.planned('标签', 'K5');
 }
 
 export function deleteKnowledgeBaseTag(kbId: string, tagSeqId: number, params?: { force?: boolean }) {
   const forceQuery = params?.force ? '?force=true' : '';
-  return del(`/api/v1/knowledge-bases/${kbId}/tags/${tagSeqId}${forceQuery}`);
+  return nexus.planned('标签', 'K5');
 }
 
 export function updateKnowledgeTagBatch(data: { updates: Record<string, string[]> }) {
-  return put(`/api/v1/knowledge/tags`, data);
+  return nexus.planned('标签', 'K5');
 }
 
 export function updateFAQEntryTagBatch(kbId: string, data: { updates: Record<number, number | null> }) {
-  return put(`/api/v1/knowledge-bases/${kbId}/faq/entries/tags`, data);
+  return nexus.planned('FAQ', 'K3');
 }
 
 const buildQuery = (params?: Record<string, any>) => {
@@ -791,19 +787,19 @@ export function listFAQEntries(
   },
 ) {
   const query = buildQuery(params);
-  return get(`/api/v1/knowledge-bases/${kbId}/faq/entries${query}`);
+  return nexus.plannedEmpty([], { total: 0 });
 }
 
 export function upsertFAQEntries(kbId: string, data: { entries: any[]; mode: 'append' | 'replace' }) {
-  return post(`/api/v1/knowledge-bases/${kbId}/faq/entries`, data);
+  return nexus.planned('FAQ', 'K3');
 }
 
 export function createFAQEntry(kbId: string, data: any) {
-  return post(`/api/v1/knowledge-bases/${kbId}/faq/entry`, data);
+  return nexus.planned('FAQ', 'K3');
 }
 
 export function updateFAQEntry(kbId: string, entryId: number, data: any) {
-  return put(`/api/v1/knowledge-bases/${kbId}/faq/entries/${entryId}`, data);
+  return nexus.planned('FAQ', 'K3');
 }
 
 // Unified batch update API - supports is_enabled, is_recommended, tag_id
@@ -823,11 +819,11 @@ export interface FAQEntryFieldsBatchRequest {
 }
 
 export function updateFAQEntryFieldsBatch(kbId: string, data: FAQEntryFieldsBatchRequest) {
-  return put(`/api/v1/knowledge-bases/${kbId}/faq/entries/fields`, data);
+  return nexus.planned('FAQ', 'K3');
 }
 
 export function deleteFAQEntries(kbId: string, ids: number[]) {
-  return del(`/api/v1/knowledge-bases/${kbId}/faq/entries`, { ids });
+  return nexus.planned('FAQ', 'K3');
 }
 
 export function searchFAQEntries(
@@ -838,14 +834,13 @@ export function searchFAQEntries(
     match_count?: number
   }
 ) {
-  return post(`/api/v1/knowledge-bases/${kbId}/faq/search`, data);
+  return nexus.planned('FAQ', 'K3');
 }
 
 // Export FAQ entries as CSV or JSON file
 export async function exportFAQEntries(kbId: string, format: 'csv' | 'json' = 'csv'): Promise<Blob> {
-  const suffix = format === 'json' ? '?format=json' : ''
-  const response = await getDown(`/api/v1/knowledge-bases/${kbId}/faq/entries/export${suffix}`)
-  return response as unknown as Blob
+  void kbId; void format;
+  return nexus.planned('FAQ 导出', 'K3')
 }
 
 // FAQ Import Progress API
@@ -881,13 +876,11 @@ export interface FAQImportProgress {
 }
 
 export function getFAQImportProgress(taskId: string) {
-  return get(`/api/v1/faq/import/progress/${taskId}`);
+  return nexus.planned('FAQ 导入', 'K3');
 }
 
 export function updateFAQImportResultDisplayStatus(knowledgeBaseId: string, displayStatus: 'open' | 'close') {
-  return put(`/api/v1/knowledge-bases/${knowledgeBaseId}/faq/import/last-result/display`, {
-    display_status: displayStatus
-  });
+  return nexus.planned('FAQ 导入', 'K3');
 }
 
 export function searchKnowledge(
@@ -909,7 +902,7 @@ export function searchKnowledge(
   if (options?.agent_id) query.set('agent_id', options.agent_id);
   if (options?.agent_source_tenant_id) query.set('agent_source_tenant_id', options.agent_source_tenant_id);
   if (options?.recent) query.set('recent', 'true');
-  return get(`/api/v1/knowledge/search?${query.toString()}`);
+  return nexus.plannedEmpty([], { total: 0 });
 }
 
 export function knowledgeSemanticSearch(data: {
@@ -917,13 +910,10 @@ export function knowledgeSemanticSearch(data: {
   knowledge_base_ids?: string[];
   knowledge_ids?: string[];
 }) {
-  return post('/api/v1/knowledge-search', data);
+  return nexus.searchBases(data.query, data.knowledge_base_ids);
 }
 
 export function batchReparseKnowledge(kbId: string, ids: string[], processConfig?: KnowledgeProcessOverrides) {
-  return post(`/api/v1/knowledge/batch-reparse`, {
-    kb_id: kbId,
-    ids,
-    process_config: processConfig,
-  });
+  void kbId; void processConfig;
+  return Promise.all(ids.map(id => nexus.retryDocument(id))).then(() => ({ success: true, data: null }));
 }

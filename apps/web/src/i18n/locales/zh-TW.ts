@@ -9164,7 +9164,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "工具存取級別", read_only: "唯讀", standard: "標準", strict: "嚴格", read_onlyDesc: "只提供唯讀工具，寫入和高危工具不可用。", standardDesc: "寫入類工具直接執行，高危工具需要審批。", strictDesc: "寫入類和高危工具都需要審批。" },
-    risk: { read: "唯讀", probe: "探查", write: "寫入", destructive: "高危" },
+    risk: { read: "唯讀", probe: "探查", write: "寫入", destructive: "高危", low: "低風險", medium: "中風險", high: "高風險" },
     basicInfoDesc: "設定智慧體的名稱與描述",
     promptsConfigDesc: "設定智慧體的系統提示詞",
     modelConfigDesc: "設定對話模型與生成參數",
@@ -9177,12 +9177,8 @@ export default {
     toolGroups: {
       base: "基礎",
       memory: "記憶",
+      knowledge: "知識庫",
       skills: "技能"
-    },
-    risk: {
-      low: "低風險",
-      medium: "中風險",
-      high: "高風險"
     },
     requiresApproval: "需審批",
     readOnly: "唯讀",
