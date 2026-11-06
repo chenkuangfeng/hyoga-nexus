@@ -283,3 +283,42 @@ def skill_scripts_gate(*, auth_mode: str | None, backend: str | None, config_ena
     entry point where it occurs.
     """
     return bool(config_enabled) and auth_mode == "development" and backend == "local"
+
+
+@dataclass(frozen=True)
+class KnowledgeSettings:
+    """``[knowledge]`` (openspec 2026-11-06-knowledge-base K1).
+
+    ``data_dir`` holds the builtin stores: original files under ``files/`` (local storage backend) and the
+    builtin SQLite vector store ``vectors.db``. ``max_upload_mb`` caps one upload. ``index_concurrency`` is
+    the number of index jobs a worker runs at a time (1 by default: parsing and embedding use memory).
+    """
+
+    data_dir: Path = Path('data/knowledge')
+    max_upload_mb: int = 50
+    index_concurrency: int = 1
+
+    @property
+    def files_dir(self) -> Path:
+        return self.data_dir / 'files'
+
+    @property
+    def vectors_path(self) -> Path:
+        return self.data_dir / 'vectors.db'
+
+
+def knowledge_settings(path: Path | None = None) -> KnowledgeSettings:
+    """Read ``[knowledge]``; absent keys mean the defaults. Invalid values raise DatabaseConfigurationError."""
+    values = section("knowledge", path)
+    data_dir = values.get("data_dir", "data/knowledge")
+    if not isinstance(data_dir, str) or not data_dir.strip():
+        raise DatabaseConfigurationError(f"{_FILE} [knowledge].data_dir must be a non-empty string")
+
+    def integer(key: str, default: int, minimum: int, maximum: int) -> int:
+        value = values.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+            raise DatabaseConfigurationError(f"{_FILE} [knowledge].{key} must be an integer in [{minimum}, {maximum}]")
+        return value
+
+    return KnowledgeSettings(Path(data_dir), integer("max_upload_mb", 50, 1, 1024),
+                             integer("index_concurrency", 1, 1, 8))

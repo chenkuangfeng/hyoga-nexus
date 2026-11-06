@@ -64,3 +64,12 @@ idle_seconds = 300
 repeat_threshold = 3
 # How often the worker checks each running Run, in seconds. Minimum 5. Read when the worker starts.
 interval_seconds = 30
+
+[knowledge]
+# Knowledge bases (openspec 2026-11-06-knowledge-base). Builtin stores live under data_dir:
+# original files in files/ (local storage backend) and the builtin SQLite vector store vectors.db.
+data_dir = "data/knowledge"
+# Largest accepted upload, in MB (1-1024).
+max_upload_mb = 50
+# Index jobs a worker runs at the same time (1-8). Parsing and embedding use memory; keep 1 on small hosts.
+index_concurrency = 1

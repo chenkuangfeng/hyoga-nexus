@@ -28,11 +28,15 @@
 - [x] K1.2b 引擎代码：postgres（pgvector + tsvector）、qdrant、elasticsearch、milvus；只实现不测试，能力目录标 `verified=false`，真实环境后补验收。
   - postgres（psycopg 异步、按维度的部分 HNSW 索引、`tsvector('simple')` 关键词）、qdrant / elasticsearch / milvus（httpx 调 REST；Milvus 2.5+ 用 BM25 函数做关键词通道；ES kNN 带 `filter`）。Qdrant、Milvus `requires_vectors=True`，库必须配置 Embedding 模型。新增依赖 httpx、psycopg 到 knowledge 包。只验证了能构造与注册，未连接真实服务。
 - [ ] K1.2c 真实环境验收：postgres、qdrant、elasticsearch、milvus 连接、增删查与越权用例（需用户提供环境）。
-- [ ] K1.3 持久化与迁移：`knowledge_bases`、`knowledge_documents`、`knowledge_document_versions`、`knowledge_chunks`、`knowledge_chunk_vectors`、`knowledge_jobs`、`vector_stores`、`storage_backends`；升降级测试。
-- [ ] K1.4 服务：库与文档增删改查、上传去重、版本切换、删除标记与清理、资源注册、共享、审计。
-- [ ] K1.5 作业：parse → chunk → embed → activate，阶段提交、退避重试、恢复、取消。
+- [x] K1.3 持久化与迁移：`knowledge_bases`、`knowledge_documents`、`knowledge_document_versions`、`knowledge_chunks`、`knowledge_chunk_vectors`、`knowledge_jobs`、`vector_stores`、`storage_backends`；升降级测试。
+  - 迁移 `c8d9e0f1a2b3`。向量不进平台库（不建 `knowledge_chunk_vectors`），由所选向量库保存；`indexed_count` 记录已写入索引的块数用于断点续做。库与文档名称在 active 范围内唯一（部分索引）。`[knowledge]` 配置：`data_dir`、`max_upload_mb`、`index_concurrency`。
+- [x] K1.4 服务：库与文档增删改查、上传去重、版本切换、删除标记与清理、资源注册、共享、审计。
+  - `nexus_platform.knowledge`：`access`（读：本空间成员或共享进来的空间成员；写：空间 owner/admin 或创建者）、`stores`（向量库与存储后端注册，密钥按 id 绑定加密、列表打码；未登记时用内置 SQLite 与本地目录）、`service`。共享直接复用 `resource_grants`。SQLite 不强制外键级联，清理任务显式删除子行。
+- [x] K1.5 作业：parse → chunk → embed → activate，阶段提交、退避重试、恢复、取消。
+  - `jobs.claim` 以租约（10 分钟）领取；解析错误直接失败（`empty_text`、`unsupported_type`），其他错误 30s/2m/10m 退避，第 4 次失败；文档或库删除后作业取消。Embedding 通过 `knowledge.embedding.set_embedder_factory` 注入，索引用创建者 Key、查询用查询者 Key。
 - [ ] K1.6 向量库与存储后端注册：增删改查、密钥加密、连接测试、库创建时选择。
-- [ ] K1.7 Pre-Filter 与混合检索、降级、诊断；越权测试逐路径。
+- [x] K1.7 Pre-Filter 与混合检索、降级、诊断；越权测试逐路径。
+  - `search.resolve_scope` + `search.search`；命中后在平台库按范围再过滤一次。测试 `tests/test_knowledge_service.py`（去重、版本切换时机、跨空间/共享/撤权/绑定/删除、解析失败与重试、混合检索与向量降级审计）。
 - [ ] K1.8 工具 `search_knowledge`、`read_document`、`list_documents`；证据登记存 Run progress；Run 结束引用校验；智能体绑定与发布校验。
 - [ ] K1.9 前端：列表、创建/编辑（类型、索引策略、向量库、存储、模型、分块）、详情、上传、状态与重试、块预览、检索测试、共享、活动、引用渲染、智能体编辑器知识库分区。
 - [ ] K1.10 `evals/knowledge/` 与包文档（README、requirements、design）。

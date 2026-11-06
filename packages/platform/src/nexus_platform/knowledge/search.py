@@ -1,0 +1,222 @@
+"""Pre-Filter and hybrid search (openspec 2026-11-06-knowledge-base K1.7, architecture 2.10).
+
+1. :func:`resolve_scope` computes, at call time, the knowledge bases the caller may read from the current
+   space (optionally limited to an agent's bound bases and then to a requested subset) and, for each, the
+   current version ids of its active documents. Nothing is searched outside this scope.
+2. Per base, the keyword channel (when the base indexes keywords and the engine supports it) and the vector
+   channel (when the base indexes vectors and the query can be embedded) run on the base's vector store with
+   the scope pushed down to the engine.
+3. All lists are fused (weighted RRF, :mod:`nexus_knowledge.retrieval.fuse`). Hits are loaded from the
+   platform database and filtered by the scope once more (defense in depth).
+
+Degradation: a failing vector channel (no embedding model, the user cannot use it, provider or engine error)
+is dropped for that base and reported in ``degraded``; a failing keyword channel likewise. Each degradation is
+audited as ``knowledge.search_degraded``. A degradation never widens the scope.
+"""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Sequence
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from nexus_knowledge.index import Scope, VectorStoreError, collection_name
+from nexus_knowledge.retrieval.fuse import Candidate, fuse
+from nexus_knowledge.text import query_tokens
+from nexus_platform.authz.audit import audit
+from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
+                                               KnowledgeDocumentVersionRecord)
+from . import access, embedding, stores
+
+logger = logging.getLogger(__name__)
+
+MAX_LIMIT = 50
+CANDIDATES_PER_CHANNEL = 30
+
+
+@dataclass
+class ScopedBase:
+    kb: KnowledgeBaseRecord
+    version_ids: tuple[str, ...]
+
+
+@dataclass
+class SearchHit:
+    chunk_id: str
+    score: float
+    ranks: dict[str, int]
+    content: str
+    kb_id: str
+    kb_name: str
+    document_id: str
+    filename: str
+    version_id: str
+    ordinal: int
+    page: int | None
+    section: list[str]
+
+    def ref(self) -> dict[str, Any]:
+        """Citation reference kept by the evidence registry."""
+        return {'kb_id': self.kb_id, 'document_id': self.document_id, 'version_id': self.version_id,
+                'filename': self.filename, 'page': self.page, 'section': self.section, 'ordinal': self.ordinal}
+
+
+@dataclass
+class SearchResult:
+    hits: list[SearchHit]
+    degraded: list[dict[str, str]] = field(default_factory=list)
+    searched: list[str] = field(default_factory=list)
+    ignored: list[str] = field(default_factory=list)
+
+
+def resolve_scope(db: Session, tenant_id: UUID, user_id: UUID, *, bound: Sequence[UUID] | None = None,
+                  requested: Sequence[UUID] | None = None) -> tuple[list[ScopedBase], list[str]]:
+    """Readable bases with their searchable versions; second value lists requested ids that were ignored.
+
+    ``bound`` restricts to an agent version's bindings (None: every readable base, used by the management
+    UI); ``requested`` narrows further and can never add a base.
+    """
+    allowed = list(bound) if bound is not None else None
+    ignored: list[str] = []
+    if requested:
+        wanted = list(dict.fromkeys(requested))
+        if allowed is not None:
+            ignored = [str(i) for i in wanted if i not in set(allowed)]
+            wanted = [i for i in wanted if i in set(allowed)]
+        allowed = wanted
+    bases = access.readable_bases(db, tenant_id, user_id, allowed)
+    if requested:
+        found = {kb.id for kb in bases}
+        ignored += [str(i) for i in requested if i not in found and str(i) not in ignored]
+    out = []
+    for kb in bases:
+        versions = db.scalars(select(KnowledgeDocumentRecord.current_version_id).where(
+            KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active',
+            KnowledgeDocumentRecord.current_version_id.is_not(None))).all()
+        out.append(ScopedBase(kb, tuple(sorted(str(v) for v in versions))))
+    return out, ignored
+
+
+async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, user_id: UUID, query: str, *,
+                 limit: int = 8, bound: Sequence[UUID] | None = None, requested: Sequence[UUID] | None = None,
+                 vector_weight: float = 1.0, keyword_weight: float = 1.0) -> SearchResult:
+    """Search the caller's readable scope. ``db`` is used for reads only; audits are written in it too."""
+    query = (query or '').strip()
+    if not query:
+        raise ValueError('query must not be empty')
+    limit = max(1, min(int(limit), MAX_LIMIT))
+    scoped, ignored = resolve_scope(db, tenant_id, user_id, bound=bound, requested=requested)
+    result = SearchResult(hits=[], ignored=ignored)
+    tokens = query_tokens(query)
+    vector_lists: list[list[Candidate]] = []
+    keyword_lists: list[list[Candidate]] = []
+    query_vectors: dict[UUID, list[float] | Exception] = {}
+    for item in scoped:
+        kb = item.kb
+        result.searched.append(str(kb.id))
+        if not item.version_ids:
+            continue
+        scope = Scope(str(kb.id), item.version_ids)
+        collection = collection_name(str(kb.id))
+        try:
+            index = stores.vector_index_for(db, kb)
+        except Exception as exc:  # unusable store configuration: nothing can be searched in this base
+            _degrade(db, result, tenant_id, user_id, kb, 'all', 'store_unavailable', exc)
+            continue
+        try:
+            if kb.indexing.get('keyword') and index.supports_keyword and tokens:
+                try:
+                    keyword_lists.append(await index.search_keyword(collection, tokens, scope, CANDIDATES_PER_CHANNEL))
+                except VectorStoreError as exc:
+                    _degrade(db, result, tenant_id, user_id, kb, 'keyword', exc.code, exc)
+            if kb.indexing.get('vector'):
+                vector = await _query_vector(factory, tenant_id, user_id, kb, query, query_vectors)
+                if isinstance(vector, Exception):
+                    _degrade(db, result, tenant_id, user_id, kb, 'vector', _reason(vector), vector)
+                elif kb.embedding_dimension and len(vector) != kb.embedding_dimension:
+                    _degrade(db, result, tenant_id, user_id, kb, 'vector', 'dimension_mismatch', None)
+                else:
+                    try:
+                        vector_lists.append(await index.search_vector(collection, vector, scope, CANDIDATES_PER_CHANNEL))
+                    except VectorStoreError as exc:
+                        _degrade(db, result, tenant_id, user_id, kb, 'vector', exc.code, exc)
+        finally:
+            await index.close()
+    fused = fuse(vector_lists, keyword_lists, vector_weight=vector_weight, keyword_weight=keyword_weight)
+    result.hits = _load_hits(db, fused, scoped, limit)
+    return result
+
+
+def _reason(exc: Exception) -> str:
+    if isinstance(exc, LookupError):
+        return 'embedding_unavailable'
+    return getattr(exc, 'code', None) or 'embedding_failed'
+
+
+async def _query_vector(factory, tenant_id: UUID, user_id: UUID, kb: KnowledgeBaseRecord, query: str,
+                        cache: dict[UUID, list[float] | Exception]) -> list[float] | Exception:
+    """The query embedded with the caller's own key (decision 6), once per embedding model."""
+    model = kb.embedding_model_version_id
+    if model is None:
+        return LookupError('no embedding model')
+    if model not in cache:
+        try:
+            client = embedding.embedder(factory, tenant_id, user_id, model, 'knowledge.query')
+            try:
+                (vector,) = await client.embed([query])
+            finally:
+                await client.close()
+            cache[model] = [float(x) for x in vector]
+        except Exception as exc:  # provider or authorization failure: keyword search still answers
+            cache[model] = exc
+    return cache[model]
+
+
+def _degrade(db: Session, result: SearchResult, tenant_id: UUID, user_id: UUID, kb: KnowledgeBaseRecord,
+             channel: str, reason: str, exc: Exception | None) -> None:
+    result.degraded.append({'kb_id': str(kb.id), 'channel': channel, 'reason': reason})
+    logger.warning('knowledge search degraded', extra={'kb_id': str(kb.id), 'channel': channel, 'reason': reason,
+                                                       'error': type(exc).__name__ if exc else None})
+    audit(db, tenant_id, user_id, 'knowledge.search_degraded', access.KIND, str(kb.id),
+          {'channel': channel, 'reason': reason})
+
+
+def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int) -> list[SearchHit]:
+    allowed = {version for item in scoped for version in item.version_ids}
+    names = {item.kb.id: item.kb.name for item in scoped}
+    ids = []
+    for item in fused:
+        try:
+            ids.append(UUID(item.chunk_id))
+        except ValueError:
+            continue
+    if not ids:
+        return []
+    rows = db.execute(select(KnowledgeChunkRecord, KnowledgeDocumentVersionRecord, KnowledgeDocumentRecord).join(
+        KnowledgeDocumentVersionRecord, KnowledgeDocumentVersionRecord.id == KnowledgeChunkRecord.version_id).join(
+        KnowledgeDocumentRecord, KnowledgeDocumentRecord.id == KnowledgeDocumentVersionRecord.document_id).where(
+        KnowledgeChunkRecord.id.in_(ids[: limit * 4]))).all()
+    by_id = {str(chunk.id): (chunk, version, doc) for chunk, version, doc in rows}
+    hits = []
+    for item in fused:
+        found = by_id.get(item.chunk_id)
+        if found is None:
+            continue
+        chunk, version, doc = found
+        if str(version.id) not in allowed or doc.status != 'active':  # stale index row or out of scope
+            continue
+        hits.append(SearchHit(item.chunk_id, round(item.score, 6), item.ranks, chunk.content, str(doc.kb_id),
+                              names.get(doc.kb_id, ''), str(doc.id), doc.filename, str(version.id), chunk.ordinal,
+                              chunk.page, list(chunk.section)))
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def hit_view(hit: SearchHit) -> dict[str, Any]:
+    return {'chunk_id': hit.chunk_id, 'score': hit.score, 'channels': hit.ranks, 'content': hit.content,
+            'kb_id': hit.kb_id, 'kb_name': hit.kb_name, 'document_id': hit.document_id, 'filename': hit.filename,
+            'version_id': hit.version_id, 'ordinal': hit.ordinal, 'page': hit.page, 'section': hit.section}

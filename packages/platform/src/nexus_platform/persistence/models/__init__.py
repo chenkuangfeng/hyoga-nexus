@@ -43,6 +43,15 @@ from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
 from .space import AgentShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
 
+from .knowledge import (
+    VectorStoreRecord,
+    StorageBackendRecord,
+    KnowledgeBaseRecord,
+    KnowledgeDocumentRecord,
+    KnowledgeDocumentVersionRecord,
+    KnowledgeChunkRecord,
+    KnowledgeJobRecord,
+)
 __all__ = [
     'SessionMemorySnapshotRecord',
     'MemoryCaptureSettingsRecord',
@@ -109,4 +118,11 @@ __all__ = [
     'UserOrgUnitRecord',
     
     'OrgAuditRecord',
+    'VectorStoreRecord',
+    'StorageBackendRecord',
+    'KnowledgeBaseRecord',
+    'KnowledgeDocumentRecord',
+    'KnowledgeDocumentVersionRecord',
+    'KnowledgeChunkRecord',
+    'KnowledgeJobRecord',
 ]
