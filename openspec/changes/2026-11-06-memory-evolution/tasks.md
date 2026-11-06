@@ -1,32 +1,43 @@
 # 实施任务
 
-状态：草案，待确认。确认前不编码。
+状态：已确认（2026-11-06），实施中。
 
 每个阶段完成后单独提交并推送。阶段内发现的追加工作写入本文件对应阶段，不另开提案。
 
 ## 0. 准备
 
-- [ ] 0.1 用户确认 `proposal.md` 中"待确认的决定"1–7。
-- [ ] 0.2 精读参考源码并在本节记录取舍：
+- [x] 0.1 用户确认 `proposal.md` 中"待确认的决定"1–7。
+- [x] 0.2 精读参考源码并在本节记录取舍（第 1 阶段相关部分已读，其余阶段开始前补读并在此追加）：
   - WeKnora：`extract.go`（`collectSessionSegments`、`relevantExisting`、`buildExtractionPrompt`、`applyDecisions`）、`service.go`（`Recall`、`findContainedDuplicate`、`enforceCapacity`）、`consolidate.go`、`vector.go`、`topic_resolve.go`、`search_conversations.go`；
   - octop-memory：`checks.py`、`rerank.py`、`budget.py`、`suppress.py`、`consolidate.py`、`gc.py`；
   - hermes-agent：`background_review.py`、`memory_tool_store.py`、`memory_provider.py`、`memory_manager.py`。
-- [ ] 0.3 核对 Run 起始用户消息的 `runtime_metadata.origin` 实际取值，确定 A1 的白名单。
-- [ ] 0.4 核对 `2026-11-05-memory-switches` 前端第 2 节的进度。第 2 阶段的界面任务在它完成后开始。
+  - 第 1 阶段取舍：
+    - 来源筛选照 WeKnora 只取用户消息，但 Nexus 按 `origin` 白名单判断，而不是只看角色，因为运行时会以 `user` 角色补发合成消息。
+    - 相关条目照 WeKnora 只给相关的 15 条；WeKnora 用向量检索选取，Nexus 第 1 阶段没有向量，改为按分词重合度在应用内打分（每人有字数预算，全量读取开销小）。
+    - 证据校验取 octop-memory `check_evidence` 的思路（引用必须出自原始事件），校验方式改为规范化子串匹配。
+    - 主题即身份、包含即重复照 WeKnora `MemoryItemKey` 与 `findContainedDuplicate`；但 WeKnora 直接替换已发布条目，Nexus 只生成编辑草稿（决定 E2）。
+    - 冲突提示用 octop-memory 检查 5 的否定词加重合度规则，只作提示，不进入 `conflict` 状态，因为 Nexus 每条都要人工审核。
+    - "不该保存"清单照 hermes `_DO_NOT_CAPTURE_BLOCK`，压缩成中文要点。
+- [x] 0.3 核对 Run 起始用户消息的 `runtime_metadata.origin` 实际取值，确定 A1 的白名单。
+  - 结果：起始消息写入时 `runtime_metadata` 为空（`message_repository.initial`）；回答追问为 `user_input`，运行中追加指令为 `user_steer`；运行时补发的续写、截断提醒、项目上下文、恢复提示是 `role='user'`、`origin='runtime'`（`orchestrator.py`、`recovery.py`），必须排除。白名单定为 `('', 'user_input', 'user_steer')`。会话分叉复制消息时保留原 `origin`。
+- [x] 0.4 核对 `2026-11-05-memory-switches` 前端第 2 节的进度。第 2 阶段的界面任务在它完成后开始。
+  - 结果（2026-11-06）：该提案前端任务 2.1–2.6 均未完成。第 2 阶段先做后端，界面任务排在它之后。
 
 ## 1. 第 1 阶段：抓取质量（A1–A9）
 
-- [ ] 1.1 迁移：`memory_drafts` 新增 `topic`、`importance`、`confidence`、`valid_until`、`evidence`、`annotations`；`memory_entries` 新增 `topic`、`importance`；`memory_tombstones` 新增 `topic` 和索引。测试升级与降级。
-- [ ] 1.2 `nexus_memory.capture.select_sources`：消息来源白名单、助手只读上下文、没有用户消息时跳过（A1、A9）。
-- [ ] 1.3 `validate_actions` 新协议：允许 `update` 加 `target`、证据校验、价值门槛、有效期、默认值、单窗口 8 项上限（A4、A5、A8）。
-- [ ] 1.4 `text.topic_key`、`text.normalize_for_match`、`text.NEGATIONS`；`propose` 中加入主题匹配转更新、包含重复、冲突提示（A6、A5）。
-- [ ] 1.5 `_plan`：按关键词检索相关条目（不足时补齐）；读取被拒主题（A2、A7）。
-- [ ] 1.6 worker `build_request` 新结构，`INSTRUCTIONS` 重写，并用测试锁定关键句（A3）。
-- [ ] 1.7 `review`：发布时把 `topic`、`importance`、`valid_until` 复制到条目；拒绝时把 `topic` 写入墓碑。
-- [ ] 1.8 前台 `propose_memory_draft` 参数增加 `topic`、`importance`、`valid_until`。
-- [ ] 1.9 接口：`GET /memory` 的草稿与条目返回新字段；审核时可修改 `importance`。
-- [ ] 1.10 pytest：来源筛选、证据、门槛、主题转更新、包含重复、冲突提示、被拒主题、迁移、抓取端到端（假抽取器）。
-- [ ] 1.11 文档：`packages/memory/docs/design.md`、`docs/architecture.md` 2.8 节。
+- [x] 1.1 迁移：`memory_drafts` 新增 `topic`、`importance`、`confidence`、`valid_until`、`evidence`、`annotations`；`memory_entries` 新增 `topic`、`importance`；`memory_tombstones` 新增 `topic` 和索引。测试升级与降级。
+- [x] 1.2 `nexus_memory.capture.select_sources`：消息来源白名单、助手只读上下文、没有用户消息时跳过（A1、A9）。
+- [x] 1.3 `validate_actions` 新协议：允许 `update` 加 `target`、证据校验、价值门槛、有效期、默认值、单窗口 8 项上限（A4、A5、A8）。
+- [x] 1.4 `text.topic_key`、`text.normalize_for_match`、`text.NEGATIONS`；`propose` 中加入主题匹配转更新、包含重复、冲突提示（A6、A5）。
+- [x] 1.5 `_plan`：按关键词检索相关条目（不足时补齐）；读取被拒主题（A2、A7）。
+- [x] 1.6 worker `build_request` 新结构，`INSTRUCTIONS` 重写，并用测试锁定关键句（A3）。
+- [x] 1.7 `review`：发布时把 `topic`、`importance`、`valid_until` 复制到条目；拒绝时把 `topic` 写入墓碑。
+- [x] 1.8 前台 `propose_memory_draft` 参数增加 `topic`、`importance`、`valid_until`。
+- [x] 1.9 接口：`GET /memory` 的草稿与条目返回新字段；审核时可修改 `importance`。
+  - 追加：编辑草稿记录 `target_entry_id`，审核时未指定条目则按草稿记录的条目发布（迁移 1.1 中新增该列）。
+- [x] 1.10 pytest：来源筛选、证据、门槛、主题转更新、包含重复、冲突提示、被拒主题、迁移、抓取端到端（假抽取器）。
+  - `tests/test_memory_evolution_stage1.py`（22 项），并更新 `test_memory_capture.py`、`test_memory_capture_credentials.py`、`test_memory_rules.py` 的内存仓储；全量 808 通过。PostgreSQL 随路线图 2.9 验收。
+- [x] 1.11 文档：`packages/memory/docs/design.md`、`docs/architecture.md` 2.8 节。
 
 ## 2. 第 2 阶段：注入与展示（B1–B6、E1）
 

@@ -7,7 +7,10 @@ Contract notes:
 - Extraction output is untrusted. `validate_actions` keeps only well-formed actions and counts the rest;
   nothing is stored from a rejected action.
 - Capture never publishes. Valid actions become drafts through `service.propose` with `origin='capture'`.
-- Unattended runs (no user in the loop) may only `add`. Edits and deletes need a person to review them.
+- Unattended runs (no user in the loop) may `add`, and `update` only an entry the extractor was shown
+  (by index into the related list). The result is still a draft; deletes are never accepted.
+- Only the user's own words are extraction sources (`select_sources`); assistant text is read-only
+  context and runtime-appended messages are excluded (openspec 2026-11-06-memory-evolution stage 1).
 """
 from __future__ import annotations
 
@@ -16,7 +19,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 from uuid import UUID
 
-from .service import CONTENT_LIMIT
+from . import text as memtext
+from .service import CONFIDENCE_VALUES, CONTENT_LIMIT, KIND_VALUES, TITLE_LIMIT, parse_valid_until
 
 #: Wait after a Run completes before its messages are read, so a conversation that is still going is not split.
 CAPTURE_DELAY = timedelta(seconds=90)
@@ -36,8 +40,24 @@ RELATED_LIMIT = 15
 #: Most actions accepted from one extraction; the rest are dropped and counted as rejected.
 MAX_ACTIONS = 10
 
+#: Most valid actions kept from one extraction (WeKnora `extractMaxItemsPerRun`).
+MAX_VALID_ACTIONS = 8
+#: Evidence quotes per action, and the bounds of one quote (normalized minimum, raw maximum).
+MAX_EVIDENCE = 3
+QUOTE_MIN_CHARS = 4
+QUOTE_MAX_CHARS = 200
+TOPIC_LIMIT = TITLE_LIMIT
+#: Most recent rejected topics shown to the extractor, and how far back they are read.
+REJECTED_TOPIC_LIMIT = 20
+REJECTED_TOPIC_WINDOW = timedelta(days=90)
+#: Assistant context lines are cut to this many characters each.
+CONTEXT_CHARS = 300
+#: Origins of messages a person wrote: '' is the Run's initial message (stored without metadata),
+#: `user_input` answers a question, `user_steer` is an instruction added while the Run was working.
+USER_ORIGINS = ('', 'user_input', 'user_steer')
+
 OPS = ('add', 'update', 'delete', 'none')
-UNATTENDED_OPS = ('add',)
+UNATTENDED_OPS = ('add', 'update')
 
 
 @dataclass(frozen=True)
@@ -48,6 +68,12 @@ class Message:
     content: str
     created_at: datetime
     id: str = ''
+    #: `runtime_metadata.origin`; '' when the message has none (the Run's initial user message).
+    origin: str = ''
+    #: True for assistant messages that requested tools (their text is not conversation context).
+    tool_calls: bool = False
+    #: Reserved marker for system-generated messages (`runtime_metadata.synthetic`); never a source.
+    synthetic: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,35 +127,97 @@ def backoff_seconds(attempt: int) -> int:
 
 @dataclass
 class Validation:
-    """Accepted actions and the number of raw items that were rejected."""
+    """Accepted actions, the number of raw items that were rejected, and low-value items skipped.
+
+    `low_value` items are well formed but below the value gate (importance <= 2 with low confidence);
+    they are counted for the audit and never become drafts (openspec 2026-11-06-memory-evolution A5).
+    """
     actions: list[dict[str, Any]] = field(default_factory=list)
     rejected: int = 0
     reasons: list[str] = field(default_factory=list)
+    low_value: int = 0
 
 
-def validate_actions(raw: Any, *, unattended: bool) -> Validation:
+def select_sources(messages: Sequence[Message]) -> tuple[list[Message], list[Message]]:
+    """Split a window into extraction sources and read-only context (stage 1, A1/A9).
+
+    Sources are user messages the person actually wrote: `role='user'` with an origin in
+    `USER_ORIGINS` and not marked synthetic. Messages the runtime appends as `user` (continuation
+    prompts, truncation notices, project context) carry `origin='runtime'` and are excluded, as are
+    tool messages. Assistant text without tool calls is context only: it helps resolve references
+    ("use the first one") but nothing may be recorded from it (WeKnora `collectSessionSegments`).
+    """
+    sources: list[Message] = []
+    context: list[Message] = []
+    for message in sorted(messages, key=lambda m: m.sequence):
+        if not message.content.strip():
+            continue
+        if message.role == 'user' and message.origin in USER_ORIGINS and not message.synthetic:
+            sources.append(message)
+        elif message.role == 'assistant' and not message.tool_calls:
+            context.append(message)
+    return sources, context
+
+
+def rank_related(sources: Sequence[Message], candidates: Sequence[dict[str, Any]], *,
+                 limit: int = RELATED_LIMIT) -> list[dict[str, Any]]:
+    """Pick the published entries the extractor should see for this window (stage 1, A2).
+
+    `candidates` are dicts with `title`, `topic` and `content`, most recently updated first. Entries
+    sharing more tokens with the user's words come first; when fewer than `limit` share any, the most
+    recent remaining entries fill the list, so a short owner store is shown whole. The whole store is
+    bounded by the character budget, so scoring in process is cheap (WeKnora `relevantExisting`).
+    """
+    window: set[str] = set()
+    for message in sources:
+        window |= memtext.token_set(message.content)
+    scored = []
+    for order, item in enumerate(candidates):
+        tokens = memtext.token_set(' '.join(str(item.get(key, '')) for key in ('title', 'topic', 'content')))
+        scored.append((len(window & tokens), order, item))
+    relevant = sorted((row for row in scored if row[0] > 0), key=lambda row: (-row[0], row[1]))
+    rest = [row for row in scored if row[0] == 0]
+    return [item for _, _, item in (relevant + rest)[:limit]]
+
+
+def validate_actions(raw: Any, *, unattended: bool, related: Sequence[dict[str, Any]] = (),
+                     sources: Sequence[Message] | None = None, now: datetime | None = None) -> Validation:
     """Check extractor output against the action schema.
 
-    Accepted item shapes:
-    - `{'op': 'add', 'kind': 'memory'|'sop', 'diff': str}`
+    Accepted item shapes (optional fields in brackets):
+    - `{'op': 'add', 'kind': 'memory'|'sop', 'diff': str, [topic, importance, confidence, valid_until, evidence]}`
+    - `{'op': 'update', 'target': int, 'diff': str, [...]}`: `target` indexes `related`; the action is
+      resolved to that entry's id and current version. Unattended runs may update only this way.
     - `{'op': 'update', 'entry_id': uuid, 'base_version': int, 'diff': str}` (attended only)
-    - `{'op': 'delete', 'entry_id': uuid}` is recognized but not stored in this stage
+    - `{'op': 'delete', ...}` is recognized but not stored
     - `{'op': 'none'}` is a no-op and is not counted as rejected
-    Anything else is rejected. A non-list output rejects everything in it, as one reason.
+
+    When `sources` is given (automatic capture), every action needs `evidence`: one to three
+    `{'seq', 'quote'}` items whose quote, normalized, occurs in that source message. Evidence is
+    returned as `{'message_id', 'sequence', 'quote'}`. Optional fields that are malformed are dropped,
+    not rejected; only the importance/confidence gate and the evidence check discard a whole item.
+    Anything else is rejected. A non-list output rejects everything in it, as one reason. At most
+    `MAX_VALID_ACTIONS` actions are kept from one output.
     """
     result = Validation()
     if not isinstance(raw, list):
         result.reasons.append('not_a_list')
         return result
+    by_sequence = {message.sequence: message for message in sources} if sources is not None else None
     for item in raw[:MAX_ACTIONS]:
-        verdict = _check_item(item, unattended=unattended)
-        if verdict is None:
+        verdict = _check_item(item, unattended=unattended, related=related, by_sequence=by_sequence, now=now)
+        if verdict is None or verdict == 'none':
             continue
-        if verdict == 'none':
+        if verdict == 'low_value':
+            result.low_value += 1
             continue
         if isinstance(verdict, str):
             result.rejected += 1
             result.reasons.append(verdict)
+            continue
+        if len(result.actions) >= MAX_VALID_ACTIONS:
+            result.rejected += 1
+            result.reasons.append('too_many_actions')
             continue
         result.actions.append(verdict)
     result.rejected += max(0, len(raw) - MAX_ACTIONS)
@@ -138,8 +226,9 @@ def validate_actions(raw: Any, *, unattended: bool) -> Validation:
     return result
 
 
-def _check_item(item: Any, *, unattended: bool) -> dict[str, Any] | str | None:
-    """Return a normalized action, `'none'` for a no-op, or a rejection reason string."""
+def _check_item(item: Any, *, unattended: bool, related: Sequence[dict[str, Any]],
+                by_sequence: dict[int, Message] | None, now: datetime | None) -> dict[str, Any] | str | None:
+    """Return a normalized action, `'none'` for a no-op, `'low_value'`, or a rejection reason string."""
     if not isinstance(item, dict):
         return 'not_an_object'
     op = item.get('op')
@@ -158,15 +247,70 @@ def _check_item(item: Any, *, unattended: bool) -> dict[str, Any] | str | None:
         return 'diff_too_long'
     if op == 'add':
         kind = item.get('kind', 'memory')
-        if kind not in ('memory', 'sop'):
+        if kind not in KIND_VALUES:
             return 'bad_kind'
-        return {'op': 'add', 'kind': kind, 'diff': diff}
-    # update
-    try:
-        entry_id = UUID(str(item.get('entry_id')))
-    except ValueError:
-        return 'bad_entry_id'
-    base_version = item.get('base_version')
-    if not isinstance(base_version, int) or isinstance(base_version, bool) or base_version < 1:
-        return 'bad_base_version'
-    return {'op': 'update', 'entry_id': entry_id, 'base_version': base_version, 'diff': diff}
+        action: dict[str, Any] = {'op': 'add', 'kind': kind, 'diff': diff}
+    elif 'target' in item:
+        target = item.get('target')
+        if isinstance(target, bool) or not isinstance(target, int) or not 0 <= target < len(related):
+            return 'bad_target'
+        entry = related[target]
+        kind = item.get('kind', entry.get('kind'))
+        if kind != entry.get('kind'):
+            return 'kind_mismatch'
+        action = {'op': 'update', 'kind': kind, 'entry_id': str(entry['id']),
+                  'base_version': int(entry['version']), 'diff': diff}
+    elif unattended:
+        return 'bad_target'
+    else:
+        try:
+            entry_id = UUID(str(item.get('entry_id')))
+        except ValueError:
+            return 'bad_entry_id'
+        base_version = item.get('base_version')
+        if not isinstance(base_version, int) or isinstance(base_version, bool) or base_version < 1:
+            return 'bad_base_version'
+        action = {'op': 'update', 'entry_id': entry_id, 'base_version': base_version, 'diff': diff}
+
+    importance = item.get('importance')
+    if isinstance(importance, int) and not isinstance(importance, bool) and 1 <= importance <= 5:
+        action['importance'] = importance
+    confidence = item.get('confidence')
+    if confidence in CONFIDENCE_VALUES:
+        action['confidence'] = confidence
+    if action.get('importance', 3) <= 2 and action.get('confidence') == 'low':
+        return 'low_value'
+    topic = item.get('topic')
+    if isinstance(topic, str) and topic.strip():
+        action['topic'] = topic.strip()[:TOPIC_LIMIT]
+    if 'valid_until' in item and now is not None:
+        end = parse_valid_until(item.get('valid_until'), now)
+        if end is not None:
+            action['valid_until'] = end.isoformat()
+    if by_sequence is not None:
+        evidence = _check_evidence(item.get('evidence'), by_sequence)
+        if isinstance(evidence, str):
+            return evidence
+        action['evidence'] = evidence
+    return action
+
+
+def _check_evidence(raw: Any, by_sequence: dict[int, Message]) -> list[dict[str, Any]] | str:
+    """Validate quotes against the user's own messages (octop-memory `check_evidence`)."""
+    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_EVIDENCE:
+        return 'bad_evidence'
+    out = []
+    for quote_item in raw:
+        if not isinstance(quote_item, dict):
+            return 'bad_evidence'
+        sequence, quote = quote_item.get('seq'), quote_item.get('quote')
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence not in by_sequence:
+            return 'bad_evidence'
+        if not isinstance(quote, str) or len(quote) > QUOTE_MAX_CHARS:
+            return 'bad_evidence'
+        normalized = memtext.normalize_for_match(quote)
+        message = by_sequence[sequence]
+        if len(normalized) < QUOTE_MIN_CHARS or normalized not in memtext.normalize_for_match(message.content):
+            return 'bad_evidence'
+        out.append({'message_id': message.id, 'sequence': sequence, 'quote': quote.strip()})
+    return out

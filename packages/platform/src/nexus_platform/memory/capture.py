@@ -14,7 +14,7 @@ capture model; the caller passes the extractor when it runs jobs. Extraction cal
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any, Callable, Protocol
 from uuid import UUID
@@ -65,7 +65,16 @@ class Extractor(Protocol):
     """
 
     def __call__(self, *, messages: list[rules.Message], related: list[dict[str, Any]], model_version_id: UUID,
-                 tenant_id: UUID, owner_id: UUID) -> Any: ...
+                 tenant_id: UUID, owner_id: UUID, context: list[rules.Message],
+                 rejected_topics: list[str]) -> Any: ...
+
+
+def _message(row: MessageRecord) -> rules.Message:
+    """Capture view of a stored message, with the provenance `select_sources` needs."""
+    metadata = row.runtime_metadata or {}
+    return rules.Message(sequence=row.sequence, role=row.role, content=row.content, created_at=row.created_at,
+                         id=str(row.id), origin=str(metadata.get('origin') or ''),
+                         tool_calls=bool(metadata.get('tool_calls')), synthetic=bool(metadata.get('synthetic')))
 
 
 # ---------------------------------------------------------------- settings
@@ -146,8 +155,7 @@ def enqueue_for_run(db: Session, run: RunRecord, *, now: datetime | None = None)
     rows = db.scalars(select(MessageRecord).where(
         MessageRecord.session_id == run.session_id, MessageRecord.sequence > cursor.last_processed_sequence)
         .order_by(MessageRecord.sequence).limit(PLAN_MESSAGE_LIMIT)).all()
-    messages = [rules.Message(sequence=m.sequence, role=m.role, content=m.content,
-                              created_at=m.created_at, id=str(m.id)) for m in rows]
+    messages = [_message(m) for m in rows]
     window = rules.plan_window(messages, cursor=cursor.last_processed_sequence, now=now,
                                last_window_at=cursor.updated_at if cursor.last_processed_sequence else None)
     if window is None:
@@ -255,13 +263,20 @@ def _is_pending(factory: Callable[[], Session], job_id: UUID) -> bool:
 
 @dataclass(frozen=True)
 class _Plan:
-    """What the extraction call needs, read before the call. `skip` names why there is no call."""
+    """What the extraction call needs, read before the call. `skip` names why there is no call.
+
+    `messages` are the extraction sources (the user's own words), `context` the assistant text shown
+    read-only, `related` the published entries the extractor may update (by index), and
+    `rejected_topics` the subjects the owner declined recently.
+    """
     skip: str | None
     messages: list[rules.Message]
     related: list[dict[str, Any]]
     version_id: UUID | None
     tenant_id: UUID
     owner_id: UUID
+    context: list[rules.Message] = field(default_factory=list)
+    rejected_topics: list[str] = field(default_factory=list)
 
 
 def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
@@ -284,12 +299,17 @@ def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
         MessageRecord.session_id == job.session_id,
         MessageRecord.sequence >= job.from_sequence, MessageRecord.sequence <= job.through_sequence)
         .order_by(MessageRecord.sequence)).all()
-    messages = [rules.Message(sequence=m.sequence, role=m.role, content=m.content,
-                              created_at=m.created_at, id=str(m.id)) for m in rows]
+    sources, read_only = rules.select_sources([_message(m) for m in rows])
+    if not sources:
+        return replace(empty, skip='no_user_messages')
     repo = SqlMemoryRepository(db)
-    related = [{'id': str(e.id), 'title': e.title, 'kind': e.kind}
-               for e in repo.published_entries(job.tenant_id, job.owner_user_id, '')[:rules.RELATED_LIMIT]]
-    return _Plan(None, messages, related, version_id, job.tenant_id, job.owner_user_id)
+    candidates = [{'id': str(item.entry.id), 'title': item.entry.title, 'kind': item.entry.kind,
+                   'topic': item.entry.topic, 'version': item.entry.current_version, 'content': item.content}
+                  for item in repo.live_entries(job.tenant_id, job.owner_user_id)]
+    related = rules.rank_related(sources, candidates)
+    rejected = repo.rejected_topics(job.tenant_id, job.owner_user_id, utc_now() - rules.REJECTED_TOPIC_WINDOW,
+                                    rules.REJECTED_TOPIC_LIMIT)
+    return _Plan(None, sources, related, version_id, job.tenant_id, job.owner_user_id, read_only, rejected)
 
 
 def _extraction_step(factory: Callable[[], Session], job_id: UUID, extractor: Extractor, now: datetime) -> str:
@@ -303,7 +323,8 @@ def _extraction_step(factory: Callable[[], Session], job_id: UUID, extractor: Ex
         return _complete_skipped(factory, job_id, plan.skip, now)
     try:
         raw = extractor(messages=plan.messages, related=plan.related, model_version_id=plan.version_id,
-                        tenant_id=plan.tenant_id, owner_id=plan.owner_id)
+                        tenant_id=plan.tenant_id, owner_id=plan.owner_id, context=plan.context,
+                        rejected_topics=plan.rejected_topics)
     except PlatformError:
         # The owner's key or the model stopped being usable between planning and the call.
         return _complete_skipped(factory, job_id, 'model_unavailable', now)
@@ -311,7 +332,7 @@ def _extraction_step(factory: Callable[[], Session], job_id: UUID, extractor: Ex
         job = db.get(MemoryCaptureJobRecord, job_id, with_for_update=True)
         if job is None or job.state != 'pending':
             return job.state if job else 'missing'
-        _record_extraction(db, job, raw)
+        _record_extraction(db, job, raw, plan, now)
         return job.state
 
 
@@ -324,15 +345,19 @@ def _complete_skipped(factory: Callable[[], Session], job_id: UUID, reason: str,
         return job.state
 
 
-def _record_extraction(db: Session, job: MemoryCaptureJobRecord, raw: Any) -> None:
-    """Keep only validated actions; invalid items are counted and their reasons audited, never stored."""
-    verdict = rules.validate_actions(raw, unattended=True)
+def _record_extraction(db: Session, job: MemoryCaptureJobRecord, raw: Any, plan: _Plan, now: datetime) -> None:
+    """Keep only validated actions; invalid items are counted and their reasons audited, never stored.
+
+    Validation needs the plan: `update` targets index the related entries the model was shown, and
+    every action's evidence must quote one of the source messages.
+    """
+    verdict = rules.validate_actions(raw, unattended=True, related=plan.related, sources=plan.messages, now=now)
     job.actions = [_serialize(action) for action in verdict.actions]
     job.state = 'extracted'
     job.last_error = None
     audit(db, job.tenant_id, job.owner_user_id, 'memory.capture', 'memory_capture_job', str(job.id),
           {'step': 'extract', 'calls': 1, 'actions': len(verdict.actions), 'rejected': verdict.rejected,
-           'reasons': verdict.reasons[:5]})
+           'low_value': verdict.low_value, 'reasons': verdict.reasons[:5]})
 
 
 def _skip(db: Session, job: MemoryCaptureJobRecord, reason: str, now: datetime) -> None:
@@ -378,10 +403,14 @@ def _store(db: Session, job: MemoryCaptureJobRecord, now: datetime) -> None:
 
 def _propose(repo: SqlMemoryRepository, job: MemoryCaptureJobRecord, action: dict[str, Any],
              source_ids: tuple[str, ...]) -> dict[str, Any]:
+    valid_until = action.get('valid_until')
     return memory_rules.propose(
         repo, job.tenant_id, job.owner_user_id, job.source_run_id, action.get('kind', 'memory'),
         action['diff'], entry_id=_uuid_or_none(action.get('entry_id')),
-        base_version=action.get('base_version'), origin='capture', source_message_ids=source_ids)
+        base_version=action.get('base_version'), origin='capture', source_message_ids=source_ids,
+        topic=action.get('topic', ''), importance=action.get('importance'), confidence=action.get('confidence'),
+        valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
+        evidence=tuple(action.get('evidence') or ()))
 
 
 def _shortfall(outcome: dict[str, Any]) -> int:

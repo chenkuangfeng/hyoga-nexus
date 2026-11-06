@@ -6,7 +6,8 @@ import pytest
 
 from nexus_memory import service
 from nexus_memory import text as memtext
-from nexus_memory.ports import DraftView, EntryView, MemoryConflict, MemoryNotFound, SearchRow, SizedEntry, VersionView
+from nexus_memory.ports import (DraftMeta, DraftView, EntryView, LiveEntry, MemoryConflict, MemoryNotFound, SearchRow,
+                                SizedEntry, VersionView)
 
 
 class FakeRepo:
@@ -18,6 +19,7 @@ class FakeRepo:
         self.drafts: dict = {}
         self.audits: list = []
         self.tombstones: set = set()
+        self.tombstone_topics: list = []
 
     def add_draft(self, tenant_id, owner_id, *, kind='memory', diff='fact', status='pending_review', base_version=None):
         draft = DraftView(id=uuid4(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, diff=diff,
@@ -26,10 +28,15 @@ class FakeRepo:
         self.drafts[draft.id] = draft
         return draft
 
-    def create_draft(self, *, tenant_id, source_run_id, kind, diff, fingerprint, base_version, origin, source_message_ids):
+    def create_draft(self, *, tenant_id, source_run_id, kind, diff, fingerprint, base_version, origin, source_message_ids,
+                     meta=None):
+        meta = meta or DraftMeta()
         draft = DraftView(id=uuid4(), tenant_id=tenant_id, owner_user_id=self.run_owner, kind=kind, diff=diff,
                           status='pending_review', source_run_id=source_run_id, fingerprint=fingerprint,
-                          base_version=base_version, origin=origin, source_message_ids=tuple(source_message_ids))
+                          base_version=base_version, origin=origin, source_message_ids=tuple(source_message_ids),
+                          topic=meta.topic, importance=meta.importance, confidence=meta.confidence,
+                          valid_until=meta.valid_until, evidence=tuple(meta.evidence),
+                          annotations=dict(meta.annotations), target_entry_id=meta.target_entry_id)
         self.drafts[draft.id] = draft
         return draft.id
 
@@ -48,8 +55,25 @@ class FakeRepo:
     def is_tombstoned(self, tenant_id, owner_id, fingerprint):
         return (tenant_id, owner_id, fingerprint) in self.tombstones
 
-    def add_tombstone(self, tenant_id, owner_id, fingerprint):
+    def add_tombstone(self, tenant_id, owner_id, fingerprint, topic=''):
         self.tombstones.add((tenant_id, owner_id, fingerprint))
+        if topic:
+            self.tombstone_topics.insert(0, (tenant_id, owner_id, topic))
+
+    def rejected_topics(self, tenant_id, owner_id, since, limit):
+        out = []
+        for t, o, topic in self.tombstone_topics:
+            if (t, o) == (tenant_id, owner_id) and topic not in out:
+                out.append(topic)
+        return out[:limit]
+
+    def live_entries(self, tenant_id, owner_id):
+        rows = [e for e in self.entries.values() if e.tenant_id == tenant_id and e.owner_user_id == owner_id and e.active]
+        # Most recently changed first: later versions were appended later in these tests.
+        rows.sort(key=lambda e: self.order.get(e.id, 0), reverse=True)
+        return [LiveEntry(entry=e, content=self.versions[(e.id, e.current_version)].content) for e in rows]
+
+    order: dict = {}
 
     def sized_entries(self, tenant_id, owner_id):
         out = []
@@ -99,17 +123,20 @@ class FakeRepo:
     def set_draft_status(self, draft_id, status):
         self.drafts[draft_id] = replace(self.drafts[draft_id], status=status)
 
-    def create_entry(self, *, tenant_id, owner_id, kind, title, project):
+    def create_entry(self, *, tenant_id, owner_id, kind, title, project, topic='', importance=3):
         e = EntryView(id=uuid4(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, title=title,
-                      project=project, active=True, current_version=1, enabled=True, valid_until=None)
+                      project=project, active=True, current_version=1, enabled=True, valid_until=None,
+                      topic=topic, importance=importance)
         self.entries[e.id] = e
         return e
 
     def bump_entry(self, entry_id, *, current_version, title=None, project=None, active=None,
-                   enabled=None, valid_until=None):
+                   enabled=None, valid_until=None, topic=None, importance=None):
         from nexus_memory.ports import UNSET
         e = self.entries[entry_id]
         self.entries[entry_id] = replace(e, current_version=current_version,
+                                         topic=e.topic if topic is None else topic,
+                                         importance=e.importance if importance is None else importance,
                                          title=e.title if title is None else title,
                                          project=e.project if project is None else project,
                                          active=e.active if active is None else active,
@@ -120,6 +147,8 @@ class FakeRepo:
                        fingerprint='', source_message_ids=()):
         self.versions[(entry_id, version)] = VersionView(entry_id, version, content, source_run_id, source_draft_id,
                                                          fingerprint, tuple(source_message_ids))
+        self.counter = getattr(self, 'counter', 0) + 1
+        self.order = {**self.order, entry_id: self.counter}
 
     def audit(self, tenant_id, actor_id, action, target_type, target_id, metadata=None):
         self.audits.append((action, target_id))

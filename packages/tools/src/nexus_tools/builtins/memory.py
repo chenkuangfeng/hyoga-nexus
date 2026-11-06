@@ -14,7 +14,9 @@ def memory_tools():
     async def draft(arguments, context):
         store = _store(context)
         message = await store.propose(arguments['kind'], 'session', arguments['diff'],
-                                      entry_id=arguments.get('entry_id'), base_version=arguments.get('base_version'))
+                                      entry_id=arguments.get('entry_id'), base_version=arguments.get('base_version'),
+                                      topic=arguments.get('topic', ''), importance=arguments.get('importance'),
+                                      valid_until=arguments.get('valid_until'))
         return ToolResult(message)
     async def start(arguments, context):
         store = _store(context)
@@ -32,10 +34,15 @@ def memory_tools():
         'kind': {'enum': ['memory', 'sop']},
         'diff': {'type': 'string', 'minLength': 1, 'maxLength': 8000},
         'entry_id': {'type': 'string', 'maxLength': 36},
-        'base_version': {'type': 'integer', 'minimum': 1}},
+        'base_version': {'type': 'integer', 'minimum': 1},
+        'topic': {'type': 'string', 'maxLength': 160},
+        'importance': {'type': 'integer', 'minimum': 1, 'maximum': 5},
+        'valid_until': {'type': 'string', 'maxLength': 32}},
         'required': ['kind', 'diff'], 'additionalProperties': False}
     yield RegisteredTool(ToolDefinition('propose_memory_draft',
-        'Propose verified memory/SOP changes for review. Pass entry_id and base_version to propose an edit of an existing entry.',
+        'Propose verified memory/SOP changes for review. Pass entry_id and base_version to propose an edit of an existing entry. '
+        'Give a short topic; a draft whose topic matches a published entry becomes an edit of that entry. '
+        'importance is 1-5; valid_until (YYYY-MM-DD) only for time-bound notes.',
         draft_schema), draft, lambda r: r.data)
     yield RegisteredTool(ToolDefinition('start_long_term_update', 'Read the memory index and consolidate reusable findings.',
         {'type': 'object', 'properties': {}, 'additionalProperties': False}), start, lambda r: r.data)

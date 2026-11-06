@@ -35,6 +35,8 @@ class MemoryReview(BaseModel):
     project: str = Field(default='', max_length=160)
     entry_id: UUID | None = None
     expected_version: int = Field(default=0, ge=0)
+    #: Optional override of the draft's importance (1-5); omitted keeps the draft's or the entry's value.
+    importance: int | None = Field(default=None, ge=1, le=5)
 
 
 class MemoryRestore(BaseModel):

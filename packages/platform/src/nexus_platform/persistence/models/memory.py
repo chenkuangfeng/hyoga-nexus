@@ -48,6 +48,17 @@ class MemoryDraftRecord(Base):
     fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     base_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_message_ids: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    # Extraction metadata and review hints (openspec 2026-11-06-memory-evolution stage 1). All optional.
+    topic: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    importance: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: `[{message_id, sequence, quote}]`: the user's words the draft was taken from.
+    evidence: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    #: Review hints with fixed keys (`conflict`, `similar`); never change what is published.
+    annotations: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: Entry an edit draft updates (no foreign key: archived entries keep their id, and review re-checks it).
+    target_entry_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
 
 
 class MemoryEntryRecord(Base):
@@ -64,6 +75,10 @@ class MemoryEntryRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default='1')
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Subject label; entries with the same normalized topic are one subject (an addition becomes an edit).
+    topic: Mapped[str] = mapped_column(String(160), nullable=False, default='', server_default='')
+    #: 1 (trivial) to 5 (essential); orders the index and eviction.
+    importance: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default='3')
 
 
 class MemoryVersionRecord(Base):
@@ -86,12 +101,18 @@ class MemoryVersionRecord(Base):
 
 
 class MemoryTombstoneRecord(Base):
-    """Content the owner rejected; the same fingerprint is not proposed again."""
+    """Content the owner rejected; the same fingerprint is not proposed again.
+
+    `topic` names the rejected subject so the extractor can be told not to re-derive it in other words
+    (openspec 2026-11-06-memory-evolution A7); only the label is kept, never the rejected text.
+    """
     __tablename__ = 'memory_tombstones'
+    __table_args__ = (Index('ix_memory_tombstones_owner_created', 'tenant_id', 'owner_user_id', 'created_at'),)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    topic: Mapped[str] = mapped_column(String(160), nullable=False, default='', server_default='')
 
 
 class ContextSummaryRecord(Base):

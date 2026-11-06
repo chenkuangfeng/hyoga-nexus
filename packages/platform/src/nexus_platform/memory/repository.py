@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import new_id, utc_now
 from nexus_memory import text as memtext
-from nexus_memory.ports import UNSET, DraftView, EntryView, SearchRow, SizedEntry, VersionView
+from nexus_memory.ports import UNSET, DraftMeta, DraftView, EntryView, LiveEntry, SearchRow, SizedEntry, VersionView
 from nexus_platform.authz.audit import audit
 from nexus_platform.persistence.models import (
     MemoryDraftRecord,
@@ -113,6 +113,31 @@ class SqlMemoryRepository:
     def is_tombstoned(self, tenant_id: UUID, owner_id: UUID, fingerprint: str) -> bool:
         return self.db.get(MemoryTombstoneRecord, (tenant_id, owner_id, fingerprint)) is not None
 
+    def rejected_topics(self, tenant_id: UUID, owner_id: UUID, since: datetime, limit: int) -> list[str]:
+        rows = self.db.scalars(
+            select(MemoryTombstoneRecord.topic)
+            .where(MemoryTombstoneRecord.tenant_id == tenant_id, MemoryTombstoneRecord.owner_user_id == owner_id,
+                   MemoryTombstoneRecord.created_at >= since, MemoryTombstoneRecord.topic != '')
+            .order_by(MemoryTombstoneRecord.created_at.desc())
+        )
+        seen: dict[str, None] = {}
+        for topic in rows:
+            seen.setdefault(topic, None)
+            if len(seen) >= limit:
+                break
+        return list(seen)
+
+    def live_entries(self, tenant_id: UUID, owner_id: UUID) -> list[LiveEntry]:
+        rows = self.db.execute(
+            select(MemoryEntryRecord, MemoryVersionRecord.content)
+            .join(MemoryVersionRecord, (MemoryVersionRecord.entry_id == MemoryEntryRecord.id)
+                  & (MemoryVersionRecord.version == MemoryEntryRecord.current_version))
+            .where(MemoryEntryRecord.tenant_id == tenant_id, MemoryEntryRecord.owner_user_id == owner_id,
+                   MemoryEntryRecord.active.is_(True))
+            .order_by(MemoryVersionRecord.created_at.desc(), MemoryEntryRecord.id)
+        ).all()
+        return [LiveEntry(entry=_entry(row), content=content) for row, content in rows]
+
     def sized_entries(self, tenant_id: UUID, owner_id: UUID) -> list[SizedEntry]:
         rows = self.db.execute(
             select(MemoryEntryRecord.id, MemoryEntryRecord.title, func.length(MemoryVersionRecord.content))
@@ -138,13 +163,18 @@ class SqlMemoryRepository:
     # --- writes ------------------------------------------------------------
 
     def create_draft(self, *, tenant_id: UUID, source_run_id: UUID, kind: str, diff: str, fingerprint: str,
-                     base_version: int | None, origin: str, source_message_ids: tuple[str, ...]) -> UUID:
+                     base_version: int | None, origin: str, source_message_ids: tuple[str, ...],
+                     meta: DraftMeta | None = None) -> UUID:
         run = self.db.get(RunRecord, source_run_id)
+        meta = meta or DraftMeta()
         row = MemoryDraftRecord(
             id=new_id(), tenant_id=tenant_id, source_run_id=source_run_id, kind=kind,
             scope=str(run.session_id), diff=diff, status='pending_review', created_at=utc_now(),
             origin=origin, fingerprint=fingerprint, base_version=base_version,
             source_message_ids=list(source_message_ids),
+            topic=meta.topic or None, importance=meta.importance, confidence=meta.confidence,
+            valid_until=meta.valid_until, evidence=[dict(item) for item in meta.evidence] or None,
+            annotations=dict(meta.annotations) or None, target_entry_id=meta.target_entry_id,
         )
         self.db.add(row)
         self.db.flush()
@@ -153,15 +183,20 @@ class SqlMemoryRepository:
     def set_draft_status(self, draft_id: UUID, status: str) -> None:
         self.db.get(MemoryDraftRecord, draft_id).status = status
 
-    def add_tombstone(self, tenant_id: UUID, owner_id: UUID, fingerprint: str) -> None:
-        if self.db.get(MemoryTombstoneRecord, (tenant_id, owner_id, fingerprint)) is None:
+    def add_tombstone(self, tenant_id: UUID, owner_id: UUID, fingerprint: str, topic: str = '') -> None:
+        row = self.db.get(MemoryTombstoneRecord, (tenant_id, owner_id, fingerprint))
+        if row is None:
             self.db.add(MemoryTombstoneRecord(tenant_id=tenant_id, owner_user_id=owner_id,
-                                              fingerprint=fingerprint, created_at=utc_now()))
+                                              fingerprint=fingerprint, created_at=utc_now(), topic=topic))
+        elif topic:
+            row.topic, row.created_at = topic, utc_now()
 
-    def create_entry(self, *, tenant_id: UUID, owner_id: UUID, kind: str, title: str, project: str) -> EntryView:
+    def create_entry(self, *, tenant_id: UUID, owner_id: UUID, kind: str, title: str, project: str,
+                     topic: str = '', importance: int = 3) -> EntryView:
         row = MemoryEntryRecord(
             id=new_id(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, title=title,
             project=project, active=True, current_version=1, created_at=utc_now(), enabled=True,
+            topic=topic, importance=importance,
         )
         self.db.add(row)
         self.db.flush()
@@ -169,8 +204,13 @@ class SqlMemoryRepository:
 
     def bump_entry(self, entry_id: UUID, *, current_version: int, title: str | None = None,
                    project: str | None = None, active: bool | None = None,
-                   enabled: bool | None = None, valid_until: Any = UNSET) -> None:
+                   enabled: bool | None = None, valid_until: Any = UNSET,
+                   topic: str | None = None, importance: int | None = None) -> None:
         row = self.db.get(MemoryEntryRecord, entry_id)
+        if topic is not None:
+            row.topic = topic
+        if importance is not None:
+            row.importance = importance
         row.current_version = current_version
         if title is not None:
             row.title = title
@@ -292,6 +332,7 @@ def _entry(row: MemoryEntryRecord) -> EntryView:
         id=row.id, tenant_id=row.tenant_id, owner_user_id=row.owner_user_id, kind=row.kind,
         title=row.title, project=row.project, active=row.active, current_version=row.current_version,
         enabled=bool(row.enabled), valid_until=_aware(row.valid_until),
+        topic=row.topic or '', importance=row.importance if row.importance is not None else 3,
     )
 
 
@@ -309,4 +350,7 @@ def _draft(row: MemoryDraftRecord, owner_id: UUID) -> DraftView:
         diff=row.diff, status=row.status, source_run_id=row.source_run_id,
         fingerprint=row.fingerprint or '', base_version=row.base_version, origin=row.origin,
         source_message_ids=tuple(row.source_message_ids or ()),
+        topic=row.topic or '', importance=row.importance, confidence=row.confidence,
+        valid_until=_aware(row.valid_until), evidence=tuple(row.evidence or ()),
+        annotations=dict(row.annotations or {}), target_entry_id=row.target_entry_id,
     )

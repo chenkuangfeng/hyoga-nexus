@@ -47,7 +47,9 @@ def test_owner_key_is_used_per_call_and_each_use_is_audited(database, monkeypatc
     _enable(database, principal, tenant.id, version_id)
     _messages(database, session.id, 4)
     job_id = UUID(_enqueue(database, run.id, utc_now()))
-    fake = ScriptedModel('[{"op":"add","kind":"memory","diff":"Owner fact"}]')
+    # Evidence quotes the last user message `_messages` wrote (odd sequences are user messages).
+    fake = ScriptedModel('[{"op":"add","kind":"memory","diff":"Owner fact",'
+                         '"evidence":[{"seq":5,"quote":"about deployment checklist"}]}]')
     seen = {}
 
     def fake_create_model(**kwargs):

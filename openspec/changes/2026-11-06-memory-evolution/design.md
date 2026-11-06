@@ -1,6 +1,6 @@
 # 设计：长期记忆演进
 
-本文按"待确认的决定"全部采用推荐方案来写；如果决定有变化，再修改对应章节。
+"待确认的决定" 1–7 已于 2026-11-06 确认，全部采用推荐方案。
 
 各层职责沿用现有分工：
 
@@ -15,7 +15,7 @@
 
 | 阶段 | 表 | 变更 |
 | --- | --- | --- |
-| 1 | `memory_drafts` | `topic` 字符串(160) 可空；`importance` 整数 1–5 可空；`confidence`（low/medium/high）可空；`valid_until` 带时区时间可空；`evidence` JSON 可空（`{message_id, quote}` 列表）；`annotations` JSON 可空 |
+| 1 | `memory_drafts` | `topic` 字符串(160) 可空；`importance` 整数 1–5 可空；`confidence`（low/medium/high）可空；`valid_until` 带时区时间可空；`evidence` JSON 可空（`{message_id, sequence, quote}` 列表）；`annotations` JSON 可空；`target_entry_id` 可空（编辑草稿指向的条目，不设外键） |
 | 1 | `memory_entries` | `topic` 字符串(160)，默认空串；`importance` 整数，默认 3 |
 | 1 | `memory_tombstones` | `topic` 字符串(160)，默认空串；新增索引 `(tenant_id, owner_user_id, created_at)` |
 | 2 | `memory_entries` | `last_used_at` 可空；`use_count` 整数，默认 0；`kind` 允许值增加 `profile` |
@@ -57,14 +57,14 @@
 ```
 
 - **用户消息的筛选**（`nexus_memory.capture.select_sources`，纯函数）：
-  - 只保留 `role='user'`，且 `runtime_metadata.origin` 属于白名单 `{'user_input', 'user_steer', 'runtime'}` 的消息。`runtime` 是 Run 起始用户消息当前写入的来源，实施时核对。
+  - 只保留 `role='user'`，且 `runtime_metadata.origin` 属于白名单 `USER_ORIGINS = ('', 'user_input', 'user_steer')` 的消息。空串是 Run 起始用户消息（写入时不带元数据）。运行时补发的 `user` 消息（续写提示、截断提醒、项目上下文、恢复提示）的来源是 `runtime`，一律排除。
   - 排除带 `runtime_metadata.synthetic=true` 的消息，作为日后系统合成消息的保留标记。
   - 助手消息进入 `<context>`；工具消息和带 `tool_calls` 的消息不进入。
   - 窗口内没有用户消息时，跳过任务（`skip='no_user_messages'`），不调用模型。
-- **相关条目**（`_plan`）：
-  1. 用窗口内用户消息的关键词（`text.query_tokens`，取前 30 个高频词）调用 `repo.search`，取前 15 条；
-  2. 不足 15 条时，用最近更新的已发布条目补齐；
-  3. 编号从 0 开始，供输出中的 `target` 引用。
+- **相关条目**（`_plan` 调用 `rules.rank_related`）：
+  1. 读取本人全部未归档条目及当前正文（`repo.live_entries`，按最近版本时间倒序）。每人有 6000 字预算，全部读出的开销可控，所以在应用内打分，不用关键词检索（关键词检索要求所有词同时命中，不适合用整段对话作查询）。
+  2. 按与用户消息共有的分词数降序排列，取前 15 条；共有词为 0 的条目按最近更新补齐。
+  3. 编号从 0 开始，供输出中的 `target` 引用；编号对应的条目 ID 和当前版本在校验时换算。
 - **被拒主题**：本人最近 90 天内的墓碑中非空的 `topic`，按时间倒序去重，最多 20 个。
 
 ### 2.2 输出与校验（`nexus_memory.capture.validate_actions`）
@@ -91,7 +91,7 @@
   - 至少 1 条、最多 3 条；`seq` 必须属于本窗口的用户消息。
   - `quote` 规范化后（去空白、标点，转小写）必须是该消息正文的子串，长度 4–200 字。
   - 不满足时拒绝，原因为 `bad_evidence`。
-  - 存储时把 `seq` 换算成 `message_id`。
+  - 存储时同时保留 `message_id` 和 `sequence`。
 - **价值门槛**：`importance <= 2` 且 `confidence == 'low'` 时，计为 `low_value`，不建草稿。
 - **有效期**：
   - 只接受今天之后、5 年以内的日期，存储为当日 23:59:59 UTC。
@@ -110,7 +110,10 @@
    - 新内容被已有内容包含时，返回 `duplicate`。
    - 新内容包含已有内容时，转为对该条目的更新草稿。
 3. **冲突提示**：新内容与某个已发布条目的二元组 Jaccard ≥ 0.3，且其中只有一方含否定词（`text.NEGATIONS`，中英文列表与 octop-memory 一致）时，写入 `annotations.conflict`。
-4. **前台提议**：`propose_memory_draft` 的参数增加可选的 `topic`、`importance`、`valid_until`；不要求提供证据。
+4. **前台提议**：`propose_memory_draft` 的参数增加可选的 `topic`、`importance`、`valid_until`；不要求提供证据。转换为编辑时，工具返回给模型的结果会说明。
+5. **编辑草稿的目标**：编辑草稿记录 `target_entry_id`。审核时没有指定条目的，按草稿记录的条目和 `base_version` 发布，条目版本已变化时返回冲突。
+
+被拒来源消息"短期内不再抽取"（提案 A7 后半句）不需要单独实现：抓取游标在任务排队时已经越过该窗口，同一批消息不会再次进入抽取。
 
 ### 2.4 抽取提示（`INSTRUCTIONS`）
 

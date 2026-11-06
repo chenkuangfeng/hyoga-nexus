@@ -40,10 +40,14 @@ def index(db, tenant_id: UUID, user_id: UUID, project: str = '') -> str:
 @_translate
 def propose(db, tenant_id: UUID, owner_id: UUID, run_id: UUID, kind: str, diff: str, *,
             entry_id: UUID | None = None, base_version: int | None = None,
-            origin: str = 'foreground', source_message_ids: tuple[str, ...] = ()) -> dict[str, Any]:
-    """Screen and record a draft inside the caller's Run transaction; the owner is the Run's principal."""
+            origin: str = 'foreground', source_message_ids: tuple[str, ...] = (), **meta: Any) -> dict[str, Any]:
+    """Screen and record a draft inside the caller's Run transaction; the owner is the Run's principal.
+
+    `meta` forwards the optional extraction fields of `nexus_memory.service.propose` (`topic`,
+    `importance`, `confidence`, `valid_until`, `evidence`).
+    """
     return rules.propose(SqlMemoryRepository(db), tenant_id, owner_id, run_id, kind, diff, entry_id=entry_id,
-                         base_version=base_version, origin=origin, source_message_ids=source_message_ids)
+                         base_version=base_version, origin=origin, source_message_ids=source_message_ids, **meta)
 
 
 @_translate
@@ -83,11 +87,13 @@ def read_for_run(db, tenant_id: UUID, owner_id: UUID, entry_id: UUID, run_id: UU
 
 @_translate
 def review(db, principal: Principal, tenant_id: UUID, draft_id: UUID, *, approve: bool, title: str,
-           entry_id: UUID | None = None, expected_version: int = 0, project: str = '') -> dict[str, Any]:
+           entry_id: UUID | None = None, expected_version: int = 0, project: str = '',
+           importance: int | None = None) -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         return rules.review(SqlMemoryRepository(db), user.id, tenant_id, draft_id, approve=approve,
-                            title=title, entry_id=entry_id, expected_version=expected_version, project=project)
+                            title=title, entry_id=entry_id, expected_version=expected_version, project=project,
+                            importance=importance)
 
 
 @_translate

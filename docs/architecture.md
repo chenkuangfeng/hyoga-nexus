@@ -262,6 +262,11 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - 启停（`enabled`）与有效期（`valid_until`）与归档分开：停用或过期只影响索引与检索，版本保留；HTTP `PATCH /memory/{id}`。
 - 会话内快照：每个会话的第一个 Run 冻结所有者的已发布记忆索引，之后的 Run 复用，系统前缀保持稳定。新发布的记忆在用户刷新快照（`POST .../memory-snapshot/refresh`）后才进入该会话。快照只对会话所有者可见。
 
+**实现要点（openspec 2026-11-06-memory-evolution，分阶段实施；当前完成第 1 阶段）**：
+- 自动抓取只以用户本人写的消息为来源（按消息来源白名单排除运行时补发的合成消息），助手文字只作只读上下文；每项草稿必须带可校验的原文证据，低价值项不建草稿。
+- 抽取模型看到按对话相关性挑选的已发布条目（带编号）和最近被拒的主题；主题或内容与已发布条目相同时生成编辑草稿，冲突只作审核提示。
+- 任何路径都不自动发布记忆；后续阶段（常驻画像块、对话内确认、语义合并、历史会话检索、向量召回等）见该提案的 `tasks.md`。
+
 ### 2.9 沙箱与执行环境
 
 借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）；Octop `infra/backend/`（工作区后端可插拔：本地、Docker、PostgreSQL、对象存储，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。

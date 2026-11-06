@@ -85,12 +85,21 @@ def test_invalid_output_is_discarded_and_counted_not_stored():
     assert attended.actions == [] and attended.reasons == ['delete_not_supported']
 
 
-def test_unattended_runs_may_only_add():
+def test_unattended_runs_update_only_entries_they_were_shown():
     entry = str(uuid4())
     update = {'op': 'update', 'entry_id': entry, 'base_version': 1, 'diff': 'new text'}
-    assert rules.validate_actions([update], unattended=True).actions == []
+    verdict = rules.validate_actions([update], unattended=True)
+    assert verdict.actions == [] and verdict.reasons == ['bad_target']
     attended = rules.validate_actions([update], unattended=False).actions
     assert attended and attended[0]['base_version'] == 1
+    related = [{'id': entry, 'kind': 'memory', 'version': 4}]
+    by_target = rules.validate_actions([{'op': 'update', 'target': 0, 'diff': 'new text'}], unattended=True,
+                                       related=related).actions
+    assert by_target == [{'op': 'update', 'kind': 'memory', 'entry_id': entry, 'base_version': 4, 'diff': 'new text'}]
+    bad = rules.validate_actions([{'op': 'update', 'target': 1, 'diff': 'x'},
+                                  {'op': 'update', 'target': 0, 'kind': 'sop', 'diff': 'x'}],
+                                 unattended=True, related=related)
+    assert bad.actions == [] and bad.reasons == ['bad_target', 'kind_mismatch']
 
 
 def test_non_list_output_is_rejected_as_a_whole():
@@ -150,15 +159,24 @@ def _drafts(factory, run):
             MemoryDraftRecord.tenant_id == run.tenant_id)]
 
 
+def _with_evidence(action, messages):
+    """Scripted actions quote the last user message unless they bring their own evidence."""
+    if isinstance(action, dict) and action.get('op') in ('add', 'update') and 'evidence' not in action:
+        return {**action, 'evidence': [{'seq': messages[-1].sequence, 'quote': messages[-1].content[:30]}]}
+    return action
+
+
 def _scripted(outputs):
     """Extractor that returns the scripted outputs in order and records each call."""
     calls = []
 
-    def extractor(*, messages, related, model_version_id, tenant_id, owner_id):
+    def extractor(*, messages, related, model_version_id, tenant_id, owner_id, context, rejected_topics):
         calls.append(len(messages))
         item = outputs[len(calls) - 1] if len(calls) <= len(outputs) else outputs[-1]
         if isinstance(item, Exception):
             raise item
+        if isinstance(item, list):
+            return [_with_evidence(action, messages) for action in item]
         return item
     extractor.calls = calls
     return extractor
@@ -203,7 +221,8 @@ def test_full_run_creates_capture_drafts_through_propose_and_completes(database)
                             {'op': 'add', 'kind': 'memory', 'diff': 'Deploy with checklist'}]])
     later = utc_now() + timedelta(hours=1)
     assert capture.run_due(database, extractor, worker_id='w1', now=later) == 'completed'
-    assert extractor.calls == [5]  # the stack writes one message, then four were appended
+    # The stack writes one user message, then four alternate assistant/user: three user messages are sources.
+    assert extractor.calls == [3]
     drafts = _drafts(database, run)
     # The second identical action is a duplicate of the first pending draft, so only one draft exists.
     assert drafts == [('capture', 'Deploy with checklist', 'pending_review')]
@@ -223,7 +242,8 @@ def test_capture_model_is_called_without_tools_and_gets_the_window(database):  #
         seen['keys'] = sorted(kwargs)
         return []
     capture.run_due(database, extractor, worker_id='w1', now=utc_now() + timedelta(hours=1))
-    assert seen['keys'] == ['messages', 'model_version_id', 'owner_id', 'related', 'tenant_id']
+    assert seen['keys'] == ['context', 'messages', 'model_version_id', 'owner_id', 'rejected_topics', 'related',
+                            'tenant_id']
 
 
 def test_crash_after_extraction_does_not_call_the_model_again(database, monkeypatch):  # noqa: F811
@@ -246,7 +266,7 @@ def test_crash_after_extraction_does_not_call_the_model_again(database, monkeypa
     monkeypatch.setattr(memory_rules, 'propose', real)
     later = now + timedelta(hours=1)
     assert capture.run_due(database, extractor, worker_id='w1', now=later) == 'completed'
-    assert extractor.calls == [5]  # extraction happened once
+    assert extractor.calls == [3]  # extraction happened once (three user messages)
     assert _drafts(database, run) == [('capture', 'Alpha fact', 'pending_review')]
 
 

@@ -410,7 +410,8 @@ class DurableRuntimeStore:
                   {'run_id': str(run.id)})
 
     async def propose(self, kind: str, scope: str, diff: str, *, entry_id: str | None = None,
-                      base_version: int | None = None) -> str:
+                      base_version: int | None = None, topic: str = '', importance: int | None = None,
+                      valid_until: str | None = None) -> str:
         """Screen and record a draft for review; returns a short outcome line the model can read.
 
         Refusals (threat rules, tombstones, duplicates, budget, stale base) do not fail the Run:
@@ -424,14 +425,22 @@ class DurableRuntimeStore:
             db = work.session
             run = self._run(db)
             try:
+                from nexus_memory.service import parse_valid_until
                 outcome = propose_draft(db, run.tenant_id, run.principal_id, run.id, kind, diff,
-                                        entry_id=UUID(entry_id) if entry_id else None, base_version=base_version)
+                                        entry_id=UUID(entry_id) if entry_id else None, base_version=base_version,
+                                        topic=topic, importance=importance,
+                                        valid_until=parse_valid_until(valid_until, utc_now()))
             except (Conflict, NotFound) as exc:
                 return f'Draft not created: {exc}'
             status = outcome['status']
             if status == 'pending':
                 append_event(db, run.id, 'memory.draft_created', {'draft_id': outcome['id'], 'kind': kind, 'scope': 'session'})
-                return 'Draft pending review: ' + outcome['id']
+                line = 'Draft pending review: ' + outcome['id']
+                if outcome.get('target_entry_id') and not entry_id:
+                    line += f" (proposed as an edit of existing entry {outcome['target_entry_id']} with the same topic or content)"
+                if outcome.get('annotations', {}).get('conflict'):
+                    line += '; may conflict with: ' + ', '.join(h['title'] for h in outcome['annotations']['conflict'])
+                return line
             if status == 'duplicate':
                 return f"Not created: the same content already exists as {outcome['target']} {outcome['id']}."
             if status == 'budget_exceeded':

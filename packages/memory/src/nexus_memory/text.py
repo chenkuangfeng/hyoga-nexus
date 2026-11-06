@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 REDACTED = '【已隐藏】'
@@ -48,6 +49,48 @@ def fingerprint(text: str) -> str:
     """Stable identity of memory content: whitespace-collapsed, case-folded, SHA-256 hex."""
     normalized = re.sub(r'\s+', ' ', (text or '').strip()).casefold()
     return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def normalize_for_match(text: str) -> str:
+    """Comparable form of a statement: NFKC (full width to half width), case-folded, without whitespace,
+    punctuation or symbols. Used for containment duplicates, evidence checks and topic keys
+    (WeKnora `NormalizeMemoryForMatch`)."""
+    folded = unicodedata.normalize('NFKC', text or '').casefold()
+    return ''.join(ch for ch in folded if ch.isalnum())
+
+
+def topic_key(topic: str) -> str:
+    """Identity of a topic label: two wordings that differ only in case, width, spacing or punctuation
+    produce the same key. Empty when the label has no letters or digits."""
+    return normalize_for_match(topic)[:160]
+
+
+def token_set(text: str) -> set[str]:
+    """Set of `tokenize` tokens (CJK bigrams and lowercase words) for overlap scores."""
+    return set(tokenize(text).split())
+
+
+def jaccard(a: str, b: str) -> float:
+    """Token-set Jaccard similarity in [0, 1]; 0 when either side has no tokens (octop-memory `suppress.jaccard`)."""
+    left, right = token_set(a), token_set(b)
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
+
+
+#: Negation markers for the conflict hint (same vocabulary as octop-memory `checks._NEGATION_TOKENS`).
+#: Matching is a heuristic: it only adds a review hint, it never blocks or changes a draft.
+NEGATIONS_CJK = ('不', '没', '别', '勿', '无需', '不要', '禁止')
+NEGATIONS_WORDS = frozenset({'not', 'no', 'never', 'avoid', "don't", 'dont', "won't", 'wont',
+                             "isn't", 'isnt', "aren't", 'arent', "doesn't", 'doesnt'})
+
+
+def has_negation(text: str) -> bool:
+    """True when the statement contains a negation marker."""
+    value = (text or '').casefold()
+    if any(marker in value for marker in NEGATIONS_CJK):
+        return True
+    return any(word in NEGATIONS_WORDS for word in re.findall(r"[a-z']+", value))
 
 
 @dataclass(frozen=True)
