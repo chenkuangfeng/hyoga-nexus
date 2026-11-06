@@ -1,8 +1,13 @@
 # 规格：知识库
 
-来源：`openspec/changes/2026-11-06-knowledge-base`（草案）。
+来源：`openspec/changes/2026-11-06-knowledge-base`（草案第 2 版）。
 
 ## 需求
+
+### R0 能力目录与待实现
+- 能力目录逐项返回 `available` 或 `planned` 与所属阶段；`available` 由已注册的实现决定。
+- 前端保留 WeKnora 全部知识库入口，`planned` 项显示「待实现」且不可提交；后端对选择 `planned` 能力的写请求返回 422 `capability_planned`。
+- 知识库可配置类型（document、faq、wiki）、索引策略（向量、关键词、Wiki、图谱）、向量库与存储后端；图谱可选 `entity`、`graphrag_light`、`graphrag_general`。
 
 ### R1 文档生命周期
 - 同一库内上传内容相同的文件不产生新版本，返回已有文档并标注 `deduplicated`。
@@ -22,3 +27,7 @@
 ### R4 证据与引用
 - 同一 Run 内进入模型上下文的块按首次出现编号 `[ID:n]`，重复出现沿用编号；挂起恢复后编号不变。
 - Run 结束时，回答中已登记的 `[ID:n]` 生成指向文档版本与块的引用；未登记的编号不生成引用并产生 `knowledge.citation_invalid` 事件。
+
+### R5 图谱与 GraphRAG
+- 图谱构建为库级可恢复任务；新构建版本完成后才切换可见；图元素可追溯到来源文档版本与块。
+- 图检索在种子实体、关系数、跳数、token、耗时上有界，被截断时告知模型；图检索失败时退化为基础检索并记录降级；权限过滤同样作用于图谱结果。

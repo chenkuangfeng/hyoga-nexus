@@ -1,6 +1,19 @@
-# 设计：知识库（路线图第 6 步 6.1–6.3）
+# 设计：知识库（路线图第 6 步）
 
-按决定 1–7 的推荐方案编写；用户选择备选方案时同步修改本文。
+按决定 1–8 的推荐方案编写；用户选择备选方案时同步修改本文。本文详细描述 K0、K1 与 K2 的骨架，K3–K7 在各阶段开始前补充。
+
+## 0. 能力目录与「待实现」
+
+- `nexus_knowledge.capabilities.CATALOG`：每项 `{key, group, label, stage, available}`，group 取 `kb_type`、`indexing`、`vector_engine`、`storage_provider`、`parser_engine`、`datasource`、`kb_setting`、`graph_mode`。`available` 由代码中注册的实现决定（例如 `VectorIndex` 注册表里有 `qdrant` 才为真），不手工维护。
+- 运行时可用性另由门控判断（Octop `gate.py`）：已实现但未配置（如未选 Embedding 模型、pgvector 扩展缺失）返回 `unavailable` 与原因，与 `planned` 区分。
+- 前端：`useKnowledgeCapabilities()` 缓存目录；`<PlannedBadge :cap="key" />` 显示「待实现 · K3」；表单与按钮通过 `isAvailable(key)` 禁用。接口模块对 `planned` 能力的调用直接返回空状态，不发请求。
+- 库设置中选择了 `planned` 的项（例如类型 `wiki`）不允许保存，后端同样以 422 `capability_planned` 拒绝。
+
+## 0.1 向量库与图谱存储
+
+- `vector_stores(id, tenant_id, name, engine, connection_config, index_config, status)`：密钥字段用模型 Key 同一套加密主密钥加密；`POST .../vector-stores/{id}/test` 做连接与维度探测。内置两条不可删除的记录：`sqlite`（本地）与 `postgres`（当前数据库，需 pgvector）。
+- `VectorIndex` 端口：`upsert(version_id, chunks, vectors)`、`delete(version_ids)`、`search(query_vec, version_ids, k)`；`version_ids` 是 Pre-Filter 的结果，每个引擎必须把它作为服务端过滤条件，测试套件对每个实现跑同一组越权用例。
+- 图谱（决定 2）：`knowledge_graph_entities`、`knowledge_graph_relations`、`knowledge_graph_communities`、`knowledge_graph_reports`，均带 `kb_id`、`build_version`、来源块；实体、关系、报告的向量存入同一 `VectorIndex`（以 `kind` 区分）。`knowledge_bases.graph_build_version` 指向可见版本。
 
 ## 1. 包结构与依赖方向
 
