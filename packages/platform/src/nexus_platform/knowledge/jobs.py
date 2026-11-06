@@ -242,6 +242,8 @@ async def _activate(factory, job_id: UUID) -> None:
                 previous = old.id
         doc.current_version_id, doc.updated_at = version.id, utc_now()
         version.state, version.updated_at = 'ready', utc_now()
+        from .graph.build import schedule
+        schedule(db, kb, kb.created_by)  # a base with a graph rebuilds it after a document change
         index = stores.vector_index_for(db, kb)
         kb_id = kb.id
     if previous is not None:

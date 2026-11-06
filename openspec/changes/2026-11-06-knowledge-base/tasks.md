@@ -48,14 +48,16 @@
 
 ## K2 图谱与 GraphRAG
 
+> K2 后端进度：领域层 `nexus_knowledge.graph`（抽取提示与容错解析、保守合并——同名不同类型不合并、无类型提及只并入唯一类型实体、不按相似名合并；Louvain 社区与报告；有界扩展）；平台 `nexus_platform.knowledge.graph`（`SqlGraphStore` 内置存储、`build` 构建任务、`search` 图检索、`config` 图配置）。构建任务单独成表，文档变化后防抖 30 秒重建，等该库文档索引完成再构建；抽取按块内容哈希缓存，重建只对新文本调用模型。实体、关系、社区报告写入库的向量引擎第二个集合（`g` + 库 ID），由关键词与向量（有 Embedding 时）召回。图元素记录来源文档版本，检索按当前可读版本过滤，文档被替换或删除后立即不再返回。`search_knowledge` 自动附带图谱段（每条带 `[ID:n]`，指向来源块），新增 `query_knowledge_graph` 工具按名称精确查询；超出上限时明确提示截断，图检索失败只丢弃图谱段。三种模式在内置存储上都可用；Neo4j 仍待 K2.7。库的图配置在 `settings.graph`（mode、model_id、entity_types、relation_types、instructions）。测试 `tests/test_knowledge_graph.py`、`tests/test_knowledge_graph_domain.py`。
+
 - [x] K2.0 技术验证：社区划分实现（Leiden / Louvain）在本机内存下的可行性。
   - 结论：networkx 3.6 的 `leiden_communities` 只是后端分派入口，没有安装原生后端（graspologic、igraph）时不可用，不引入原生依赖。改用纯 Python 的 `louvain_partitions`（分层）：1000 节点 0.14 秒、41MB；2 万节点 8 万边 18 秒、134MB，适合后台任务。依赖 `networkx==3.6.1` 加到 knowledge 包。
   - 设计取舍：构建任务单独成表（`knowledge_graph_builds`），不改 `knowledge_jobs` 的类型约束；按块内容哈希缓存抽取结果，文档变化触发的整库重建只对新增块调用模型；图元素记录来源文档版本，检索时按当前范围过滤，旧版本内容不会被召回。
-- [ ] K2.1 `graph_stores` 注册与 `GraphStore` 端口；`builtin` 图元素表（实体、关系、社区、社区报告，带来源与 schema 版本、构建版本）与迁移。
-- [ ] K2.2 抽取：`graphrag_light`（实体关系抽取、向量化）。
-- [ ] K2.3 `graphrag_general`（实体归并、社区划分、社区报告）。
-- [ ] K2.4 `entity` 模式（WeKnora ExtractConfig）与 `query_knowledge_graph` 工具。
-- [ ] K2.5 库级构建任务、重建、版本切换；有界图检索、截断提示、降级。
+- [x] K2.1 `graph_stores` 注册与 `GraphStore` 端口；`builtin` 图元素表（实体、关系、社区、社区报告，带来源与 schema 版本、构建版本）与迁移。
+- [x] K2.2 抽取：`graphrag_light`（实体关系抽取、向量化）。
+- [x] K2.3 `graphrag_general`（实体归并、社区划分、社区报告）。
+- [x] K2.4 `entity` 模式（WeKnora ExtractConfig）与 `query_knowledge_graph` 工具。
+- [x] K2.5 库级构建任务、重建、版本切换；有界图检索、截断提示、降级。
 - [ ] K2.7 `neo4j` 图存储实现与越权测试（需 Neo4j 测试环境）。
 - [ ] K2.6 前端图存储管理、图谱设置、任务状态、图谱浏览。
 

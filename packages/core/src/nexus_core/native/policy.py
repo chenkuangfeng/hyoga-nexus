@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
                       'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script',
-                      'search_knowledge', 'read_document', 'list_documents')
+                      'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph')
 #: Knowledge tools (openspec 2026-11-06-knowledge-base K1.8); offered only when the agent binds a knowledge base.
-KNOWLEDGE_TOOL_NAMES = frozenset({'search_knowledge', 'read_document', 'list_documents'})
+KNOWLEDGE_TOOL_NAMES = frozenset({'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph'})
 #: Agent tool access levels (tool-call-hardening D11).
 TOOL_ACCESS_LEVELS = ('read_only', 'standard', 'strict')
 #: Builtin that pages through externalized tool output (P2). Its presence in a Run's bindings enables spilling.

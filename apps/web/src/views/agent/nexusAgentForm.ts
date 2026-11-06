@@ -47,7 +47,7 @@ export interface AgentEditorForm {
 export interface KnowledgeBinding { id: string, source_tenant_id: string }
 
 /** Knowledge tools bound together with the first knowledge base (publishing requires `search_knowledge`). */
-export const KNOWLEDGE_TOOLS = ['search_knowledge', 'read_document', 'list_documents'] as const
+export const KNOWLEDGE_TOOLS = ['search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph'] as const
 
 export const TOOL_ACCESS_LEVELS = ['read_only', 'standard', 'strict'] as const
 export type ToolAccess = (typeof TOOL_ACCESS_LEVELS)[number]

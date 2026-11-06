@@ -96,12 +96,17 @@ async def search_for_run(factory: sessionmaker[Session], run_id: UUID, query: st
                                      bound=bound, requested=requested or None)
         db.commit()
     if not result.hits:
-        note = 'No relevant passages found in the bound knowledge bases.'
-        return note + _degraded_note(result)
+        registry = _registry(state)
+        graph_text = await _graph_text(factory, run_id, query, bound, requested or None, registry)
+        _save(state, registry)
+        if graph_text:
+            return graph_text + _degraded_note(result)
+        return 'No relevant passages found in the bound knowledge bases.' + _degraded_note(result)
     registry = _registry(state)
     body = '\n\n'.join(_passage(registry, hit.chunk_id, hit.content, hit.ref()) for hit in result.hits)
+    graph_text = await _graph_text(factory, run_id, query, bound, requested or None, registry)
     _save(state, registry)
-    return (f'<knowledge_results>\n{_FENCE_NOTE}\n{body}\n</knowledge_results>\n'
+    return (f'<knowledge_results>\n{_FENCE_NOTE}\n{body}\n</knowledge_results>\n' + graph_text +
             'Cite a passage by ending the sentence that uses it with its [ID:n].' + _degraded_note(result))
 
 
@@ -206,3 +211,124 @@ def attach_citations(db: Session, run: RunRecord) -> None:
 from nexus_knowledge import capabilities as _capabilities  # noqa: E402
 
 _capabilities.mark_available('kb_feature', 'citations')
+
+
+# ---------------------------------------------------------------- graph context (openspec 2026-11-06-knowledge-base K2)
+
+async def _graph_text(factory, run_id: UUID, query: str, bound: list[UUID], requested: list[UUID] | None,
+                      registry: EvidenceRegistry) -> str:
+    """Graph section for bases with a ready build; '' when there is none. Failures only drop this section."""
+    from .graph import search as graph_search
+    from nexus_knowledge.graph.retrieve import Limits
+    results = []
+    try:
+        with factory() as db:
+            run = _run(db, run_id)
+            scoped, _ = search.resolve_scope(db, run.tenant_id, run.principal_id, bound=bound, requested=requested)
+            cache: dict = {}
+            for item in scoped:
+                if not item.kb.indexing.get('graph') or not item.version_ids:
+                    continue
+                build = graph_search.ready_build(db, item.kb.id)
+                if build is None:
+                    continue
+                found = await graph_search.search_graph(factory, db, item.kb, build, set(item.version_ids),
+                                                        run.principal_id, query, Limits(), cache)
+                if not found.empty() or found.degraded:
+                    results.append((item.kb.name, found))
+            return _render_graph(db, results, registry) if results else ''
+    except Exception:  # graph is an enhancement: plain passages still answer
+        return ''
+
+
+def _chunk_ref(db: Session, chunk_id: str, allowed_versions: set[str]) -> dict[str, Any] | None:
+    try:
+        chunk = db.get(KnowledgeChunkRecord, UUID(chunk_id))
+    except ValueError:
+        return None
+    if chunk is None or str(chunk.version_id) not in allowed_versions:
+        return None
+    version = db.get(KnowledgeDocumentVersionRecord, chunk.version_id)
+    doc = db.get(KnowledgeDocumentRecord, version.document_id) if version else None
+    if doc is None or doc.status != 'active':
+        return None
+    return {'kb_id': str(doc.kb_id), 'document_id': str(doc.id), 'version_id': str(chunk.version_id),
+            'filename': doc.filename, 'page': chunk.page, 'section': list(chunk.section), 'ordinal': chunk.ordinal}
+
+
+def _handle(db: Session, registry: EvidenceRegistry, sources, allowed: set[str]) -> str:
+    """``[ID:n]`` of the first source chunk that is still readable ('' when none is)."""
+    for chunk_id, version_id in sources:
+        if version_id not in allowed:
+            continue
+        ref = _chunk_ref(db, chunk_id, allowed)
+        if ref is not None:
+            return f' [ID:{registry.stamp(chunk_id, ref)}]'
+    return ''
+
+
+def _render_graph(db: Session, results, registry: EvidenceRegistry, *, max_chars: int = 6000) -> str:
+    from nexus_knowledge.graph.retrieve import fit
+    blocks: list[str] = []
+    truncated = False
+    degraded = []
+    for kb_name, found in results:
+        if found.degraded:
+            degraded.append(f'{kb_name}:{found.degraded}')
+        allowed = {v for entity in (*found.entities, *found.relations, *found.communities) for v in entity.versions}
+        names = {e.id: e.name for e in found.entities}
+        truncated = truncated or found.truncated
+        if found.communities:
+            blocks.append(f'## {kb_name} · 社区报告')
+            blocks += [f'- {c.title}：{html.escape(c.summary, quote=False)}{_handle(db, registry, c.sources, allowed)}'
+                       for c in found.communities]
+        if found.entities:
+            blocks.append(f'## {kb_name} · 实体')
+            blocks += [f'- {html.escape(e.name, quote=False)}（{e.type or "未分类"}）：'
+                       f'{html.escape(e.description, quote=False)}{_handle(db, registry, e.sources, allowed)}'
+                       for e in found.entities]
+        if found.relations:
+            blocks.append(f'## {kb_name} · 关系')
+            blocks += [f'- {html.escape(names.get(r.source_id, "?"), quote=False)} — '
+                       f'{html.escape(names.get(r.target_id, "?"), quote=False)}：'
+                       f'{html.escape(r.description, quote=False)}{_handle(db, registry, r.sources, allowed)}'
+                       for r in found.relations]
+    kept, cut = fit(blocks, max_chars)
+    notes = []
+    if truncated or cut:
+        notes.append('注意：图谱结果因数量或长度上限被截断；没有出现的关系不代表不存在。')
+    if degraded:
+        notes.append('图谱不可用，已使用普通检索：' + ', '.join(degraded))
+    if not kept and not notes:
+        return ''
+    return '<knowledge_graph>\n' + _FENCE_NOTE + '\n' + '\n'.join([*kept, *notes]) + '\n</knowledge_graph>\n'
+
+
+async def query_graph_for_run(factory: sessionmaker[Session], run_id: UUID, names: list[str], kb_id: str | None,
+                              hops: int, state: dict) -> str:
+    """``query_knowledge_graph``: entities by exact name with their neighbourhood, from bases with a graph."""
+    from .graph import search as graph_search
+    from nexus_knowledge.graph.retrieve import Limits
+    with factory() as db:
+        run = _run(db, run_id)
+        bound = bound_base_ids(db, UUID(run.config_snapshot['agent_version_id']))
+        requested = None
+        if kb_id:
+            try:
+                requested = [UUID(kb_id)]
+            except ValueError:
+                return 'Knowledge base not found.'
+        scoped, _ = search.resolve_scope(db, run.tenant_id, run.principal_id, bound=bound, requested=requested)
+        registry = _registry(state)
+        results = []
+        for item in scoped:
+            build = graph_search.ready_build(db, item.kb.id) if item.kb.indexing.get('graph') and item.version_ids else None
+            if build is None:
+                continue
+            found = await graph_search.lookup_entities(factory, db, item.kb, build, set(item.version_ids), names,
+                                                       Limits(hops=max(1, min(hops, 3))))
+            if not found.empty():
+                results.append((item.kb.name, found))
+        text = _render_graph(db, results, registry) if results else ''
+        _save(state, registry)
+    return text or 'No matching entities in the knowledge graphs of the bound knowledge bases.'

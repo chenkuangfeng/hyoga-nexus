@@ -488,6 +488,10 @@ class DurableRuntimeStore:
         from nexus_platform.knowledge.tools import read_document_for_run
         return await read_document_for_run(self.factory, self.context.run_id, document_id, chunk, count, state)
 
+    async def query_knowledge_graph(self, entities: list[str], kb_id: str | None, hops: int, state: dict) -> str:
+        from nexus_platform.knowledge.tools import query_graph_for_run
+        return await query_graph_for_run(self.factory, self.context.run_id, entities, kb_id, hops, state)
+
     async def list_documents(self, kb_id: str | None, keyword: str, offset: int, limit: int) -> str:
         from nexus_platform.knowledge.tools import list_documents_for_run
         return await list_documents_for_run(self.factory, self.context.run_id, kb_id, keyword, offset, limit)

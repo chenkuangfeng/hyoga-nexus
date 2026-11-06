@@ -175,6 +175,8 @@ def test_write_access_and_capability_checks(env):
         with pytest.raises(capabilities.CapabilityPlanned):
             service.create_base(db, tenant_id, owner, name='faq', kb_type='faq', indexing={'keyword': True})
         with pytest.raises(capabilities.CapabilityPlanned):
+            service.create_base(db, tenant_id, owner, name='w', indexing={'keyword': True, 'wiki': True})
+        with pytest.raises(ValueError, match='chat model'):  # graph is implemented but needs its configuration
             service.create_base(db, tenant_id, owner, name='g', indexing={'keyword': True, 'graph': True})
         with pytest.raises(ValueError):
             service.create_base(db, tenant_id, owner, name='v', indexing={'vector': True, 'keyword': True})

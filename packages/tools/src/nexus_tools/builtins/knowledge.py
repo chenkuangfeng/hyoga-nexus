@@ -25,6 +25,22 @@ def knowledge_tools():
         return ToolResult(await _store(context).list_documents(
             arguments.get('kb_id'), arguments.get('keyword', ''), arguments.get('offset', 0), arguments.get('limit', 30)))
 
+    async def graph(arguments, context):
+        return ToolResult(await _store(context).query_knowledge_graph(
+            arguments['entities'], arguments.get('kb_id'), arguments.get('hops', 2), run_state_of(context)))
+
+    yield RegisteredTool(ToolDefinition(
+        'query_knowledge_graph',
+        'Look up entities by exact name in the knowledge graphs of the bound knowledge bases and return them with '
+        'their relations, up to `hops` steps away. Use it for questions about how things relate. Results are '
+        'bounded; a note says when they were cut. Items are labelled [ID:n] for citation.',
+        {'type': 'object', 'properties': {
+            'entities': {'type': 'array', 'items': {'type': 'string', 'minLength': 1, 'maxLength': 120},
+                         'minItems': 1, 'maxItems': 10},
+            'kb_id': {'type': 'string', 'maxLength': 36},
+            'hops': {'type': 'integer', 'minimum': 1, 'maximum': 3}},
+         'required': ['entities'], 'additionalProperties': False},
+        read_only=True, idempotent=True), graph, lambda r: r.data)
     yield RegisteredTool(ToolDefinition(
         'search_knowledge',
         'Search the knowledge bases bound to this agent (keyword and semantic search). Write `query` as focused '

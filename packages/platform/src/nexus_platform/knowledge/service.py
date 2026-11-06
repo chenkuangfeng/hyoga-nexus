@@ -19,6 +19,8 @@ import mimetypes
 from typing import Any
 from uuid import UUID
 
+from datetime import timedelta
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -33,6 +35,7 @@ from nexus_platform.identity.service import require_membership
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
 from . import access, stores
+from .graph import config as graph_config
 
 KB_TYPES = ('document', 'faq', 'wiki')
 INDEXING_KEYS = ('vector', 'keyword', 'graph', 'wiki')
@@ -99,7 +102,8 @@ def _parse_status(version: KnowledgeDocumentVersionRecord | None) -> str:
 
 def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dict[str, Any],
                     vector_store_id: str | None, storage_backend_id: str | None,
-                    embedding_model_id: UUID | None, chunk_size: int, chunk_overlap: int):
+                    embedding_model_id: UUID | None, chunk_size: int, chunk_overlap: int,
+                    settings: dict[str, Any] | None = None, user_id: UUID | None = None):
     if kb_type not in KB_TYPES:
         raise ValueError(f'type must be one of {", ".join(KB_TYPES)}')
     capabilities.require_available('kb_type', kb_type)
@@ -109,6 +113,11 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
             capabilities.require_available('indexing', key)
     if not (normalized['vector'] or normalized['keyword']):
         raise ValueError('enable vector or keyword indexing')
+    if normalized['graph']:
+        # Graph building calls a chat model with the creator's key (decision 6) and needs a valid configuration.
+        config = graph_config.parse(settings)
+        if user_id is not None:
+            _authorize_chat_model(db, tenant_id, user_id, config.model_id)
     validate_chunking(chunk_size, chunk_overlap)
     store = stores.vector_store_of_tenant(db, tenant_id, vector_store_id)
     backend = stores.storage_backend_of_tenant(db, tenant_id, storage_backend_id)
@@ -134,7 +143,7 @@ def create_base(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, descr
     normalized, store, backend = _check_settings(
         db, tenant_id, kb_type=kb_type, indexing=indexing or {}, vector_store_id=vector_store_id,
         storage_backend_id=storage_backend_id, embedding_model_id=embedding_model_id, chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap)
+        chunk_overlap=chunk_overlap, settings=settings, user_id=user_id)
     if embedding_model_id is not None:
         _authorize_embedding(db, tenant_id, user_id, embedding_model_id)
     _unique_name(db, tenant_id, name)
@@ -161,6 +170,16 @@ def _unique_name(db: Session, tenant_id: UUID, name: str, exclude: UUID | None =
         query = query.where(KnowledgeBaseRecord.id != exclude)
     if db.scalar(query) is not None:
         raise Conflict('A knowledge base with this name already exists')
+
+
+def _authorize_chat_model(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
+    from nexus_platform.models.provider_settings import authorize_model
+    from nexus_platform.persistence.models import ModelProfileRecord
+
+    version = authorize_model(db, tenant_id, user_id, version_id)
+    profile = db.get(ModelProfileRecord, version.profile_id)
+    if profile is None or profile.model_type != 'chat':
+        raise ValueError('graph.model_id must be a chat model')
 
 
 def _authorize_embedding(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
@@ -209,13 +228,19 @@ def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, change
         vector_store_id=str(kb.vector_store_id) if kb.vector_store_id else None,
         storage_backend_id=str(kb.storage_backend_id) if kb.storage_backend_id else None,
         embedding_model_id=embedding, chunk_size=int(chunk.get('chunk_size', kb.chunk_size)),
-        chunk_overlap=int(chunk.get('chunk_overlap', kb.chunk_overlap)))
+        chunk_overlap=int(chunk.get('chunk_overlap', kb.chunk_overlap)),
+        settings=changes['settings'] if isinstance(changes.get('settings'), dict) else kb.settings, user_id=user_id)
+    graph_changed = normalized.get('graph') != bool(kb.indexing.get('graph')) or (
+        isinstance(changes.get('settings'), dict) and changes['settings'].get('graph') != kb.settings.get('graph'))
     kb.indexing, kb.embedding_model_version_id = normalized, embedding
     kb.chunk_size = int(chunk.get('chunk_size', kb.chunk_size))
     kb.chunk_overlap = int(chunk.get('chunk_overlap', kb.chunk_overlap))
     if isinstance(changes.get('settings'), dict):
         kb.settings = dict(changes['settings'])
     kb.updated_at = utc_now()
+    if graph_changed:
+        from .graph.build import schedule
+        schedule(db, kb, user_id, delay=timedelta(0))
     audit(db, tenant_id, user_id, 'knowledge_base.updated', access.KIND, str(kb.id), {})
     return kb
 
@@ -228,6 +253,7 @@ def list_bases(db: Session, tenant_id: UUID, user_id: UUID) -> list[KnowledgeBas
 def delete_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> None:
     kb = access.writable_base(db, kb_id, tenant_id, user_id)
     kb.status, kb.updated_at = 'deleting', utc_now()
+    cancel_graph_builds(db, kb.id)
     deactivate_resource(db, tenant_id=tenant_id, kind=access.KIND, resource_id=str(kb.id), version_id=None)
     _queue(db, kb, kind='cleanup')
     audit(db, tenant_id, user_id, 'knowledge_base.deleted', access.KIND, str(kb.id), {})
@@ -237,6 +263,8 @@ def rebuild_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> in
     """Re-index the current or latest version of every document (new chunking, new embedding model)."""
     kb = access.writable_base(db, kb_id, tenant_id, user_id)
     kb.embedding_dimension = None
+    from .graph.build import schedule
+    schedule(db, kb, user_id)
     count = 0
     for doc in db.scalars(select(KnowledgeDocumentRecord).where(KnowledgeDocumentRecord.kb_id == kb.id,
                                                               KnowledgeDocumentRecord.status == 'active')):
@@ -378,6 +406,8 @@ def delete_document(db: Session, tenant_id: UUID, user_id: UUID, document_id: UU
     kb = access.writable_base(db, kb.id, tenant_id, user_id)
     doc.status, doc.updated_at = 'deleting', utc_now()
     _queue(db, kb, kind='cleanup', document_id=doc.id)
+    from .graph.build import schedule
+    schedule(db, kb, user_id)
     audit(db, tenant_id, user_id, 'knowledge_document.deleted', 'knowledge_document', str(doc.id),
           {'kb_id': str(kb.id)})
 
@@ -400,10 +430,24 @@ def chunk_view(chunk: KnowledgeChunkRecord) -> dict[str, Any]:
             'section': list(chunk.section), 'char_start': chunk.char_start, 'char_end': chunk.char_end}
 
 
+def cancel_graph_builds(db: Session, kb_id: UUID) -> None:
+    """Stop unfinished graph builds of a base that is being deleted."""
+    from nexus_platform.persistence.models import GraphBuildRecord
+    for build in db.scalars(select(GraphBuildRecord).where(GraphBuildRecord.kb_id == kb_id,
+                                                           GraphBuildRecord.state.in_(('pending', 'running')))):
+        build.state, build.updated_at = 'cancelled', utc_now()
+
+
 # Implemented here (capability catalog, decision 5).
 capabilities.mark_available('kb_type', 'document')
 capabilities.mark_available('indexing', 'vector')
 capabilities.mark_available('indexing', 'keyword')
 capabilities.mark_available('parser_engine', 'builtin')
 for _feature in ('documents', 'upload', 'chunking', 'embedding_model'):
+    capabilities.mark_available('kb_feature', _feature)
+capabilities.mark_available('indexing', 'graph')
+for _mode in graph_config.MODES:
+    capabilities.mark_available('graph_mode', _mode)
+capabilities.mark_available('graph_store', 'builtin')
+for _feature in ('graph_settings', 'graph_browser'):
     capabilities.mark_available('kb_feature', _feature)
