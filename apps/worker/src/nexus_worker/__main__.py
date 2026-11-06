@@ -58,6 +58,14 @@ def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> b
         return False
     from nexus_worker.native import execute_native
     _worker_loop().run_until_complete(execute_native(factory, task_id, worker_id, stopped=stopped, **execution_options))
+    # Stage 6 (D6): a space's external memory provider observes the finished turn in the background.
+    from nexus_platform.memory.providers import after_run
+    from nexus_platform.persistence.models import OutboxRecord
+    with factory() as session:
+        task = session.get(OutboxRecord, task_id)
+        run_id = task.run_id if task is not None else None
+    if run_id is not None:
+        after_run(factory, run_id)
     return True
 
 

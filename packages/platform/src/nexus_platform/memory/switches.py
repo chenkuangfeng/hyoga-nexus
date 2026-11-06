@@ -58,7 +58,8 @@ EXTRACT_INSTRUCTIONS_LIMIT = 1000
 
 def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, enabled: bool,
                        write_mode: str, extract_instructions: str | None = None,
-                       embedding_model_version_id: Any = UNSET) -> dict[str, Any]:
+                       embedding_model_version_id: Any = UNSET, interest_threshold: int | None = None,
+                       memory_provider: Any = UNSET) -> dict[str, Any]:
     """Change the space switch, write mode and, when given, the custom extraction rules.
 
     Only owners and admins; non-members get 404 from `context`. The rules are added to every extraction
@@ -67,7 +68,15 @@ def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, en
 
     `embedding_model_version_id` (stage 5, D2) chooses the embedding model for semantic memory recall:
     it must be an `embedding` model the caller may use; `None` turns semantic recall off; omitted keeps it.
+    `interest_threshold` (stage 6, D4) is 2-10; `memory_provider` (D6) must be a registered provider name
+    or `None` for built-in only.
     """
+    if interest_threshold is not None and not 2 <= interest_threshold <= 10:
+        raise ValueError('Interest threshold must be between 2 and 10')
+    if memory_provider not in (UNSET, None):
+        from .providers import registered
+        if memory_provider not in registered():
+            raise ValueError('Unknown memory provider')
     if write_mode not in rules.WRITE_MODES:
         raise ValueError('Memory write mode is invalid')
     if extract_instructions is not None:
@@ -93,21 +102,27 @@ def set_space_settings(db: Session, principal: Principal, tenant_id: UUID, *, en
                 if db.get(ModelProfileRecord, version.profile_id).model_type != 'embedding':
                     raise ValueError('The memory embedding model must be an embedding model')
             row.embedding_model_version_id = embedding_model_version_id
+        if interest_threshold is not None:
+            row.interest_threshold = interest_threshold
+        if memory_provider is not UNSET:
+            row.memory_provider = memory_provider
         row.updated_by, row.updated_at = user.id, utc_now()
         audit(db, tenant_id, user.id, 'memory.space_settings', 'tenant', str(tenant_id),
               {'enabled': enabled, 'write_mode': write_mode,
                'extract_instructions_chars': len(row.extract_instructions or ''),
-               'embedding_model_version_id': str(row.embedding_model_version_id) if row.embedding_model_version_id else None})
+               'embedding_model_version_id': str(row.embedding_model_version_id) if row.embedding_model_version_id else None,
+               'interest_threshold': row.interest_threshold, 'memory_provider': row.memory_provider})
         return _space_view(row, can_edit=True)
 
 
 def _space_view(row: MemorySpaceSettingsRecord | None, *, can_edit: bool) -> dict[str, Any]:
     if row is None:
         return {'enabled': rules.DEFAULT_SPACE_ENABLED, 'write_mode': rules.DEFAULT_WRITE_MODE,
-                'extract_instructions': '', 'embedding_model_version_id': None, 'can_edit': can_edit, 'updated_at': None}
+                'extract_instructions': '', 'embedding_model_version_id': None, 'interest_threshold': 3,
+                'memory_provider': None, 'can_edit': can_edit, 'updated_at': None}
     return {'enabled': row.enabled, 'write_mode': row.write_mode, 'extract_instructions': row.extract_instructions or '',
             'embedding_model_version_id': str(row.embedding_model_version_id) if row.embedding_model_version_id else None,
-            'can_edit': can_edit, 'updated_at': row.updated_at.isoformat() if row.updated_at else None}
+            'interest_threshold': row.interest_threshold or 3, 'memory_provider': row.memory_provider, 'can_edit': can_edit, 'updated_at': row.updated_at.isoformat() if row.updated_at else None}
 
 
 def extract_instructions(db: Session, tenant_id: UUID) -> str:

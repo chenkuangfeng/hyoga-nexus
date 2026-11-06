@@ -52,10 +52,18 @@ def session_snapshot(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id
     if row is not None and row.tenant_id == tenant_id and row.owner_user_id == owner_id:
         return row
     built = memory_rules.snapshot(SqlMemoryRepository(db), tenant_id, owner_id, project, now=now or utc_now())
+    text = built.text
+    # Stage 6 (D6): the space's external provider may add a block; it is frozen with the snapshot.
+    from .providers import provider_for, snapshot_text
+    provider = provider_for(db, tenant_id)
+    if provider is not None:
+        extra = snapshot_text(None, provider, tenant_id=tenant_id, owner_id=owner_id, session_id=session_id)
+        if extra:
+            text = text + '\n' + extra
     key = version_key(db, tenant_id, owner_id)
     row = SessionMemorySnapshotRecord(
         session_id=session_id, tenant_id=tenant_id, owner_user_id=owner_id,
-        index_text=built.text, version_key=key, created_at=now or utc_now(),
+        index_text=text, version_key=key, created_at=now or utc_now(),
         resident_entries=[dict(item) for item in built.resident],
     )
     db.add(row)

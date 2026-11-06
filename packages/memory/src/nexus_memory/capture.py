@@ -55,6 +55,8 @@ CONTEXT_CHARS = 300
 #: Origins of messages a person wrote: '' is the Run's initial message (stored without metadata),
 #: `user_input` answers a question, `user_steer` is an instruction added while the Run was working.
 USER_ORIGINS = ('', 'user_input', 'user_steer')
+#: Kinds an extractor may add; `interest` comes only from topic counts (stage 6, D4).
+EXTRACT_KINDS = ('memory', 'sop', 'profile')
 
 OPS = ('add', 'update', 'delete', 'none')
 UNATTENDED_OPS = ('add', 'update')
@@ -255,7 +257,7 @@ def _check_item(item: Any, *, unattended: bool, related: Sequence[dict[str, Any]
         return 'diff_too_long'
     if op == 'add':
         kind = item.get('kind', 'memory')
-        if kind not in KIND_VALUES:
+        if kind not in EXTRACT_KINDS:
             return 'bad_kind'
         action: dict[str, Any] = {'op': 'add', 'kind': kind, 'diff': diff}
     elif 'target' in item:

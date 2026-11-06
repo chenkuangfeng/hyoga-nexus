@@ -112,6 +112,10 @@ class MemorySpaceSettingsUpdate(BaseModel):
     extract_instructions: str | None = Field(default=None, max_length=1000)
     #: Embedding model for semantic memory recall; null turns it off, omitted keeps the current choice.
     embedding_model_version_id: UUID | None = None
+    #: Conversations a subject must come up in before it is proposed as an interest (2-10); omitted keeps it.
+    interest_threshold: int | None = Field(default=None, ge=2, le=10)
+    #: Registered external memory provider; null for built-in only, omitted keeps the current choice.
+    memory_provider: str | None = Field(default=None, max_length=64)
 
 
 class MemoryPreferencesUpdate(BaseModel):
@@ -134,7 +138,9 @@ def update_memory_settings(tenant_id: UUID, body: MemorySpaceSettingsUpdate, pri
     embedding = body.embedding_model_version_id if 'embedding_model_version_id' in body.model_fields_set else UNSET
     return memory_switches.set_space_settings(db, principal, tenant_id, enabled=body.enabled, write_mode=body.write_mode,
                                              extract_instructions=body.extract_instructions,
-                                             embedding_model_version_id=embedding)
+                                             embedding_model_version_id=embedding,
+                                             interest_threshold=body.interest_threshold,
+                                             memory_provider=body.memory_provider if 'memory_provider' in body.model_fields_set else UNSET)
 
 
 @router.get('/memory-preferences')
@@ -187,6 +193,14 @@ def update_memory_availability(tenant_id: UUID, entry_id: UUID, body: MemoryAvai
     valid_until: Any = body.valid_until if 'valid_until' in body.model_fields_set else UNSET
     enabled = body.enabled if 'enabled' in body.model_fields_set else None
     return memory.set_availability(db, principal, tenant_id, entry_id, enabled=enabled, valid_until=valid_until)
+
+
+@router.get('/memory-topics')
+def list_memory_topics(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)):
+    """Subjects the caller keeps bringing up, with conversation counts toward the interest threshold."""
+    from nexus_platform.memory.interests import list_topics
+    return list_topics(db, principal, tenant_id)
 
 
 @router.post('/memory-consolidation', status_code=202)

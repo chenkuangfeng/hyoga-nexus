@@ -11,7 +11,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DDL, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, event, text, true
+from sqlalchemy import (JSON, Boolean, CheckConstraint, DDL, DateTime, ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint, Uuid, event, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -216,6 +217,10 @@ class MemorySpaceSettingsRecord(Base):
     extract_instructions: Mapped[str] = mapped_column(Text, nullable=False, default='', server_default='')
     #: Embedding model for semantic memory recall (stage 5, D2); NULL means keyword search only.
     embedding_model_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    #: Conversations a subject must come up in before it is proposed as an interest (stage 6, D4; 2-10).
+    interest_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default='3')
+    #: Registered external memory provider used in this space (stage 6, D6); NULL means built-in only.
+    memory_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class MemoryEmbeddingRecord(Base):
@@ -234,6 +239,26 @@ class MemoryEmbeddingRecord(Base):
     dims: Mapped[int] = mapped_column(Integer, nullable=False)
     vector: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryTopicStatRecord(Base):
+    """How often one person brought up a subject (openspec 2026-11-06-memory-evolution D4; WeKnora `MemoryTopicStat`).
+
+    `hits` counts distinct conversations (`session_ids`, at most 50 kept). Reaching the space threshold
+    proposes an `interest` draft once (`promoted_at`); the owner still decides whether it is published.
+    """
+    __tablename__ = 'memory_topic_stats'
+    __table_args__ = (UniqueConstraint('tenant_id', 'owner_user_id', 'normalized_key', name='uq_memory_topic_stats_key'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    normalized_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    topic: Mapped[str] = mapped_column(String(160), nullable=False)
+    aliases: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    session_ids: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MemoryConsolidationStateRecord(Base):

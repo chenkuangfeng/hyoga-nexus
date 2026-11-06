@@ -100,11 +100,16 @@
 
 ## 6. 第 6 阶段：依赖外部条件的能力（D4、D5、D6）
 
-- [ ] 6.1 迁移：`memory_topic_stats`；`memory_space_settings.interest_threshold`；`memory_entries.kind` 允许 `interest`。
+- [x] 6.1 迁移：`memory_topic_stats`；`memory_space_settings.interest_threshold`；`memory_entries.kind` 允许 `interest`。
+  - 同一迁移加入 `memory_space_settings.memory_provider`（6.3 用）。
 - [ ] 6.2 主题计数、晋升为 `interest` 草稿、拒绝后停止计数；我的记忆中的主题列表（替换占位）（D4）。
-- [ ] 6.3 `MemoryProviderPort`、`BuiltinMemoryProvider`、外部提供方注册、超时与卡死保护、测试替身（D6）。
+  - 已完成：抓取每个窗口按有效项主题计数（同一会话只计一次），达到空间阈值（默认 3，2–10）生成一次 `interest` 草稿；被拒主题不再计数；抽取模型不能直接新增 `interest`；`interest` 条目参与每轮召回。接口 `GET /native/memory-topics`。
+  - 阻塞：主题列表界面在"我的记忆"设置页，随 `2026-11-05-memory-switches` 前端第 2 节一并实施。
+- [x] 6.3 `MemoryProviderPort`、`BuiltinMemoryProvider`、外部提供方注册、超时与卡死保护、测试替身（D6）。
+  - 端口在 `nexus_core.runtime.memory`（同步钩子 `snapshot_block`、`prefetch`、`sync_turn`，上下文只提供 `propose`）；平台 `memory/providers.py` 负责注册、按空间选择、截止时间（8 秒 / 30 秒）、连续 3 次失败暂停 10 分钟、`memory.provider_failed` 审计、结果包裹转义。内置记忆就是现有的快照、召回与工具，不另包一层 `BuiltinMemoryProvider` 类，`builtin` 名称保留。hermes 的会话结束与子任务钩子未接入：Nexus 目前没有对应事件。
 - [ ] 6.4 门禁：路线图第 6 步知识检索与引用登记可用后，实施 `memory_doc_affinity`、Run 完成时的记录、重排加权、管理入口（D5）。门禁不满足时保持未勾选。
-- [ ] 6.5 pytest 与前端单元测试；文档同步。
+- [x] 6.5 pytest 与前端单元测试；文档同步。
+  - `tests/test_memory_evolution_stage6.py`（9 项），全量 854 通过。
 
 ## 7. 规格与归档
 

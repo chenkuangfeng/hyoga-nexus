@@ -190,6 +190,15 @@ class ExecutionPreparer:
                                                        history[last_user].content, exclude=resident, now=utc_now())
                         if recalled.text:
                             history.insert(last_user, ModelMessage('user', recalled.text))
+                    # Stage 6 (D6): the space's external provider may add material for this turn.
+                    from nexus_platform.memory.providers import prefetch_text, provider_for
+                    provider = provider_for(db, run.tenant_id)
+                    if last_user is not None and provider is not None:
+                        anchor = next(index for index in range(len(history) - 1, -1, -1) if history[index].role == 'user')
+                        extra = prefetch_text(None, provider, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                                              session_id=run.session_id, query=history[anchor].content)
+                        if extra:
+                            history.insert(anchor, ModelMessage('user', extra))
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
 

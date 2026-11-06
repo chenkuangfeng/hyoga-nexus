@@ -27,6 +27,11 @@
 - `recall()`：按本轮用户消息与 `memory` 类条目的共有分词（至少 2 个）挑选，最多 5 条、600 字，排除常驻块已有条目，结果用 `<user_memory source="recall">` 包裹；不调用模型。
 - 抽取器可返回 `ExtractorReply(actions, usage)`，平台把用量写入抓取任务。
 
+## 兴趣与外部提供方（第 6 阶段）
+
+- `interest` 类型只由主题计数产生（平台 `memory/interests.py`），抽取模型不能直接新增；条目只进索引，参与每轮召回。
+- 外部记忆提供方的端口 `MemoryProviderPort` 在 `nexus_core.runtime.memory`；提供方只能经 `ctx.propose` 写入草稿。
+
 ## 自动抓取规则（`capture.py`）
 
 - 来源：`select_sources()` 只把用户本人写的消息作为来源（`role='user'` 且来源属于 `USER_ORIGINS`：起始消息、`user_input`、`user_steer`）；运行时补发的 `user` 消息（`origin='runtime'`）和工具消息排除，助手文字只作只读上下文。参考 WeKnora `collectSessionSegments`。

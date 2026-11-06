@@ -424,12 +424,16 @@ def _store(db: Session, job: MemoryCaptureJobRecord, now: datetime) -> None:
             outcome = {'status': 'conflict'}
         results.append(outcome['status'])
         job.stored_count = index + 1
+    # Stage 6 (D4): count the window's topics; reaching the space threshold proposes an interest draft.
+    from .interests import observe
+    interests = observe(db, tenant_id=job.tenant_id, owner_id=job.owner_user_id, session_id=job.session_id,
+                        run_id=job.source_run_id, topics=[a.get('topic', '') for a in actions], now=now)
     job.state = 'stored'
     job.last_error = None
     audit(db, job.tenant_id, job.owner_user_id, 'memory.capture', 'memory_capture_job', str(job.id),
           {'step': 'store', 'drafts': results.count('pending'), 'duplicates': results.count('duplicate'),
            'other': len(results) - results.count('pending') - results.count('duplicate'),
-           'evicted': evicted, 'policy': policy, 'statuses': results[:10]})
+           'evicted': evicted, 'policy': policy, 'statuses': results[:10], 'interests': len(interests)})
 
 
 def _propose(repo: SqlMemoryRepository, job: MemoryCaptureJobRecord, action: dict[str, Any],

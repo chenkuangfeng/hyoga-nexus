@@ -38,7 +38,8 @@ TITLE_LIMIT = 160
 MEMORY_BUDGET_CHARS = 6000
 CONTENT_LIMIT = 8000
 #: `profile` (stage 2): who the user is and how they like to work; bodies are injected into the snapshot.
-KIND_VALUES = ('memory', 'sop', 'profile')
+#: `interest` (stage 6): a subject the person keeps coming back to, proposed from topic counts, never extracted.
+KIND_VALUES = ('memory', 'sop', 'profile', 'interest')
 #: Characters of profile bodies carried whole in a session snapshot (decision 2: counted in the budget).
 RESIDENT_LIMIT = 1000
 #: Usage share above which the snapshot asks the model to consolidate before proposing.
@@ -669,7 +670,7 @@ class Recall:
 def recall(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, message: str, *,
            exclude: frozenset[str] = frozenset(), now: datetime | None = None,
            vector_ranking: list[UUID] | None = None) -> Recall:
-    """Pick `memory` entries relevant to the user's message for this turn (stage 5, D3). No model call.
+    """Pick `memory` and `interest` entries relevant to the user's message for this turn (stage 5, D3). No model call.
 
     An entry qualifies when it shares at least two tokens with the message (one when the message has
     only one); entries are ranked by shared tokens, then index order, and fused with the semantic
@@ -682,7 +683,7 @@ def recall(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, message: str
         return Recall('', ())
     needed = min(2, len(tokens)) if tokens else 1
     candidates = [item for item in _ordered_live(repo, tenant_id, owner_id, '', now)
-                  if item.entry.kind == 'memory' and str(item.entry.id) not in exclude]
+                  if item.entry.kind in ('memory', 'interest') and str(item.entry.id) not in exclude]
     scored = []
     for order, item in enumerate(candidates):
         shared = len(tokens & text.token_set(' '.join((item.entry.title, item.entry.topic, item.content))))
