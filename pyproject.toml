@@ -22,6 +22,7 @@ dependencies = [
     "hyoga-nexus-sandbox",
     "hyoga-nexus-connectors",
     "hyoga-nexus-guanlan",
+    "python-multipart>=0.0.20,<1",
 ]
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx>=0.27,<1"]

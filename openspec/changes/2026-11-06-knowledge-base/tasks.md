@@ -34,7 +34,8 @@
   - `nexus_platform.knowledge`：`access`（读：本空间成员或共享进来的空间成员；写：空间 owner/admin 或创建者）、`stores`（向量库与存储后端注册，密钥按 id 绑定加密、列表打码；未登记时用内置 SQLite 与本地目录）、`service`。共享直接复用 `resource_grants`。SQLite 不强制外键级联，清理任务显式删除子行。
 - [x] K1.5 作业：parse → chunk → embed → activate，阶段提交、退避重试、恢复、取消。
   - `jobs.claim` 以租约（10 分钟）领取；解析错误直接失败（`empty_text`、`unsupported_type`），其他错误 30s/2m/10m 退避，第 4 次失败；文档或库删除后作业取消。Embedding 通过 `knowledge.embedding.set_embedder_factory` 注入，索引用创建者 Key、查询用查询者 Key。
-- [ ] K1.6 向量库与存储后端注册：增删改查、密钥加密、连接测试、库创建时选择。
+- [x] K1.6 向量库与存储后端注册：增删改查、密钥加密、连接测试、库创建时选择。
+  - 接口 `/knowledge/vector-stores`（含 `builtin`、草稿连接测试）与 `/knowledge/storage-backends`。
 - [x] K1.7 Pre-Filter 与混合检索、降级、诊断；越权测试逐路径。
   - `search.resolve_scope` + `search.search`；命中后在平台库按范围再过滤一次。测试 `tests/test_knowledge_service.py`（去重、版本切换时机、跨空间/共享/撤权/绑定/删除、解析失败与重试、混合检索与向量降级审计）。
 - [ ] K1.8 工具 `search_knowledge`、`read_document`、`list_documents`；证据登记存 Run progress；Run 结束引用校验；智能体绑定与发布校验。

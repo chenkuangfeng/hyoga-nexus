@@ -49,6 +49,7 @@ def _worker_loop() -> asyncio.AbstractEventLoop:
 
 from nexus_worker.memory_capture import (capture_tick, consolidation_tick, embedding_tick, install_embedder,
                                          retention_tick)
+from nexus_worker import knowledge_index
 
 
 def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> bool:
@@ -80,6 +81,10 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     factory = session_factory(engine)
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     install_embedder()
+    knowledge_index.install_embedder()
+    # Read before work starts: an invalid [knowledge] section stops the worker.
+    from nexus_platform.configuration import knowledge_settings
+    knowledge_concurrency = knowledge_settings().index_concurrency
     stopped = threading.Event()
     epoch = start_process_epoch(factory, worker_id)
 
@@ -94,6 +99,9 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
         while not stopped.is_set():
             try:
                 processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch, watchdog=watchdog)
+                if not processed:
+                    # Knowledge index and cleanup jobs (openspec 2026-11-06-knowledge-base K1.5).
+                    processed = knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency)
                 if not processed:
                     # Memory capture runs only while no Run is waiting (stage 3); it is off unless an owner opted in.
                     processed = capture_tick(factory, worker_id)

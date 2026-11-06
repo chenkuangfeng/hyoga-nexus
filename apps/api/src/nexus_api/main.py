@@ -43,9 +43,17 @@ def ensure_default_space() -> None:
         engine.dispose()
 
 
+def install_knowledge_embedder() -> None:
+    """Let the retrieval test embed queries with the searcher's own key (openspec 2026-11-06-knowledge-base)."""
+    from nexus_platform.knowledge.embedding import set_embedder_factory
+    from nexus_worker.knowledge_index import knowledge_embedder
+    set_embedder_factory(knowledge_embedder)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_default_space()
+    install_knowledge_embedder()
     yield
 
 
