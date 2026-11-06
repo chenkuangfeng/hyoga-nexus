@@ -1,13 +1,13 @@
 # 实施任务
 
-状态：草案第 2 版。决定 2–8 已确认（2026-11-06），决定 1 待用户选择首批向量引擎。每个阶段单独提交推送；阶段内追加工作写回本文件。
+状态：决定 1–8 已确认（2026-11-06），实施中。每个阶段单独提交推送；阶段内追加工作写回本文件。
 
 ## 0. 准备
 
 - [x] 0.1 阅读 Octop `infra/knowledge/`、RAGFlow `agentic_rag/` 证据与引用、WeKnora 融合与 SQLite 检索。
 - [x] 0.2 梳理 WeKnora 知识库功能面（库类型、索引策略、向量库、存储后端、解析引擎、FAQ、Wiki、图谱、数据源、标签、文件夹、图片、共享、活动）。
 - [x] 0.3 阅读 RAGFlow `service/graph/`（GraphRAG 检索）。
-- [ ] 0.4 用户确认决定 1–8。决定 2–8 已确认；决定 1 待选。
+- [x] 0.4 用户确认决定 1–8（2026-11-06）。
 - [ ] 0.5 更新文档：`docs/architecture.md` 2.10（向量库注册、图谱存储、GraphRAG、引用处理）、路线图第 6 步子计划改为 K0–K7、`2026-11-02-weknora-parity` 第 3 阶段指向本变更。
 
 ## K0 前端全量接入与能力目录
@@ -20,7 +20,8 @@
 ## K1 文档库核心
 
 - [ ] K1.1 领域：`ingest.parse`（文本、Markdown、CSV、JSON、pypdf）、`ingest.chunk`（标题/页 + 定长重叠）、`retrieval.fuse`、`evidence`，移植参考项目测试样例。
-- [ ] K1.2 端口：`VectorIndex`（含范围过滤下推）、`KeywordIndex`、`BlobStore`；实现 sqlite、postgres（pgvector + tsvector）、本地目录。
+- [ ] K1.2 端口：`VectorIndex`（含范围过滤下推）、`KeywordIndex`、`BlobStore`；实现 sqlite（测试）、本地目录。
+- [ ] K1.2b 引擎代码：postgres（pgvector + tsvector）、qdrant、elasticsearch、milvus；只实现不测试，能力目录标 `verified=false`，真实环境后补验收。
 - [ ] K1.3 持久化与迁移：`knowledge_bases`、`knowledge_documents`、`knowledge_document_versions`、`knowledge_chunks`、`knowledge_chunk_vectors`、`knowledge_jobs`、`vector_stores`、`storage_backends`；升降级测试。
 - [ ] K1.4 服务：库与文档增删改查、上传去重、版本切换、删除标记与清理、资源注册、共享、审计。
 - [ ] K1.5 作业：parse → chunk → embed → activate，阶段提交、退避重试、恢复、取消。

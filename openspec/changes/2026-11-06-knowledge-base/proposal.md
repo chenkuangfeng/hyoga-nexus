@@ -10,7 +10,7 @@
 - 前端不隐藏未实现的功能，统一标记「待实现」；
 - 在此基础上参考其他项目做增强和优化。
 
-本版按这些要求重写了第 1 版（只覆盖 6.1–6.3 并隐藏 WeKnora 独有功能）。2026-11-06 用户确认决定 2–8（决定 2 改为 Neo4j 与内置图存储都支持、可配置）；决定 1 待用户从主流向量库中选择首批引擎。
+本版按这些要求重写了第 1 版（只覆盖 6.1–6.3 并隐藏 WeKnora 独有功能）。2026-11-06 用户确认决定 1–8：决定 1 首批实现 sqlite、pgvector、qdrant、elasticsearch、milvus，只测试 sqlite；决定 2 改为 Neo4j 与内置图存储都支持、可配置；其余按推荐。
 
 ## 原因
 
@@ -99,11 +99,12 @@
 - 记忆演进 6.4 文档亲和度：K1 完成后在原记忆变更里实施。
 - 制品库、自动化、工具箱等其他 WeKnora 页面：不属于知识库。
 
-## 决定（2–8 已确认，1 待选）
+## 决定（1–8 已确认）
 
-1. **首批实现的向量引擎**（待用户选择）
-   - 推荐：K1 先实现 `sqlite`（向量以 JSON 存储，在授权范围内进程内计算余弦，用于本地开发）和 `postgres`（pgvector，生产）。其余 9 种引擎（elasticsearch、opensearch、qdrant、milvus、weaviate、doris、tencent_vectordb、infinity，以及 neo4j 图存储）在目录和配置表单里全部可见，标记「待实现」。你提供对应服务的测试环境后，按 `VectorIndex` 端口逐个实现并做连接验收。
-   - 备选：K1 同时实现 Qdrant 和 Elasticsearch。需要你先提供这两个服务；本机内存 1.8GB，跑不起来。
+1. **首批实现的向量引擎**（已确认）
+   - K1 实现 `sqlite`、`postgres`（pgvector）、`qdrant`、`elasticsearch`、`milvus` 五种，都实现 `VectorIndex` 端口（含 Pre-Filter 范围下推与关键词通道）。
+   - 只有 `sqlite` 在本变更中运行测试；`postgres`、`qdrant`、`elasticsearch`、`milvus` 只实现代码，标注「未验证」，有真实环境后补做连接与越权验收。能力目录对它们返回 `available` 并附 `verified=false`，界面显示「未验证」。
+   - 其余引擎（opensearch、weaviate、doris、tencent_vectordb、infinity、chroma、redis、dashvector、pinecone）显示「待实现」。
 
 2. **图谱的存储**（已确认：两种都支持，可配置）
    - `builtin`：参考 RAGFlow，实体、关系、社区、社区报告存在 PostgreSQL / SQLite 的表里，向量进库所选的向量库。不需要额外部署，权限过滤与文本块共用同一套 Pre-Filter。
