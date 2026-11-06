@@ -8957,6 +8957,10 @@ export default {
       viewer: "뷰어"
     }
   },
+  knowledgeCitation: {
+    title: '출처',
+    page: '{page}쪽',
+  },
   planned: {
     title: "아직 사용할 수 없습니다",
     body: "이 페이지는 이후 단계에 제공됩니다. 이 버전에는 메뉴 항목만 있으며 Nexus API에는 아직 연결되어 있지 않습니다.",

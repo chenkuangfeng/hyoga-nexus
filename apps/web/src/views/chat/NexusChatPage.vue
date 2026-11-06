@@ -113,6 +113,7 @@
                   :is-first-enter="isFirstEnter" :embedded-mode="compact" :can-fork="!compact" :can-rewind="!compact"
                   :can-ask-assistant="!compact" @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
                   @rewind="planned('rewind')" @ask-assistant="planned('askAssistant')" />
+                <KnowledgeCitations v-if="row.citations?.length" :citations="row.citations" />
               </div>
             </div>
 
@@ -149,6 +150,7 @@
 </template>
 
 <script setup lang="ts">
+import KnowledgeCitations from '@/components/knowledge/KnowledgeCitations.vue'
 /**
  * Conversation core. The session comes from the parent as `sessionId`; empty means the welcome state.
  * Sending from the welcome state creates the session first and emits `session-created`.

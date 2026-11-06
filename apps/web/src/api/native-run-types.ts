@@ -71,6 +71,21 @@ export interface ConversationMessage {
   role: string
   content: string
   created_at: string
+  /** Knowledge citations of an assistant answer; empty for other messages. */
+  citations?: KnowledgeCitation[]
+}
+
+/** One resolved `[ID:n]` handle of an answer (openspec 2026-11-06-knowledge-base K1.8). */
+export interface KnowledgeCitation {
+  handle: number
+  chunk_id: string
+  kb_id?: string
+  document_id?: string
+  version_id?: string
+  filename?: string
+  page?: number | null
+  section?: string[]
+  ordinal?: number
 }
 
 export interface ConversationPage {

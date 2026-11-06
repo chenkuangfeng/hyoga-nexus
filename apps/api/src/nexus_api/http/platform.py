@@ -684,7 +684,9 @@ def conversation_history(tenant_id: UUID, session_id: UUID,
                                             after_sequence=after_sequence, limit=limit)
     return {'messages': [{'id': row.id, 'run_id': row.run_id, 'sequence': row.sequence,
                           'role': 'system' if row.role == 'user' and row.runtime_metadata.get('origin') == 'runtime' else row.role,
-                          'content': row.content, 'created_at': row.created_at} for row in messages],
+                          'content': row.content, 'created_at': row.created_at,
+                          # Knowledge citations resolved when the Run completed (openspec 2026-11-06-knowledge-base).
+                          'citations': row.runtime_metadata.get('citations', [])} for row in messages],
             'latest_run': RunView.model_validate(latest, from_attributes=True) if latest else None}
 
 

@@ -153,3 +153,30 @@ def test_shared_base_can_be_bound_by_another_space_and_loses_access_on_revoke(kb
         revoke_resource_grant(db, OWNER, grant.id)
     assert 'No relevant passages' in asyncio.run(store.search_knowledge('安装', [], 5, {})) \
         or 'No knowledge base' in asyncio.run(store.search_knowledge('安装', [], 5, {}))
+
+
+def test_history_api_returns_citations(kb_env):
+    from fastapi.testclient import TestClient
+    from nexus_api.dependencies.platform import get_database_session, get_principal
+    from nexus_api.main import app
+
+    factory, tenant, _, bound, _ = kb_env
+    version = _agent(factory, tenant, [bound])
+    run, context, store = _run(factory, tenant, version)
+    asyncio.run(store.search_knowledge('安装', [], 5, context.progress.state))
+    asyncio.run(store.save_progress(context.progress))
+    asyncio.run(store.message(ModelMessage('assistant', '见 [ID:1]')))
+    store.finish(RuntimeOutcome('completed'))
+
+    def session():
+        with factory() as db:
+            yield db
+    app.dependency_overrides[get_database_session] = session
+    app.dependency_overrides[get_principal] = lambda: OWNER
+    try:
+        with TestClient(app) as client:
+            body = client.get(f'/api/v1/tenants/{tenant.id}/sessions/{run.session_id}/messages').json()
+    finally:
+        app.dependency_overrides.clear()
+    answer = next(m for m in body['messages'] if m['role'] == 'assistant')
+    assert answer['citations'][0]['filename'] == '安装.md'

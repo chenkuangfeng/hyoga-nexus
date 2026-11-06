@@ -9,7 +9,7 @@
  *
  * Pure module (no Vue, no network) so the grouping rules are unit tested.
  */
-import { TERMINAL_RUN_STATUSES, type ConversationMessage, type RunEvent } from '../api/native-run-types'
+import { TERMINAL_RUN_STATUSES, type ConversationMessage, type KnowledgeCitation, type RunEvent } from '../api/native-run-types'
 import { toAgentEventStream, usedMemoriesFromEvents, type AgentEventStreamOptions, type AgentStreamEvent,
   type UsedMemoryRef } from './nexusAgentEvents'
 
@@ -39,6 +39,8 @@ export interface ChatAssistantRow {
   run_status: string
   /** Memories the Run injected or read, for WeKnora's "used N memories" row (`memory.used` events). */
   used_memories: UsedMemoryRef[]
+  /** Knowledge sources cited by the answer (openspec 2026-11-06-knowledge-base K1.8). */
+  citations: KnowledgeCitation[]
 }
 
 export type ChatRow = ChatUserRow | ChatAssistantRow
@@ -63,7 +65,8 @@ export function statusFromEvents(events: readonly RunEvent[]): string {
 }
 
 function assistantRow(runId: string | null, key: string, content: string, createdAt: string,
-  events: readonly RunEvent[] | undefined, status: string, live: boolean, options?: AgentEventStreamOptions): ChatAssistantRow {
+  events: readonly RunEvent[] | undefined, status: string, live: boolean, options?: AgentEventStreamOptions,
+  citations: KnowledgeCitation[] = []): ChatAssistantRow {
   const stream = events ? toAgentEventStream(events, status, options) : []
   return {
     role: 'assistant',
@@ -79,6 +82,7 @@ function assistantRow(runId: string | null, key: string, content: string, create
     is_completed: !live,
     run_status: status,
     used_memories: events ? usedMemoriesFromEvents(events) : [],
+    citations,
   }
 }
 
@@ -95,7 +99,7 @@ export function buildChatRows(messages: readonly ConversationMessage[],
   eventsByRun: ReadonlyMap<string, readonly RunEvent[]>, pendingUsers: readonly string[] = [],
   live: LiveRun | null = null, baseOptions: AgentEventStreamOptions = {}): ChatRow[] {
   const rows: ChatRow[] = []
-  let group: { runId: string | null; key: string; texts: string[]; createdAt: string } | null = null
+  let group: { runId: string | null; key: string; texts: string[]; createdAt: string; citations: KnowledgeCitation[] } | null = null
 
   const flush = () => {
     if (!group) return
@@ -105,7 +109,8 @@ export function buildChatRows(messages: readonly ConversationMessage[],
     const content = group.texts.join('\n\n')
     if (content || (events && events.length > 0)) {
       rows.push(assistantRow(group.runId, group.key, content, group.createdAt, events, status,
-        isLive && !TERMINAL_RUN_STATUSES.has(status), { ...baseOptions, ...(isLive ? live!.options : {}) }))
+        isLive && !TERMINAL_RUN_STATUSES.has(status), { ...baseOptions, ...(isLive ? live!.options : {}) },
+        mergeCitations(group.citations)))
     }
     group = null
   }
@@ -120,9 +125,10 @@ export function buildChatRows(messages: readonly ConversationMessage[],
     const key = message.run_id ?? message.id
     if (!group || group.key !== key) {
       flush()
-      group = { runId: message.run_id, key, texts: [], createdAt: message.created_at }
+      group = { runId: message.run_id, key, texts: [], createdAt: message.created_at, citations: [] }
     }
     if (message.role === 'assistant' && message.content.trim()) group.texts.push(message.content)
+    if (message.role === 'assistant' && message.citations?.length) group.citations.push(...message.citations)
   }
   flush()
 
@@ -137,6 +143,13 @@ export function buildChatRows(messages: readonly ConversationMessage[],
     if (row.agentEventStream.length > 0) rows.push(row)
   }
   return rows
+}
+
+/** Citations of one answer in handle order, one entry per handle. */
+export function mergeCitations(citations: readonly KnowledgeCitation[]): KnowledgeCitation[] {
+  const byHandle = new Map<number, KnowledgeCitation>()
+  for (const item of citations) if (!byHandle.has(item.handle)) byHandle.set(item.handle, item)
+  return [...byHandle.values()].sort((a, b) => a.handle - b.handle)
 }
 
 /** Runs whose events are needed to rebuild finished answers (excluding the live Run). */

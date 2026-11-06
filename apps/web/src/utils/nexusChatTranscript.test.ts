@@ -65,3 +65,16 @@ test('assistant rows carry the memories their Run used', () => {
   assert.equal(row.role, 'assistant')
   assert.deepEqual(row.role === 'assistant' ? row.used_memories : null, [{ id: 'p1', kind: 'profile', content: '风格' }])
 })
+
+test('knowledge citations of a Run are merged by handle onto its answer row', () => {
+  const rows = buildChatRows([
+    { id: 'u', run_id: 'r1', sequence: 1, role: 'user', content: 'q', created_at: '' },
+    { id: 'a1', run_id: 'r1', sequence: 2, role: 'assistant', content: 'x [ID:2] [ID:1]', created_at: '',
+      citations: [{ handle: 2, chunk_id: 'c2', filename: 'b.md' }, { handle: 1, chunk_id: 'c1', filename: 'a.md' }] },
+    { id: 'a2', run_id: 'r1', sequence: 3, role: 'assistant', content: 'y [ID:1]', created_at: '',
+      citations: [{ handle: 1, chunk_id: 'c1', filename: 'a.md' }] },
+  ] as never, new Map(), [], null)
+  const answer = rows.find(row => row.role === 'assistant')
+  assert.ok(answer && answer.role === 'assistant')
+  assert.deepEqual(answer.citations.map(item => item.handle), [1, 2])
+})

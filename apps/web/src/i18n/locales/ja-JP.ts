@@ -8957,6 +8957,10 @@ export default {
       viewer: "閲覧者"
     }
   },
+  knowledgeCitation: {
+    title: '参照元',
+    page: '{page} ページ',
+  },
   planned: {
     title: "まだ利用できません",
     body: "このページは後のフェーズのものです。このバージョンではメニュー項目のみ存在し、Nexus API にはまだ接続されていません。",

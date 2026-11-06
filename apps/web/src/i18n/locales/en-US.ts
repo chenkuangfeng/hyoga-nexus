@@ -86,6 +86,10 @@ export default {
       viewer: 'Viewer',
     },
   },
+  knowledgeCitation: {
+    title: 'Sources',
+    page: 'p. {page}',
+  },
   planned: {
     title: 'Not available yet',
     body: 'This page belongs to a later phase. Only the menu entry exists in this version and it is not connected to the Nexus API yet.',

@@ -86,6 +86,10 @@ export default {
       viewer: '查看者',
     },
   },
+  knowledgeCitation: {
+    title: '引用来源',
+    page: '第 {page} 页',
+  },
   planned: {
     title: '该功能尚未接入',
     body: '此页面属于后续阶段，当前版本只保留菜单入口，尚未对接 Nexus 接口。',

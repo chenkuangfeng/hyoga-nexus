@@ -8953,6 +8953,10 @@ export default {
       viewer: "檢視者"
     }
   },
+  knowledgeCitation: {
+    title: '引用來源',
+    page: '第 {page} 頁',
+  },
   planned: {
     title: "尚未開放",
     body: "此頁面屬於後續階段。此版本只有選單項目，尚未連接 Nexus API。",
