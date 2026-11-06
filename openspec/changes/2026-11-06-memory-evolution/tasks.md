@@ -97,7 +97,7 @@
   - `same_model` 模式于 2026-11-06 按用户决定移出范围（原因见 `design.md` 6.3），不实施。
 - [x] 5.5 前端：空间设置中的 Embedding 模型、智能体编辑器中的主动召回开关、我的记忆中的复盘模式与用量。
   - 阻塞：三处都在 `2026-11-05-memory-switches` 前端第 2 节（设置页 2.2/2.3、智能体编辑器 2.4）尚未接入的页面上。接口已就绪：`memory-settings` 的 `embedding_model_version_id`、`budgets.memory.recall`、`memory-capture/usage`。
-  - 已完成（2026-11-06）：空间页的 Embedding 模型、编辑器的每轮主动召回开关、我的记忆页的近 30 天用量。复盘模式随 5.4 未做。
+  - 已完成（2026-11-06）：空间页的 Embedding 模型、编辑器的每轮主动召回开关、我的记忆页的近 30 天用量。复盘模式已移出范围。
 - [x] 5.6 pytest（向量用假 Embedding）与前端单元测试；比较两种复盘模式并写入 `design.md` 6.3 节；文档同步。
   - `tests/test_memory_evolution_stage5.py`（11 项），全量 845 通过。复盘模式比较随同模型复盘移出范围，不再进行。
 
