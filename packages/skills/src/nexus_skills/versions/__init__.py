@@ -61,10 +61,16 @@ def check_files(files: Mapping[str, str]) -> dict[str, str]:
     return dict(sorted(checked.items()))
 
 
-def content_hash(skill_md: str, files: Mapping[str, str]) -> str:
-    """SHA-256 over the canonical JSON of SKILL.md and the resource files (sorted by path)."""
+def content_hash(skill_md: str, files: Mapping[str, str], binary: Mapping[str, bytes] | None = None) -> str:
+    """SHA-256 over the canonical JSON of SKILL.md and the resource files (sorted by path).
+
+    Binary files (bundles only) are covered by their own digests; a version without any hashes exactly as before
+    binaries existed, so earlier versions keep their hash.
+    """
     if len(skill_md) > MAX_SKILL_MD_CHARS:
         raise SkillFileError('skill_md_too_large')
-    payload = json.dumps({'skill.md': skill_md, 'files': dict(sorted(files.items()))},
-                         ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    document: dict = {'skill.md': skill_md, 'files': dict(sorted(files.items()))}
+    if binary:
+        document['binary'] = {path: hashlib.sha256(data).hexdigest() for path, data in sorted(binary.items())}
+    payload = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()

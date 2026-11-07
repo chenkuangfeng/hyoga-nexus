@@ -36,3 +36,19 @@ def test_system_space_migration_round_trip_on_sqlite(tmp_path):
         assert connection.execute(text("SELECT count(*) FROM tenants WHERE kind = 'system'")).scalar() == 0
     command.upgrade(config, 'head')
     command.upgrade(config, 'head')
+
+
+def test_skill_bundle_migration_adds_install_state_and_one_install_per_skill(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'bundle.db')
+    config = _config(url)
+    command.upgrade(config, 'd2e3f4a5b6c7')
+    engine = create_engine(url)
+    command.upgrade(config, 'head')
+    inspector = inspect(engine)
+    assert {'bundle', 'bundle_sha256', 'build_state', 'build_error', 'build_log', 'build_heartbeat_at',
+            'env_ref'} <= {c['name'] for c in inspector.get_columns('skill_versions')}
+    index = next(i for i in inspector.get_indexes('skill_versions') if i['name'] == 'uq_skill_versions_installing')
+    assert index['unique'] and index['column_names'] == ['skill_id']
+    command.downgrade(config, 'd2e3f4a5b6c7')
+    assert 'build_state' not in {c['name'] for c in inspect(engine).get_columns('skill_versions')}
+    command.upgrade(config, 'head')

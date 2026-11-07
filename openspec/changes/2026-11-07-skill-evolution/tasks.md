@@ -67,16 +67,19 @@
 
 ## 3. S3 存储与安装流水线（方案 C）
 
-- [ ] 3.1 迁移：`skill_versions` 增加 `bundle`、`bundle_sha256`、`build_state`（既有行 `ready`）、`build_error`、`build_heartbeat_at`、`env_ref`；`installing` 的部分唯一索引；既有版本 zip 的生成策略（惰性或批量）。
-- [ ] 3.2 `SkillFileSource`：zip 按条目读取与会话内缓存；回退到文件行；`read_skill_file` 对二进制只返回元信息。
-- [ ] 3.3 规范化与校验：条目、总字节、单文件、压缩比、路径穿越、符号链接、重复路径、根目录 `SKILL.md`；恶意样例测试（穿越、炸弹、符号链接、重复路径）。
+- [x] 3.1 迁移：`skill_versions` 增加 `bundle`、`bundle_sha256`、`build_state`（既有行 `ready`）、`build_error`、`build_heartbeat_at`、`env_ref`；`installing` 的部分唯一索引；既有版本 zip 的生成策略（惰性或批量）。
+  - `skill_versions` 增加 `bundle`、`bundle_sha256`、`build_state`、`build_error`、`build_log`、`build_heartbeat_at`、`env_ref` 与 `installing` 部分唯一索引（迁移 `e3f4a5b6c7d8`，往返测试）；既有版本不批量生成 zip，导出时由文件行惰性重建；新发布的版本都写入规范 zip。状态机与心跳的使用见 3.4、3.7。
+- [ ] 3.2 （已完成：二进制文件只存于 zip，运行时与文本文件一起投射进沙箱，脚本解析只看文本文件，内容哈希覆盖二进制；**未做**：按条目读取与会话内缓存，`read_skill_file` 对二进制返回元信息。）`SkillFileSource`：zip 按条目读取与会话内缓存；回退到文件行；`read_skill_file` 对二进制只返回元信息。
+- [x] 3.3 规范化与校验：条目、总字节、单文件、压缩比、路径穿越、符号链接、重复路径、根目录 `SKILL.md`；恶意样例测试（穿越、炸弹、符号链接、重复路径）。
+  - `nexus_skills.bundle`：先查条目表再按上限读取，拒绝穿越、符号链接/设备文件、重复路径、加密、条目过多、压缩比异常、超限；根目录或单一外层目录下的 `SKILL.md`；丢弃 `__MACOSX`、`.DS_Store` 与点文件；`pack` 输出规范 zip（排序、固定时间与权限，同内容同字节）。13 项测试。
 - [ ] 3.4 隔离区与原子换入：暂存目录、规范化、扫描、构建、验证、`rename` 换入、同事务移动 `current_version_id`；失败路径逐点测试（每一步失败旧版本仍服务、暂存清理）。
 - [ ] 3.5 环境构建器：docker 临时容器（标签、联网、可写暂存）、bwrap、local；超时、输出与目录大小上限；档位指纹命名；无对应环境时脚本不可用并提示。
-- [ ] 3.6 验证关 `nexus_skills.verify`：可读；`.py` 用 `ast` 解析，`.sh` 用 `sh -n`，`.js` 用 `node --check`（解释器不存在时只给 `note`）；清单包已装；`note` 与 `problem` 分档；不推断 `import`。
+- [ ] 3.6 （已完成：`nexus_skills.verify` 的 `.py`/`.sh`/`.bash`/`.js` 语法检查、解释器缺失只给 `note`、`requirements.txt` 格式校验与 `missing_distributions`，并已接入发布与上传；**未做**：在构建环境内核对清单包是否已装，随 3.5 完成。）验证关 `nexus_skills.verify`：可读；`.py` 用 `ast` 解析，`.sh` 用 `sh -n`，`.js` 用 `node --check`（解释器不存在时只给 `note`）；清单包已装；`note` 与 `problem` 分档；不推断 `import`。
 - [ ] 3.7 状态机与清理：`installing → ready | failed`、`reinstall` 复用已存 zip、停止；心跳；周期任务清理超时 `installing`、残留暂存目录与带标签容器、过期环境目录。
-- [ ] 3.8 上传入口：管理员上传 zip 接口（大小限制）；构建状态与日志查询；前端上传、状态轮询、失败原因展示。
+- [ ] 3.8 （已完成：`POST /tenants/{id}/skills/upload` 原始 zip 请求体，流式限长 32 MB，管理员，走同一发布检查与发布策略；**未做**：构建状态与日志查询、前端上传与轮询。）上传入口：管理员上传 zip 接口（大小限制）；构建状态与日志查询；前端上传、状态轮询、失败原因展示。
 - [ ] 3.9 远程来源：五类来源解析与归一；出站校验抽到 `nexus_core` 并复用；跳转、超时、字节上限；GitHub 子目录裁剪；仅管理员与始终确认；来源 URL 与摘要记录；更新检查；测试覆盖内网地址、重定向到内网、超大响应、非法输入。
-- [ ] 3.10 导出：单个技能 zip 下载（权限：库按读权限，内置所有人，私有仅所有者）。
+- [x] 3.10 导出：单个技能 zip 下载（权限：库按读权限，内置所有人，私有仅所有者）。
+  - `GET /tenants/{id}/skills/{name}/bundle?version=`：本空间技能或内置技能，空间成员可导出；私有技能的所有者限制随 S4 加入。
 
 ## 4. S4 私有技能与对话式创建
 

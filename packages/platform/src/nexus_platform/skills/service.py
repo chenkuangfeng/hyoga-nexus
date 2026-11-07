@@ -27,7 +27,9 @@ from nexus_platform.persistence.models import (
     PlatformResourceRecord, ResourceBindingRecord, SessionSkillSnapshotRecord, SkillRecord,
     SkillVersionFileRecord, SkillVersionRecord,
 )
+from nexus_skills import bundle as skill_bundle
 from nexus_skills.guard import check_declared_scripts, static_hints
+from nexus_skills.verify import verify_files
 from nexus_skills.exec import ResolvedScript, ScriptError, resolve_script
 from nexus_skills.guard.scan import SCANNER_VERSION, ScanResult, scan_skill
 from nexus_skills.policy import decide, resolve_execution
@@ -91,12 +93,23 @@ def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, f
 
 
 def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str, files: dict[str, str],
-                     source: str, *, acknowledged: bool = False) -> dict[str, Any]:
-    """Publish inside the caller's transaction; the caller has already authorized the actor."""
+                     source: str, *, acknowledged: bool = False,
+                     binary: dict[str, bytes] | None = None) -> dict[str, Any]:
+    """Publish inside the caller's transaction; the caller has already authorized the actor.
+
+    ``binary`` holds the non-text files of a bundle; they live only in the version's zip and are projected into the
+    sandbox beside the text files. The syntax check (`nexus_skills.verify`) runs before anything is stored.
+    """
+    binary = dict(binary or {})
     parsed = parse_skill(skill_md)
     if parsed.execution == 'local' and source != BUILTIN_SOURCE:
         raise InvalidConfiguration('skill_execution_not_permitted')
     clean = check_files(files)
+    if set(binary) & set(clean):
+        raise InvalidConfiguration('skill_path_duplicate')
+    problems = [finding for finding in verify_files(clean) if finding.level == 'problem']
+    if problems:
+        raise InvalidConfiguration(f'skill_verify_failed:{problems[0].path}:{problems[0].message}')
     missing = check_declared_scripts(parsed, clean)
     if missing:
         raise InvalidConfiguration(missing[0])
@@ -111,7 +124,8 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
     if decision != 'allow':
         raise SkillScanBlocked(_SCAN_STOPS[decision], scan)
     released = acknowledged and decide(source, scan.verdict) in ('need_ack', 'block')
-    digest = content_hash(skill_md, clean)
+    digest = content_hash(skill_md, clean, binary)
+    packed = skill_bundle.pack(skill_md, clean, binary)
     now = utc_now()
     skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name))
     if skill is None:
@@ -137,7 +151,8 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
         scan_hints=hints, trust=source, scan_version=scan.version, scan=scan.as_dict(),
         model_invocable=parsed.model_invocable, user_invocable=parsed.user_invocable, execution=parsed.execution,
         extra={'values': parsed.extra, 'notes': list(parsed.notes)},
-        content_hash=digest, created_by=user_id, created_at=now,
+        content_hash=digest, bundle=packed, bundle_sha256=skill_bundle.digest(packed),
+        created_by=user_id, created_at=now,
     )
     db.add(version)
     db.flush()
@@ -155,7 +170,65 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
               {'name': parsed.name, 'version': number, 'verdict': scan.verdict,
                'rules': sorted({f.rule for f in scan.findings})})
     return {'skill': parsed.name, 'version': number, 'version_id': str(version.id), 'content_hash': digest,
-            'scan_hints': hints, 'verdict': scan.verdict, 'findings': len(scan.findings), 'notes': list(parsed.notes)}
+            'scan_hints': hints, 'verdict': scan.verdict, 'findings': len(scan.findings), 'notes': list(parsed.notes),
+            'binary_files': sorted(binary)}
+
+
+def install_bundle(db: Session, principal: Principal, tenant_id: UUID, data: bytes, *, source: str = 'import',
+                   acknowledge_findings: bool = False) -> dict[str, Any]:
+    """Install a skill from an uploaded zip as a new version (administrators; source ``import`` by default).
+
+    The archive is checked before anything is read (see `nexus_skills.bundle`), then goes through the same checks and
+    release policy as a published skill, so an upload cannot do what a publish could not.
+    """
+    try:
+        unpacked = skill_bundle.unpack(data)
+    except skill_bundle.BundleError as exc:
+        raise InvalidConfiguration(str(exc)) from None
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        require_api_permission(db, tenant_id, user.id, PUBLISH_PERMISSION)
+        return _publish_version(db, tenant_id, user.id, unpacked.skill_md, unpacked.text, source,
+                                acknowledged=acknowledge_findings, binary=unpacked.binary)
+
+
+def version_bundle(db: Session, version: SkillVersionRecord) -> bytes:
+    """The zip of a version: the stored one, or one rebuilt from the file rows for versions older than bundles."""
+    if version.bundle is not None:
+        return version.bundle
+    files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
+        SkillVersionFileRecord.version_id == version.id))}
+    return skill_bundle.pack(version.skill_md, files)
+
+
+def _binary_files(db: Session, version: SkillVersionRecord, text_paths: set[str]) -> dict[str, bytes]:
+    """Files of a version that are not text rows (they exist only in its zip)."""
+    if version.bundle is None:
+        return {}
+    return {path: data for path, data in skill_bundle.read_entries(version.bundle).items()
+            if path != 'SKILL.md' and path not in text_paths}
+
+
+def export_bundle(db: Session, principal: Principal, tenant_id: UUID, name: str,
+                  version: int | None = None) -> tuple[str, int, bytes]:
+    """(skill name, version number, zip) of a skill visible in this space: its own, or a builtin one.
+
+    Any member of the space may export; a version is a copy of what the space already uses. Defaults to the
+    current version.
+    """
+    context(db, principal, tenant_id)
+    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+    if skill is None:
+        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == name))
+    if skill is None:
+        raise NotFound('skill_not_found')
+    query = select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
+    query = query.where(SkillVersionRecord.version == version) if version is not None else query.where(
+        SkillVersionRecord.id == skill.current_version_id)
+    row = db.scalar(query)
+    if row is None:
+        raise NotFound('skill_not_found')
+    return name, row.version, version_bundle(db, row)
 
 
 def _live(db: Session, tenant_id: UUID, name: str, version: SkillVersionRecord) -> bool:
@@ -247,7 +320,7 @@ class PreparedExec:
     source: str
     declared: str
     #: Every file of the version including SKILL.md, as projected into the sandbox.
-    files: dict[str, str]
+    files: dict[str, str | bytes]
     script: ResolvedScript
 
 
@@ -268,14 +341,16 @@ def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
         SkillVersionFileRecord.version_id == version.id))}
     files['SKILL.md'] = version.skill_md
     try:
-        resolved = resolve_script(script, files)
+        resolved = resolve_script(script, files)  # text files only: a binary file is never a runnable script
     except ScriptError as exc:
         raise NotFound(str(exc)) from None
+    files = {**files, **_binary_files(db, version, set(files))}
     return PreparedExec(skill=name, version=version.version, version_id=str(version.id), content_hash=version.content_hash,
                         source=version.trust, declared=version.execution, files=files, script=resolved)
 
 
-def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str) -> tuple[str, dict[str, str]] | None:
+def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID,
+                name: str) -> tuple[str, dict[str, str | bytes]] | None:
     """(content hash, every file incl. SKILL.md) of a bound skill the model may use, or None when there is none."""
     version = bound_versions(db, agent_version_id).get(name)
     if version is None or not version.model_invocable:
@@ -283,7 +358,7 @@ def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str)
     files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
         SkillVersionFileRecord.version_id == version.id))}
     files['SKILL.md'] = version.skill_md
-    return version.content_hash, files
+    return version.content_hash, {**files, **_binary_files(db, version, set(files))}
 
 
 def exec_skill_available(policy_flag: bool, profile: str | None) -> bool:
@@ -394,8 +469,8 @@ def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str
              'findings': list((v.scan or {}).get('findings', [])), 'scan_version': v.scan_version,
              'rescan_needed': v.scan_version < SCANNER_VERSION,
              'model_invocable': v.model_invocable, 'user_invocable': v.user_invocable, 'execution': v.execution,
-             'notes': list((v.extra or {}).get('notes', [])),
-             'created_at': v.created_at.isoformat()} for v in versions]
+             'notes': list((v.extra or {}).get('notes', [])), 'build_state': v.build_state,
+             'has_bundle': v.bundle is not None, 'created_at': v.created_at.isoformat()} for v in versions]
 
 
 def rescan(db: Session, principal: Principal, tenant_id: UUID, name: str, version: int) -> dict[str, Any]:

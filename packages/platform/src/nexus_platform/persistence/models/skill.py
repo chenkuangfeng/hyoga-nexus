@@ -11,7 +11,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid, true
+from sqlalchemy import (JSON, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint,
+                        Uuid, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -37,7 +38,12 @@ class SkillVersionRecord(Base):
     """One published, immutable version. ``content_hash`` covers SKILL.md and every version file."""
 
     __tablename__ = "skill_versions"
-    __table_args__ = (UniqueConstraint("skill_id", "version", name="uq_skill_versions_number"),)
+    __table_args__ = (
+        UniqueConstraint("skill_id", "version", name="uq_skill_versions_number"),
+        # One install at a time per skill (openspec 2026-11-07-skill-evolution, S3).
+        Index("uq_skill_versions_installing", "skill_id", unique=True,
+              sqlite_where=text("build_state = 'installing'"), postgresql_where=text("build_state = 'installing'")),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     skill_id: Mapped[UUID] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"), nullable=False)
@@ -63,6 +69,18 @@ class SkillVersionRecord(Base):
     #: Frontmatter keys this platform does not know, kept verbatim, plus parse notes such as ``frontmatter_repaired``.
     extra: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: The canonical zip of the version (``nexus_skills.bundle.pack``). Null on versions published before bundles
+    #: existed; it is rebuilt from the file rows when needed. Binary files exist only here.
+    bundle: Mapped[bytes | None] = mapped_column(LargeBinary)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64))
+    #: ``installing`` -> ``ready`` | ``failed``. A version that is not ``ready`` is never served.
+    build_state: Mapped[str] = mapped_column(String(16), nullable=False, default="ready", server_default="ready")
+    build_error: Mapped[str | None] = mapped_column(Text)
+    #: The last lines of the dependency build, for the install page.
+    build_log: Mapped[str | None] = mapped_column(Text)
+    build_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Name of the built dependency environment directory, when the skill has a dependency manifest.
+    env_ref: Mapped[str | None] = mapped_column(String(200))
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
