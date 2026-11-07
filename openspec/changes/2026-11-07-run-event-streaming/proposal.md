@@ -1,8 +1,8 @@
-# Run 事件通道：数据库只存持久事实，实时流与控制信号走独立通道
+# Run 事件通道与部署模式：数据库只存持久事实，实时流与控制信号走独立通道；支持嵌入模式；补强并发准入
 
 ## 状态
 
-待确认（2026-11-07）。决定 1–8 见下，括号内为推荐方案。确认前不编码。
+待确认（2026-11-07）。决定 1–10 见下，括号内为推荐方案。确认前不编码。
 
 ## 原因
 
@@ -11,6 +11,9 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
 1. **SSE 按连接轮询**：`apps/api/.../http/platform.py` 的流式接口每个连接每 0.25 秒查一次 `run_events`，且每轮重复 `get_run`（含权限校验）。1000 个观看者约 4000 QPS 纯读，并占用 1000 个同步线程与数据库连接。
 2. **每个事件一个完整事务**：`runs/store.py` 的 `emit` 每次都开事务、检查 Outbox 租约、`FOR UPDATE` 锁 Run、写事件。流式文本 `message.delta` 默认每 150ms 一次（`delta_flush_ms`），单个流式 Run 约 7 事务/秒，200 个并发 Run 约 1400 事务/秒，且全部争用各自的 Run 行锁。
 3. **控制信号靠心跳读库**：取消、审批结果由 worker 在心跳（`heartbeat()`）里读库发现，延迟取决于心跳周期。
+
+4. **部署形态单一**：只有 API 与 worker 分进程一种形态。deer-flow、WeKnora 的 Run 与 API 同进程（deer-flow 是网关内的 asyncio 任务，WeKnora 是请求处理的 goroutine，只有后台作业走独立 worker 池），小规模部署没有跨进程成本。拆分的收益是重启不杀 Run、资源与扩缩隔离，且后台作业（定时、知识索引、记忆整理、向量化）必须有常驻进程；但对个人或小团队，这些收益用不上，跨进程成本却全要付。
+5. **并发准入有缺口**：已有会话内 FIFO、全局活动会话上限（`[platform].max_concurrent_sessions`，默认 8，`runs/session_ledger.py`、`admission_repository.py`）。缺：按租户 / 用户的公平上限，以及按模型的并发限流（deer-flow 有全局与每用户 Run 上限；WeKnora 有按模型的 Redis 限流器，且只约束后台任务，不挤占交互聊天）。
 
 数据库作 Outbox 队列本身不是瓶颈（行锁加租约，量级为每 Run 几次领取）。瓶颈是把「实时流」与「控制信号」也放在数据库里。
 
@@ -22,6 +25,8 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
 | | `runtime/events/store/db.py`、`runs/manager.py` | 持久事件与实时流分离；`owner_worker_id` 与租约过期回收 |
 | WeKnora | `internal/stream/redis_manager.go`、`memory_manager.go`、`factory.go` | 按环境选择 memory / redis；活动 Run 标记（`SetLiveRun` / `ClaimLiveRun` / `GetLiveRun`，活动期间续 TTL）；控制事件放独立 key（steer），不进用户可见流；`DropMessageStreams` 随会话删除清理 |
 | | `internal/types/interfaces`（`StreamManager`）、`router/task.go` | 接口与实现分离；asynq 队列（不采用，见决定 8） |
+| | `internal/container/container.go`（`registerModelConcurrencyLimiter`）、`router/task.go`（`backgroundTaskMiddleware`） | 按模型并发限流，后台任务与交互聊天区分对待 |
+| deer-flow | `runtime/runs/manager.py`（`multitask_strategy`）、`app/gateway/app.py`（`max_concurrent_runs`、`max_concurrent_runs_per_user`） | 全局与每用户 Run 上限；同线程并发策略 |
 
 两者取舍：deer-flow 的 Redis Streams 优于 WeKnora 的 Redis List 加偏移轮询（阻塞读、有序 ID、`MAXLEN`、断档可检测），采用前者作为数据面；WeKnora 的活动 Run 标记与独立控制通道是 deer-flow 没有的，采用后者补充。
 
@@ -45,12 +50,20 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
 8. **SSE 接口改为异步生成器**：不再一个连接占一个线程；数据库重放部分放线程池，通道部分用异步 Redis 客户端；心跳改为 15 秒的 SSE 注释行。
 9. **配置**（`[run_events]`）：`backend`、`redis_url`、`maxlen`、`retention_seconds`、`heartbeat_seconds`、`poll_min_ms`、`poll_max_ms`；Redis 为可选依赖（extra `redis`）。启动时校验，无效配置阻止启动，与 `[knowledge]`、`[watchdog]` 一致。
 10. **可观测**：指标 `run_event_publish_failures`、`run_event_gaps`、`run_event_subscribers`、`run_event_bus_up`；`/health/ready` 对非 `database` 后端调用 `ping`。
-11. **文档**：`docs/architecture.md`、`docs/roadmap.md`、`apps/api`、`apps/worker`、`packages/core`、`packages/platform` 的 README 与 design，`configs/nexus.example.toml`。
+11. **嵌入模式**：新增 `[deployment].mode`，取 `embedded` 或 `split`（默认 `split`，行为不变）。`embedded` 下 API 进程在 lifespan 中启动 worker 循环（独立线程，复用同一个 `run_once` 与后台作业 tick），事件通道固定为 `memory`，不需要 Redis。同一份代码，仅启动方式不同。`embedded` 的约束：
+   - 容量上限是单进程；重启时进行中的 Run 按现有租约机制恢复（租约到期后回收），不保证不中断。
+   - 后台作业（知识索引、记忆整理、向量化）在嵌入模式下并发受 `[deployment].background_concurrency` 限制（默认 1），且仍只在空闲时运行，避免拖慢接口。
+   - `run_worker` 当前在函数内注册 SIGINT / SIGTERM，非主线程不可用；拆为「循环主体」与「信号安装」两部分，嵌入时由 API 的 lifespan 控制停止事件。
+   - 数据库引擎、模型连接池、嵌入器（`install_embedder`）在两进程模式下各自初始化，嵌入时共享同一进程内实例，需核对线程安全。
+12. **并发准入补强**（在现有会话 FIFO 与全局上限之上，不替换）：
+   - 每租户、每用户的活动会话上限（`[platform].max_concurrent_sessions_per_tenant`、`_per_user`，默认不限，设置后才生效，沿用 `LedgerError` 的稳定错误码）。
+   - 按模型的并发限流（`[model_limits]`，默认关闭）：令牌取自 Run 准备阶段的模型配置，限流器放在模型调用前；只约束后台任务（记忆整理、摘要、向量化、知识增强），交互式 Run 不受限但计入用量；`redis` 后端用 Redis 计数，`database` 与 `memory` 用进程内计数（分进程且无 Redis 时按进程各自计数，文档注明）。
+   - 超限不丢请求：交互式 Run 沿用会话 FIFO 排队；后台任务延后重试。
+13. **文档**：`docs/architecture.md`、`docs/roadmap.md`、`apps/api`、`apps/worker`、`packages/core`、`packages/platform` 的 README 与 design，`configs/nexus.example.toml`。
 
 ### 范围外
 
 - 不引入独立任务队列（asynq / Celery）：Outbox 行锁加租约已满足；领取频率与 Run 数同阶，不是瓶颈（决定 8）。
-- 不做按模型并发限流（WeKnora 的 Redis 限流器），属于另一个议题。
 - 不采用 Postgres `LISTEN/NOTIFY`：它与 Redis 方案重叠，且 SQLite 不支持。`database` 后端已覆盖无 Redis 的场景。
 - 不改 Run 状态机、不改事件的持久语义；不需要数据库迁移。历史 `message.delta` 行保持可读。
 
@@ -63,7 +76,9 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
 5. **活动 Run 标记与 `GET /sessions/{id}/live-run`**：（推荐）采用。
 6. **Redis 作可选依赖**：（推荐）extra `redis`，`database` 后端不依赖它；备选：作为必选依赖。
 7. **SSE 改异步**：（推荐）采用；这会改动认证依赖和会话注入方式，需随同改造 `get_database_session` 在流式接口中的使用（流内按需短会话，不持有长连接）。
-8. **不引入独立队列、不做模型限流、不用 NOTIFY**：（推荐）如范围外所述；备选：另起提案。
+8. **不引入独立队列、不用 NOTIFY**：（推荐）如范围外所述；备选：另起提案。
+9. **嵌入模式**：（推荐）采用，默认仍为 `split`；备选：不提供，小规模部署同样起两个进程。
+10. **并发准入补强**：（推荐）每租户 / 用户上限默认不限，按模型限流默认关闭，均为显式开启才生效；备选：仅做全局上限（现状）。
 
 ## 验收
 
@@ -71,4 +86,6 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
 - 压测脚本（沿用 deer-flow `scripts/benchmark/concurrency` 的做法）：同样的 N 个流式 Run、M 个观看者下，对比三个后端的数据库 QPS、事务数、首字延迟；`redis` 后端流式期间每 Run 的数据库写入应只剩持久事件与心跳。
 - 杀掉 Redis、杀掉 worker、断开客户端各一次：Run 状态正确，客户端重连后文本完整。
 - 取消延迟：`redis` 后端下从请求到 worker 停止低于 1 秒。
+- 嵌入模式下单进程完成 Run 的全流程（提交、执行、流式、取消、审批、定时任务、知识索引），无 Redis；停止时优雅退出，不残留线程；多个用户同时流式互不影响。
+- 并发准入：超出每用户 / 每租户上限时返回稳定错误码或排队；按模型限流只让后台任务延后，交互式 Run 不被后台任务饿死。
 - 既有 Run、事件、SSE 测试保持通过。

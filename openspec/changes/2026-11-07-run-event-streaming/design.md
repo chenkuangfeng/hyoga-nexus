@@ -111,3 +111,24 @@ async def stream(run, after_sequence):
 | 订阅者落后 | `StreamGap`，补读数据库，`stream.resync` |
 | 控制信号丢失 | 心跳回落读库，延迟退化为心跳周期，不丢取消 |
 | 过期 worker 继续发临时事件 | Lua 令牌比较失败，被拒绝；持久事件被数据库租约拒绝（不变） |
+
+## 9. 嵌入模式
+
+```text
+split（默认）：  apps/api ──► DB / Redis ◄── apps/worker           （现状 + 事件通道）
+embedded：       apps/api 进程
+                   ├─ FastAPI（事件循环）
+                   └─ WorkerThread：run_loop(stop_event) ── memory 事件通道（进程内）
+```
+
+- `nexus_worker.__main__` 拆为 `run_loop(factory, worker_id, stopped, ...)`（循环主体，不装信号）与 `run_worker(...)`（装信号并调用 `run_loop`）。`split` 行为不变。
+- API 的 lifespan：`mode == "embedded"` 时创建 `stop_event` 与守护线程运行 `run_loop`，退出时置位并等待（有超时）；线程内异常记录日志并按退避重启循环，不拖垮 API。
+- 事件通道在嵌入模式固定为 `memory`；`[run_events].backend` 与 `[deployment].mode` 冲突（如 `embedded` + `redis` 允许，作为可选加速；`split` + `memory` 报错）在启动时校验。
+- 后台作业并发受 `background_concurrency` 限制；`run_once`（Run 执行）优先，后台 tick 仍只在无待处理 Run 时运行（现有逻辑不变）。
+- 线程安全核对项：SQLAlchemy 引擎（线程安全）、会话（每次工作新建，不跨线程）、模型 HTTP 连接池（`configure_connection_pool` 只在进程内初始化一次）、`install_embedder` 的单例、`_worker_loop()` 的独立事件循环。
+
+## 10. 并发准入补强
+
+- 现状：`session_ledger` 每会话 FIFO，`max_concurrent_sessions` 全局上限；占用槽位的状态为 `queued / started / unknown`。
+- 新增 `TenantQuota` 检查，在 `admission_repository` 提交流程中、全局上限之后执行：统计该租户 / 用户占用槽位的会话数，超限抛 `LedgerError` 子类（稳定错误码 `tenant_session_limit`、`user_session_limit`）。上限为空即不检查。
+- 按模型限流 `ModelLimiter`：`acquire(model_profile_id, kind)` 返回许可，`kind` 为 `interactive` 或 `background`；只对 `background` 阻塞（超出并发则任务保持未领取，下个 tick 重试），`interactive` 不阻塞但计数。许可带过期时间，worker 崩溃后自动回收。`redis` 后端用带 TTL 的计数键，其余后端用进程内计数。

@@ -3,9 +3,11 @@
 状态：待确认（2026-11-07）。已完成的任务才勾选。
 
 ## 0. 准备
-- [ ] 0.1 用户确认决定 1–8。
+- [ ] 0.1 用户确认决定 1–10。
 - [ ] 0.2 补读 deer-flow `stream_bridge/redis.py` 的 `subscribe`、围栏与清理，`runs/worker.py` 的发布与租约接入；WeKnora `redis_manager.go` 的 live-run 与 steer 部分。
 - [ ] 0.3 核对：助手消息是否在持久事件中携带完整文本（决定 2 的前提）；`message.delta` 的所有消费方；前端事件归并逻辑。
+- [ ] 0.5 核对嵌入模式的线程安全项（见设计 9），尤其 `run_worker` 的信号安装、引擎与嵌入器初始化顺序、`_worker_loop()`。
+- [ ] 0.6 补读 deer-flow `app/gateway/app.py` 的并发上限接入与 `scheduler`；WeKnora `registerModelConcurrencyLimiter` 与 `backgroundTaskMiddleware`。
 - [ ] 0.4 先更新文档：`docs/architecture.md`、`docs/roadmap.md`、`apps/api`、`apps/worker`、`packages/core`、`packages/platform` 的 design 与 README。
 
 ## 1. 契约与配置
@@ -33,7 +35,17 @@
 ## 5. 前端
 - [ ] 5.1 无 `id` 事件、`stream.resync`、`live-run` 接入；单元测试。
 
-## 6. 验证
-- [ ] 6.1 压测脚本与三后端对比数据记入 `docs`。
-- [ ] 6.2 故障注入：Redis、worker、客户端。
-- [ ] 6.3 全量 `pytest`、`pnpm build` 与浏览器测试。
+## 6. 嵌入模式
+- [ ] 6.1 `run_worker` 拆为 `run_loop` 与信号安装；`split` 行为用现有 worker 测试证明不变。
+- [ ] 6.2 `[deployment]` 配置、校验与冲突检查；API lifespan 启停 worker 线程，异常退避重启，优雅退出。
+- [ ] 6.3 嵌入模式端到端测试：提交、流式、取消、审批、定时任务、知识索引；多用户并发；停止后无残留线程。
+
+## 7. 并发准入
+- [ ] 7.1 每租户 / 用户上限与稳定错误码；默认不限，沿用账本规则与现有测试。
+- [ ] 7.2 `ModelLimiter` 与 `[model_limits]`；后台任务延后重试；`redis` 与进程内两种计数。
+- [ ] 7.3 测试：超限、崩溃后许可回收、交互式不被饿死。
+
+## 8. 验证
+- [ ] 8.1 压测脚本与三后端对比数据记入 `docs`。
+- [ ] 8.2 故障注入：Redis、worker、客户端。
+- [ ] 8.3 全量 `pytest`、`pnpm build` 与浏览器测试。
