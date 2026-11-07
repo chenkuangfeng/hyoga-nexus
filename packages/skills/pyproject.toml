@@ -5,6 +5,10 @@ build-backend = "hatchling.build"
 name = "hyoga-nexus-skills"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["hyoga-nexus-core", "jsonschema==4.26.0"]
+dependencies = [
+    "hyoga-nexus-core",
+    "jsonschema==4.26.0",
+    "pyyaml==6.0.3",
+]
 [tool.hatch.build.targets.wheel]
 packages = ["src/nexus_skills"]

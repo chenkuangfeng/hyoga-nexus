@@ -42,6 +42,9 @@ def api(database):
 
 def _stack(database):
     tenant, _, model_version, agent, version, session = create_agent_stack(database, OWNER)
+    with database() as db:  # builtin tools live in the system space, which the API registers at startup
+        from nexus_platform.system import ensure_system_resources
+        ensure_system_resources(db)
     with database() as db:
         add_member(db, OWNER, tenant.id, MEMBER, TenantRole.CONTRIBUTOR)
     return tenant.id, model_version, agent, version, session
@@ -116,11 +119,17 @@ def test_tool_catalog_lists_builtins_with_enablement(api, database):
     names = [tool["name"] for tool in body["tools"]]
     assert "todo" in names and "ask_user" in names
     todo = next(tool for tool in body["tools"] if tool["name"] == "todo")
-    assert todo["group"] == "base" and todo["enabled_in_tenant"] is False
+    # Builtin tools are assignable in every space without an enable step.
+    assert todo["group"] == "base" and todo["enabled_in_tenant"] is True and todo["builtin"] is True
+    assert todo["disabled"] is False
     assert body["can_enable_tools"] is True and body["groups"][0] == "base"
+    # The space may switch one off for itself; the old enable call lifts that again.
+    assert api.put(f"/api/v1/tenants/{tid}/builtin-disabled/tool/todo").status_code == 200
+    todo = next(t for t in api.get(f"/api/v1/tenants/{tid}/agent-tools").json()["tools"] if t["name"] == "todo")
+    assert todo["enabled_in_tenant"] is False and todo["disabled"] is True
     assert api.post(f"/api/v1/tenants/{tid}/tools/todo/enable").status_code == 201
     todo = next(t for t in api.get(f"/api/v1/tenants/{tid}/agent-tools").json()["tools"] if t["name"] == "todo")
-    assert todo["enabled_in_tenant"] is True
+    assert todo["enabled_in_tenant"] is True and todo["disabled"] is False
 
     api.as_(MEMBER)
     member_view = api.get(f"/api/v1/tenants/{tid}/agent-tools")

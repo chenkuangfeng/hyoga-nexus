@@ -44,3 +44,14 @@ def publish_skill(tenant_id: UUID, body: SkillPublishRequest, principal: Princip
                   db: Session = Depends(get_database_session)) -> dict[str, Any]:
     """Publish a new immutable version. Requires the tools-management permission (administrators)."""
     return skills.publish(db, principal, tenant_id, body.skill_md, body.files)
+
+
+@router.post("/platform/skills/import-builtin")
+def import_builtin_skills(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Import the repository's builtin skills into the system space (platform administrators only).
+
+    Builtin skills are assignable in every space. Unchanged folders are reported as ``unchanged``; changed ones
+    become a new version, and agent versions that bound an earlier version keep it.
+    """
+    from nexus_platform.configuration import builtin_skills_dir
+    return skills.import_builtin(db, principal, builtin_skills_dir())

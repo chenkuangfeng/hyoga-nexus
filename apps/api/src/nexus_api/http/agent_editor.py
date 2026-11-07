@@ -38,11 +38,15 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
                 db: Session = Depends(get_database_session)):
     """Return the builtin tools an agent may bind, with the space's enablement state.
 
-    Any member may read the catalog; non-members get 404. ``enabled_in_tenant`` reflects the space's
-    active tool resources (``POST .../tools/{name}/enable``). ``default_tools`` is the caller's Native
-    preference for new agents. Listing a tool grants nothing: binding and per-call checks still apply.
+    Any member may read the catalog; non-members get 404. Builtin tools are registered under the system space
+    and assignable in every space, so ``enabled_in_tenant`` is true for all of them unless the space switched one
+    off (``disabled``) — "enabled" here means assignable, not that an agent uses it. A tool the space registered
+    itself also counts. ``builtin`` marks tools that come from the system space. ``default_tools`` is the caller's
+    Native preference for new agents. Listing a tool grants nothing: binding and per-call checks still apply.
     """
+    from nexus_core.platform import SYSTEM_TENANT_ID
     from nexus_tools.builtins.catalog import GROUP_ORDER, builtin_catalog, group_catalog
+    from nexus_platform.system import disabled_builtins
     from nexus_platform.runs.tool_gates import deployment_gate_facts, unavailable_groups
     from nexus_platform.runs.settings import view as native_preferences
     with db.begin():
@@ -52,9 +56,15 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
         enabled = set(db.scalars(select(PlatformResourceRecord.resource_id).where(
             PlatformResourceRecord.tenant_id == tenant_id, PlatformResourceRecord.kind == "tool",
             PlatformResourceRecord.version_id == "v1", PlatformResourceRecord.active.is_(True))))
+        builtin = set(db.scalars(select(PlatformResourceRecord.resource_id).where(
+            PlatformResourceRecord.tenant_id == SYSTEM_TENANT_ID, PlatformResourceRecord.kind == "tool",
+            PlatformResourceRecord.version_id == "v1", PlatformResourceRecord.active.is_(True))))
+        off = {resource_id for kind, resource_id in disabled_builtins(db, tenant_id) if kind == "tool"}
+        enabled = enabled | (builtin - off)
         default_tools = list(native_preferences(db, user.id, tenant_id)["settings"]["behavior"]["enabled_tools"])
     return {
-        "tools": [asdict(entry) | {"enabled_in_tenant": entry.name in enabled} for entry in builtin_catalog()],
+        "tools": [asdict(entry) | {"enabled_in_tenant": entry.name in enabled, "builtin": entry.name in builtin,
+                                   "disabled": entry.name in off} for entry in builtin_catalog()],
         "groups": list(GROUP_ORDER),
         # Per-group switch metadata for the editor: `available` is the deployment-side layer (sandbox accepted,
         # search backend configured...), `reason` its stable code; `default_enabled` is the agent-side default.

@@ -12,7 +12,7 @@ from .model import (
     ModelDefaultRecord,
 )
 from .agent import AgentRecord, AgentVersionRecord, ResourceBindingRecord, AgentDraftBindingRecord
-from .resource import PlatformResourceRecord, ResourceGrantRecord
+from .resource import PlatformResourceRecord, ResourceGrantRecord, TenantBuiltinDisabledRecord
 from .session import SessionRecord, MessageRecord, RuntimeSessionBindingRecord
 from .run import RunRecord, NativeRunStateRecord, RunDirectiveRecord, NativePreferenceRecord
 from .event import RunEventRecord
@@ -39,6 +39,7 @@ from .memory import (
     ContextSummaryRecord,
 )
 from .skill import SkillRecord, SkillVersionRecord, SkillVersionFileRecord, SessionSkillSnapshotRecord
+from .schedule import CronJobRecord
 from .approval import InputRequestRecord, ActionApprovalRecord, ActionGrantRecord
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
@@ -107,6 +108,8 @@ __all__ = [
     'AgentDraftBindingRecord',
     'PlatformResourceRecord',
     'ResourceGrantRecord',
+    'CronJobRecord',
+    'TenantBuiltinDisabledRecord',
     'SessionRecord',
     'MessageRecord',
     'RuntimeSessionBindingRecord',

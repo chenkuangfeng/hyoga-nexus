@@ -2,6 +2,7 @@
 
     uv run python -m nexus_api.cli create-owner --tenant "公司名" --username alice
     uv run python -m nexus_api.cli set-platform-admin --username alice
+    uv run python -m nexus_api.cli import-builtin-skills
 
 The password is read with a hidden prompt and never accepted as an argument or environment value.
 """
@@ -28,7 +29,25 @@ def main(argv: list[str] | None = None) -> int:
     admin = commands.add_parser("set-platform-admin", help="grant or revoke the platform admin flag")
     admin.add_argument("--username", required=True)
     admin.add_argument("--revoke", action="store_true")
+    builtin = commands.add_parser("import-builtin-skills",
+                                  help="publish the repository's builtin skills into the system space")
+    builtin.add_argument("--dir", default=None, help="skills folder (default: [skills].builtin_dir, then ./skills)")
     args = parser.parse_args(argv)
+    if args.command == "import-builtin-skills":
+        from pathlib import Path
+        from nexus_core.platform import SYSTEM_USER_ID
+        from nexus_platform.configuration import builtin_skills_dir
+        from nexus_platform.skills.service import import_builtin_as
+        root = Path(args.dir) if args.dir else builtin_skills_dir()
+        engine = create_database_engine()
+        try:
+            with session_factory(engine)() as db:
+                results = import_builtin_as(db, SYSTEM_USER_ID, root)
+        finally:
+            engine.dispose()
+        for item in results:
+            print(f"{item['status']:<10} {item['folder']}" + (f"  {item['error']}" if item.get('error') else ""))
+        return 1 if any(item["status"] == "failed" for item in results) else 0
     if args.command == "set-platform-admin":
         engine = create_database_engine()
         try:

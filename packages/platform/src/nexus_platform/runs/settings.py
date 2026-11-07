@@ -84,8 +84,17 @@ def view(db, user_id, tenant_id) -> dict:
     from sqlalchemy import select
     enabled = set(db.scalars(select(PlatformResourceRecord.resource_id).where(PlatformResourceRecord.tenant_id == tenant_id, PlatformResourceRecord.kind == 'tool', PlatformResourceRecord.version_id == 'v1', PlatformResourceRecord.active.is_(True))))
     membership = require_membership(db, tenant_id, user_id)
+    # Builtin tools are registered under the system space and are assignable in every space; a space may switch one off.
+    from nexus_core.platform import SYSTEM_TENANT_ID
+    from nexus_platform.system import disabled_builtins
+    builtin = set(db.scalars(select(PlatformResourceRecord.resource_id).where(
+        PlatformResourceRecord.tenant_id == SYSTEM_TENANT_ID, PlatformResourceRecord.kind == 'tool',
+        PlatformResourceRecord.version_id == 'v1', PlatformResourceRecord.active.is_(True))))
+    off = {resource_id for kind, resource_id in disabled_builtins(db, tenant_id) if kind == 'tool'}
+    enabled = enabled | (builtin - off)
     return {'version': row.version if row else 0, 'settings': settings, 'fields': schema,
-            'available_tools': [{'id': name, 'label': name, 'enabled': name in enabled} for name in BUILTIN_TOOL_NAMES],
+            'available_tools': [{'id': name, 'label': name, 'enabled': name in enabled,
+                                 'builtin': name in builtin, 'disabled': name in off} for name in BUILTIN_TOOL_NAMES],
             'can_enable_tools': membership.role in ADMIN_ROLES}
 
 

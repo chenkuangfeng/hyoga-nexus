@@ -43,6 +43,26 @@ def ensure_default_space() -> None:
         engine.dispose()
 
 
+def ensure_system_space() -> None:
+    """Create the system space and register builtin tools under it. Never stops the API from starting."""
+    try:
+        engine = create_database_engine()
+    except DatabaseConfigurationError as exc:
+        logger.warning("System space bootstrap skipped: %s", exc)
+        return
+    try:
+        from nexus_platform.system import ensure_system_resources
+        with session_factory(engine)() as db:
+            created = ensure_system_resources(db)
+        logger.info("System space ready; newly registered builtin tools: %s", created)
+    except SQLAlchemyError as exc:
+        logger.warning("System space bootstrap skipped; apply migrations first: %s", exc)
+    except Exception:
+        logger.exception("System space bootstrap failed")
+    finally:
+        engine.dispose()
+
+
 def install_knowledge_embedder() -> None:
     """Let the retrieval test embed queries with the searcher's own key (openspec 2026-11-06-knowledge-base)."""
     from nexus_platform.knowledge.embedding import set_embedder_factory
@@ -56,6 +76,7 @@ def install_knowledge_embedder() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_default_space()
+    ensure_system_space()
     install_knowledge_embedder()
     yield
 

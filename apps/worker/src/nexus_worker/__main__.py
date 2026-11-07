@@ -79,6 +79,13 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
                               keepalive_expiry=pool.keepalive_expiry_seconds)
     engine = create_database_engine(database_url)
     factory = session_factory(engine)
+    try:
+        # Builtin tools live under the system space; register any added since the last start.
+        from nexus_platform.system import ensure_system_resources
+        with factory() as session:
+            ensure_system_resources(session)
+    except Exception:
+        logger.exception("System space sync failed; builtin tools may be unavailable until it succeeds")
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     install_embedder()
     knowledge_index.install_embedder()

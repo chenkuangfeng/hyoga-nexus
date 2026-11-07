@@ -17,11 +17,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from nexus_core.native import BUILTIN_TOOL_NAMES
-from nexus_core.platform import Principal, new_id, utc_now
+from nexus_core.platform import SYSTEM_TENANT_ID, Principal, new_id, utc_now
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.authz.resources import authorize_resource
-from nexus_platform.errors import Conflict, InvalidConfiguration, NotFound, PlatformError
+from nexus_platform.errors import Conflict, Forbidden, InvalidConfiguration, NotFound, PlatformError
 from nexus_platform.models.provider_settings import context
 from nexus_platform.persistence.models import (
     PlatformResourceRecord, ResourceBindingRecord, SessionSkillSnapshotRecord, SkillRecord,
@@ -55,60 +55,69 @@ def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 @_translate
 def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, files: dict[str, str],
-            *, source: str = 'installed') -> dict[str, Any]:
-    """Publish a new immutable version of an installed skill; creates the skill on first publish.
+            *, source: str = 'admin') -> dict[str, Any]:
+    """Publish a new immutable version of a space skill; creates the skill on first publish.
 
     Checks, in order: administrator permission, SKILL.md rules, resource rules, declared scripts
-    present, dependency tools known, a source conflict with builtin skills, and a change in content
-    since the last version. The version is registered as a platform resource so bindings can name it.
+    present, dependency tools known, a name already taken by a builtin skill, a source conflict, and a change
+    in content since the last version. The version is registered as a platform resource so bindings can name it.
     """
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         require_api_permission(db, tenant_id, user.id, PUBLISH_PERMISSION)
-        parsed = parse_skill(skill_md)
-        clean = check_files(files)
-        missing = check_declared_scripts(parsed, clean)
-        if missing:
-            raise InvalidConfiguration(missing[0])
-        unknown = [tool for tool in parsed.tools if tool not in AVAILABLE_TOOL_NAMES]
-        if unknown:
-            raise InvalidConfiguration(f'skill_tool_unknown:{unknown[0]}')
-        digest = content_hash(skill_md, clean)
-        now = utc_now()
-        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name))
-        if skill is None:
-            skill = SkillRecord(id=new_id(), tenant_id=tenant_id, name=parsed.name, source=source,
-                                created_by=user.id, created_at=now)
-            db.add(skill)
-            db.flush()
-            number = 1
-        else:
-            if skill.source != source:
-                raise InvalidConfiguration('skill_source_conflict')
-            latest = db.scalar(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
-                               .order_by(SkillVersionRecord.version.desc()).limit(1))
-            if latest is not None and latest.content_hash == digest:
-                raise Conflict('skill_version_unchanged')
-            number = (latest.version if latest else 0) + 1
-        hints = [{'category': h.category, 'path': h.path, 'line': h.line} for h in static_hints(clean)]
-        version = SkillVersionRecord(
-            id=new_id(), skill_id=skill.id, tenant_id=tenant_id, version=number, description=parsed.description,
-            skill_md=skill_md, body=parsed.body, tools=list(parsed.tools),
-            scripts=[{'name': s.name, 'path': s.path, 'interpreter': s.interpreter, 'timeout': s.timeout,
-                      'args': s.args, 'risk_level': s.risk_level} for s in parsed.scripts],
-            scan_hints=hints, content_hash=digest, created_by=user.id, created_at=now,
-        )
-        db.add(version)
+        return _publish_version(db, tenant_id, user.id, skill_md, files, source)
+
+
+def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str, files: dict[str, str],
+                     source: str) -> dict[str, Any]:
+    """Publish inside the caller's transaction; the caller has already authorized the actor."""
+    parsed = parse_skill(skill_md)
+    clean = check_files(files)
+    missing = check_declared_scripts(parsed, clean)
+    if missing:
+        raise InvalidConfiguration(missing[0])
+    unknown = [tool for tool in parsed.tools if tool not in AVAILABLE_TOOL_NAMES]
+    if unknown:
+        raise InvalidConfiguration(f'skill_tool_unknown:{unknown[0]}')
+    if tenant_id != SYSTEM_TENANT_ID and db.scalar(select(SkillRecord.id).where(
+            SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == parsed.name).limit(1)) is not None:
+        raise InvalidConfiguration('skill_name_taken_by_builtin')
+    digest = content_hash(skill_md, clean)
+    now = utc_now()
+    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name))
+    if skill is None:
+        skill = SkillRecord(id=new_id(), tenant_id=tenant_id, name=parsed.name, source=source,
+                            created_by=user_id, created_at=now)
+        db.add(skill)
         db.flush()
-        for path, content in clean.items():
-            db.add(SkillVersionFileRecord(version_id=version.id, path=path, content=content))
-        db.add(PlatformResourceRecord(id=new_id(), tenant_id=tenant_id, kind=RESOURCE_KIND, resource_id=parsed.name,
-                                      version_id=str(version.id), active=True, created_at=now))
-        skill.current_version_id = version.id
-        audit(db, tenant_id, user.id, 'skill.published', 'skill', str(skill.id),
-              {'name': parsed.name, 'version': number, 'content_hash': digest, 'scan_hint_count': len(hints)})
-        return {'skill': parsed.name, 'version': number, 'version_id': str(version.id), 'content_hash': digest,
-                'scan_hints': hints}
+        number = 1
+    else:
+        if skill.source != source:
+            raise InvalidConfiguration('skill_source_conflict')
+        latest = db.scalar(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
+                           .order_by(SkillVersionRecord.version.desc()).limit(1))
+        if latest is not None and latest.content_hash == digest:
+            raise Conflict('skill_version_unchanged')
+        number = (latest.version if latest else 0) + 1
+    hints = [{'category': h.category, 'path': h.path, 'line': h.line} for h in static_hints(clean)]
+    version = SkillVersionRecord(
+        id=new_id(), skill_id=skill.id, tenant_id=tenant_id, version=number, description=parsed.description,
+        skill_md=skill_md, body=parsed.body, tools=list(parsed.tools),
+        scripts=[{'name': s.name, 'path': s.path, 'interpreter': s.interpreter, 'timeout': s.timeout,
+                  'args': s.args, 'risk_level': s.risk_level} for s in parsed.scripts],
+        scan_hints=hints, trust=source, content_hash=digest, created_by=user_id, created_at=now,
+    )
+    db.add(version)
+    db.flush()
+    for path, content in clean.items():
+        db.add(SkillVersionFileRecord(version_id=version.id, path=path, content=content))
+    db.add(PlatformResourceRecord(id=new_id(), tenant_id=tenant_id, kind=RESOURCE_KIND, resource_id=parsed.name,
+                                  version_id=str(version.id), active=True, created_at=now))
+    skill.current_version_id = version.id
+    audit(db, tenant_id, user_id, 'skill.published', 'skill', str(skill.id),
+          {'name': parsed.name, 'version': number, 'content_hash': digest, 'scan_hint_count': len(hints)})
+    return {'skill': parsed.name, 'version': number, 'version_id': str(version.id), 'content_hash': digest,
+            'scan_hints': hints}
 
 
 def _live(db: Session, tenant_id: UUID, name: str, version: SkillVersionRecord) -> bool:
@@ -166,7 +175,7 @@ def read_for_run(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
     if version is None:
         raise NotFound('skill_unavailable')
     try:
-        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=tenant_id,
+        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
                            resource_version_id=str(version.id), permission='use')
     except PlatformError:
         raise NotFound('skill_unavailable') from None
@@ -212,7 +221,7 @@ def prepare_script(db: Session, tenant_id: UUID, agent_version_id: UUID, name: s
     if spec is None:
         raise NotFound('skill_script_unavailable')
     try:
-        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=tenant_id,
+        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
                            resource_version_id=str(version.id), permission='use')
     except PlatformError:
         raise NotFound('skill_unavailable') from None
@@ -238,19 +247,31 @@ LOCAL_BACKEND = 'local'
 
 
 def list_skills(db: Session, principal: Principal, tenant_id: UUID) -> list[dict[str, Any]]:
-    """Skills of the Tenant with their newest version number. Any active member may read the list."""
+    """Skills of the space plus the builtin skills, which every space can see and assign.
+
+    Builtin entries carry ``scope = 'builtin'`` and ``disabled`` (the space switched them off: still listed so an
+    administrator can switch them back on, but not assignable). Any active member may read the list.
+    """
     context(db, principal, tenant_id)
+    from nexus_platform.system import disabled_builtins
+    off = disabled_builtins(db, tenant_id)
     rows = db.execute(select(SkillRecord, SkillVersionRecord).outerjoin(
         SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
-        .where(SkillRecord.tenant_id == tenant_id).order_by(SkillRecord.name)).all()
+        .where(SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID))).order_by(SkillRecord.name)).all()
     return [{'name': skill.name, 'source': skill.source, 'version': version.version if version else None,
-             'description': version.description if version else ''} for skill, version in rows]
+             'description': version.description if version else '',
+             'scope': 'builtin' if skill.tenant_id == SYSTEM_TENANT_ID else 'space',
+             'source_tenant_id': str(skill.tenant_id),
+             'disabled': skill.tenant_id == SYSTEM_TENANT_ID and ('skill', skill.name) in off}
+            for skill, version in rows]
 
 
 def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str) -> list[dict[str, Any]]:
     """Version history of one skill: metadata, hashes and advisory hints. Bodies and files are not returned."""
     context(db, principal, tenant_id)
     skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+    if skill is None:
+        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == name))
     if skill is None:
         raise NotFound('skill_not_found')
     versions = db.scalars(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
@@ -277,26 +298,43 @@ def read_skill_folder(folder: Path) -> tuple[str, dict[str, str]]:
     return skill_md, files
 
 
-def import_builtin(db: Session, principal: Principal, tenant_id: UUID, root: Path) -> list[dict[str, Any]]:
-    """Publish every skill folder under ``root`` (a folder holding SKILL.md) with the builtin source.
+def import_builtin(db: Session, principal: Principal, root: Path) -> list[dict[str, Any]]:
+    """Publish every skill folder under ``root`` (a folder holding SKILL.md) as a builtin skill of the system space.
 
-    Folders whose content matches the current version are reported as ``unchanged`` instead of failing,
-    so the import can be run again after each repository update. Each folder is published in its own
-    transaction, so one bad folder does not roll back the others; its error code is reported.
+    Only platform administrators may import. Builtin skills are assignable in every space. Folders whose content
+    matches the current version are reported as ``unchanged`` instead of failing, so the import can be run again
+    after each repository update; changed content becomes a new version, and agent versions that bound an earlier
+    version keep it. Each folder is published in its own transaction, so one bad folder does not roll back the
+    others; its error code is reported.
     """
+    from nexus_platform.identity.service import resolve_user
+    with db.begin():
+        user = resolve_user(db, principal)
+        if not user.is_platform_admin:
+            raise Forbidden('platform_admin_required')
+        admin_id = user.id
+    return import_builtin_as(db, admin_id, root)
+
+
+def import_builtin_as(db: Session, actor_id: UUID, root: Path) -> list[dict[str, Any]]:
+    """The import itself, for callers that have already authorized the actor (the operator command, tests)."""
+    from nexus_platform.system import ensure_system_tenant
+    with db.begin():
+        ensure_system_tenant(db)
+    admin_id = actor_id
     results: list[dict[str, Any]] = []
     for skill_file in sorted(root.rglob('SKILL.md')):
         folder = skill_file.parent
         if folder.name in _SKIP_NAMES:
             continue
+        label = folder.relative_to(root).as_posix()
         try:
             skill_md, files = read_skill_folder(folder)
-            outcome = publish(db, principal, tenant_id, skill_md, files, source=BUILTIN_SOURCE)
-            results.append({'folder': folder.relative_to(root).as_posix(), 'status': 'published', **outcome})
+            with db.begin():
+                outcome = _publish_version(db, SYSTEM_TENANT_ID, admin_id, skill_md, files, BUILTIN_SOURCE)
+            results.append({'folder': label, 'status': 'published', **outcome})
         except Conflict as exc:
-            db.rollback()
-            results.append({'folder': folder.relative_to(root).as_posix(), 'status': 'unchanged', 'error': str(exc)})
-        except (PlatformError, UnicodeDecodeError, OSError) as exc:
-            db.rollback()
-            results.append({'folder': folder.relative_to(root).as_posix(), 'status': 'failed', 'error': str(exc)})
+            results.append({'folder': label, 'status': 'unchanged', 'error': str(exc)})
+        except (PlatformError, SkillFormatError, SkillFileError, UnicodeDecodeError, OSError) as exc:
+            results.append({'folder': label, 'status': 'failed', 'error': str(exc)})
     return results

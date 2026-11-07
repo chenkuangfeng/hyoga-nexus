@@ -275,6 +275,14 @@ def skill_scripts_allowed(path: Path | None = None) -> bool:
     return value
 
 
+def builtin_skills_dir(path: Path | None = None) -> Path:
+    """Return ``[skills].builtin_dir``: the repository folder whose skills become builtin skills. Default ``skills``."""
+    value = section("skills", path).get("builtin_dir", "skills")
+    if not isinstance(value, str) or not value.strip():
+        raise DatabaseConfigurationError(f"{_FILE} [skills].builtin_dir must be a non-empty path")
+    return Path(value)
+
+
 def skill_scripts_gate(*, auth_mode: str | None, backend: str | None, config_enabled: bool) -> bool:
     """Return True only when all proposal conditions hold: config flag, development auth mode, local backend.
 

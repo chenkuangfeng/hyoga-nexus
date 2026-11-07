@@ -66,7 +66,8 @@ def list_all_tenants(session: Session, principal: Principal) -> list[TenantRecor
         if not user.is_platform_admin:
             raise Forbidden("Platform administrator required")
         return list(session.scalars(
-            select(TenantRecord).where(TenantRecord.status == "active").order_by(TenantRecord.created_at)))
+            select(TenantRecord).where(TenantRecord.status == "active", TenantRecord.kind != "system")
+            .order_by(TenantRecord.created_at)))
 
 
 def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRecord, str]]:

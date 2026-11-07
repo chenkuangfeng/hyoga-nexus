@@ -24,6 +24,16 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: Reserved space that owns builtin skills and tools (openspec 2026-11-07-skill-evolution). It has no members,
+#: cannot be signed in to and never appears in a space list; resources registered under it are usable from every
+#: space, personal spaces included, without a grant.
+SYSTEM_TENANT_ID = UUID("00000000-0000-7000-8000-000000000001")
+#: Account that owns the system space (``created_by``). It has no identity or credential, so nobody can sign in as it.
+SYSTEM_USER_ID = UUID("00000000-0000-7000-8000-000000000002")
+#: Resource kinds that are effective in every space once registered under the system space.
+GLOBAL_BUILTIN_KINDS = frozenset({"skill", "tool"})
+
+
 class TenantRole(StrEnum):
     OWNER = "owner"
     ADMIN = "admin"

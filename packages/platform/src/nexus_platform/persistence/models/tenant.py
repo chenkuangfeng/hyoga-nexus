@@ -11,7 +11,7 @@ class TenantRecord(Base):
     __tablename__ = "tenants"
     __table_args__ = (
         CheckConstraint("status IN ('active', 'archived')", name="ck_tenants_status"),
-        CheckConstraint("kind IN ('personal', 'enterprise')", name="ck_tenants_kind"),
+        CheckConstraint("kind IN ('personal', 'enterprise', 'system')", name="ck_tenants_kind"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)

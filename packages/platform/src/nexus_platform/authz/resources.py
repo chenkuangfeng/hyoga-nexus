@@ -6,11 +6,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from nexus_core.platform import Principal, new_id, utc_now
+from nexus_core.platform import GLOBAL_BUILTIN_KINDS, SYSTEM_TENANT_ID, Principal, new_id, utc_now
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
-from nexus_platform.persistence.models import PlatformResourceRecord, ResourceGrantRecord
+from nexus_platform.persistence.models import PlatformResourceRecord, ResourceGrantRecord, TenantBuiltinDisabledRecord
 from nexus_platform.tenants.service import ADMIN_ROLES
 
 
@@ -155,7 +155,14 @@ def authorize_resource(
     resource_version_id: str | None = None,
     permission: str = "use",
 ) -> PlatformResourceRecord:
-    """Recheck resource status and current grant at the actual operation boundary."""
+    """Recheck resource status and current grant at the actual operation boundary.
+
+    Builtin skills and tools (kinds in ``GLOBAL_BUILTIN_KINDS``) are registered under the system space and need no
+    grant: every space may use them unless it has switched the resource off. A space-owned registration of the
+    same name takes precedence, so bindings made before the system space existed keep working.
+    """
+    if kind in GLOBAL_BUILTIN_KINDS and source_tenant_id == SYSTEM_TENANT_ID:
+        return _builtin_resource(session, tenant_id, kind, resource_id, resource_version_id)
     if source_tenant_id is None or source_tenant_id == tenant_id:
         direct = session.scalar(
             select(PlatformResourceRecord).where(
@@ -168,6 +175,10 @@ def authorize_resource(
         )
         if direct is not None:
             return direct
+        if kind in GLOBAL_BUILTIN_KINDS:
+            builtin = _find_builtin(session, kind, resource_id, resource_version_id)
+            if builtin is not None:
+                return _builtin_resource(session, tenant_id, kind, resource_id, resource_version_id)
     shared = session.execute(
         select(PlatformResourceRecord, ResourceGrantRecord)
         .join(ResourceGrantRecord, ResourceGrantRecord.source_tenant_id == PlatformResourceRecord.tenant_id)
@@ -187,3 +198,26 @@ def authorize_resource(
     if shared is None:
         raise Forbidden("Resource is unavailable or its grant was revoked")
     return shared[0]
+
+
+def _find_builtin(session: Session, kind: str, resource_id: str, version_id: str | None) -> PlatformResourceRecord | None:
+    return session.scalar(
+        select(PlatformResourceRecord).where(
+            PlatformResourceRecord.tenant_id == SYSTEM_TENANT_ID,
+            PlatformResourceRecord.kind == kind,
+            PlatformResourceRecord.resource_id == resource_id,
+            PlatformResourceRecord.version_id == (version_id or ""),
+            PlatformResourceRecord.active.is_(True),
+        )
+    )
+
+
+def _builtin_resource(session: Session, tenant_id: UUID, kind: str, resource_id: str,
+                      version_id: str | None) -> PlatformResourceRecord:
+    """The builtin registration, or Forbidden when it is missing, revoked or switched off in this space."""
+    row = _find_builtin(session, kind, resource_id, version_id)
+    if row is None:
+        raise Forbidden("Resource is unavailable or its grant was revoked")
+    if session.get(TenantBuiltinDisabledRecord, (tenant_id, kind, resource_id)) is not None:
+        raise Forbidden("Resource is disabled in this space")
+    return row

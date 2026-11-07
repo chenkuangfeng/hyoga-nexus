@@ -725,8 +725,16 @@ def memory_drafts(tenant_id: UUID, run_id: UUID, principal: Principal = Depends(
 @router.post('/tenants/{tenant_id}/tools/{name}/enable', status_code=201)
 def enable_builtin(tenant_id: UUID, name: str, principal: Principal = Depends(get_principal),
                    db: Session = Depends(get_database_session)):
+    """Offer a builtin tool in this space (kept for existing clients).
+
+    Builtin tools are registered under the system space and assignable in every space without this call; it now
+    only lifts a switch-off the space made earlier and returns the registration an agent binds.
+    """
+    from nexus_core.platform import SYSTEM_TENANT_ID
     from nexus_tools.builtins import builtins
     from nexus_platform.errors import NotFound
+    from nexus_platform.persistence.models import TenantBuiltinDisabledRecord
+    from nexus_platform.system import ensure_system_tenant, sync_builtin_tools
     tool = builtins().get(name, 'v1')
     if not tool:
         raise NotFound('Tool not found')
@@ -735,6 +743,34 @@ def enable_builtin(tenant_id: UUID, name: str, principal: Principal = Depends(ge
         require_tenant(db, tenant_id)
         require_membership(db, tenant_id, user.id)
         require_api_permission(db, tenant_id, user.id, "tools:manage")
-        authz.register_resource(db, tenant_id=tenant_id, kind='tool', resource_id=name, version_id='v1')
+        ensure_system_tenant(db)
+        sync_builtin_tools(db)
+        off = db.get(TenantBuiltinDisabledRecord, (tenant_id, 'tool', name))
+        if off is not None:
+            db.delete(off)
         audit(db, tenant_id, user.id, 'tool.enabled', 'tool', name)
-    return {'kind': 'tool', 'resource_id': name, 'resource_version_id': 'v1', 'source_tenant_id': tenant_id}
+    return {'kind': 'tool', 'resource_id': name, 'resource_version_id': 'v1', 'source_tenant_id': SYSTEM_TENANT_ID}
+
+
+@router.get('/tenants/{tenant_id}/builtin-disabled')
+def list_builtin_disabled(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                          db: Session = Depends(get_database_session)):
+    """Builtin skills and tools this space has switched off."""
+    from nexus_platform import system
+    return system.list_disabled(db, principal, tenant_id)
+
+
+@router.put('/tenants/{tenant_id}/builtin-disabled/{kind}/{resource_id}')
+def disable_builtin_resource(tenant_id: UUID, kind: str, resource_id: str, principal: Principal = Depends(get_principal),
+                             db: Session = Depends(get_database_session)):
+    """Stop offering one builtin skill or tool in this space (needs ``tools:manage``)."""
+    from nexus_platform import system
+    return system.disable_builtin(db, principal, tenant_id, kind, resource_id)
+
+
+@router.delete('/tenants/{tenant_id}/builtin-disabled/{kind}/{resource_id}')
+def enable_builtin_resource(tenant_id: UUID, kind: str, resource_id: str, principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)):
+    """Offer a switched-off builtin skill or tool in this space again."""
+    from nexus_platform import system
+    return system.enable_builtin_resource(db, principal, tenant_id, kind, resource_id)

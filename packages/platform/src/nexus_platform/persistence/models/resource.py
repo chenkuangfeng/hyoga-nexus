@@ -45,3 +45,19 @@ class ResourceGrantRecord(Base):
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TenantBuiltinDisabledRecord(Base):
+    """A builtin resource a space has turned off (openspec 2026-11-07-skill-evolution).
+
+    Builtin skills and tools are registered under the system space and are assignable in every space. A row here
+    removes one of them from this space only: it is hidden from the catalog, refused when an agent version is
+    published and denied at call time. Agent versions published earlier keep their bindings.
+    """
+    __tablename__ = "tenant_builtin_disabled"
+
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64), primary_key=True)
+    resource_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    disabled_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    disabled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

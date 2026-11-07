@@ -26,7 +26,8 @@ class SkillRecord(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    source: Mapped[str] = mapped_column(String(16), nullable=False, default="installed")
+    #: ``builtin`` / ``admin`` / ``import`` / ``agent`` / ``user`` (openspec 2026-11-07-skill-evolution).
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="admin")
     current_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -48,6 +49,14 @@ class SkillVersionRecord(Base):
     tools: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     scripts: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     scan_hints: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    #: Trust level of the source at publish time (``builtin`` / ``admin`` / ``import`` / ``agent`` / ``user``).
+    trust: Mapped[str] = mapped_column(String(16), nullable=False, default="admin", server_default="admin")
+    #: Version of the scanner that produced ``scan``; versions scanned by an older scanner are marked for rescan.
+    scan_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    #: Structured scanner result: ``{"verdict": "safe|caution|dangerous", "findings": [...]}``.
+    scan: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    #: Frontmatter keys this platform does not know, kept verbatim, plus parse notes such as ``frontmatter_repaired``.
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

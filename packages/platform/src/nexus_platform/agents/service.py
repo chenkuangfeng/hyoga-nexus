@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from nexus_core.platform import Principal, new_id, utc_now
+from nexus_core.platform import GLOBAL_BUILTIN_KINDS, SYSTEM_TENANT_ID, Principal, new_id, utc_now
 from nexus_platform.errors import Conflict, InvalidConfiguration, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models.service import clean_public_options, content_hash
@@ -19,6 +19,7 @@ from nexus_platform.persistence.models import (
     CredentialReferenceRecord,
     ModelProfileRecord,
     ModelProfileVersionRecord,
+    PlatformResourceRecord,
     ResourceBindingRecord,
 )
 from nexus_platform.agents.access import require_agent_permission
@@ -326,6 +327,7 @@ def replace_draft_bindings(session: Session, agent: AgentRecord, bindings: list[
         resource_id = str(raw["resource_id"]).strip()
         source_tenant_id = UUID(str(raw["source_tenant_id"]))
         version_id = str(raw.get("resource_version_id") or "")
+        source_tenant_id = builtin_source(session, kind, resource_id, version_id, source_tenant_id)
         key = (kind, resource_id, version_id, str(source_tenant_id))
         if key in seen:
             raise Conflict("Duplicate agent resource binding")
@@ -337,6 +339,29 @@ def replace_draft_bindings(session: Session, agent: AgentRecord, bindings: list[
                 binding_config=clean_public_options(raw.get("config", {}), "binding_config"),
             )
         )
+
+
+def builtin_source(session: Session, kind: str, resource_id: str, version_id: str, source_tenant_id: UUID) -> UUID:
+    """Point a binding of a builtin skill or tool at the system space.
+
+    Clients bind a resource with the current space as its source. A builtin resource is registered only under the
+    system space, and the binding's foreign key needs a registered resource, so a space that has no registration of
+    its own gets the system space as the source. A registration the space made itself (a tool enabled before the
+    system space existed) is left alone.
+    """
+    if kind not in GLOBAL_BUILTIN_KINDS or source_tenant_id == SYSTEM_TENANT_ID:
+        return source_tenant_id
+    own = session.scalar(select(PlatformResourceRecord.id).where(
+        PlatformResourceRecord.tenant_id == source_tenant_id, PlatformResourceRecord.kind == kind,
+        PlatformResourceRecord.resource_id == resource_id, PlatformResourceRecord.version_id == version_id,
+        PlatformResourceRecord.active.is_(True)).limit(1))
+    if own is not None:
+        return source_tenant_id
+    builtin = session.scalar(select(PlatformResourceRecord.id).where(
+        PlatformResourceRecord.tenant_id == SYSTEM_TENANT_ID, PlatformResourceRecord.kind == kind,
+        PlatformResourceRecord.resource_id == resource_id, PlatformResourceRecord.version_id == version_id,
+        PlatformResourceRecord.active.is_(True)).limit(1))
+    return SYSTEM_TENANT_ID if builtin is not None else source_tenant_id
 
 
 def check_skill_dependencies(session: Session, tenant_id: UUID, bindings: list[AgentDraftBindingRecord]) -> None:
