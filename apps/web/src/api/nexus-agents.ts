@@ -205,3 +205,65 @@ export async function listTenantSkills(tenantId: string, sandboxProfile?: string
 export async function getNativeDefaults(tenantId: string): Promise<NativeDefaults> {
   return get<NativeDefaults>(`${tenantPath(tenantId)}/native/settings`)
 }
+
+// ---- Skill installation (openspec 2026-11-07-skill-evolution, S3) ------------------------------------------
+
+/** Result of installing a skill. `build_state` is `installing` while its dependencies are being built. */
+export interface SkillInstallResult {
+  skill: string
+  version: number
+  version_id: string
+  verdict: string
+  findings: number
+  notes: string[]
+  binary_files: string[]
+  build_state: 'ready' | 'installing' | string
+}
+
+/** Build state of one skill version, polled while `installing`. */
+export interface SkillInstallStatus {
+  skill: string
+  version: number
+  build_state: 'installing' | 'ready' | 'failed' | string
+  build_error: string | null
+  build_log: string
+  env_ref: string | null
+}
+
+function skillPath(tenantId: string, name: string): string {
+  return `${tenantPath(tenantId)}/skills/${encodeURIComponent(name)}`
+}
+
+/** Install a skill from a zip (the raw request body). Administrators; `acknowledge` releases scan findings. */
+export async function uploadSkillBundle(tenantId: string, file: Blob, options: {
+  sandboxProfile?: string, acknowledge?: boolean } = {}): Promise<SkillInstallResult> {
+  const query = new URLSearchParams()
+  if (options.acknowledge) query.set('acknowledge_findings', 'true')
+  if (options.sandboxProfile) query.set('sandbox_profile', options.sandboxProfile)
+  const suffix = query.toString() ? `?${query}` : ''
+  const data: unknown = await post(`${tenantPath(tenantId)}/skills/upload${suffix}`, file,
+    { headers: { 'Content-Type': 'application/zip' }, timeout: 120_000 })
+  return data as SkillInstallResult
+}
+
+/** Ask the server to fetch a skill from a remote source. `confirm` must be true: the user has seen the address. */
+export async function installRemoteSkill(tenantId: string, source: string, options: {
+  confirm: boolean, acknowledge?: boolean }): Promise<SkillInstallResult> {
+  const data: unknown = await post(`${tenantPath(tenantId)}/skills/install-remote`, {
+    source, confirm: options.confirm, acknowledge_findings: !!options.acknowledge }, { timeout: 360_000 })
+  return data as SkillInstallResult
+}
+
+export async function getSkillInstallStatus(tenantId: string, name: string, version: number): Promise<SkillInstallStatus> {
+  const data: unknown = await get(`${skillPath(tenantId, name)}/versions/${version}/install`)
+  return data as SkillInstallStatus
+}
+
+export async function reinstallSkill(tenantId: string, name: string, version: number, sandboxProfile?: string): Promise<void> {
+  const query = sandboxProfile ? `?sandbox_profile=${encodeURIComponent(sandboxProfile)}` : ''
+  await post(`${skillPath(tenantId, name)}/versions/${version}/reinstall${query}`, {})
+}
+
+export async function stopSkillInstall(tenantId: string, name: string, version: number): Promise<void> {
+  await post(`${skillPath(tenantId, name)}/versions/${version}/stop-install`, {})
+}
