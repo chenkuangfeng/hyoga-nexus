@@ -94,7 +94,8 @@ def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, f
 
 def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str, files: dict[str, str],
                      source: str, *, acknowledged: bool = False,
-                     binary: dict[str, bytes] | None = None) -> dict[str, Any]:
+                     binary: dict[str, bytes] | None = None,
+                     origin: dict[str, str] | None = None) -> dict[str, Any]:
     """Publish inside the caller's transaction; the caller has already authorized the actor.
 
     ``binary`` holds the non-text files of a bundle; they live only in the version's zip and are projected into the
@@ -150,7 +151,7 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
                   'args': s.args, 'risk_level': s.risk_level} for s in parsed.scripts],
         scan_hints=hints, trust=source, scan_version=scan.version, scan=scan.as_dict(),
         model_invocable=parsed.model_invocable, user_invocable=parsed.user_invocable, execution=parsed.execution,
-        extra={'values': parsed.extra, 'notes': list(parsed.notes)},
+        extra={'values': parsed.extra, 'notes': list(parsed.notes), **({'origin': origin} if origin else {})},
         content_hash=digest, bundle=packed, bundle_sha256=skill_bundle.digest(packed),
         created_by=user_id, created_at=now,
     )
@@ -470,7 +471,7 @@ def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str
              'rescan_needed': v.scan_version < SCANNER_VERSION,
              'model_invocable': v.model_invocable, 'user_invocable': v.user_invocable, 'execution': v.execution,
              'notes': list((v.extra or {}).get('notes', [])), 'build_state': v.build_state,
-             'has_bundle': v.bundle is not None, 'created_at': v.created_at.isoformat()} for v in versions]
+             'has_bundle': v.bundle is not None, 'origin': (v.extra or {}).get('origin'), 'created_at': v.created_at.isoformat()} for v in versions]
 
 
 def rescan(db: Session, principal: Principal, tenant_id: UUID, name: str, version: int) -> dict[str, Any]:

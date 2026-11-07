@@ -14,5 +14,6 @@
 | `runtime/outcomes.py` | 执行结束结果 |
 | `native/policy.py` | 内置工具集合与 NativePolicy 配置验证 |
 | `native/hooks.py` | HookContext/HookTransform，共享消息与变换数据 |
+| `egress.py` | 受保护的出站下载：只允许公网地址、逐跳校验重定向、连接已校验的字面地址、字节与时间上限；`web_fetch` 与技能远程安装共用 |
 
 这次拆分保留原 DTO/Protocol 字段与方法，不增加供应商私有状态、ORM 或第二个执行循环。真正的协议请求构建、历史重放和上下文压缩由 runtimes 实现。

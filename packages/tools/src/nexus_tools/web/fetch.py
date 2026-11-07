@@ -1,6 +1,7 @@
 """Fetch a public web page for the model, with SSRF protection.
 
-Every hop (the first request and each redirect) is checked before anything is sent: the scheme and port are
+The checks and the download loop live in `nexus_core.egress` (shared with skill installation from a remote source):
+every hop (the first request and each redirect) is checked before anything is sent: the scheme and port are
 restricted, the host is resolved, and *every* resolved address must be globally routable (loopback, private,
 link-local, cloud-metadata and other special ranges are refused). The request then connects to the validated
 literal address while TLS still verifies the original host name, so a DNS answer that changes between check
@@ -10,14 +11,12 @@ with a byte limit. Page text is external data: callers mark it as such.
 """
 from __future__ import annotations
 
-import asyncio
-import ipaddress
-import socket
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlsplit
 
 import httpx
+
+from nexus_core import egress
 
 ALLOWED_PORTS = (80, 443, 8080, 8443)
 MAX_REDIRECTS = 5
@@ -40,51 +39,31 @@ class Page:
     truncated: bool
 
 
-async def default_resolver(host: str, port: int) -> list[str]:
-    """Addresses of `host`, bounded to five seconds."""
-    try:
-        results = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM), 5)
-    except (OSError, asyncio.TimeoutError):
-        raise WebError('web_unreachable', 'the host name could not be resolved') from None
-    return [item[4][0] for item in results]
+def _translate(exc: egress.EgressError) -> WebError:
+    return WebError(exc.code.replace('egress_', 'web_', 1), exc.detail)
+
+
+default_resolver = egress.default_resolver
 
 
 def check_url(url: str) -> tuple[str, str, int]:
     """(scheme, host, port) of an acceptable URL, or WebError. Does not touch the network."""
     try:
-        parsed = urlsplit(url)
-        port = parsed.port
-    except ValueError:
-        raise WebError('web_url_invalid') from None
-    if (parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password
-            or any(c.isspace() or ord(c) < 32 for c in url) or len(url) > 2048):
-        raise WebError('web_url_invalid', 'only http and https URLs without credentials are allowed')
-    port = port or (443 if parsed.scheme == 'https' else 80)
-    if port not in ALLOWED_PORTS:
-        raise WebError('web_destination_denied', f'port {port} is not allowed')
-    return parsed.scheme, parsed.hostname, port
+        return egress.check_url(url, ALLOWED_PORTS)
+    except egress.EgressError as exc:
+        raise _translate(exc) from None
 
 
 def _public(address: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(address.split('%')[0])
-    except ValueError:
-        return False
-    if ip.version == 6 and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-    return ip.is_global and not ip.is_multicast
+    return egress.is_public(address)
 
 
 async def validate_destination(host: str, port: int, resolver=default_resolver) -> str:
     """The address to connect to, after checking that every address the host resolves to is public."""
     try:
-        literal = [str(ipaddress.ip_address(host))]
-    except ValueError:
-        literal = None
-    addresses = literal or await resolver(host, port)
-    if not addresses or not all(_public(address) for address in addresses):
-        raise WebError('web_destination_denied', 'the address is not publicly routable')
-    return addresses[0]
+        return await egress.validate_destination(host, port, resolver)
+    except egress.EgressError as exc:
+        raise _translate(exc) from None
 
 
 class _Text(HTMLParser):
@@ -153,40 +132,13 @@ def extract(body: bytes, content_type: str) -> tuple[str, str]:
 async def fetch(url: str, *, max_bytes: int, timeout: float, resolver=default_resolver,
                 transport: httpx.AsyncBaseTransport | None = None) -> Page:
     """Fetch `url` (following up to five redirects) and return its readable text."""
-    async with httpx.AsyncClient(transport=transport or httpx.AsyncHTTPTransport(trust_env=False, retries=0),
-                                 follow_redirects=False, trust_env=False, timeout=timeout) as client:
-        current = url
-        for _ in range(MAX_REDIRECTS + 1):
-            scheme, host, port = check_url(current)
-            address = await validate_destination(host, port, resolver)
-            parsed = urlsplit(current)
-            netloc = f'[{address}]' if ':' in address else address
-            pinned = parsed._replace(netloc=netloc + (f':{parsed.port}' if parsed.port else '')).geturl()
-            request = client.build_request('GET', pinned, headers={
-                'Host': parsed.netloc.rpartition('@')[2], 'User-Agent': 'HyogaNexus-WebFetch/1.0',
-                'Accept': 'text/html,text/plain,application/json;q=0.9,*/*;q=0.1'},
-                extensions={'sni_hostname': host})
-            try:
-                response = await client.send(request, stream=True)
-            except httpx.TimeoutException:
-                raise WebError('web_timeout') from None
-            except httpx.HTTPError:
-                raise WebError('web_unreachable', 'the request failed') from None
-            try:
-                if response.status_code in (301, 302, 303, 307, 308) and response.headers.get('location'):
-                    current = urljoin(current, response.headers['location'])
-                    continue
-                if response.status_code >= 400:
-                    raise WebError('web_http_error', f'the server answered {response.status_code}')
-                body, truncated = bytearray(), False
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > max_bytes:
-                        del body[max_bytes:]
-                        truncated = True
-                        break
-                title, text = extract(bytes(body), response.headers.get('content-type', ''))
-                return Page(current, title, text, truncated)
-            finally:
-                await response.aclose()
-        raise WebError('web_too_many_redirects')
+    try:
+        got = await egress.download(
+            url, max_bytes=max_bytes, timeout=timeout, ports=ALLOWED_PORTS, resolver=resolver, transport=transport,
+            max_redirects=MAX_REDIRECTS,
+            headers={'User-Agent': 'HyogaNexus-WebFetch/1.0',
+                     'Accept': 'text/html,text/plain,application/json;q=0.9,*/*;q=0.1'})
+    except egress.EgressError as exc:
+        raise _translate(exc) from None
+    title, text = extract(got.body, got.headers.get('content-type', ''))
+    return Page(got.url, title, text, got.truncated)

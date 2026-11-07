@@ -143,6 +143,60 @@ def unpack(data: bytes, *, max_upload: int = MAX_UPLOAD_BYTES) -> Bundle:
                       ignored=tuple(ignored))
 
 
+def subtree(data: bytes, *, subdir: str = '', find_name: str = '', max_entry: int = MAX_ENTRY_BYTES) -> bytes:
+    """Cut one skill folder out of a repository archive and return it as a zip with SKILL.md at its root.
+
+    Repository archives (GitHub, GitLab) wrap everything in one generated folder and hold the whole repository, so
+    the entry limits are applied to the selected folder, not to the repository. ``subdir`` names the folder under
+    the wrapper; ``find_name`` finds the single folder with that name that holds a SKILL.md; with neither, the
+    wrapper folder (or the archive root) is the skill. The result is checked again by :func:`unpack`.
+    """
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except (zipfile.BadZipFile, EOFError, ValueError):
+        raise BundleError('bundle_invalid') from None
+    with archive:
+        infos = [info for info in archive.infolist() if not info.is_dir()]
+        if any(info.flag_bits & 0x1 for info in infos):
+            raise BundleError('bundle_encrypted')
+        names = [info.filename for info in infos]
+        tops = {name.split('/', 1)[0] for name in names if '/' in name}
+        wrapper = f'{next(iter(tops))}/' if len(tops) == 1 and all('/' in n for n in names) else ''
+        inner = [n[len(wrapper):] for n in names]
+        if find_name:
+            hits = [n[:-len('SKILL.md')] for n in inner if n.endswith('/SKILL.md') and n.split('/')[-2] == find_name]
+            if not hits:
+                raise BundleError('bundle_skill_not_found')
+            if len(hits) > 1:
+                raise BundleError('bundle_skill_ambiguous')
+            target = hits[0]
+        elif subdir:
+            target = subdir.strip('/') + '/'
+        else:
+            target = ''
+        selected = [(info, name[len(wrapper):][len(target):]) for info, name in zip(infos, names)
+                    if name[len(wrapper):].startswith(target)]
+        if not selected:
+            raise BundleError('bundle_skill_not_found')
+        if len(selected) > MAX_ENTRIES:
+            raise BundleError('bundle_too_many_entries')
+        out = io.BytesIO()
+        produced = 0
+        with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as target_zip:
+            for info, relative in selected:
+                if _is_link(info):
+                    raise BundleError('bundle_symlink')
+                if info.file_size > max_entry:
+                    raise BundleError('bundle_too_large_unpacked')
+                with archive.open(info) as handle:
+                    content = handle.read(max_entry + 1)
+                produced += len(content)
+                if len(content) > max_entry or produced > MAX_UNPACKED_BYTES:
+                    raise BundleError('bundle_too_large_unpacked')
+                target_zip.writestr(relative, content)
+        return out.getvalue()
+
+
 def pack(skill_md: str, text: dict[str, str], binary: dict[str, bytes] | None = None) -> bytes:
     """The canonical zip of a version: sorted entries, fixed timestamps and modes, so equal content is equal bytes."""
     entries: dict[str, bytes] = {'SKILL.md': skill_md.encode('utf-8')}

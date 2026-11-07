@@ -77,7 +77,8 @@
 - [ ] 3.6 （已完成：`nexus_skills.verify` 的 `.py`/`.sh`/`.bash`/`.js` 语法检查、解释器缺失只给 `note`、`requirements.txt` 格式校验与 `missing_distributions`，并已接入发布与上传；**未做**：在构建环境内核对清单包是否已装，随 3.5 完成。）验证关 `nexus_skills.verify`：可读；`.py` 用 `ast` 解析，`.sh` 用 `sh -n`，`.js` 用 `node --check`（解释器不存在时只给 `note`）；清单包已装；`note` 与 `problem` 分档；不推断 `import`。
 - [ ] 3.7 状态机与清理：`installing → ready | failed`、`reinstall` 复用已存 zip、停止；心跳；周期任务清理超时 `installing`、残留暂存目录与带标签容器、过期环境目录。
 - [ ] 3.8 （已完成：`POST /tenants/{id}/skills/upload` 原始 zip 请求体，流式限长 32 MB，管理员，走同一发布检查与发布策略；**未做**：构建状态与日志查询、前端上传与轮询。）上传入口：管理员上传 zip 接口（大小限制）；构建状态与日志查询；前端上传、状态轮询、失败原因展示。
-- [ ] 3.9 远程来源：五类来源解析与归一；出站校验抽到 `nexus_core` 并复用；跳转、超时、字节上限；GitHub 子目录裁剪；仅管理员与始终确认；来源 URL 与摘要记录；更新检查；测试覆盖内网地址、重定向到内网、超大响应、非法输入。
+- [x] 3.9 远程来源：五类来源解析与归一；出站校验抽到 `nexus_core` 并复用；跳转、超时、字节上限；GitHub 子目录裁剪；仅管理员与始终确认；来源 URL 与摘要记录；更新检查；测试覆盖内网地址、重定向到内网、超大响应、非法输入。
+  - `nexus_core.egress`（出站校验与逐跳下载，`web_fetch` 改为复用，原 45 项测试不变）；`nexus_skills.source` 五类来源解析；`bundle.subtree` 从仓库压缩包裁出目录（条目计数在裁剪后进行）；`nexus_platform.skills.remote`：`install-remote`（管理员、必须 `confirm`、权限检查先于任何联网）与 `check-update`（按内容哈希比较，不自动更新）；来源（类型、URL、引用、压缩包摘要）记在版本的 `extra.origin`，未新增列。测试覆盖内网地址、元数据地址、重定向到内网、重定向过多、超大响应、非法输入。**未联网验证** ClawHub 下载地址与 GitHub / GitLab 实际压缩包格式；前端入口随 3.8 的前端一起做。
 - [x] 3.10 导出：单个技能 zip 下载（权限：库按读权限，内置所有人，私有仅所有者）。
   - `GET /tenants/{id}/skills/{name}/bundle?version=`：本空间技能或内置技能，空间成员可导出；私有技能的所有者限制随 S4 加入。
 

@@ -78,6 +78,32 @@ async def upload_skill(tenant_id: UUID, request: Request, acknowledge_findings: 
     return skills.install_bundle(db, principal, tenant_id, b"".join(chunks), acknowledge_findings=acknowledge_findings)
 
 
+class RemoteInstallRequest(BaseModel):
+    """A remote source: ``https://github.com/o/r[/tree/ref/dir]``, ``github:o/r/dir@ref``, a GitLab project URL,
+    ``https://skills.sh/o/r/skill``, ``clawhub:slug[@version]`` or a direct https link to a zip."""
+    source: str = Field(min_length=1, max_length=500)
+    #: Must be true: the caller has shown the administrator what will be fetched by this server.
+    confirm: bool = False
+    acknowledge_findings: bool = False
+
+
+@router.post("/tenants/{tenant_id}/skills/install-remote", status_code=201)
+def install_remote_skill(tenant_id: UUID, body: RemoteInstallRequest, principal: Principal = Depends(get_principal),
+                         db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Fetch a skill from a remote source and install it as a new version. Administrators; always needs ``confirm``."""
+    from nexus_platform.skills import remote
+    return remote.install_remote(db, principal, tenant_id, body.source, confirm=body.confirm,
+                                 acknowledge_findings=body.acknowledge_findings)
+
+
+@router.post("/tenants/{tenant_id}/skills/{name}/check-update")
+def check_skill_update(tenant_id: UUID, name: str, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Look at the remote source an installed skill came from and say whether it changed. Applies nothing."""
+    from nexus_platform.skills import remote
+    return remote.check_update(db, principal, tenant_id, name)
+
+
 @router.get("/tenants/{tenant_id}/skills/{name}/bundle")
 def download_skill(tenant_id: UUID, name: str, version: int | None = Query(default=None, ge=1),
                    principal: Principal = Depends(get_principal),
