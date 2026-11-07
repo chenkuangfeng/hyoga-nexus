@@ -5,7 +5,7 @@ BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_d
                       'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script',
                       'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph', 'grep_chunks',
                       'document_outline', 'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
-                      'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'web_search', 'web_fetch', 'delegate_task')
+                      'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'web_search', 'web_fetch', 'delegate_task', 'vision_analyze')
 #: Tools of the `sandbox` group (openspec 2026-11-07-tool-expansion, section 4).
 SANDBOX_TOOL_NAMES = frozenset({'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                                 'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec'})
@@ -91,6 +91,8 @@ class NativePolicy:
     #: Progressive tool loading (R4): deferrable tools (MCP and tools that declare it) whose schemas together reach
     #: this many tokens are reached through tool_search / tool_describe / tool_call. 0 turns it off.
     tool_search_min_tokens: int = 6000
+    #: Model profile version used by `vision_analyze` (type vision). Empty: the tool reports that none is configured.
+    vision_model_profile_version_id: str = ''
     sandbox_exec_timeout_seconds: int = 30
     sandbox_output_limit: int = 20000
 
@@ -151,6 +153,12 @@ class NativePolicy:
                 raise ValueError(f'{name} must be a number between 0.1 and 1.0')
         if not self.compact_low_ratio < self.compact_high_ratio or self.compact_high_ratio < 0.5:
             raise ValueError('Compaction low ratio must be below high ratio, and high ratio at least 0.5')
+        if self.vision_model_profile_version_id:
+            from uuid import UUID
+            try:
+                UUID(self.vision_model_profile_version_id)
+            except (ValueError, TypeError, AttributeError):
+                raise ValueError('Vision model identifier must be a UUID or empty') from None
         if self.compaction_model_profile_version_id:
             from uuid import UUID
             try:

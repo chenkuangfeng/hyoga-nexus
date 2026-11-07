@@ -24,6 +24,9 @@ class SandboxSession:
     async def read_file(self, path: str, *, start_line: int, max_lines: int) -> FileChunk:
         return await self.files.read_file(path, start_line=start_line, max_lines=max_lines)
 
+    async def read_image(self, path: str) -> tuple[bytes, str]:
+        return await self.files.read_image(path)
+
     async def write_file(self, path: str, content: str, *, append: bool) -> int:
         return await self.files.write_file(path, content, append=append)
 

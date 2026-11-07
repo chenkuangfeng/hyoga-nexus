@@ -20,6 +20,9 @@ from . import paths
 MAX_READ_BYTES = 5_000_000
 #: Largest single write through `write_file`.
 MAX_WRITE_BYTES = 2_000_000
+#: Images `read_image` hands to a vision model, by suffix, and their size limit.
+IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif'}
+MAX_IMAGE_BYTES = 10_000_000
 #: Search bounds: files visited, bytes read per file, and characters kept per hit.
 SEARCH_MAX_FILES = 2000
 SEARCH_MAX_FILE_BYTES = 1_000_000
@@ -99,6 +102,18 @@ class HostFileStore:
         chosen = lines[first - 1:first - 1 + max_lines]
         following = first + len(chosen) if first - 1 + len(chosen) < len(lines) else None
         return FileChunk('\n'.join(chosen), first, len(lines), following, size)
+
+    async def read_image(self, path: str) -> tuple[bytes, str]:
+        return await asyncio.to_thread(self._image, path)
+
+    def _image(self, path: str) -> tuple[bytes, str]:
+        host = paths.resolve(path, self.roots, must_exist=True)
+        mime = IMAGE_TYPES.get(host.suffix.lower())
+        if mime is None or host.is_dir():
+            raise SandboxError('sandbox_not_an_image', 'supported: png, jpg, jpeg, webp, gif')
+        if host.stat().st_size > MAX_IMAGE_BYTES:
+            raise SandboxError('sandbox_file_too_large')
+        return host.read_bytes(), mime
 
     async def write_file(self, path: str, content: str, *, append: bool) -> int:
         return await asyncio.to_thread(self._write, path, content, append)

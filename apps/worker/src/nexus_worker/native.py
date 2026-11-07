@@ -195,6 +195,9 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             budget = ExecutionBudget(**options)
         except ValueError:
             raise RuntimeFault('runtime_budget_invalid') from None
+        if 'media' not in hidden and policy.vision_model_profile_version_id:
+            from .vision import VisionAnalyzer
+            services.vision = VisionAnalyzer(factory, context.tenant_id, context.principal_id, policy.vision_model_profile_version_id)
         if 'collab' not in hidden:
             # Delegated tasks (openspec 2026-11-07-tool-expansion 8.1): a nested run with a subset of these tools.
             from .models import configured_routing

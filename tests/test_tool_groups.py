@@ -66,9 +66,10 @@ def test_high_impact_groups_default_to_off_and_old_versions_gain_nothing():
 
 def test_unavailable_groups_report_stable_reasons():
     reasons = unavailable_groups(GateFacts())
-    assert reasons == {'sandbox': 'sandbox_disabled', 'wiki': 'wiki_base_not_bound', 'web': 'web_disabled'}
+    assert reasons == {'sandbox': 'sandbox_disabled', 'wiki': 'wiki_base_not_bound', 'web': 'web_disabled', 'media': 'sandbox_required'}
     assert unavailable_groups(GateFacts(sandbox_enabled=True))['sandbox'] == 'sandbox_not_accepted'
-    assert 'sandbox' not in unavailable_groups(GateFacts(sandbox_enabled=True, sandbox_accepted=True))
+    ready = unavailable_groups(GateFacts(sandbox_enabled=True, sandbox_accepted=True))
+    assert 'sandbox' not in ready and 'media' not in ready
 
 
 def test_switch_cannot_open_an_unavailable_group_and_availability_cannot_open_a_switched_off_one():

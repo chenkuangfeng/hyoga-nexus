@@ -41,6 +41,8 @@ def _sandbox(facts: GateFacts) -> str:
 AVAILABILITY: dict[str, Callable[[GateFacts], str]] = {
     'sandbox': _sandbox,
     'wiki': lambda facts: '' if facts.wiki_base_bound else 'wiki_base_not_bound',
+    # Image files live in the sandbox workspace, so the media tools need a usable sandbox.
+    'media': lambda facts: '' if _sandbox(facts) == '' else 'sandbox_required',
     'web': lambda facts: '' if facts.web_enabled else 'web_disabled',
 }
 

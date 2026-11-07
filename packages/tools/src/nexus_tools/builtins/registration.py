@@ -8,6 +8,7 @@ from .checkpoint import checkpoint_tool
 from .collab import collab_tools
 from .conversations import conversation_tools
 from .knowledge import knowledge_tools
+from .media import media_tools
 from .memory import memory_tools
 from .sandbox import sandbox_tools
 from .skills import skills_tools
@@ -35,6 +36,7 @@ def builtins() -> ToolRegistry:
         ('sandbox', tuple(sandbox_tools())),
         ('web', tuple(web_tools())),
         ('collab', tuple(collab_tools())),
+        ('media', tuple(media_tools())),
     ):
         for tool in tools:
             registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))

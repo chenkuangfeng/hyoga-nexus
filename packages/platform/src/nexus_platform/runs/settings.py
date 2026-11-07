@@ -33,6 +33,7 @@ LABELS = {
     'tool_failure_stop_at': '同一工具连续失败停止次数（0 为关闭）', 'tool_injection_scan': '扫描工具输出中的疑似指令注入',
     'tool_groups_enabled': '工具组开关（沙箱、Web 等高影响组默认关闭）',
     'tool_search_min_tokens': '延迟加载工具的阈值（Token，0 为关闭）',
+    'vision_model_profile_version_id': '图像理解使用的视觉模型（空为未配置）',
     'sandbox_exec_timeout_seconds': '沙箱命令默认超时（秒）', 'sandbox_output_limit': '沙箱命令每路输出保留上限（字符）',
 }
 
