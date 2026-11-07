@@ -17,6 +17,7 @@ from nexus_core.sandbox import SandboxError
 from nexus_sandbox import acceptance, paths
 from nexus_sandbox.backends.docker import DockerBackend, container_name
 from nexus_sandbox.backends.output import Sink
+from nexus_sandbox.backends.bwrap import BwrapBackend, BwrapExecutor
 from nexus_sandbox.files import HostFileStore
 from nexus_sandbox.manager import SandboxManager
 from nexus_sandbox.settings import SandboxSettings, load_settings
@@ -365,3 +366,53 @@ def test_a_failing_or_crashing_probe_becomes_a_failed_item():
     assert run(acceptance._guard('x', boom)).ok is False
     item = run(acceptance._guard('y', refused))
     assert item.ok is False and 'sandbox_backend_unavailable' in item.detail
+
+
+# ------------------------------------------------------------------ bwrap backend (argument list only; the jail is verified by the acceptance)
+
+def bwrap_settings(tmp_path, **overrides):
+    return SandboxSettings(enabled=True, backend='bwrap', workspace_root=str(tmp_path / 'sbx'), **overrides)
+
+
+def test_bwrap_jail_has_every_isolation_flag(tmp_path):
+    backend = BwrapBackend(bwrap_settings(tmp_path))
+    args = backend.jail_arguments(tmp_path / 'w', tmp_path / 'o', '/workspace', 'echo hi')
+    for flag in ('--die-with-parent', '--new-session', '--unshare-all', '--clearenv', '--proc', '--dev'):
+        assert flag in args, flag
+    assert args[args.index('--cap-drop') + 1] == 'ALL'
+    assert '--share-net' not in args  # network = none keeps the network namespace unshared
+    assert args[args.index('--remount-ro') + 1] == '/'
+    assert args[-4:] == ['--', '/bin/sh', '-c', 'echo hi']
+    binds = [(args[i + 1], args[i + 2]) for i, value in enumerate(args) if value == '--bind']
+    assert [dst for _, dst in binds] == ['/workspace', '/outputs']  # the only writable host directories
+    assert all(not src.startswith(('/home', '/root', '/etc')) for src, _ in binds)
+    assert not any(value in args for value in ('--setenv-host', '--bind-try'))
+
+
+def test_bwrap_opens_the_network_only_by_configuration(tmp_path):
+    backend = BwrapBackend(bwrap_settings(tmp_path, network='bridge'))
+    assert '--share-net' in backend.jail_arguments(tmp_path / 'w', tmp_path / 'o', '/workspace', 'true')
+
+
+def test_bwrap_limits_wrap_the_jail_without_a_shell_injection_path(tmp_path):
+    backend = BwrapBackend(bwrap_settings(tmp_path, memory_mb=256, workspace_quota_mb=10))
+    inner = backend.jail_arguments(tmp_path / 'w', tmp_path / 'o', '/workspace', "echo '$(id)'; x")
+    wrapped = backend.limited(inner)
+    assert wrapped[:2] == ['/bin/sh', '-c'] and 'ulimit -v 262144' in wrapped[2] and 'ulimit -f 20480' in wrapped[2]
+    assert wrapped[3:] == ['nexus-bwrap', *inner]  # the command is an argument, never part of the limit script
+    assert "echo '$(id)'" not in wrapped[2]
+
+
+def test_bwrap_manager_builds_an_executor_without_docker(tmp_path):
+    manager = SandboxManager(bwrap_settings(tmp_path))
+    session = manager.session('t1', 's1')
+    assert manager.docker is None and isinstance(session.executor, BwrapExecutor)
+    assert run(manager.reap()) == []
+
+
+def test_bwrap_reports_a_missing_binary(tmp_path):
+    settings = bwrap_settings(tmp_path)
+    executor = BwrapExecutor(BwrapBackend(settings, binary='/nonexistent/bwrap'), tmp_path / 'w', tmp_path / 'o')
+    with pytest.raises(SandboxError) as caught:
+        run(executor.run('true', cwd='/workspace', timeout_seconds=5, output_limit=100))
+    assert caught.value.code == 'sandbox_backend_unavailable'

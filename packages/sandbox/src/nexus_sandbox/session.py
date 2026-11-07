@@ -74,6 +74,9 @@ class SandboxSession:
         root, parts = paths.split(cwd)
         if root != '/workspace':
             raise SandboxError('sandbox_path_invalid', 'background commands run under /workspace')
+        if not getattr(self.executor, 'supports_background', True):
+            # A bwrap jail ends with its launcher shell (PID namespace), so a detached job could not outlive it.
+            raise SandboxError('sandbox_background_unsupported', 'this sandbox backend cannot keep a command running after it returns')
         running = [job for job in await self._jobs() if (await self._finished(job)) is None]
         if len(running) >= MAX_JOBS:
             raise SandboxError('sandbox_too_many_jobs', f'at most {MAX_JOBS} background commands at once; cancel or wait for one')

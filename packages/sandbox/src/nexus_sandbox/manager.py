@@ -1,4 +1,4 @@
-"""Leases: one workspace (and, for docker, one container) per (tenant, session).
+"""Leases: one workspace (and, for docker, one container; for bwrap, one jail per command) per (tenant, session).
 
 The tenant and session ids become directory names, so they are validated as UUID-like tokens first. A lease
 is held by the Run using it; idle containers are removed after `idle_seconds` while the workspace directory
@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from .backends.docker import DockerBackend, DockerExecutor, container_name
+from .backends.bwrap import BwrapBackend, BwrapExecutor
 from .backends.local import LocalExecutor
 from .files import HostFileStore
 from .session import SandboxSession
@@ -27,6 +28,7 @@ class SandboxManager:
     def __init__(self, settings: SandboxSettings, *, docker: DockerBackend | None = None):
         self.settings = settings
         self.docker = docker or (DockerBackend(settings) if settings.backend == 'docker' else None)
+        self.bwrap = BwrapBackend(settings) if settings.backend == 'bwrap' else None
         self._last_used: dict[str, float] = {}
         self._executors: dict[str, object] = {}
 
@@ -43,6 +45,8 @@ class SandboxManager:
         key = f'{tenant_id}/{session_id}'
         if self.settings.backend == 'docker':
             executor = DockerExecutor(self.docker, container_name(str(tenant_id), str(session_id)), workspace, outputs)
+        elif self.settings.backend == 'bwrap':
+            executor = BwrapExecutor(self.bwrap, workspace, outputs)
         else:
             executor = LocalExecutor(files.roots)
         self._last_used[key] = time.monotonic()

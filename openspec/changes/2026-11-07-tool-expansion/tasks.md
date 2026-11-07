@@ -44,6 +44,8 @@
   - `manager`：目录、容器名、空闲与孤儿回收（`reap`）。后台定期调用 `reap` 尚未接入 worker 循环。
 - [x] 3.5 `[sandbox]` 部署配置读取与校验（`deployment.py`），配置错误不泄露细节；`configs/README.md` 与示例同步。
   - `[sandbox]` 读取与校验、`configs/nexus.example.toml`、`configs/README.md`、`.gitignore`。
+- [ ] 3.8 `bwrap` 后端（追加，用户确认）：`backends/bwrap`、`backend = "bwrap"`、管理器与验收接入、`exec_async` 明确拒绝。
+  - 代码与参数测试已写，未在真实 bwrap 上验证（待用户验证）；进程数限制缺失，验收的进程数探测预计不通过。
 - [ ] 3.6 `acceptance` 全部探测项与迁移 `sandbox_acceptance`；worker 启动自检与 `sandbox-check` 命令；验收报告输出到文件。
   - 部分完成：验收模块 12 项探测与按指纹失效的报告已实现；`--sandbox-check` 命令已加入 worker（调整：用参数而非子命令）。调整：报告保存在 `workspace_root/acceptance.json`，不建 `sandbox_acceptance` 表——工作区里有未提交的知识库迁移，新迁移无法稳定接在链上；迁移链稳定后再改表。
 - [ ] 3.7 在真实 Docker 上跑通验收并保存报告；无 Docker 的环境相关测试跳过并说明。

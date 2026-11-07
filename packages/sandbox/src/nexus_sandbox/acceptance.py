@@ -65,7 +65,7 @@ async def _guard(name: str, probe) -> Item:
 
 async def run(settings: SandboxSettings, *, manager: SandboxManager | None = None) -> dict:
     """Run every probe and store the report. Raises `sandbox_acceptance_requires_isolating_backend` for `local`."""
-    if settings.backend != 'docker':
+    if settings.backend not in ('docker', 'bwrap'):
         raise SandboxError('sandbox_acceptance_requires_isolating_backend')
     manager = manager or SandboxManager(settings)
     tag = uuid.uuid4().hex[:12]

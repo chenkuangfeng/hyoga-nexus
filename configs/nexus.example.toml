@@ -80,7 +80,10 @@ index_concurrency = 1
 # "sandbox" tool group on per agent. The report is stored under workspace_root and is valid only for the
 # backend, image and limits it was run with.
 enabled = false
-# "docker" isolates commands in one container per session. "local" runs them as the server user with NO isolation:
+# "docker" isolates commands in one container per session. "bwrap" (bubblewrap, Linux) puts every command in its own
+# namespace jail: no daemon or image, the host's /usr is mounted read-only. It has no process-count limit and no
+# background commands (sandbox_exec_async is refused); `cpus`, `pids` and `image` do not apply to it.
+# "local" runs them as the server user with NO isolation:
 # development only, and it needs allow_local = true and the development auth mode.
 backend = "docker"
 # The image must already be present (it is never pulled) and offer sh, timeout and python3.

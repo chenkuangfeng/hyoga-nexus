@@ -6,7 +6,7 @@ from pathlib import Path
 
 from nexus_core.deployment import DeploymentConfigError, section
 
-BACKENDS = ('docker', 'local')
+BACKENDS = ('docker', 'bwrap', 'local')
 NETWORKS = ('none', 'bridge')
 
 
