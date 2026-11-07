@@ -12,7 +12,7 @@
 
 ```text
                   skills.tenant_id        skills.owner_user_id      登记为平台资源   进入智能体的方式
-内置技能          系统租户                 NULL                      是               绑定（source_tenant_id = 系统租户）
+内置技能与工具    系统租户                 NULL                      是               绑定（source_tenant_id = 系统租户）
 租户技能库        普通租户                 NULL                      是               绑定
 私有技能          普通租户                 用户                      否               Run 按当前用户自动并入索引
 ```
@@ -21,12 +21,16 @@
 - 私有技能**不登记为平台资源**：它不可绑定、不可授权，授权规则就是「所有者等于当前主体」，从而不会出现「别人绑定了我的私有技能」的情形。共享到库是**复制**出一个新的库技能，两者此后互不影响。
 - 名字解析顺序（读取、`load_skill`）：技能库 → 内置；私有仅在「本人」范围内查找，并且创建时不能与库或内置同名（决定 7）。技能库后来发布同名技能时，该名字对所有人解析为库技能，私有同名在列表里标「已被取代」。
 
-## 3. 系统租户与内置技能
+## 3. 系统租户与内置技能、内置工具
 
 - 迁移：`tenants.kind` 约束扩为 `('personal', 'enterprise', 'system')`；插入固定 id 的系统租户和一个保留用户（无身份、`status` 禁用，仅作 `created_by`）。常量放在 `nexus_core`，两处引用同一 id。
 - 排除：所有「列出租户 / 成员 / 组织 / 平台汇总 / 注册 / 空间切换」的查询过滤 `kind != 'system'`；登录与空间选择拒绝进入系统租户。这些查询点在 `tasks.md` 0.2 中读码列全，并用测试覆盖。
-- 授权：`authorize_resource` 在查找授权行**之前**增加分支：`kind == 'skill'` 且 `source_tenant_id == SYSTEM_TENANT_ID` 时，只校验资源行存在且 `active`，不要求 `resource_grants`。其他资源种类不受影响。
-- 绑定：智能体编辑器列出「本租户技能 + 内置技能」；绑定内置技能写 `source_tenant_id = 系统租户`。`bound_versions` 现有的校验（版本的租户等于绑定的源租户、资源生效）对内置技能同样成立。
+- 授权：`authorize_resource` 在查找授权行**之前**增加分支：`kind in GLOBAL_BUILTIN_KINDS`（本变更为 `{'skill', 'tool'}`）且 `source_tenant_id == SYSTEM_TENANT_ID` 时，校验资源行存在且 `active`、本空间没有停用它，不要求 `resource_grants`。其他资源种类不受影响。个人空间与企业空间走同一分支，不区分 `kind`。
+- 内置工具：启动时（API 与 worker 共用的幂等同步函数）把 `BUILTIN_TOOL_NAMES` 逐个登记到系统租户（`kind='tool'`、`version_id='v1'`）；新增工具随发版自动出现，已有行不变。绑定内置工具时 `source_tenant_id` 为系统租户。
+- 兼容：既有的租户登记工具与绑定照常有效；`POST /tenants/{id}/tools/{name}/enable` 保留，返回系统租户的资源并写审计，不再写租户登记；设置接口 `available_tools[].enabled` 对内置工具恒为真，`can_enable_tools` 对内置工具不再有意义（前端据此隐藏启用按钮）。
+- 空间停用：`tenant_builtin_disabled(tenant_id, kind, resource_id)`，主键三列。编辑器目录、发布智能体版本时的绑定校验、`authorize_resource` 的系统租户分支三处读取它；停用不改变已发布的智能体版本，只让之后的调用被授权拒绝，并在目录中标「本空间已停用」。
+- 空间自有资源：租户技能库与空间自有工具仍是 `source_tenant_id == 本租户` 的登记，`authorize_resource` 的既有分支不变；其他空间的智能体既不能绑定（外键与目录过滤），也读不到。
+- 绑定：智能体编辑器列出「本租户技能 + 内置技能」「本租户工具 + 内置工具」；绑定内置技能写 `source_tenant_id = 系统租户`。`bound_versions` 现有的校验（版本的租户等于绑定的源租户、资源生效）对内置技能同样成立。
 - 导入与升级：平台管理员接口 `POST /platform/skills/import-builtin` 与部署命令，读取仓库 `skills/` 逐个发布到系统租户；内容相同报告 `unchanged`；升级生成新版本。既有智能体版本绑定的旧版本不变（不可变语义）；编辑器对比绑定版本与最新内置版本，提示「有新版本」。
 - 撤销：平台管理员可把某个内置版本的资源置为不生效，所有绑定它的智能体下一次 Run 即看不到它（沿用 `_live`）。
 
@@ -138,11 +142,14 @@ skills/<name>@<hash12>/{SKILL.md, refs/, scripts/}   ← 本会话可用（绑�
 
 ## 10. 兼容与迁移
 
-- 迁移：`tenants.kind` 约束；系统租户与保留用户；`skills` 增加 `owner_user_id` 并替换唯一约束；`skill_versions` 增加 `trust`、`scan_version`、`scan`、`extra`；`skill_version_files` 增加二进制列；新表 `skill_drafts`、`skill_submissions`、`skill_packs`、`skill_pack_items`、`skill_usage`；`installed → admin`。降级删除新表与新列、还原约束（有私有技能或系统租户数据时，降级前先给出明确提示）。
+- 迁移：`tenants.kind` 约束；系统租户与保留用户；`tenant_builtin_disabled`；内置工具同步到系统租户；`skills` 增加 `owner_user_id` 并替换唯一约束；`skill_versions` 增加 `trust`、`scan_version`、`scan`、`extra`；`skill_version_files` 增加二进制列；新表 `skill_drafts`、`skill_submissions`、`skill_packs`、`skill_pack_items`、`skill_usage`；`installed → admin`。降级删除新表与新列、还原约束（有私有技能或系统租户数据时，降级前先给出明确提示）。
 - 既有智能体版本、会话快照、绑定不变；`model_invocable` 默认真，因此行为不变。
 - 公开 API 只增不改；旧发布接口在 `admin` 来源下行为一致，只多返回扫描结论。
 
 ## 11. 风险
+
+- **同名工具的两个来源并存**：既有租户登记的工具绑定与新的系统租户绑定都存在时，Run 准备阶段按名字去重会判定 `tool_configuration_invalid`。编辑器只提供一个来源（优先系统租户），迁移不改写既有绑定，并增加测试覆盖「同名双来源」。
+- **全局生效削弱了「空间管理员启用」这道闸**：靠分组可用性、智能体开关（默认关）、`tool_access` 与审批把关，并提供空间停用名单；高影响工具（沙箱、Web、委派、定时）的默认关闭状态要有测试固定。
 
 - **系统租户是新的特殊对象**：所有枚举租户的查询都要排除它，漏一处就会在界面里冒出来。用一致性测试遍历租户相关查询，并在 0.2 中列全。
 - 私有技能是用户或模型写的任意文本，进入模型上下文：它只影响本人会话，但可能含提示注入。保存时扫描，索引里只放名字和简介，正文在加载时带「技能内容，不授予权限」前缀（沿用现有 `read_for_run`）。

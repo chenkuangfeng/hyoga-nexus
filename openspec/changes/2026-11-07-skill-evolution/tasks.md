@@ -11,6 +11,7 @@
   - Run 的主体与租户字段（`principal_id`、`tenant_id`）在 `read_for_run`、`session_index` 调用处是否可得；
   - 会话中追加说明消息的注入点，确认不破坏提示缓存与冻结的工具块；
   - 智能体绑定里「逐个关闭技能」的字段位置；
+  - 内置工具的调用期授权路径（网关如何带 `source_tenant_id` 调用 `authorize_resource`）、编辑器的工具目录与 `available_tools`、`enable_builtin` 的全部调用方、`runs/settings.py` 对租户登记工具的读取点；
   - `paths.VIRTUAL_ROOTS` 与两个沙箱后端的挂载点；
   - 审批机制可用的风险等级与「每次需确认」的表达方式；
   - `.codex/rules/backend.md` 的依赖条款（决定 4）。
@@ -21,6 +22,11 @@
 - [ ] 1.1 迁移：`tenants.kind` 约束加 `system`；系统租户与保留用户；`skills.source` 迁移 `installed → admin`；`skill_versions` 增加 `trust`、`scan_version`、`scan`、`extra`；升降级测试。
 - [ ] 1.2 排除系统租户：按 0.2 的清单逐处过滤；一致性测试遍历这些查询，断言系统租户不出现、不可登录、不可切换进入。
 - [ ] 1.3 `authorize_resource` 增加系统租户技能分支；测试：任意租户的智能体可绑定并读取，普通租户不能向系统租户发布或撤销，其他资源种类不受影响。
+- [ ] 1.3a 内置工具同步：启动时幂等把 `BUILTIN_TOOL_NAMES` 登记到系统租户；`GLOBAL_BUILTIN_KINDS = {'skill', 'tool'}`；授权分支对 `tool` 同样放行；测试：企业空间与个人空间的智能体无需启用即可绑定并调用；新增工具名随同步出现。
+- [ ] 1.3b 兼容：`tools/{name}/enable` 保留并改返回系统租户资源；`available_tools[].enabled` 对内置工具恒为真；既有租户登记的绑定照常有效；同名双来源的测试。
+- [ ] 1.3c 空间停用：迁移 `tenant_builtin_disabled`；管理接口（`tools:manage`）；编辑器目录、发布校验、调用授权三处读取；测试：停用后目录不列出、发布拒绝、调用拒绝，其他空间不受影响。
+- [ ] 1.3d 门控不退化：测试固定「高影响工具组（沙箱、Web、委派、定时）在分组不可用或智能体开关关闭时仍不出现」；个人空间与企业空间各一组用例。
+- [ ] 1.3e 前端：设置与编辑器按系统租户来源展示内置工具与技能（标「内置」），隐藏对内置工具的启用按钮，展示「本空间已停用」。
 - [ ] 1.4 `nexus_skills.guard` 规则扫描器与 `ScanResult`；规则表带测试样例；扫描器版本号；建议性 linter。
 - [ ] 1.5 `nexus_skills.policy.decide` 与放行矩阵；逐格测试。
 - [ ] 1.6 名字规则与保留词；frontmatter `model_invocable` / `user_invocable` 解析与校验；索引与 `read_for_run` 的过滤。
