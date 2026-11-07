@@ -177,6 +177,9 @@ async def _parse(factory, job_id: UUID) -> None:
         blob = stores.blob_store_for(db, kb)
         key, filename = version.blob_key, doc.filename
         media_config = media.config_of(kb)
+        from dataclasses import replace
+        from . import parsers
+        media_config = replace(media_config, parser_config=parsers.load_config(db, kb.tenant_id))
         try:
             config = ChunkConfig.from_settings(kb.chunk_size, kb.chunk_overlap, (kb.settings or {}).get('chunking_config'))
         except ValueError as exc:

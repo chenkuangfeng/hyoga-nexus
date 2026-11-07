@@ -48,6 +48,9 @@ def install_knowledge_embedder() -> None:
     from nexus_platform.knowledge.embedding import set_embedder_factory
     from nexus_worker.knowledge_index import knowledge_embedder
     set_embedder_factory(knowledge_embedder)
+    from nexus_platform.knowledge.rerank import set_reranker_factory
+    from nexus_worker.knowledge_index import knowledge_reranker
+    set_reranker_factory(knowledge_reranker)
 
 
 @asynccontextmanager

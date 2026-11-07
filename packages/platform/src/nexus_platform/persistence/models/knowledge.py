@@ -204,7 +204,7 @@ class KnowledgeJobRecord(Base):
 __all__ = ['VectorStoreRecord', 'StorageBackendRecord', 'KnowledgeBaseRecord', 'KnowledgeDocumentRecord',
            'KnowledgeDocumentVersionRecord', 'KnowledgeChunkRecord', 'KnowledgeJobRecord', 'GraphStoreRecord',
            'GraphBuildRecord', 'GraphEntityRecord', 'GraphRelationRecord', 'GraphCommunityRecord',
-           'GraphExtractionCacheRecord', 'FaqEntryRecord', 'KnowledgeTagRecord']
+           'GraphExtractionCacheRecord', 'FaqEntryRecord', 'KnowledgeTagRecord', 'ParserEngineConfigRecord']
 
 
 # ---------------------------------------------------------------- graph (openspec 2026-11-06-knowledge-base K2)
@@ -376,3 +376,17 @@ class KnowledgeTagRecord(Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ParserEngineConfigRecord(Base):
+    """Connection settings of the external parser engines of a space (WeKnora ``parser-engine-config``).
+
+    Secrets (`mineru_api_key`, `mineru_server_api_key`, `paddleocr_vl_cloud_token`) are encrypted with the
+    deployment key, bound to the space id, and masked when read.
+    """
+
+    __tablename__ = 'knowledge_parser_configs'
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    updated_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

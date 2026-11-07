@@ -74,11 +74,14 @@
 ## K4 解析与分块增强
 
 - [x] K4.1 解析引擎规则与 Office 文档；分块策略、父子分块、分块调试。
-  - Office：`ingest/office.py` 用标准库解析 `.docx`（标题样式转章节）、`.pptx`（每页一段，页码=幻灯片号）、`.xlsx`（每个工作表一段，`列名: 值`）；拒绝 DTD 与超大解压（64MB）。分块：`ChunkConfig` 与策略 `auto|heading|heuristic|recursive|legacy`、自定义分隔符；`auto` 按文档特征选择并给出被否决的层级。父子分块：父块不索引、子块索引，命中子块返回父块文本（同一父块只返回一次）；块表新增 `parent_id`、`indexed`（迁移 `f3a4b5c6d7e8`），读取/块列表/图谱构建只看父块或普通块。接口 `POST /knowledge/chunk-preview`（分块调试）、`GET /knowledge/parser-engines`；解析引擎规则里选了未实现的引擎返回 `capability_planned`。外部引擎（MarkItDown、AnyDoc、MinerU、PaddleOCR 等）仍待实现。
+  - Office：`ingest/office.py` 用标准库解析 `.docx`（标题样式转章节）、`.pptx`（每页一段，页码=幻灯片号）、`.xlsx`（每个工作表一段，`列名: 值`）；拒绝 DTD 与超大解压（64MB）。分块：`ChunkConfig` 与策略 `auto|heading|heuristic|recursive|legacy`、自定义分隔符；`auto` 按文档特征选择并给出被否决的层级。父子分块：父块不索引、子块索引，命中子块返回父块文本（同一父块只返回一次）；块表新增 `parent_id`、`indexed`（迁移 `f3a4b5c6d7e8`），读取/块列表/图谱构建只看父块或普通块。接口 `POST /knowledge/chunk-preview`（分块调试）、`GET /knowledge/parser-engines`；解析引擎规则里选了未实现的引擎返回 `capability_planned`。外部引擎见 K4.3。
   - 测试：`tests/test_knowledge_domain.py`（Office、策略、父子、预览）、`tests/test_knowledge_service.py`（父子检索、docx 入库）、`tests/test_knowledge_api.py`；后端全量 1008 通过。
 - [x] K4.2 OCR、VLM 图片描述、图片库；ASR（代码完成，未经真实模型服务验证，能力目录标 `verified=false`）。
   - 客户端 `nexus_runtimes/native/models/media.py`（OpenAI 兼容：视觉对话带图片、`/audio/transcriptions`，与对话模型同一受限传输）；平台 `nexus_platform/knowledge/media.py`：图片（png/jpg/webp/gif）由视觉模型输出描述与图中文字，作为文档文本入索引；扫描 PDF 无文字层时，按页取内嵌图片（pypdf，最多 30 页）逐页识别；音频（mp3/wav/m4a/flac/ogg/aac）由语音模型转写。配置 `settings.vlm_config`（model_id、description_language、custom_instructions）与 `asr_config`（model_id、language），模型须是创建者可用的 vision / speech 类型；未配置模型时上传图片/音频直接拒绝并说明原因。模型调用用库创建者的 Key。图片库：`GET /bases/{id}/images`（图片文档与模型写的描述，支持关键词），前端图片库接入；图片属性筛选与排序仍待实现。worker 注入视觉/语音客户端工厂。
   - 测试 `tests/test_knowledge_media.py` 只用假客户端验证流水线；真实 VLM / ASR 服务验证待环境（K4.2b）。
+- [x] K4.3 外部解析引擎（移植 WeKnora `internal/infrastructure/docparser` 的 MinerU、PaddleOCR-VL，代码完成，未经真实服务验证）。
+  - `nexus_knowledge/ingest/engines.py`：`mineru`（自建 `/file_parse` 多部分上传）、`mineru_cloud`（mineru.net v4：申请上传地址 → PUT 文件 → 轮询 → 内联 Markdown 或结果压缩包）、`paddleocr_vl`（自建 `/layout-parsing`）、`paddleocr_vl_cloud`（AI Studio 作业：提交 → 轮询 → JSONL 结果）；输出 Markdown 后按标题切成章节，丢弃指向本地图片的引用。每个主机单独建客户端并走与模型调用相同的受限传输（含私网白名单）。空间级连接配置表 `knowledge_parser_configs`（迁移 `c6d7e8f9a0b1`，密钥加密、读取时打码、回传打码值保留原密钥、仅管理员可写）；库规则 `parser_engine_rules` 按文件类型选引擎，未命中走 builtin；`simple` 引擎并入 builtin 的子集。接口 `GET/PUT /knowledge/parser-engine-config`、`GET /knowledge/parser-engines`（含未配置原因）。测试 `tests/test_knowledge_engines.py`（模拟传输）。
+  - 仍待实现：`anydoc`（WeKnora 的 Go 进程内转换库，旧版 `.doc/.xls/.ppt` 需要转换器）、`markitdown`、`weknoracloud`（需要对应服务的协议资料或账号）。
 - [ ] K4.2b 真实视觉与语音模型验收：图片描述质量、扫描 PDF、音频转写、超大文件与超时（需用户提供模型服务）。
 
 ## K5 组织与增强
@@ -90,7 +93,9 @@
   - 未做：手动编辑摘要/生成的问题（前端对应接口仍为待实现）、重排（K5.3b）。
 - [x] K5.3a 元数据过滤（见 K5.1）、同义词、结构导航工具（RAGFlow `grep_chunks`、`navigate_structure`/大纲）。
   - 同义词：库设置 `settings.synonyms`（每组 2–10 个词，最多 200 组）；查询含其中一个词时关键词通道补充其余词，向量通道不变（`nexus_knowledge.retrieval.synonyms`）。编辑器高级设置里有同义词文本框（每行一组）。结构工具：`grep_chunks`（对可读绑定文档的当前块做精确子串匹配，返回带 `[ID:n]` 的片段）、`document_outline`（由块的章节路径生成标题/页码大纲与块区间）、`read_document` 新增 `section` 参数按标题路径读取。三者都是只读工具，同样受 Pre-Filter 约束；编辑器只把空间已启用的知识库工具加入智能体，`search_knowledge` 为必选。测试见 `tests/test_knowledge_tools.py`、`tests/test_knowledge_organize.py`。
-- [ ] K5.3b 重排（需要重排模型客户端，待实现）。
+- [x] K5.3b 重排（移植 WeKnora `internal/reranking` 与 `models/api` 重排协议，代码完成，未经真实模型验证）。
+  - 策略 `nexus_knowledge.retrieval.rerank`：阈值（默认 0.2；无结果且阈值 > 0.3 时放宽到 ×0.7；仍无结果时保留得分 ≥ 0.15 的最高一条，否则返回空）、综合分 `0.6×模型分 + 0.3×检索分 + 0.1`、MMR（λ=0.7）去近似重复、候选截断与段落长度限制。客户端 `nexus_runtimes/native/models/rerank.py`：`cohere`（Cohere/Jina/智谱/SiliconFlow/vLLM）、`tei`、`dashscope` 三种线格式，由模型选项 `rerank_api` 选择。库设置 `rerank_config {enabled, model_id, threshold, top_k}`，模型为重排类型；重排属于查询时模型，使用检索者自己的 Key，用户无权/客户端缺失/供应商出错时保持原顺序并在检索结果 `rerank` 字段给出原因（不会使检索失败）。检索测试接口可传 `rerank=false` 跳过。编辑器高级设置有重排开关与模型选择。测试 `tests/test_knowledge_rerank.py`（策略、三种协议、检索接入）。
+- [ ] K5.3c 真实重排模型验收（需环境）。
 
 ## K6 Wiki 库
 

@@ -159,8 +159,9 @@ def test_chunk_preview_parser_engines_and_engine_rules(api):
     assert bad.status_code == 422
     engines = {e['Name']: e for e in client.get(path + '/parser-engines').json()['data']}
     assert engines['builtin']['Available'] and 'docx' in engines['builtin']['FileTypes']
-    assert not engines['mineru']['Available'] and engines['mineru']['UnavailableReason'].startswith('待实现')
+    assert not engines['mineru']['Available'] and engines['mineru']['UnavailableReason'].startswith('未配置')  # implemented, not set up
+    assert not engines['anydoc']['Available'] and engines['anydoc']['UnavailableReason'].startswith('待实现')
     rule = client.post(path + '/bases', json={'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
                                               'settings': {'chunking_config': {'parser_engine_rules': [
-                                                  {'file_types': ['pdf'], 'engine': 'mineru'}]}}})
+                                                  {'file_types': ['pdf'], 'engine': 'anydoc'}]}}})
     assert rule.status_code == 422 and rule.json()['error']['code'] == 'capability_planned'

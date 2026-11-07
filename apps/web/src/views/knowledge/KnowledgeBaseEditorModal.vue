@@ -564,6 +564,21 @@
                     @update:profile-config="(value) => { if (formData) formData.profileConfig = value }"
           @update:table-metadata-instructions="(value: string) => { if (formData) formData.chunkingConfig.tableMetadataInstructions = value }"
         />
+        <!-- 重排（openspec 2026-11-06-knowledge-base K5.3b）：检索后用重排模型重新打分，失败时保持原顺序 -->
+        <div v-if="formData" class="synonyms-setting">
+          <label class="synonyms-setting__label">重排 <CapabilityBadge group="kb_feature" capability="rerank" /></label>
+          <p class="synonyms-setting__desc">检索后用重排模型对候选重新打分并去掉相近重复。使用检索者自己的模型 Key；模型不可用时保持原有顺序。</p>
+          <t-switch v-model="formData.rerankConfig.enabled" />
+          <template v-if="formData.rerankConfig.enabled">
+            <t-select v-model="formData.rerankConfig.model_id" placeholder="选择重排模型" style="max-width: 320px">
+              <t-option v-for="m in allModels.filter((item: any) => item.type === 'Rerank')" :key="m.id" :value="m.id"
+                :label="m.display_name || m.name" />
+            </t-select>
+            <t-input-number v-model="formData.rerankConfig.threshold" :min="0" :max="1" :step="0.05" theme="normal"
+              style="width: 160px" />
+          </template>
+        </div>
+
         <!-- 同义词（openspec 2026-11-06-knowledge-base K5）：每行一组，用逗号分隔，关键词检索时互相扩展 -->
         <div v-if="formData" class="synonyms-setting">
           <label class="synonyms-setting__label">同义词 <CapabilityBadge group="kb_feature" capability="synonyms" /></label>
@@ -1011,6 +1026,7 @@ const initFormData = (type: 'document' | 'faq' = 'document') => {
       language: ''
     },
     synonymsText: '',
+    rerankConfig: { enabled: false, model_id: '', threshold: 0.2 },
     nexusGraph: { mode: 'graphrag_light', store: 'builtin', model_id: '', entity_types: [] as string[],
       relation_types: [] as string[], instructions: '' },
     nodeExtractConfig: {
@@ -1184,6 +1200,8 @@ const loadKBData = async (
         modelId: kb.asr_config?.model_id || '',
         language: kb.asr_config?.language || ''
       },
+      rerankConfig: { enabled: kb.rerank_config?.enabled === true, model_id: kb.rerank_config?.model_id || '',
+        threshold: kb.rerank_config?.threshold ?? 0.2 },
       synonymsText: (kb.synonyms || []).map((group: string[]) => group.join('，')).join('\n'),
       nexusGraph: {
         mode: kb.graph?.mode || 'graphrag_light', store: kb.graph?.store || 'builtin', model_id: kb.graph?.model_id || '',
@@ -1711,6 +1729,10 @@ const buildSubmitData = () => {
     }
   }
 
+  data.rerank_config = formData.value.rerankConfig.enabled
+    ? { enabled: true, model_id: formData.value.rerankConfig.model_id, threshold: formData.value.rerankConfig.threshold }
+    : { enabled: false }
+
   // Synonym groups: one group per line, terms separated by commas.
   data.synonyms = String(formData.value.synonymsText || '').split('\n')
     .map((line: string) => line.split(/[,，、]/).map((term: string) => term.trim()).filter(Boolean))
@@ -1835,6 +1857,7 @@ const doSubmit = async () => {
         updateConfig.graph = data.graph
       }
       updateConfig.synonyms = data.synonyms
+      updateConfig.rerank_config = data.rerank_config
       await updateKnowledgeBase(kbId, {
         name: data.name,
         description: data.description,

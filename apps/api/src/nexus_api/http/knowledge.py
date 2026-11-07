@@ -650,19 +650,30 @@ def preview_chunking(tenant_id: UUID, body: ChunkingPreviewInput, principal: Pri
 @router.get('/parser-engines')
 def list_parser_engines(tenant_id: UUID, principal: Principal = Depends(get_principal),
                         db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    """Parser engines with file types and state; only ``builtin`` is implemented."""
+    """Parser engines with file types and state (configured / planned); settings are those of this space."""
     from nexus_knowledge.ingest.parse import SUPPORTED_SUFFIXES
-    _user(db, principal, tenant_id)
-    data = []
-    for row in capabilities.snapshot():
-        if row['group'] != 'parser_engine':
-            continue
-        available = row['status'] == 'available'
-        data.append({'Name': row['key'], 'Description': row['label'],
-                     'FileTypes': sorted(s.lstrip('.') for s in SUPPORTED_SUFFIXES) if row['key'] == 'builtin' else [],
-                     'Available': available,
-                     'UnavailableReason': '' if available else f'待实现 · {row["stage"]}' if row['stage'] else '待实现'})
-    return {'data': data, 'connected': True}
+    from nexus_platform.knowledge import media, parsers
+    user = _user(db, principal, tenant_id)
+    builtin_types = sorted(s.lstrip('.') for s in SUPPORTED_SUFFIXES | media.media_suffixes())
+    return {'data': parsers.engine_list(parsers.load_config(db, tenant_id), builtin_types), 'connected': True}
+
+
+@router.get('/parser-engine-config')
+def get_parser_engine_config(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                             db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.knowledge import parsers
+    user = _user(db, principal, tenant_id)
+    return {'data': parsers.masked_config(db, tenant_id, user.id)}
+
+
+@router.put('/parser-engine-config')
+def put_parser_engine_config(tenant_id: UUID, body: dict[str, Any], principal: Principal = Depends(get_principal),
+                             db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Replace the external engine settings of the space (owners and admins). Secrets are write-only."""
+    from nexus_platform.knowledge import parsers
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'data': parsers.save_config(db, tenant_id, user.id, body)}
 
 
 # ---------------------------------------------------------------- retrieval test
@@ -674,6 +685,8 @@ class SearchInput(BaseModel):
     tag_ids: list[UUID] = Field(default_factory=list, max_length=50)
     folder_path: str | None = Field(None, max_length=1024)
     metadata: dict[str, str] = Field(default_factory=dict, max_length=20)
+    #: False skips reranking even when the base enables it (retrieval test).
+    rerank: bool = True
     vector_weight: float = Field(1.0, ge=0, le=10)
     keyword_weight: float = Field(1.0, ge=0, le=10)
 
@@ -687,14 +700,14 @@ async def search(tenant_id: UUID, body: SearchInput, request: Request, principal
         bind=db.get_bind(), expire_on_commit=False, autoflush=False)
     result = await knowledge_search.search(factory, db, tenant_id, user.id, body.query, limit=body.limit,
                                            requested=body.kb_ids, vector_weight=body.vector_weight,
-                                           keyword_weight=body.keyword_weight,
+                                           keyword_weight=body.keyword_weight, rerank=body.rerank,
                                            doc_filter=organize.DocumentFilter(
                                                tuple(str(t) for t in body.tag_ids),
                                                organize.clean_folder(body.folder_path) if body.folder_path is not None else None,
                                                True, body.metadata))
     db.commit()  # degradation audits
     return {'items': [knowledge_search.hit_view(hit) for hit in result.hits], 'degraded': result.degraded,
-            'searched': result.searched, 'ignored': result.ignored}
+            'searched': result.searched, 'ignored': result.ignored, 'rerank': result.rerank}
 
 
 # ---------------------------------------------------------------- sharing and activity

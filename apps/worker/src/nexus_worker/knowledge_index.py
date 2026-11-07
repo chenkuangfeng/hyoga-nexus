@@ -60,6 +60,15 @@ def knowledge_speech(factory, tenant_id: UUID, user_id: UUID, model_version_id: 
                               share_connections=True)
 
 
+def knowledge_reranker(factory, tenant_id: UUID, user_id: UUID, model_version_id: UUID, purpose: str):
+    from nexus_platform.models.provider_settings import owner_model_call
+    from nexus_runtimes.native.models.rerank import create_reranker
+    call = owner_model_call(factory, tenant_id=tenant_id, owner_id=user_id, version_id=model_version_id,
+                            purpose=purpose, model_type='rerank')
+    return create_reranker(model=call.model_name, api_key=call.lease.reveal_for_call(), options=call.options,
+                           share_connections=True)
+
+
 def install_embedder() -> None:
     from nexus_platform.knowledge.embedding import set_embedder_factory
     from nexus_platform.knowledge.graph.llm import set_completer
@@ -67,6 +76,11 @@ def install_embedder() -> None:
     set_completer(knowledge_completer)
     from nexus_platform.knowledge.media import set_media_factory
     set_media_factory(vision=knowledge_vision, speech=knowledge_speech)
+    from nexus_platform.knowledge.rerank import set_reranker_factory
+    set_reranker_factory(knowledge_reranker)
+    from nexus_platform.knowledge.parsers import set_http_client_factory
+    from nexus_runtimes.native.models.network import provider_client
+    set_http_client_factory(lambda url: provider_client(url, timeout=600))
 
 
 def knowledge_tick(factory: sessionmaker[Session], loop, concurrency: int) -> bool:

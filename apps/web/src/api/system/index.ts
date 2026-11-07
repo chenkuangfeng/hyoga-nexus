@@ -166,11 +166,11 @@ export function checkParserEngines(config: ParserEngineConfig): Promise<ParserEn
 }
 
 export function getParserEngineConfig(): Promise<{ data: ParserEngineConfig }> {
-  return get('/api/v1/tenants/kv/parser-engine-config')
+  return get(`${knowledgePath()}/parser-engine-config`)
 }
 
 export function updateParserEngineConfig(config: ParserEngineConfig): Promise<{ data: ParserEngineConfig }> {
-  return put('/api/v1/tenants/kv/parser-engine-config', config)
+  return put(`${knowledgePath()}/parser-engine-config`, config)
 }
 
 export function reconnectDocReader(addr: string): Promise<ParserEnginesResponse & { msg?: string }> {

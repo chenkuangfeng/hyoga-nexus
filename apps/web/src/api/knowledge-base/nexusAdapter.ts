@@ -88,7 +88,7 @@ export function toNexusBaseInput(data: Json): Json {
   const settings: Json = {}
   for (const key of ['image_processing_config', 'summary_model_id', 'vlm_config', 'asr_config', 'extract_config',
     'faq_config', 'wiki_config', 'auto_tag_config', 'profile_config', 'question_generation_config',
-    'storage_provider_config', 'graph', 'synonyms']) {
+    'storage_provider_config', 'graph', 'synonyms', 'rerank_config']) {
     if (source[key] !== undefined) settings[key] = source[key]
   }
   if (Object.keys(chunking).length) {

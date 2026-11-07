@@ -54,6 +54,9 @@ class MediaConfig:
     instructions: str = ''
     speech_model: UUID | None = None
     speech_language: str = ''
+    #: ``kb.settings`` (parser engine rules) and the space's decrypted engine settings (set by the job).
+    settings: dict | None = None
+    parser_config: dict | None = None
 
 
 def _uuid(value: Any) -> UUID | None:
@@ -69,7 +72,8 @@ def config_of(kb) -> MediaConfig:
     return MediaConfig(kb.tenant_id, kb.created_by,
                        _uuid(vlm.get('model_id')) if vlm.get('enabled') else None,
                        str(vlm.get('description_language') or ''), str(vlm.get('custom_instructions') or '')[:2000],
-                       _uuid(asr.get('model_id')) if asr.get('enabled') else None, str(asr.get('language') or ''))
+                       _uuid(asr.get('model_id')) if asr.get('enabled') else None, str(asr.get('language') or ''),
+                       dict(settings))
 
 
 def check_upload(config: MediaConfig, filename: str) -> None:
@@ -138,8 +142,16 @@ def pdf_page_images(data: bytes, limit: int = MAX_PDF_PAGES) -> list[tuple[int, 
 
 
 async def parse(factory, config: MediaConfig, filename: str, data: bytes) -> list[Section]:
-    """Sections of a document, using the vision / speech models for images, audio and scanned PDFs."""
+    """Sections of a document, using the vision / speech models for images, audio and scanned PDFs.
+
+    A rule of the base (`parser_engine_rules`) can send a file type to an external parser engine instead.
+    """
     suffix = suffix_of(filename)
+    from . import parsers
+    engine = parsers.engine_for(config.settings, filename)
+    if engine not in (parsers.BUILTIN, 'simple'):
+        from nexus_knowledge.ingest import engines
+        return await engines.parse_with(engine, parsers.http_client_for, config.parser_config or {}, filename, data)
     if suffix in IMAGE_MIME:
         if config.vision_model is None:
             raise ParseError('image needs a VLM model')

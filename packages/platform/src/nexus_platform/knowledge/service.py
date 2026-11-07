@@ -38,6 +38,8 @@ from . import access, media, stores
 from nexus_knowledge.retrieval import synonyms as synonym_rules
 from .graph import config as graph_config
 from . import faq as faq_rules
+from . import parsers  # noqa: F401  (registers the external parser engines in the catalog)
+from . import rerank as rerank_rules
 
 KB_TYPES = ('document', 'faq', 'wiki')
 INDEXING_KEYS = ('vector', 'keyword', 'graph', 'wiki')
@@ -144,6 +146,10 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
     ChunkConfig.from_settings(chunk_size, chunk_overlap, (settings or {}).get('chunking_config'))
     synonym_rules.parse((settings or {}).get('synonyms'))  # rejects malformed synonym groups
     _check_enrichment(db, tenant_id, user_id, settings)
+    rerank_rules.validate(settings)
+    rerank_block = (settings or {}).get('rerank_config') or {}
+    if rerank_block.get('enabled') and user_id is not None:
+        _authorize_model_of_type(db, tenant_id, user_id, UUID(str(rerank_block['model_id'])), 'rerank')
     for rule in ((settings or {}).get('chunking_config') or {}).get('parser_engine_rules') or []:
         if isinstance(rule, dict) and rule.get('engine'):
             capabilities.require_available('parser_engine', str(rule['engine']))  # external engines are planned
@@ -537,3 +543,4 @@ from .graph import neo4j as _neo4j  # noqa: E402,F401  (registers the neo4j grap
 capabilities.mark_available('graph_store', 'builtin')
 for _feature in ('graph_settings', 'graph_browser'):
     capabilities.mark_available('kb_feature', _feature)
+capabilities.mark_available('kb_feature', 'rerank', verified=False)

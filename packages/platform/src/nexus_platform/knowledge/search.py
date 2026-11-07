@@ -32,6 +32,7 @@ from nexus_platform.persistence.models import (FaqEntryRecord, KnowledgeBaseReco
                                                KnowledgeDocumentVersionRecord)
 from . import access, embedding, stores
 from . import faq as faq_rules
+from . import rerank as rerank_rules
 from .organize import DocumentFilter
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,8 @@ class SearchHit:
 @dataclass
 class SearchResult:
     hits: list[SearchHit]
+    #: Rerank diagnostics (outcome, model, thresholds) when a base asked for reranking, else None.
+    rerank: dict[str, Any] | None = None
     degraded: list[dict[str, str]] = field(default_factory=list)
     searched: list[str] = field(default_factory=list)
     ignored: list[str] = field(default_factory=list)
@@ -113,7 +116,7 @@ def resolve_scope(db: Session, tenant_id: UUID, user_id: UUID, *, bound: Sequenc
 async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, user_id: UUID, query: str, *,
                  limit: int = 8, bound: Sequence[UUID] | None = None, requested: Sequence[UUID] | None = None,
                  vector_weight: float = 1.0, keyword_weight: float = 1.0,
-                 doc_filter: DocumentFilter | None = None) -> SearchResult:
+                 doc_filter: DocumentFilter | None = None, rerank: bool = True) -> SearchResult:
     """Search the caller's readable scope. ``db`` is used for reads only; audits are written in it too."""
     query = (query or '').strip()
     if not query:
@@ -163,7 +166,17 @@ async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, u
         finally:
             await index.close()
     fused = fuse(vector_lists, keyword_lists, vector_weight=vector_weight, keyword_weight=keyword_weight)
-    result.hits = _load_hits(db, fused, scoped, limit, query)
+    rerank_config = next((c for c in (rerank_rules.config_of(item.kb.settings) for item in scoped) if c), None) \
+        if rerank else None
+    if rerank_config is None:
+        result.hits = _load_hits(db, fused, scoped, limit, query)
+        return result
+    # Rerank a wider pool, then cut to the requested size.
+    pool = _load_hits(db, fused, scoped, min(rerank_rules.policy.MAX_CANDIDATES, max(limit * 3, limit)), query)
+    result.hits, diag = await rerank_rules.rerank_hits(factory, tenant_id, user_id, rerank_config, query, pool, limit)
+    result.rerank = {'outcome': diag.outcome, 'model_id': diag.model_id, 'threshold': diag.threshold,
+                     'effective_threshold': diag.effective_threshold, 'candidates': diag.candidate_count,
+                     'results': diag.result_count, 'top_score': diag.top_score, 'error': diag.error}
     return result
 
 
