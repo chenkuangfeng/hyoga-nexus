@@ -101,7 +101,7 @@ zip / 目录 ──► resolve → ResolvedSkillPackage(slug, files[(path, bytes
 
 ### 7.2 frontmatter 兼容
 
-- 已知键：`name`、`description`、`tools`、`scripts`、`model_invocable`、`user_invocable`，以及第三方常见的 `version`、`license`、`metadata`、`allowed-tools`（映射为 `tools` 的提示，不自动赋权）。
+- 已知键：`name`、`description`、`tools`、`scripts`、`execution`、`model_invocable`、`user_invocable`，以及第三方常见的 `version`、`license`、`metadata`、`allowed-tools`（映射为 `tools` 的提示，不自动赋权）。
 - 未知键保留在版本元数据 `extra` 中，导入时给出提示，不阻止。
 - 保守修复（WeKnora）：首次解析失败时尝试两种修复——缩进到 `name:` 下的键提升为顶层、标量里的未加引号冒号补引号；成功则标记 `frontmatter_repaired`。
 - 解析方式见决定 4。
@@ -130,7 +130,17 @@ skills/<name>@<hash12>/{SKILL.md, refs/, scripts/}   ← 本会话可用（绑�
 - 虚拟根新增只读的 `/skills`：`paths.VIRTUAL_ROOTS` 增加，`HostFileStore` 对其写入一律拒绝；docker 后端加 `-v <dir>:/skills:ro`，bwrap 后端加 `--ro-bind`（bwrap 每条命令一个隔离环境，需要在真实环境验证）。容器是长期的，所以投射目录在容器创建时挂载，技能集合在会话内不变；会话中新保存的私有技能的脚本在下一个会话生效。
 - 其他会话、其他租户与未授权的技能不在该目录中。
 - `run_skill_script`：命令为 `cd /workspace && <解释器> /skills/<name>@<hash>/scripts/<file>`，参数经 stdin；解释器白名单沿用 `guard`；输出转义沿用 `runner`。依赖由镜像提供，不在运行时安装；失败时附 WeKnora 式的恢复提示。
-- 沙箱不可用：生产环境不提供脚本工具；开发模式的门禁只对 `builtin` 来源开放。
+- 运行位置策略 `resolve_execution(skill_version, deployment, agent_policy, sandbox_state) -> sandbox | local | unavailable(reason)`：
+
+| 声明 | 技能来源 | 部署 `allow_local_scripts` | 沙箱可用 | 结果 |
+| --- | --- | --- | --- | --- |
+| `sandbox` | 任意 | 任意 | 是 | `sandbox` |
+| `sandbox` | 任意 | 任意 | 否 | `unavailable(sandbox_unavailable)`，不回退 |
+| `local` | `builtin` | 开 | 任意 | `local`（还需智能体设置开启技能脚本） |
+| `local` | `builtin` | 关 | 任意 | `unavailable(local_not_allowed)`，不回退 |
+| `local` | 其他来源 | 任意 | 任意 | 保存或发布时已拒绝；历史数据若存在则 `unavailable` |
+
+  声明值随版本内容固定，作者不能在运行时改变；策略的输入都来自部署与平台，不来自技能自己。纯指令技能不经过该策略。
 - 开放网络的沙箱执行任何技能脚本，每次调用强制审批（风险等级已是 `destructive`）。
 - 私有技能的脚本：投射可用后允许保存与运行，运行同样只在沙箱。
 
