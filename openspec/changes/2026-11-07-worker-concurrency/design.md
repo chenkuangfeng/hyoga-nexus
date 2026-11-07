@@ -17,12 +17,13 @@ run_loop (同步)                          run_async (一个事件循环)
 
 - 领取协程：信号量有空位才领取（`claim_next` 在线程池里执行）；没有空位时等待任一 Run 结束，不预先领取，避免租约空转。
 - Run 任务：把现有 `run_once` 里 `execute_native` 之后的 `after_run` 一并放入任务内，任务结束释放信号量。
-- 默认 `max_concurrent_runs = 1` 时，领取与执行的先后顺序和现在相同；`stopped` 事件与 `once` 语义保持。
+- `max_concurrent_runs = 1` 时，领取与执行的先后顺序和现在相同；同步入口 `run_once` 保留给测试与 `--once`；`stopped` 事件与 `once` 语义保持。
 - `execute_native` 已是协程，不需要改写；改的是它的调用方与它内部的两类阻塞点（数据库、等信号）。
 
 ## 2. 同步数据库与线程池
 
-- `store.py` 等处的同步事务保持不变，调用点统一经 `await db_call(fn, *args)`，它是 `loop.run_in_executor(db_executor, fn, *args)` 的薄封装；`db_executor` 为专用 `ThreadPoolExecutor(db_threads)`，不占用默认执行器（默认大小 `min(32, cpu+4)`，会与 `asyncio.to_thread` 的其他使用争用）。
+- `store.py` 等处的同步事务保持不变，调用点统一经 `await db_call(fn, *args)`，它是 `loop.run_in_executor(db_executor, fn, *args)` 的薄封装；`db_executor` 为专用 `ThreadPoolExecutor(db_threads)`（未配置时为单线程执行器，保持测试里「同一连接的调用互不重叠」的语义），不占用默认执行器（默认大小 `min(32, cpu+4)`，会与 `asyncio.to_thread` 的其他使用争用）。
+- 迁移方式：`DurableRuntimeStore` 中 31 处同步数据库块均不含 `await`（已用 AST 核对），22 个纯同步方法用 `@offloaded` 装饰器整体搬入线程池，含 `await` 的 5 个方法（`authorize`、`load_skill`、`exec_skill`、`read_skill_file`、`search_memory`）手工拆出同步块；`emit` 的临时事件分支不走线程。
 - 热点调用：`DurableRuntimeStore.emit / message / commit / save_progress / heartbeat / watch`、`prepare_execution`、`admit_or_defer`、`claim_next`、`finish`。凡是在协程里直接调用同步数据库函数的地方，审计后全部包起来；新增一个测试扫描 `async def` 内的直接 `with factory()` 调用（白名单之外即失败）。
 - 容量：启动时比较 `db_threads` 与引擎连接池可用连接数（SQLAlchemy `pool_size + max_overflow`；SQLite 文件库按 1 个写者计，仅警告），池不足则报错，防止线程池把连接池耗尽后互相等待。
 - 取消语义：已放入线程池的同步事务无法中断，取消只在 `await` 返回处生效；事务本身很短（毫秒级），可接受。
@@ -56,7 +57,7 @@ API 进程
   └─ worker 线程：事件循环 B，run_async(max_concurrent_runs) + 通道 memory
 ```
 
-`EmbeddedWorkers` 只起一个线程，线程内 `asyncio.run(run_async(...))`。`embedded_workers` 弃用（见提案）。异常退避重启保持。
+`EmbeddedWorkers` 只起一个线程（循环内仍是协程并发），线程内 `asyncio.run(run_async(...))`。`embedded_workers` 弃用（见提案）。异常退避重启保持。
 
 ## 8. unknown 恢复
 

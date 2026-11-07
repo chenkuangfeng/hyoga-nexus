@@ -1,9 +1,9 @@
 # 实施任务
 
-状态：待确认（2026-11-07）。已完成的任务才勾选。
+状态：实施中（2026-11-07，决定 1–8 已确认，默认并发 32）。已完成的任务才勾选。
 
 ## 0. 准备
-- [ ] 0.1 用户确认决定 1–8。
+- [x] 0.1 用户确认决定 1–8（决定 1 默认 32）。
 - [ ] 0.2 补读 deer-flow `runtime/runs/worker.py` 的任务生命周期与取消、`app/gateway/app.py` 并发上限接入；Octop `infra/bridge/transport.py` 的 `_spawn`；WeKnora `qa.go` 的取消上下文。
 - [ ] 0.3 共享状态审计（沙箱会话、工具注册表、嵌入器单例、`contextvars`、`OutputSpill`、模型连接池配置、`_worker_loop`），结果记入本节。
 - [ ] 0.4 扫描 `async def` 内直接调用同步数据库的位置，列出清单。
