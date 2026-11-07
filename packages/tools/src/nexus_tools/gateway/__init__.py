@@ -130,6 +130,23 @@ class AuthorizedToolGateway:
             kwargs['rules'] = [{'id': f.rule_id, 'description': f.description} for f in findings]
         return await self.access.approval(call, **kwargs)
 
+    def may_suspend(self, call: ToolCall) -> bool:
+        """Whether `call` could stop for approval, judged without running anything.
+
+        The batch scheduler uses it to keep such a call out of a parallel group (openspec 2026-11-07-tool-expansion,
+        section 2). It is deliberately pessimistic: a session grant that would skip the approval is not consulted.
+        """
+        version = self.bindings.get(call.name)
+        tool = self.registry.get(call.name, version) if version else None
+        if tool is None:
+            return False  # refused before any approval is asked
+        if self._decide(tool) == 'ask':
+            return True
+        arguments, _ = prepare_arguments(tool, call.arguments)
+        if arguments is None:
+            return False
+        return any(finding.severity == 'HIGH' for finding in tool_guard.scan(call.name, arguments, self.guard_rules))
+
     def begin_turn(self) -> None:
         """Called by the engine before each turn's tool calls: resets the per-turn output budget."""
         self.turn_used = 0

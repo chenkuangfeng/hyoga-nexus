@@ -1,28 +1,35 @@
 # 实施任务
 
-状态：待确认（2026-11-07）。确认前不编码；已完成的任务才勾选。
+状态：实施中（2026-11-07，决定 1–9 已确认）。已完成的任务才勾选。
 
 ## 0. 准备
 
 - [ ] 0.1 补读沙箱参考：octop-harness `backends/docker_sandbox.py`、`bwrap_shell.py`、`local_shell.py`、`composite.py`、`probe.py`；deer-flow `sandbox/`；Hermes `terminal_tool*.py`、`process_registry*.py`；WeKnora `shell_exec*.go`、`work.go`、沙箱文件工具、`file_mutation_queue.go`；DeepSeek `shell/`、`fs/`。
 - [ ] 0.2 补读 Web 与其他参考：octop-harness `web_search/_registry.py`、`web_fetch.py`、`security/ssrf.py`；Hermes `url_safety.py`、`tool_search*.py`、`schema_sanitizer.py`、`cronjob_tools.py`、`delegate_tool*.py`；deer-flow `task_tool.py`；WeKnora `wiki_*.go`。
-- [ ] 0.3 用户确认决定 1–9。
+- [x] 0.3 用户确认决定 1–9（全部采用推荐方案）。
 - [ ] 0.4 确认后先更新文档：`docs/architecture.md` 2.5、2.9、2.10、2.11；`docs/roadmap.md`（新增步骤 3.27，并在第 8 步标注先行实施）；`packages/tools/docs/design.md`；`packages/sandbox` 的 `docs/` 与 `README.md`。
 
 ## 1. 工具分组与开关（阶段 A，先做，沙箱依赖它）
 
-- [ ] 1.1 `ToolDefinition` 新增 `group`、`source`、`concurrency`、`deferrable`（均带默认值）；给现有工具补 `group`，删除 `catalog.TOOL_GROUPS`。
-- [ ] 1.2 `nexus_core.native.tool_groups`：分组注册表、`Availability`、`default_enabled`。
-- [ ] 1.3 `NativePolicy.tool_groups_enabled` 与设置页标签；老版本缺省处理。
-- [ ] 1.4 `preparation.py` 的门控改为通过分组注册表；现有记忆、知识库、技能脚本测试保持通过。
-- [ ] 1.5 一致性测试：注册表、`BUILTIN_TOOL_NAMES`、分组声明三者互相检查。
-- [ ] 1.6 目录接口返回 `availability` 与 `reason`；智能体编辑器按组显示整组开关、逐工具勾选、风险徽标与不可用原因。
+- [x] 1.1 `ToolDefinition` 新增 `group`、`source`、`concurrency`、`deferrable`（均带默认值）；给现有工具补 `group`，删除 `catalog.TOOL_GROUPS`。
+  - `ToolDefinition` 的四个新字段不进 `repr`，避免改动 `context_prefix_changed` 的工具块摘要。分组在 `registration.builtins()` 注册处声明（`replace(definition, group=...)`），删除了 `catalog.TOOL_GROUPS`。
+- [x] 1.2 `nexus_core.native.tool_groups`：分组注册表、`Availability`、`default_enabled`。
+  - `nexus_core.native.tool_groups`：`ToolGroup`、`TOOL_GROUPS`、`group_enabled`；`base` 锁定。
+- [x] 1.3 `NativePolicy.tool_groups_enabled` 与设置页标签；老版本缺省处理。
+  - `tool_groups_enabled` 只接受可切换的组 id；设置页字段类型为 `tool_groups`（前端渲染随 1.6）。
+- [x] 1.4 `preparation.py` 的门控改为通过分组注册表；现有记忆、知识库、技能脚本测试保持通过。
+  - 调整：记忆、知识库、技能脚本三处沿用 `preparation.py` 的按名过滤（行为不变，原测试保持通过）；新组经 `nexus_platform.runs.tool_gates` 与网关的 `hidden_groups` 两层门控。原因：平台包不依赖 `nexus_tools`，读不到注册表里的分组。
+- [x] 1.5 一致性测试：注册表、`BUILTIN_TOOL_NAMES`、分组声明三者互相检查。
+  - `tests/test_tool_groups.py`：注册表与 `BUILTIN_TOOL_NAMES` 一致、分组合法、门控与网关隐藏。
+- [ ] 1.6 目录接口返回 `availability` 与 `reason`（接口已完成：`/agent-tools` 的 `group_info`）；智能体编辑器按组显示整组开关、逐工具勾选、风险徽标与不可用原因。
 
 ## 2. 调度增强（阶段 C，沙箱依赖它）
 
-- [ ] 2.1 `ConcurrencyHint` 与 `execute_batch` 分类调度；未声明时行为与现在完全一致（用现有并行测试证明）。
-- [ ] 2.2 `serial(key)` 排队：同 key 串行、不同 key 并行；审批恢复路径覆盖。
-- [ ] 2.3 测试：同路径并发写入不丢失；解析失败按独占处理；结果顺序不变。
+- [x] 2.1 `ConcurrencyHint` 与 `execute_batch` 分类调度；未声明时行为与现在完全一致（用现有并行测试证明）。
+  - `classify` 与 `execute_batch`；网关新增 `may_suspend`，可能进入审批的调用不加入并行组（挂起后从第一个待处理调用恢复，并行出去的兄弟调用会被重复执行）。
+- [x] 2.2 `serial(key)` 排队：同 key 串行、不同 key 并行；审批恢复路径覆盖。
+- [x] 2.3 测试：同路径并发写入不丢失；解析失败按独占处理；结果顺序不变。
+  - `tests/test_tool_scheduling.py`；全量 pytest 1067 通过。
 
 ## 3. 沙箱后端（阶段 B）
 
