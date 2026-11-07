@@ -115,6 +115,7 @@
 35. 技能包：包是分发单位（应用到智能体展开为逐个绑定）；内置包对应仓库 `skills/` 子目录；导出为 zip。
 36. 使用记录与生命周期：`active → stale → archived`，长期未用才归档且**检查定时任务引用**（openclaw），只归档不删除。
 37. 技能凭据声明（WeKnora / Hermes）、`skill_search`（RAGFlow）、LLM 安装智能体（WeKnora 的完整形态）。
+38. 审核辅助数据：确定性的包分析器（资源引用图、内容摘要、评测清单，DeerFlow `skills/review`），供「共享到空间库」的审核页展示；上传时浏览器端先解压并展示文件清单（Octop `parseSkillZip.ts`，纯体验优化，服务端仍完整校验）。
 
 ### 范围外
 
