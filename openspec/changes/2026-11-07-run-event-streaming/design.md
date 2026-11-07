@@ -87,6 +87,7 @@ async def stream(run, after_sequence):
   - 临时事件（且后端 `supports_ephemeral`）：校验本地缓存的租约状态（不开事务），直接 `bus.publish`；租约状态由心跳线程刷新。
   - 持久事件：现有事务不变；事务提交后（`SqlAlchemyUnitOfWork` 退出后）发布，失败吞掉。
 - `commit(events, message, progress)`：同一事务写入，提交后批量发布其中的持久事件。
+- 回合结束的 `commit` 的 `events` 中加入 `message.completed {turn, text}`（`text` 为该回合助手消息的文本部分）；与消息行同事务。
 - `heartbeat()`：先 `control.wait(run, timeout=心跳周期)`，收到信号立即读库确认；超时按原逻辑读库。同时续期生产者租约与活动 Run 标记。
 - 终态：写库的终态事件提交后 `publish_end`、`marker.clear`、`bus.cleanup(delay=retention)`。
 
@@ -99,6 +100,7 @@ async def stream(run, after_sequence):
 
 ## 7. 前端
 
+- `toAgentEventStream` 新增 `message.completed`：同一 `turn` 已有开放的 `answer` 则把内容替换为完整文本并标记完成，没有则新建一个已完成的 `answer`（历史回看路径）。`stream.resync` 清空未完成（`done=false`）的 `answer`。
 - `nexusAgentEvents` 处理无 `id` 的临时事件与 `stream.resync`；`EventSource` 的自动重连用最后一个持久 `id`。
 - 打开会话时调 `live-run` 接入进行中的流。
 

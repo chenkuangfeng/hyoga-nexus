@@ -41,7 +41,8 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
    - `memory`：进程内，仅用于测试与 API 和 worker 同进程的嵌入运行；API 与 worker 分进程时配置此后端会在启动时报错。
 3. **事件分级**：
    - **持久事件**（除 `message.delta` 外的全部）：保持现状，同一事务写库，提交后再发布到通道，ID 即 `sequence`。
-   - **临时事件**（`message.delta`）：只发布到通道，不写库；完整文本仍由已持久化的助手消息提供。临时事件不带 SSE `id:`，因此 `Last-Event-ID` 永远指向持久序号。
+   - **临时事件**（`message.delta`）：只发布到通道，不写库。临时事件不带 SSE `id:`，因此 `Last-Event-ID` 永远指向持久序号。
+   - **新增持久事件 `message.completed`**（载荷 `{turn, text}`）：每个回合结束时，与该回合的助手消息在同一事务写入（`commit(events, message, progress)` 已支持）。原因：前端对已完成 Run 用 `listRunEvents` 读出持久事件，再由 `toAgentEventStream` 重建「回答 ↔ 工具」交错的时间线（`NexusChatPage.vue`、`utils/nexusAgentEvents.ts`）；`messages` 表只提供合并后的文本，不含交错顺序。没有它，`message.delta` 不写库会使历史时间线丢失回答文字。前端遇到 `message.completed` 时，把该回合的 `answer` 替换为完整文本并标记完成；`database` 后端下 `message.delta` 仍写库，两者一致，直接标记完成。
    - 通道发布失败只记日志和指标，不使 Run 失败；订阅者自动回退到数据库路径。
 4. **订阅流程**（解决先放后读的竞态）：先记录通道尾部，再从数据库重放 `after_sequence` 之后的持久事件，再消费通道并按 `sequence` 去重。通道断档（`StreamGap`）时发送 `stream.resync` 事件，前端丢弃未完成的流式文本，以数据库中的消息为准。
 5. **生产者围栏**（deer-flow）：worker 开始执行时在通道登记带令牌的生产者租约，心跳续期；发布走「令牌一致才写入」的 Lua；租约丢失后临时事件不再发布。持久事件仍由数据库租约围栏（不变）。订阅者可据生产者租约过期状态结束流（`stream.closed`），由客户端回落为查询 Run 状态。
@@ -70,7 +71,7 @@ API 与 worker 是两个进程，目前全部经数据库交互，并发上来�
 ## 待确认的决定
 
 1. **默认后端**：（推荐）`database` 为默认，`redis` 为生产推荐并可选启用；备选：强制 Redis。理由：本地开发零依赖，生产再升级，且 Redis 故障时能回退。
-2. **`message.delta` 不再写库**：（推荐）采用；备选：仍写库但按更大窗口合并。采用后写库量下降最多（流式期间的主要写入），代价是进行中的半截文本只能从通道恢复，通道断档时只能看到已持久化的部分。
+2. **`message.delta` 不再写库**：（推荐）采用；备选：仍写库但按更大窗口合并。采用后写库量下降最多（流式期间的主要写入），代价是进行中的半截文本只能从通道恢复，通道断档时只能看到已持久化的部分；回答文本在 `messages` 与 `run_events`（`message.completed`）各存一份。已用前端代码核对：历史时间线依赖事件而非消息，因此必须配套 `message.completed`。
 3. **生产者令牌围栏**：（推荐）采用 deer-flow 的 Lua 比较写入；备选：只靠数据库租约，不围栏临时事件。
 4. **控制通道**：（推荐）取消与审批走通道加数据库双写；备选：保持仅读库。
 5. **活动 Run 标记与 `GET /sessions/{id}/live-run`**：（推荐）采用。

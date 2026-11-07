@@ -5,7 +5,7 @@
 ## 0. 准备
 - [ ] 0.1 用户确认决定 1–10。
 - [ ] 0.2 补读 deer-flow `stream_bridge/redis.py` 的 `subscribe`、围栏与清理，`runs/worker.py` 的发布与租约接入；WeKnora `redis_manager.go` 的 live-run 与 steer 部分。
-- [ ] 0.3 核对：助手消息是否在持久事件中携带完整文本（决定 2 的前提）；`message.delta` 的所有消费方；前端事件归并逻辑。
+- [x] 0.3 核对：助手消息作为 `messages` 行整条持久化，但前端历史时间线由持久事件重建（`listRunEvents` → `toAgentEventStream`），`messages` 只作兜底；因此决定 2 必须配套持久事件 `message.completed`（见 3.1、5.1）。
 - [ ] 0.5 核对嵌入模式的线程安全项（见设计 9），尤其 `run_worker` 的信号安装、引擎与嵌入器初始化顺序、`_worker_loop()`。
 - [ ] 0.6 补读 deer-flow `app/gateway/app.py` 的并发上限接入与 `scheduler`；WeKnora `registerModelConcurrencyLimiter` 与 `backgroundTaskMiddleware`。
 - [ ] 0.4 先更新文档：`docs/architecture.md`、`docs/roadmap.md`、`apps/api`、`apps/worker`、`packages/core`、`packages/platform` 的 design 与 README。
@@ -22,7 +22,7 @@
 - [ ] 2.5 契约测试：三后端同一套用例（`fakeredis`）。
 
 ## 3. 写入路径
-- [ ] 3.1 `store.py`：持久事件提交后发布；临时事件走通道；失败吞掉并计数。
+- [ ] 3.1 `store.py`：持久事件提交后发布；回合结束的 `commit` 加入 `message.completed {turn, text}`；临时事件走通道；失败吞掉并计数。
 - [ ] 3.2 `heartbeat()` 接入控制通道、生产者租约、活动标记续期。
 - [ ] 3.3 取消与审批接口双写控制信号。
 - [ ] 3.4 终态收尾：`publish_end`、清标记、延迟清理；会话与 Run 删除清理键。
@@ -33,7 +33,7 @@
 - [ ] 4.3 指标。
 
 ## 5. 前端
-- [ ] 5.1 无 `id` 事件、`stream.resync`、`live-run` 接入；单元测试。
+- [ ] 5.1 `toAgentEventStream` 支持 `message.completed`（替换并完成 / 历史回看新建）；无 `id` 事件、`stream.resync`、`live-run` 接入；单元测试覆盖「只有 completed 无 delta」「delta 与 completed 同时存在」「resync 后以 completed 为准」。
 
 ## 6. 嵌入模式
 - [ ] 6.1 `run_worker` 拆为 `run_loop` 与信号安装；`split` 行为用现有 worker 测试证明不变。
