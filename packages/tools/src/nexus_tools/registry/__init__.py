@@ -44,5 +44,9 @@ class ToolRegistry:
         Draft202012Validator.check_schema(definition.parameters)
         self._tools[key] = tool
 
+    def definitions(self) -> list:
+        """Every registered tool's definition (all versions)."""
+        return [tool.definition for tool in self._tools.values()]
+
     def get(self, name: str, version: str) -> RegisteredTool | None:
         return self._tools.get((name, version))

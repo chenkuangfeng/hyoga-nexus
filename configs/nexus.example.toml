@@ -56,12 +56,28 @@ max_concurrent_sessions = 8
 
 [deployment]
 # split (default): the API and one or more worker processes (`python -m nexus_worker`) run separately.
-# embedded: the API process also runs the workers, with the in-process memory event channel and no Redis.
-# One worker executes one Run at a time, so embedded_workers is how many Runs can execute at once.
+# embedded: the API process also runs the worker (one thread with one event loop, Runs as coroutines) with the
+# in-process memory event channel and no Redis. Use a single API process with it.
 mode = "split"
-# embedded_workers = 4
 # Idle-time jobs (schedules, knowledge index, memory capture and consolidation, embeddings) while embedded.
 # background_concurrency = 1
+
+[worker]
+# One worker process executes up to max_concurrent_runs Runs at once as coroutines on one event loop, so the
+# model connection pool is shared by all of them. The count is also bounded by [platform].max_concurrent_sessions
+# (a session runs one Run at a time). A crash loses every Run the process was executing, so size it for what you can
+# tolerate; a SQLite database has a single writer and is held to 4.
+max_concurrent_runs = 32
+# Threads for synchronous database calls (a Run mostly waits on the model, so far fewer than the Runs); the worker's
+# connection pool holds db_threads + 4. Keep the database's connection limit above the pools of all processes.
+db_threads = 16
+# Seconds to let Runs wind down when the worker stops.
+stop_timeout_seconds = 30
+
+[api]
+# Threads serving the synchronous endpoints (each holds a database connection while it works); the API's pool
+# holds threads + 4 connections.
+threads = 40
 
 [run_events]
 # How a Run's live events travel from the worker to viewers. Stored events always stay in the database; this

@@ -177,10 +177,11 @@ class MemoryBus:
 
 
 class MemoryControl:
-    """Per-Run wake-up flag; ``wait`` is called from a thread."""
+    """Per-Run wake-up flag; ``wait`` is called from a thread, ``wait_async`` from a worker's event loop."""
 
     def __init__(self) -> None:
         self._flags: dict[str, threading.Event] = {}
+        self._async: dict[str, list] = {}  # run id -> [(loop, asyncio.Event)] of coroutines waiting for a signal
         self._lock = threading.Lock()
 
     def _flag(self, run_id: UUID | str) -> threading.Event:
@@ -189,6 +190,35 @@ class MemoryControl:
 
     def signal(self, run_id: UUID | str, kind: str) -> None:
         self._flag(run_id).set()
+        with self._lock:
+            waiters = list(self._async.get(str(run_id), ()))
+        for loop, event in waiters:  # the signal comes from another thread (the API side)
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:  # that loop is closed
+                pass
+
+    async def wait_async(self, run_id: UUID | str, timeout: float) -> bool:
+        key, flag = str(run_id), self._flag(run_id)
+        if flag.is_set():  # a signal that arrived while nobody was waiting is not lost
+            flag.clear()
+            return True
+        event, loop = asyncio.Event(), asyncio.get_running_loop()
+        with self._lock:
+            self._async.setdefault(key, []).append((loop, event))
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            with self._lock:
+                waiting = self._async.get(key, [])
+                if (loop, event) in waiting:
+                    waiting.remove((loop, event))
+                if not waiting:
+                    self._async.pop(key, None)
+        flag.clear()
+        return True
 
     def wait(self, run_id: UUID | str, timeout: float) -> bool:
         flag = self._flag(run_id)

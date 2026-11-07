@@ -21,6 +21,7 @@ from nexus_platform.models.provider_settings import StoredCredentialResolver
 from nexus_platform.errors import PlatformError
 from nexus_runtimes.native.models.network import provider_client
 from nexus_runtimes.native.models.factory import create_model
+from nexus_platform.runs.dbexec import run_db
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_platform.runs.tool_gates import deployment_gate_facts, hidden_groups
 from .sandbox_runtime import session_for
@@ -125,9 +126,10 @@ def admit_or_defer(factory, epoch: int, task_id, worker_id: str) -> bool:
 async def execute_native(factory, task_id, worker_id, *, model_factory=None, registry_factory=None,
                          resolver=None, hooks=(), stopped=None, ledger_epoch=None, compaction_model_factory=None,
                          watchdog=None):
-    if ledger_epoch is not None and not admit_or_defer(factory, ledger_epoch, task_id, worker_id):
+    # Synchronous database work runs on the database pool so the Runs sharing this event loop are not stalled.
+    if ledger_epoch is not None and not await run_db(admit_or_defer, factory, ledger_epoch, task_id, worker_id):
         return
-    context = prepare_execution(factory, task_id, worker_id)
+    context = await run_db(prepare_execution, factory, task_id, worker_id)
     if context is None:
         return
     store = DurableRuntimeStore(factory, context, worker_id, task_id)
@@ -135,7 +137,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
     monitor_error = None
     # Watchdog state lives for this Run only; a worker restart forgets it, so an open stall may be re-reported once.
     watch_alerted: set[str] = set()
-    store.stream_start()
+    await run_db(store.stream_start)
     async def monitor():
         nonlocal monitor_error
         next_watch = 0.0
@@ -145,7 +147,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
                 # The database lease and cancel check runs every `lease_check_seconds`; a cancel signal on the
                 # run-event channel brings it forward, so cancelling is quick without a check every 0.2 s.
                 due = time.monotonic() >= next_check
-                if (stopped and stopped.is_set()) or (due and store.heartbeat()):
+                if (stopped and stopped.is_set()) or (due and await run_db(store.heartbeat)):
                     token.cancel()
                     return
                 if due:
@@ -157,11 +159,11 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             if watchdog is not None and time.monotonic() >= next_watch:
                 next_watch = time.monotonic() + watchdog.interval_seconds
                 try:
-                    store.watch(watchdog, watch_alerted)
+                    await run_db(store.watch, watchdog, watch_alerted)
                 except Exception:
                     # Observation failures must never stop or fail the Run it observes.
                     logger.warning("Run watchdog check failed", extra={"task_id": str(task_id)}, exc_info=True)
-            if await asyncio.to_thread(store.wait_for_signal, 0.2):
+            if await store.wait_for_signal_async(0.2):
                 next_check = 0.0
     monitor_task = asyncio.create_task(monitor())
     model = None
@@ -192,7 +194,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         tool_access = ToolAccess(store)
         bound = {name: version for name, version, _ in context.bindings}
         from nexus_platform.schedule.service import is_scheduled_session
-        if is_scheduled_session(factory, context.session_id):
+        if await run_db(is_scheduled_session, factory, context.session_id):
             # A scheduled run has nobody to ask: no questions, no approvals (whatever needs one is refused), no new schedules.
             from .subagent import NoApprovalAccess
             tool_access = NoApprovalAccess(tool_access)
@@ -257,5 +259,5 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
                 await model.close()
     if monitor_error:
         outcome = RuntimeOutcome('interrupted', monitor_error)
-    store.finish(outcome)
-    store.stream_finish()
+    await run_db(store.finish, outcome)
+    await run_db(store.stream_finish)

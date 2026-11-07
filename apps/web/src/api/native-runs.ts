@@ -19,6 +19,7 @@ import {
   type ConversationMessage,
   type ConversationPage,
   type AgentView,
+  type BlockedSession,
   type PendingInput,
   type RunEvent,
   type RunView,
@@ -60,7 +61,8 @@ export async function getConversation(tenantId: string, sessionId: string): Prom
   const data: unknown = await get(`${tenantPath(tenantId)}/sessions/${encodeURIComponent(sessionId)}/messages`)
   if (!isRecord(data) || !Array.isArray(data.messages)) throw new Error('Unexpected conversation response')
   const latest = data.latest_run === null ? null : requireValid(data.latest_run, isRunView, 'run')
-  return { messages: data.messages as ConversationMessage[], latest_run: latest }
+  const blocked = data.blocked && typeof data.blocked === 'object' ? (data.blocked as BlockedSession) : null
+  return { messages: data.messages as ConversationMessage[], latest_run: latest, blocked }
 }
 
 /**
@@ -217,4 +219,9 @@ export async function streamRunEvents(tenantId: string, runId: string, options: 
       throw error
     },
   })
+}
+
+/** Release the session an interrupted Run left blocked. The Run is not replayed; the call is idempotent. */
+export async function resolveUnknownRun(tenantId: string, runId: string): Promise<void> {
+  await post(`${tenantPath(tenantId)}/runs/${encodeURIComponent(runId)}/resolve-unknown`, {})
 }

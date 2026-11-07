@@ -9104,6 +9104,7 @@ export default {
     },
     cancel: '取消執行',
     streamError: '事件流中斷：{message}',
+    blocked: { message: '會話被中斷的執行阻塞：服務程序曾意外中斷，無法確認該執行是否已產生外部影響。確認可以繼續後，點擊解除；被中斷的執行不會重新執行。', release: '解除阻塞', released: '已解除，可以繼續對話', failed: '解除失敗：{message}' },
     loadError: '載入失敗',
     noSpace: '請先選擇空間',
     notFound: '會話不存在或無權存取',

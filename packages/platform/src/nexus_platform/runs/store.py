@@ -1,6 +1,8 @@
 """Durable execution store; model execution stays in runtimes."""
 from __future__ import annotations
 from nexus_platform.persistence.unit_of_work import SqlAlchemyUnitOfWork
+from nexus_platform.runs.dbexec import offloaded, run_db
+import asyncio
 import logging
 import time
 from dataclasses import asdict
@@ -123,6 +125,15 @@ class DurableRuntimeStore:
             return False
         return current.control.wait(self.context.run_id, timeout)
 
+    async def wait_for_signal_async(self, timeout: float) -> bool:
+        """Like ``wait_for_signal`` but for a coroutine: neither the loop nor a thread is held while waiting."""
+        from nexus_platform.runs.bus import channels
+        current = channels()
+        if current is None:
+            await asyncio.sleep(timeout)
+            return False
+        return await current.control.wait_async(self.context.run_id, timeout)
+
     def _renew_stream(self) -> None:
         from nexus_platform.runs.bus import channels
         current = channels()
@@ -159,7 +170,10 @@ class DurableRuntimeStore:
 
     async def emit(self, kind: str, payload: dict[str, object]) -> None:
         if kind in EPHEMERAL_KINDS and self._publish_ephemeral(kind, payload):
-            return
+            return  # live-only text goes to the bus without a thread hop or a transaction
+        await run_db(self._emit_stored, kind, payload)
+
+    def _emit_stored(self, kind: str, payload: dict[str, object]) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
@@ -177,13 +191,15 @@ class DurableRuntimeStore:
                     raise RuntimeFault('run_authorization_denied') from None
             append_event(db, run.id, kind, payload)
 
-    async def message(self, message: ModelMessage) -> None:
+    @offloaded
+    def message(self, message: ModelMessage) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             row = add_message(db, self._run(db), message)
             return str(row.id)
 
-    async def commit(self, events=(), message: ModelMessage | None = None,
+    @offloaded
+    def commit(self, events=(), message: ModelMessage | None = None,
                      progress: RuntimeProgress | None = None) -> str | None:
         """Write adjacent observations in one transaction under one lease check (P7).
 
@@ -203,7 +219,8 @@ class DurableRuntimeStore:
                 db.get(NativeRunStateRecord, run.id).progress = asdict(progress)
             return identifier
 
-    async def save_progress(self, progress: RuntimeProgress) -> None:
+    @offloaded
+    def save_progress(self, progress: RuntimeProgress) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
@@ -269,17 +286,20 @@ class DurableRuntimeStore:
         binding_id = next((binding for tool, ver, binding in self.context.bindings if tool == name and ver == version), None)
         if not binding_id:
             raise RuntimeFault('tool_authorization_denied')
-        try:
+        def check() -> None:
             with self.factory() as db:
                 authorize_run_resource(db, self.context.principal, self.context.tenant_id,
                                        self.context.run_id, UUID(binding_id))
+        try:
+            await run_db(check)
         except PlatformError:
             raise RuntimeFault('tool_authorization_denied') from None
         if name in MEMORY_TOOL_NAMES:
             await self._require_memory(name)
         return binding_id
 
-    async def _require_memory(self, name: str) -> None:
+    @offloaded
+    def _require_memory(self, name: str) -> None:
         """Re-check the memory switches before a memory tool runs (openspec 2026-11-05-memory-switches).
 
         Preparation already removed memory tools when memory was off; this covers a switch turned off
@@ -298,14 +318,16 @@ class DurableRuntimeStore:
                   {'tool_name': name[:64], 'reason': state.reason}, result='denied')
         raise RuntimeFault('memory_disabled')
 
-    async def denied(self, name: str) -> None:
+    @offloaded
+    def denied(self, name: str) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
             audit(db, run.tenant_id, run.principal_id, 'tool.denied', 'run', str(run.id),
                   {'tool_name': name[:64]}, result='denied')
 
-    async def start(self, call: ToolCall, binding_id: str | None) -> str:
+    @offloaded
+    def start(self, call: ToolCall, binding_id: str | None) -> str:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
@@ -322,7 +344,8 @@ class DurableRuntimeStore:
                 'signature': tool_signature(call.name, call.arguments)})
             return str(invocation_id)
 
-    async def approval(self, call: ToolCall, reason: str = 'policy', risk: str | None = None, rules=()):
+    @offloaded
+    def approval(self, call: ToolCall, reason: str = 'policy', risk: str | None = None, rules=()):
         """Persist/consume a per-call action decision after current resource authorization.
 
         `reason` and `risk` (tool-call-hardening E) decide whether the owner may remember the decision.
@@ -332,7 +355,8 @@ class DurableRuntimeStore:
             db = work.session
             return request(db, self._run(db), call, reason=reason, risk=risk, rules=rules)
 
-    async def grant(self, call: ToolCall) -> bool:
+    @offloaded
+    def grant(self, call: ToolCall) -> bool:
         """Whether an active session grant lets this call skip a policy approval (queried on every call)."""
         from .approvals import grant_for_call
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -343,7 +367,8 @@ class DurableRuntimeStore:
         """Persist only the registered tool's public projection of intermediate output."""
         await self.emit('tool.progress', {'invocation_id': invocation_id, 'text': text[:4000]})
 
-    async def finish_tool(self, invocation_id: str, status: str, summary: str, error_code: str | None) -> None:
+    @offloaded
+    def finish_tool(self, invocation_id: str, status: str, summary: str, error_code: str | None) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
@@ -357,7 +382,8 @@ class DurableRuntimeStore:
             audit(db, run.tenant_id, run.principal_id, 'tool.' + status, 'tool_invocation', invocation_id,
                   {'run_id': str(run.id), 'error_code': error_code})
 
-    async def spill_tool_output(self, invocation_id: str, content: str) -> str:
+    @offloaded
+    def spill_tool_output(self, invocation_id: str, content: str) -> str:
         """Store the full text of one running invocation's result and return its handle (P2).
 
         Only the current Run's running invocation may own an output, so a handle cannot be attached
@@ -376,7 +402,8 @@ class DurableRuntimeStore:
             db.add(row)
             return str(row.id)
 
-    async def read_tool_output(self, handle: str, offset: int) -> tuple[str, int, int | None] | None:
+    @offloaded
+    def read_tool_output(self, handle: str, offset: int) -> tuple[str, int, int | None] | None:
         """Return one page of an output of this Run: (text, total_chars, next_offset or None).
 
         Returns None for unknown handles, handles of other Runs, and malformed handles. The caller
@@ -400,7 +427,8 @@ class DurableRuntimeStore:
             # Total is the original size, which may exceed the stored text when the store limit applied.
             return row.content[offset:end], row.size_chars, end if end < len(row.content) else None
 
-    async def save_summary(self, summary: str, source_id: str) -> None:
+    @offloaded
+    def save_summary(self, summary: str, source_id: str) -> None:
         """Persist only a cutpoint belonging to this Session; later reads recheck source grants."""
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
@@ -413,7 +441,8 @@ class DurableRuntimeStore:
                            through_sequence=source.sequence, content=summary, max_chars=self.summary_chars)
             audit(db, run.tenant_id, run.principal_id, 'context.summary_saved', 'session', str(run.session_id))
 
-    async def drain_steer(self) -> list[ModelMessage]:
+    @offloaded
+    def drain_steer(self) -> list[ModelMessage]:
         """Consume corrections under the same lease/Run lock as message persistence."""
         from .directives import consume
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -423,7 +452,8 @@ class DurableRuntimeStore:
             require_membership(db, run.tenant_id, run.principal_id)
             return consume(db, run, add_message)
 
-    async def memory_index(self) -> str:
+    @offloaded
+    def memory_index(self) -> str:
         """Read the published pointer index for this principal without exposing drafts."""
         from nexus_platform.memory.service import index
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -437,16 +467,22 @@ class DurableRuntimeStore:
     async def load_skill(self, name: str, sandbox=None) -> str:
         """Return the body of a skill this Run's agent version binds (Level 2, inline mode)."""
         from nexus_platform.skills.service import read_for_run as read_skill
-        with SqlAlchemyUnitOfWork(self.factory) as work:
-            db = work.session
-            run = self._run(db)
-            require_membership(db, run.tenant_id, run.principal_id)
-            result = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name)
-            audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
+
+        def read() -> str:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                text = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name,
+                                  user_id=run.principal_id)
+                audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
+                return text
+        result = await run_db(read)
         await self.emit('skill.loaded', {'skill': name[:64]})
         return await self._with_skill_dir(name, result, sandbox)
 
-    async def _with_skill_dir(self, name: str, text: str, sandbox) -> str:
+    @offloaded
+    def _with_skill_dir(self, name: str, text: str, sandbox) -> str:
         """Replace ``${NEXUS_SKILL_DIR}`` in skill text with the skill's directory as a command sees it.
 
         Skills written for other platforms name their directory with such a placeholder. The skill is projected
@@ -460,7 +496,8 @@ class DurableRuntimeStore:
         from nexus_platform.skills.service import skill_files
         with SqlAlchemyUnitOfWork(self.factory) as work:
             run = self._run(work.session)
-            found = skill_files(work.session, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name)
+            found = skill_files(work.session, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name,
+                                user_id=run.principal_id)
         if found is None:
             return text
         try:
@@ -482,13 +519,17 @@ class DurableRuntimeStore:
         from nexus_sandbox.settings import load_config
         from nexus_skills.exec import ScriptError, build_command, check_args
         behavior = _behavior(self.context)
-        with SqlAlchemyUnitOfWork(self.factory) as work:
-            db = work.session
-            run = self._run(db)
-            require_membership(db, run.tenant_id, run.principal_id)
-            if not exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile):
-                raise NotFound('skill_script_unavailable')
-            prepared = prepare_exec(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script)
+
+        def prepare():
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                if not exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile):
+                    raise NotFound('skill_script_unavailable')
+                return run, prepare_exec(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script,
+                                          user_id=run.principal_id)
+        run, prepared = await run_db(prepare)
         detail = {'skill': name, 'version': prepared.version, 'script': prepared.script.path,
                   'script_hash': prepared.script.content_hash}
         refusal = ''
@@ -530,23 +571,99 @@ class DurableRuntimeStore:
         return SkillRun(name, prepared.version, prepared.script.path, result=result,
                         hint=_recovery_hint(result.stderr, prepared.script.interpreter) if result.exit_code else '')
 
-    async def _audit_script(self, tenant_id, principal_id, run_id, detail) -> None:
+    @offloaded
+    def _audit_script(self, tenant_id, principal_id, run_id, detail) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             audit(work.session, tenant_id, principal_id, 'skill.script', 'run', str(run_id), detail)
 
     async def read_skill_file(self, name: str, path: str, sandbox=None) -> str:
         """Return one resource file of a bound skill version (Level 3); the path is checked inside the version."""
         from nexus_platform.skills.service import read_for_run as read_skill
-        with SqlAlchemyUnitOfWork(self.factory) as work:
-            db = work.session
-            run = self._run(db)
-            require_membership(db, run.tenant_id, run.principal_id)
-            result = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, path)
-            audit(db, run.tenant_id, run.principal_id, 'skill.file_read', 'run', str(run.id),
-                  {'skill': name[:64], 'path': path[:200]})
+
+        def read() -> str:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                text = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, path,
+                                  user_id=run.principal_id)
+                audit(db, run.tenant_id, run.principal_id, 'skill.file_read', 'run', str(run.id),
+                      {'skill': name[:64], 'path': path[:200]})
+                return text
+        result = await run_db(read)
         return await self._with_skill_dir(name, result, sandbox)
 
-    async def read_memory(self, entry_id: str) -> str:
+    async def skill_manage(self, action: str, arguments: dict) -> dict:
+        """Edit one of the user's skill drafts (openspec 2026-11-07-skill-evolution, S4). Drafts are the user's own and
+        are never read as skills; the edit guards (view first, unique patch, allowed paths, limits) live in
+        `nexus_platform.skills.private`. Only the action and the skill name reach the audit log."""
+        from nexus_platform.errors import InvalidConfiguration
+        from nexus_platform.skills import private
+        viewed = self.__dict__.setdefault('_viewed_drafts', set())
+
+        def edit() -> dict:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                tenant, user, name = run.tenant_id, run.principal_id, arguments.get('name', '')
+                if action == 'create':
+                    out = private.create(db, tenant, user, arguments['skill_md'], arguments.get('files'), viewed)
+                    name = out['name']
+                elif action == 'view':
+                    out = private.view(db, tenant, user, name, arguments.get('path'), viewed)
+                elif action == 'patch':
+                    out = private.patch(db, tenant, user, name, arguments['old_string'], arguments['new_string'],
+                                        arguments.get('path'), bool(arguments.get('replace_all')), viewed)
+                elif action == 'edit':
+                    out = private.edit(db, tenant, user, name, arguments['skill_md'], viewed)
+                elif action == 'write_file':
+                    out = private.write_file(db, tenant, user, name, arguments['path'], arguments['content'], viewed)
+                elif action == 'remove_file':
+                    out = private.remove_file(db, tenant, user, name, arguments['path'], viewed)
+                elif action == 'delete_draft':
+                    out = private.delete_draft(db, tenant, user, name)
+                    viewed.discard(name)
+                else:
+                    raise InvalidConfiguration('skill_manage_action_unknown')
+                if action != 'view':
+                    audit(db, tenant, user, 'skill.draft', 'run', str(run.id), {'action': action, 'skill': name[:64]})
+                return out
+        return await run_db(edit)
+
+    async def skill_save(self, name: str) -> dict:
+        """Save a draft as the next version of a private skill; live at once unless it needs a dependency build."""
+        from nexus_platform.skills import private
+        behavior = _behavior(self.context)
+
+        def save() -> dict:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                out = private.save(db, run.tenant_id, run.principal_id, name, profile=behavior.sandbox_profile)
+                audit(db, run.tenant_id, run.principal_id, 'skill.saved', 'run', str(run.id),
+                      {'skill': name[:64], 'version': out.get('version'), 'verdict': out.get('verdict')})
+                return out
+        result = await run_db(save)
+        self.__dict__.setdefault('_viewed_drafts', set()).discard(name)
+        await self.emit('skill.saved', {'skill': name[:64], 'version': result.get('version')})
+        return result
+
+    async def skill_rollback(self, name: str, version: int) -> dict:
+        """Point one of the user's private skills back at another of its versions."""
+        from nexus_platform.skills import private
+
+        def back() -> dict:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                return private.rollback(db, run.tenant_id, run.principal_id, name, version)
+        return await run_db(back)
+
+    @offloaded
+    def read_memory(self, entry_id: str) -> str:
         """Authorize each model memory read at execution time, independently of old indexes."""
         from nexus_platform.memory.service import read_for_run
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -560,7 +677,8 @@ class DurableRuntimeStore:
                 {'id': str(entry.id), 'title': entry.title, 'kind': entry.kind, 'version': entry.current_version}]})
             return result
 
-    async def checkpoint(self, content: str) -> None:
+    @offloaded
+    def checkpoint(self, content: str) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
@@ -572,7 +690,8 @@ class DurableRuntimeStore:
             audit(db, run.tenant_id, run.principal_id, 'checkpoint.updated', 'session', str(run.session_id),
                   {'run_id': str(run.id)})
 
-    async def propose(self, kind: str, scope: str, diff: str, *, entry_id: str | None = None,
+    @offloaded
+    def propose(self, kind: str, scope: str, diff: str, *, entry_id: str | None = None,
                       base_version: int | None = None, topic: str = '', importance: int | None = None,
                       valid_until: str | None = None) -> str:
         """Screen and record a draft for review; returns a short outcome line the model can read.
@@ -654,7 +773,8 @@ class DurableRuntimeStore:
         from nexus_platform.knowledge.tools import list_documents_for_run
         return await list_documents_for_run(self.factory, self.context.run_id, kb_id, keyword, offset, limit)
 
-    async def search_conversations(self, query: str, limit: int) -> str:
+    @offloaded
+    def search_conversations(self, query: str, limit: int) -> str:
         """Keyword search over the principal's other sessions in this space (stage 4, D1); snippets only."""
         from nexus_platform.memory.conversations import search
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -669,7 +789,8 @@ class DurableRuntimeStore:
                          f"{h['created_at'][:10]} | {h['snippet']}" for h in hits) + \
             '\nUse read_conversation with a session id and sequence to read the surrounding messages.'
 
-    async def read_conversation(self, session_id: str, around: int, before: int, after: int) -> str:
+    @offloaded
+    def read_conversation(self, session_id: str, around: int, before: int, after: int) -> str:
         """Messages around one sequence of an earlier session, fenced as conversation data (stage 4, D1)."""
         import html
         from nexus_platform.memory.conversations import read_page
@@ -693,13 +814,19 @@ class DurableRuntimeStore:
         """Keyword search over the principal's live published memory; pointers and snippets only."""
         from nexus_platform.memory.service import search as search_entries
         from nexus_platform.memory.vectors import vector_ranking
-        with SqlAlchemyUnitOfWork(self.factory) as work:
-            db = work.session
-            run = self._run(db)
-            require_membership(db, run.tenant_id, run.principal_id)
-            tenant_id, owner_id = run.tenant_id, run.principal_id
+        def owner() -> tuple:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                return run.tenant_id, run.principal_id
+        tenant_id, owner_id = await run_db(owner)
         # Stage 5 (D2): the query is embedded outside any transaction; None means keyword search only.
         ranking = await vector_ranking(self.factory, tenant_id=tenant_id, owner_id=owner_id, query=query)
+        return await run_db(self._search_memory_stored, query, limit, ranking)
+
+    def _search_memory_stored(self, query: str, limit: int, ranking) -> str:
+        from nexus_platform.memory.service import search as search_entries
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)

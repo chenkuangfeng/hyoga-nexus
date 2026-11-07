@@ -1,6 +1,7 @@
 """Control wake-up and live-run marker for the Redis and database backends (memory ones live in ``memory.py``)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable
@@ -24,6 +25,10 @@ class DatabaseControl:
 
     def wait(self, run_id: UUID | str, timeout: float) -> bool:
         time.sleep(max(0.0, timeout))
+        return False
+
+    async def wait_async(self, run_id: UUID | str, timeout: float) -> bool:
+        await asyncio.sleep(max(0.0, timeout))
         return False
 
 
@@ -51,8 +56,11 @@ class DatabaseMarker:
 class RedisControl:
     """Cancel wake-up on a list key apart from the event stream, so control never shows up in a viewer's feed."""
 
-    def __init__(self, url: str, *, prefix: str, client: Any = None, ttl: int = 3600) -> None:
+    def __init__(self, url: str, *, prefix: str, client: Any = None, ttl: int = 3600, async_client_factory: Any = None) -> None:
         import redis
+        import redis.asyncio as aredis
+        self._async_clients: dict = {}
+        self._async_factory = async_client_factory or (lambda: aredis.Redis.from_url(url))
         # A blocking pop outlasts the producer client's short socket timeout, hence a client of its own.
         self._client = client or redis.Redis.from_url(url, socket_timeout=MAX_WAIT_SECONDS + 3,
                                                       socket_connect_timeout=1.0)
@@ -81,6 +89,31 @@ class RedisControl:
             except Exception:
                 pass
         return bool(got)
+
+
+    async def wait_async(self, run_id: UUID | str, timeout: float) -> bool:
+        """Blocking pop on an asynchronous client: one waiting coroutine per Run, no thread."""
+        client = self._async_client()
+        try:
+            got = await client.blpop(self.key(run_id), timeout=min(max(timeout, 0.05), MAX_WAIT_SECONDS))
+        except Exception:
+            await asyncio.sleep(min(max(timeout, 0.05), MAX_WAIT_SECONDS))
+            return False
+        if got:
+            try:
+                await client.delete(self.key(run_id))
+            except Exception:
+                pass
+        return bool(got)
+
+    def _async_client(self):
+        """One asynchronous client per event loop (a client is bound to the loop it first runs on)."""
+        import redis.asyncio as aredis
+        loop_id = id(asyncio.get_running_loop())
+        client = self._async_clients.get(loop_id)
+        if client is None:
+            client = self._async_clients[loop_id] = self._async_factory()
+        return client
 
 
 _COMPARE_DELETE = """

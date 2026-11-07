@@ -34,7 +34,9 @@ from nexus_platform.persistence.models import (
     UserRecord,
 )
 from nexus_platform.runs import service as runs
+from nexus_platform.runs import unknown as unknown_runs
 from nexus_platform.runs.bus.stream import stream_run_events
+from nexus_tools.builtins.registration import side_effects_by_name
 from nexus_platform.runs.watchdog_service import acknowledge_watchdog, attention_required
 from nexus_platform.sessions import service as sessions
 from nexus_platform.tenants import service as tenants
@@ -531,6 +533,27 @@ def get_run(
     return view
 
 
+@router.get("/tenants/{tenant_id}/admissions/unknown")
+def list_unknown_admissions(
+    tenant_id: UUID,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Sessions blocked because a worker was lost while running them: all for a tenant owner or admin, one's own otherwise."""
+    return unknown_runs.list_unknown(db, principal, tenant_id, side_effects_by_name())
+
+
+@router.post("/tenants/{tenant_id}/runs/{run_id}/resolve-unknown")
+def resolve_unknown_run(
+    tenant_id: UUID,
+    run_id: UUID,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Clear the block an interrupted Run left on its session. The Run is not replayed. Idempotent."""
+    return unknown_runs.resolve_unknown_run(db, principal, tenant_id, run_id)
+
+
 @router.get("/tenants/{tenant_id}/sessions/{session_id}/live-run")
 def get_live_run(
     tenant_id: UUID,
@@ -730,7 +753,9 @@ def conversation_history(tenant_id: UUID, session_id: UUID,
                           'content': row.content, 'created_at': row.created_at,
                           # Knowledge citations resolved when the Run completed (openspec 2026-11-06-knowledge-base).
                           'citations': row.runtime_metadata.get('citations', [])} for row in messages],
-            'latest_run': RunView.model_validate(latest, from_attributes=True) if latest else None}
+            'latest_run': RunView.model_validate(latest, from_attributes=True) if latest else None,
+            # Set when a lost worker left this session blocked; the client offers to release it.
+            'blocked': unknown_runs.blocked_by(db, session_id, side_effects_by_name())}
 
 
 @router.get('/tenants/{tenant_id}/runs/{run_id}/input')

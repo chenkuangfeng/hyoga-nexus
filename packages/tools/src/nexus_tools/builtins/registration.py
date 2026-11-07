@@ -43,3 +43,10 @@ def builtins() -> ToolRegistry:
         for tool in tools:
             registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))
     return registry
+
+
+def side_effects_by_name():
+    """Lookup of whether a builtin tool changes anything outside the platform: ``lookup(name)`` is True or False, or
+    None for a tool that is not known (recovery treats an unknown tool as having side effects)."""
+    table = {definition.name: bool(definition.side_effects) for definition in builtins().definitions()}
+    return table.get

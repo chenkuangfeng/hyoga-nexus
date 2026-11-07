@@ -6,7 +6,9 @@ worker 领取平台 Outbox，装配 Native Engine，并通过短事务保存消�
 uv run python -m nexus_worker
 ```
 
-**嵌入模式**：在 `configs/nexus.toml` 设 `[deployment].mode = "embedded"`，API 进程会在 lifespan 中启动 `embedded_workers` 个 worker 线程（`nexus_worker/embedded.py`），无需单独启动 worker 与 Redis；线程异常会在停顿后自动重启，API 停止时优雅退出。一个 worker 同一时刻执行一个 Run，所以该数也是同时执行的 Run 数。后台作业只由第一个线程运行，并受 `background_concurrency` 限制。多机或需要重启不中断 Run 时使用默认的 `split`，并按需配置 `[run_events].backend = "redis"`。
+**并发**：一个 worker 进程在一个事件循环里以协程并发执行最多 `[worker].max_concurrent_runs`（默认 32）个 Run，同一会话仍按先进先出一次一个，实际并发还受 `[platform].max_concurrent_sessions` 限制。同步的数据库调用走 `db_threads` 个线程的专用线程池，不阻塞循环；SQLite 单写者，有效并发固定为 4。要用多核就多开 worker 进程。
+
+**嵌入模式**：在 `configs/nexus.toml` 设 `[deployment].mode = "embedded"`，API 进程在 lifespan 中启动一个 worker 线程（`nexus_worker/embedded.py`），线程里一个事件循环，Run 以协程并发，无需单独启动 worker 与 Redis。worker 使用独立的数据库引擎与连接池，API 请求高峰不会饿死 Run 的心跳。循环异常会在停顿后自动重启，API 停止时优雅退出。嵌入模式只能配一个 API 进程；多机或需要重启不中断 Run 时使用默认的 `split`，并按需配置 `[run_events].backend = "redis"`。
 
 在仓库根目录运行上述命令，配置步骤见[项目入口](../../README.md#本地开发)。API 与 worker 自动读取同一个 `configs/nexus.toml` 中的 `[database].url`，启动前运行 `uv run alembic -c alembic.ini upgrade head`。SQLite 用于本轮隔离测试；PostgreSQL 部署验收仍待目标环境执行。
 

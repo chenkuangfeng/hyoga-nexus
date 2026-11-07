@@ -90,9 +90,20 @@ export interface KnowledgeCitation {
   ordinal?: number
 }
 
+/** A session held by a Run a lost worker left unfinished; releasing it never re-runs that Run. */
+export interface BlockedSession {
+  reason: 'unknown'
+  run_id: string
+  admission_id: string
+  run_status: string
+  /** No unfinished tool call could have changed anything outside, so releasing is the plain choice. */
+  safe: boolean
+}
+
 export interface ConversationPage {
   messages: ConversationMessage[]
   latest_run: RunView | null
+  blocked: BlockedSession | null
 }
 
 export interface PendingInput {

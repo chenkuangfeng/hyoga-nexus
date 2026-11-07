@@ -9108,6 +9108,7 @@ export default {
     },
     cancel: '실행 취소',
     streamError: '이벤트 스트림이 중단되었습니다: {message}',
+    blocked: { message: '중단된 실행 때문에 대화가 차단되었습니다. 서비스가 예기치 않게 중단되어 외부에 영향을 주었는지 확인할 수 없습니다. 계속해도 안전하면 해제하세요. 중단된 실행은 다시 실행되지 않습니다.', release: '해제', released: '해제되었습니다. 대화를 계속할 수 있습니다', failed: '해제하지 못했습니다: {message}' },
     loadError: '불러오지 못했습니다',
     noSpace: '먼저 공간을 선택하세요',
     notFound: '세션이 없거나 접근할 수 없습니다',

@@ -10,12 +10,14 @@ import {
   acknowledgeWatchdog,
   cancelRun,
   getConversation,
+  resolveUnknownRun,
   getPendingInput,
   getRun,
   streamRunEvents,
   steerRun,
   submitInput,
   submitRun,
+  type BlockedSession,
   type ConversationMessage,
   type PendingInput,
   type RunView,
@@ -50,6 +52,8 @@ export function useNativeRun(getTenantId: () => string | null) {
   const pendingInput = ref<PendingInput | null>(null)
   const streamError = ref<string | null>(null)
   const submitting = ref(false)
+  /** Set while a lost worker's Run holds the loaded session; cleared by `releaseBlocked`. */
+  const blocked = ref<BlockedSession | null>(null)
   let controller: AbortController | null = null
 
   function requireTenant(): string {
@@ -133,6 +137,7 @@ export function useNativeRun(getTenantId: () => string | null) {
     stopStream()
     pendingInput.value = null
     const page = await getConversation(tenantId, sessionId)
+    blocked.value = page.blocked
     const latest = page.latest_run
     state.value = emptyRunState(latest)
     if (latest && isActive(latest)) {
@@ -203,8 +208,18 @@ export function useNativeRun(getTenantId: () => string | null) {
     stopStream()
   }
 
+  /** Release the loaded session from the interrupted Run holding it; the Run itself is not run again. */
+  async function releaseBlocked(): Promise<void> {
+    const current = blocked.value
+    if (!current) return
+    await resolveUnknownRun(requireTenant(), current.run_id)
+    blocked.value = null
+  }
+
   return {
     state,
+    blocked,
+    releaseBlocked,
     pendingInput,
     streamError,
     submitting,

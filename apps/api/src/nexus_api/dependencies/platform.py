@@ -21,7 +21,8 @@ def get_database_session(request: Request) -> Iterator[Session]:
     factory = getattr(request.app.state, "session_factory", None)
     if factory is None:
         try:
-            engine = create_database_engine()
+            from nexus_platform.runs.worker_settings import api_settings
+            engine = create_database_engine(pool_size=api_settings().pool_size)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         factory = session_factory(engine)

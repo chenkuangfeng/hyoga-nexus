@@ -378,6 +378,27 @@ def resolve_unknown(
     db.flush()
 
 
+def resolve_unknown_admin(db: Session, *, admission_id: UUID, tenant_id: UUID, actor_id: UUID, now: datetime,
+                          by: str = "user") -> bool:
+    """Clear an ``unknown`` admission without a worker's epoch (API, command line and start-up recovery).
+
+    The update is conditional on the row still being ``unknown``, so two callers cannot both clear it; the one that
+    loses gets False and writes nothing. ``by`` ("user" or "system") is recorded in the audit entry. A cleared
+    session accepts new Runs; the interrupted Run is never replayed.
+    """
+    row = db.scalar(select(SessionAdmissionRecord).where(SessionAdmissionRecord.admission_id == admission_id))
+    if row is None:
+        raise AdmissionNotFound(str(admission_id))
+    cleared = db.execute(update(SessionAdmissionRecord).where(
+        SessionAdmissionRecord.admission_id == admission_id, SessionAdmissionRecord.status == "unknown",
+    ).values(status="terminal", updated_at=now)).rowcount
+    if cleared != 1:
+        return False
+    audit(db, tenant_id, actor_id, "run.unknown_resolved", "session_admission", str(admission_id),
+          {"run_id": str(row.run_id), "session_id": str(row.session_id), "by": by})
+    return True
+
+
 def install_run_terminal_hook() -> None:
     """Release admissions when a Run reaches a terminal status, for every ORM session.
 
@@ -410,6 +431,7 @@ __all__ = [
     "run_admission",
     "finish_run",
     "install_run_terminal_hook",
+    "resolve_unknown_admin",
     "select_head",
     "LedgerError",
     "QueueFull",

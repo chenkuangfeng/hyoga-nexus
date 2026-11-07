@@ -362,16 +362,14 @@ def test_database_bus_serves_many_subscribers_from_one_poller(database):
 # -- embedded workers ---------------------------------------------------------------------------
 
 
-def test_embedded_workers_run_a_run_and_stop_cleanly(tmp_path, monkeypatch):
+def test_embedded_worker_runs_a_run_and_stops_cleanly(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'embedded.db'}", connect_args={"check_same_thread": False, "timeout": 30})
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
     _, _, _, run, _ = stack(factory)
-    import nexus_worker.__main__ as worker_main
-    original = worker_main.run_once
-    monkeypatch.setattr(worker_main, "run_once", lambda f, w, **kw: original(f, w, model_factory=lambda _: text_model("Hi"), **kw))
     from nexus_worker.embedded import EmbeddedWorkers
-    workers = EmbeddedWorkers(factory, DeploymentSettings(mode="embedded", embedded_workers=2), poll_interval=0.1)
+    workers = EmbeddedWorkers(factory, DeploymentSettings(mode="embedded"), poll_interval=0.1, max_runs=2,
+                              execution_options={"model_factory": lambda _: text_model("Hi")})
     install_channels(factory, RunEventSettings(backend="memory"))
     workers.start()
     try:
@@ -381,7 +379,7 @@ def test_embedded_workers_run_a_run_and_stop_cleanly(tmp_path, monkeypatch):
         assert run_row(factory, run.id).status == "completed"
     finally:
         workers.stop(timeout=20)
-    assert not any(thread.is_alive() for thread in workers.threads) and workers.threads == []
+    assert workers.threads == []
     engine.dispose()
 
 

@@ -134,6 +134,9 @@ class ControlChannel(Protocol):
     def wait(self, run_id: UUID | str, timeout: float) -> bool:
         """Block up to ``timeout`` seconds; True when a signal arrived. Called from a thread."""
 
+    async def wait_async(self, run_id: UUID | str, timeout: float) -> bool:
+        """Wait up to ``timeout`` seconds without blocking the event loop or holding a thread."""
+
 
 @runtime_checkable
 class LiveRunMarker(Protocol):

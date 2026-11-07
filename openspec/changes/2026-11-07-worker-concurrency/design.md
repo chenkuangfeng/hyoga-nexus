@@ -47,7 +47,7 @@ run_loop (同步)                          run_async (一个事件循环)
 
 ## 6. 停止
 
-`stopped` 置位后：停止领取；对每个 Run 任务触发其取消令牌（沿用现有 `token.cancel()` 路径，Run 以 `interrupted` 收尾）；等待所有任务结束，总超时 `[worker].stop_timeout_seconds`（默认 30）；超时仍未结束的 Run 不强杀，租约到期后按现有流程回收。
+`stopped` 置位后：停止领取；对每个 Run 任务触发其取消令牌（沿用现有 `token.cancel()` 路径，Run 以 `cancelled` 收尾，与变更前一致）；等待所有任务结束，总超时 `[worker].stop_timeout_seconds`（默认 30）；超时仍未结束的 Run 不强杀，租约到期后按现有流程回收。
 
 ## 7. 嵌入模式
 
@@ -91,3 +91,9 @@ API 进程
 | 事件循环被同步调用卡住 | 滞后看门狗告警；租约 60 秒，`lease_check_seconds` 为 1–5 秒，容忍短暂卡顿 |
 | 线程池耗尽 | 数据库调用排队，Run 变慢但不失败；启动校验提前拒绝明显不合理的配置 |
 | 单个 Run 抛异常 | 只影响该任务，其余继续；任务异常记日志，Run 按现有路径写 `failed` |
+
+## 10. 实施中的补充
+
+- **SQLite 并发写入**：文件型 SQLite 引擎（`create_database_engine`）加 WAL、忙等待超时与 `BEGIN IMMEDIATE`（`configure_sqlite_concurrency`），并发写入排队而不是立刻报 `database is locked`。有效并发仍固定为 4。
+- **API 线程池与连接池**：`[api].threads`（默认 40）设置同步接口线程池上限（anyio 默认限流器），API 引擎连接池为其加 4；嵌入模式的 worker 使用独立引擎，池大小为 `db_threads + 4`。
+- **压测**（假模型延迟 1 秒、SQLite 文件库、2 核 1.8GB 的开发机）：100 / 300 / 1000 个 Run 同时在一个循环里全部完成，进程内存约 150MB，无循环滞后告警，吞吐受 SQLite 串行写入限制在每秒约 6 个 Run；没有 PostgreSQL，真实上限未测。

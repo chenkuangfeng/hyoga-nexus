@@ -9097,6 +9097,7 @@ export default {
     },
     cancel: 'Cancel run',
     streamError: 'Event stream interrupted: {message}',
+    blocked: { message: 'This conversation is blocked by an interrupted run: the service stopped unexpectedly and it cannot be known whether the run had already changed anything outside. Release it once it is safe to continue; the interrupted run is not run again.', release: 'Release', released: 'Released; you can continue the conversation', failed: 'Could not release: {message}' },
     loadError: 'Failed to load',
     noSpace: 'Select a space first',
     notFound: 'Session not found or not accessible',

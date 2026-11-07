@@ -9090,6 +9090,7 @@ export default {
     },
     cancel: '取消运行',
     streamError: '事件流中断：{message}',
+    blocked: { message: '会话被中断的运行阻塞：服务进程曾意外中断，无法确认该运行是否已产生外部影响。确认可以继续后，点击解除；被中断的运行不会重新执行。', release: '解除阻塞', released: '已解除，可以继续对话', failed: '解除失败：{message}' },
     loadError: '加载失败',
     noSpace: '请先选择空间',
     notFound: '会话不存在或无权访问',

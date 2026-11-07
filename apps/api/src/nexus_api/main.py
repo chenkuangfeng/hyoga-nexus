@@ -80,26 +80,35 @@ async def lifespan(_app: FastAPI):
     from nexus_platform.runs.bus import deployment_settings, install_channels, reset_channels, run_event_settings
     # Read first: an invalid [deployment] or [run_events] stops start-up instead of changing behaviour silently.
     deployment, events = deployment_settings(), run_event_settings()
+    from nexus_platform.runs.worker_settings import api_settings, worker_settings
+    api, worker = api_settings(), worker_settings()
+    # Synchronous endpoints run on this pool; each holds a database connection, so the engine below has one per thread.
+    import anyio.to_thread
+    anyio.to_thread.current_default_thread_limiter().total_tokens = api.threads
     ensure_default_space()
     ensure_system_space()
     install_knowledge_embedder()
-    workers = None
+    workers = worker_engine = None
     if deployment.mode == "embedded" or events.backend != "database":
         # Publishing from this process (events, cancel wake-ups) needs the channels installed here; the
         # database backend publishes nothing, so a plain split deployment skips this.
-        engine = create_database_engine()
+        engine = create_database_engine(pool_size=api.pool_size)
         factory = session_factory(engine)
         _app.state.database_engine, _app.state.session_factory = engine, factory
         _app.state.run_channels = install_channels(factory, events)
         if deployment.mode == "embedded":
             from nexus_worker.embedded import EmbeddedWorkers
-            workers = EmbeddedWorkers(factory, deployment)
+            # The worker gets an engine of its own: a burst of API requests must not starve a Run's heartbeat.
+            worker_engine = create_database_engine(pool_size=worker.pool_size)
+            runs = worker.effective_runs(str(worker_engine.url))
+            workers = EmbeddedWorkers(session_factory(worker_engine), deployment, worker, max_runs=runs)
             workers.start()
     try:
         yield
     finally:
         if workers is not None:
             await asyncio.to_thread(workers.stop)
+            worker_engine.dispose()
         reset_channels()
 
 

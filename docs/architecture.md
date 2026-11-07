@@ -387,7 +387,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 **派发账本**：所有部署共用同一套规则，只有存储后端不同。
 - `runtime_epoch`：每次进程启动递增，所有账本写入带当前 `owner_epoch`；过期 epoch 的写入返回 `stale_epoch`。
 - `session_admissions`：状态为 `queued`、`started`、`unknown`、`terminal`。领取用条件更新 `UPDATE ... SET status='started', owner_epoch=:e WHERE id=:id AND status='queued'`，rowcount 必须为 1；按 `seq` 取队首。会话存在 `started` 或 `unknown` 记录时不领取。
-- 启动恢复：`owner_epoch` 小于当前值的 `started` 与执行记录转为 `unknown`，会话阻塞，不自动重放。显式解除需要用户确认或运维命令，并记录审计。
+- 启动恢复：`owner_epoch` 小于当前值的 `started` 与执行记录转为 `unknown`，会话阻塞，不自动重放。解除入口：`POST /tenants/{id}/runs/{run}/resolve-unknown`（Run 所有者与租户 owner / admin，幂等）、`GET /tenants/{id}/admissions/unknown`、命令行 `list-unknown` / `resolve-unknown`，均记审计；定时任务会话在启动恢复时自动解除，`[platform].auto_resolve_safe_unknown`（默认关闭）开启后无未完成副作用调用的 Run 也自动解除；会话消息接口返回 `blocked`，前端提示并提供解除按钮。
 - 忙时排队：会话已有执行中的 Run 时，新提交的 Run 以 `queued` 入队，接口返回 202，`run.queued` 事件与响应带 `queue_position`（1 表示下一个执行）。每会话排队上限 32，超限返回 409 `session_queue_full`，不写入任何记录。
 - 派发：worker 在 Run 开始前检查 FIFO 队首。不是队首、会话被 unknown 阻塞、或领取冲突时，释放 Outbox 租约并延后 2 秒再次投递，Run 保持 `queued`，不写失败事件。
 - 默认不打断。打断与转向不是提交的默认行为；用户显式取消通过取消接口完成。取消排队中的 Run 时，其 FIFO 位置由终态写入释放，后续条目前移。全局活跃会话上限 `max_concurrent_sessions`（`configs/nexus.toml [platform]`，缺省 8）：提交一个新会话时，若已有该数量的会话持有 queued、started 或 unknown 记录，返回 503 `session_capacity_exceeded`，不写入任何记录。同一会话的后续 Run 不占新名额。多进程 PostgreSQL 下计数与插入不在同一锁内，上限可能被短暂超出，需以数据库锁或计数器补齐（随 2.9）。
@@ -410,7 +410,7 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 - 订阅顺序：先从数据库重放 `after_sequence` 之后的持久事件，再读通道；持久事件按 `sequence` 去重，序号跳跃则从数据库补读（也修复通道漏发）；已被 `message.completed` 覆盖的回合的临时文本丢弃；断档、结束标记、生产者租约过期各自补读数据库后再收尾。续连（游标大于 0）先发 `stream.resync`，客户端丢弃未入库文本后再收到通道回放。
 - SSE 为异步生成器：连接内不持有数据库会话与线程，授权与重放使用短会话；空闲时按 `heartbeat_seconds` 发心跳注释。
 - 控制与标记：取消请求同时写库并向 Run 的控制键发信号，worker 的监视循环阻塞等待该信号，数据库租约与取消检查降为每 `lease_check_seconds` 一次；信号丢失只退化为该间隔。会话的活动 Run 标记（`GET /sessions/{id}/live-run`）随执行续期、终态清除。
-- 并发：一个 worker 同一时刻执行一个 Run，并发 Run 数等于 worker 数；`embedded` 用 `embedded_workers` 个线程，每线程独立事件循环，仅第一个线程运行空闲时的后台作业（受 `background_concurrency` 限制）。准入在全局活动会话上限之外支持 `max_concurrent_sessions_per_tenant` / `_per_user`（默认不限，超限 429 `session_limit_reached`），后台模型调用可按模型限流（`[model_limits]`，不影响交互式 Run）。
+- 并发：一个 worker 进程在一个事件循环里以协程并发执行最多 `[worker].max_concurrent_runs` 个 Run（默认 32；同一会话仍先进先出一次一个，实际并发还受 `max_concurrent_sessions` 限制），同步数据库调用走专用线程池（`db_threads`，引擎连接池为其加 4），模型连接池由所有 Run 共享；SQLite 单写者，有效并发固定为 4，文件库引擎使用 WAL、忙等待超时与 `BEGIN IMMEDIATE` 使并发写入排队而不是报错。`embedded` 是 API 进程内的一个 worker 线程，线程里同样是一个事件循环，使用独立的数据库引擎。要用多核就多开 worker 进程。准入在全局活动会话上限之外支持 `max_concurrent_sessions_per_tenant` / `_per_user`（默认不限，超限 429 `session_limit_reached`），后台模型调用可按模型限流（`[model_limits]`，不影响交互式 Run）。
 
 **输入回答**：`POST .../runs/{run_id}/input` 携带 `input_request_id`、回答与 `Idempotency-Key`；重复提交返回相同结果；回答继续同一 Run，预算累计。
 

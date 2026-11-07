@@ -7,13 +7,18 @@ import os
 import signal
 import socket
 import threading
+import time
 
 from nexus_platform.configuration import DatabaseConfigurationError, logging_level, model_connection_pool, resolve_database_url, watchdog_settings
 from nexus_runtimes.native.models.network import configure_connection_pool
 from nexus_platform.persistence.database import create_database_engine, session_factory
 from nexus_core.platform import utc_now
 from nexus_platform.runs import session_ledger as ledger
+from nexus_platform.runs import unknown
+from nexus_tools.builtins.registration import side_effects_by_name
 from nexus_platform.runs.bus import install_channels
+from nexus_platform.runs.dbexec import configure_db_executor, run_db, shutdown_db_executor
+from nexus_platform.runs.worker_settings import worker_settings
 from nexus_platform.runs.service import claim_next, process_claimed
 
 logging.basicConfig(level=logging_level())
@@ -31,9 +36,18 @@ def start_process_epoch(factory, instance_id: str) -> int:
         recovered = ledger.recover_previous_epochs(db, epoch=epoch, now=utc_now())
         db.commit()
     if recovered:
-        logger.error("Unknown Run outcomes after restart; sessions blocked until resolved",
-                     extra={"run_ids": [str(run_id) for run_id in recovered], "epoch": epoch})
+        # Scheduled tasks have nobody to ask whether to resend, and an operator may allow clearing the Runs that
+        # provably left nothing half-done; every other block waits for a person (openspec 2026-11-07-worker-concurrency).
+        with factory() as db:
+            cleared = unknown.settle_unattended(db)
+            if unknown.auto_resolve_safe_unknown():
+                cleared += unknown.settle_safe(db, side_effects_by_name())
+            db.commit()
+        waiting = [run_id for run_id in recovered if run_id not in set(cleared)]
+        logger.error("Unknown Run outcomes after restart; %d sessions cleared automatically, %d blocked until resolved",
+                     len(cleared), len(waiting), extra={"run_ids": [str(run_id) for run_id in waiting], "epoch": epoch})
     return epoch
+
 
 
 #: One event loop for the worker process. Shared HTTP connection pools are bound to the loop that
@@ -79,7 +93,9 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     configure_connection_pool(max_connections=pool.max_connections,
                               max_keepalive_connections=pool.max_keepalive_connections,
                               keepalive_expiry=pool.keepalive_expiry_seconds)
-    engine = create_database_engine(database_url)
+    # Read before any Run starts: an invalid [worker] section stops the worker.
+    settings = worker_settings()
+    engine = create_database_engine(database_url, pool_size=settings.pool_size)
     factory = session_factory(engine)
     try:
         # Builtin tools live under the system space; register any added since the last start.
@@ -106,9 +122,21 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     logger.info("Worker started", extra={"worker_id": worker_id})
     try:
         install_channels(factory)
-        run_loop(factory, worker_id, stopped, epoch=epoch, watchdog=watchdog, poll_interval=poll_interval, once=once,
-                 knowledge_concurrency=knowledge_concurrency)
+        if once:
+            # One pass of the synchronous loop: what tests and `--once` rely on.
+            run_loop(factory, worker_id, stopped, epoch=epoch, watchdog=watchdog, poll_interval=poll_interval,
+                     once=True, knowledge_concurrency=knowledge_concurrency)
+        else:
+            configure_db_executor(settings.db_threads)
+            runs = settings.effective_runs(database_url)
+            if runs < settings.max_concurrent_runs:
+                logger.warning("SQLite has a single writer: running %d Runs at once instead of the configured %d",
+                               runs, settings.max_concurrent_runs)
+            asyncio.run(run_async(factory, worker_id, stopped, epoch=epoch, watchdog=watchdog, max_runs=runs,
+                                  poll_interval=poll_interval, knowledge_concurrency=knowledge_concurrency,
+                                  stop_timeout=settings.stop_timeout_seconds))
     finally:
+        shutdown_db_executor()
         engine.dispose()
         logger.info("Worker stopped", extra={"worker_id": worker_id})
 
@@ -150,6 +178,136 @@ def run_loop(factory, worker_id: str, stopped: threading.Event, *, epoch: int, w
             return
         if not processed:
             stopped.wait(poll_interval)
+
+
+def _background_pass(factory, worker_id: str, knowledge_concurrency: int) -> bool:
+    """One pass over the idle-time jobs; True when any did work. Runs on the background thread.
+
+    Each job keeps its synchronous implementation (some use ``asyncio.run`` or this thread's own event loop),
+    so it runs in a thread of its own and never on the loop that executes Runs.
+    """
+    from .schedule import schedule_tick
+    if schedule_tick(factory):
+        return True
+    if knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency):
+        return True
+    if capture_tick(factory, worker_id):
+        return True
+    if consolidation_tick(factory, worker_id):
+        retention_tick(factory)
+        return True
+    retention_tick(factory)
+    return embedding_tick(factory, _worker_loop()) > 0
+
+
+def _claim_task(factory, worker_id: str):
+    with factory() as session:
+        return claim_next(session, worker_id)
+
+
+def _after_run(factory, task_id) -> None:
+    # Stage 6 (D6): a space's external memory provider observes the finished turn in the background.
+    from nexus_platform.memory.providers import after_run
+    from nexus_platform.persistence.models import OutboxRecord
+    with factory() as session:
+        task = session.get(OutboxRecord, task_id)
+        run_id = task.run_id if task is not None else None
+    if run_id is not None:
+        after_run(factory, run_id)
+
+
+#: Seconds between measurements of how late the event loop runs; a Run's lease lasts 60 s.
+LOOP_LAG_INTERVAL = 1.0
+LOOP_LAG_WARN_SECONDS = 1.0
+
+
+async def _watch_loop_lag(stopped: threading.Event, active) -> None:
+    """Warn when the loop is held up, which delays every Run's heartbeat. Observes only; never touches a Run."""
+    while not stopped.is_set():
+        started = time.monotonic()
+        await asyncio.sleep(LOOP_LAG_INTERVAL)
+        lag = time.monotonic() - started - LOOP_LAG_INTERVAL
+        if lag > LOOP_LAG_WARN_SECONDS:
+            logger.warning("Worker event loop ran %.1f s late with %d Runs active: a synchronous call is blocking it",
+                           lag, len(active))
+
+
+async def run_async(factory, worker_id: str, stopped: threading.Event, *, epoch: int, watchdog, max_runs: int,
+                    poll_interval: float = 1.0, knowledge_concurrency: int = 1, background: bool = True,
+                    background_concurrency: int = 1, stop_timeout: float = 30.0, execution_options=None) -> None:
+    """Claim and execute Runs concurrently on this event loop until ``stopped`` is set.
+
+    At most ``max_runs`` Runs execute at once. A claim is made only when a slot is free, so the worker never
+    holds a lease on a Run it is not executing. Synchronous database calls go to the database pool; the idle-time
+    jobs run on a thread of their own. On stop no new Run is claimed and the running ones are asked to stop
+    (they finish as interrupted); any still running after ``stop_timeout`` are left to lease recovery.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from nexus_worker.native import execute_native
+    options = execution_options or {}
+    slots = asyncio.Semaphore(max_runs)
+    active: set[asyncio.Task] = set()
+    background_tasks: set[asyncio.Task] = set()
+    background_pool = ThreadPoolExecutor(max_workers=max(1, background_concurrency), thread_name_prefix="nexus-bg")
+    loop = asyncio.get_running_loop()
+
+    async def execute(task_id) -> None:
+        try:
+            await execute_native(factory, task_id, worker_id, stopped=stopped, ledger_epoch=epoch,
+                                 watchdog=watchdog, **options)
+            await run_db(_after_run, factory, task_id)
+        except Exception:
+            logger.error("Run failed outside its own handling; its lease is left to recovery",
+                         extra={"worker_id": worker_id}, exc_info=True)
+        finally:
+            slots.release()
+
+    async def idle_pass() -> None:
+        try:
+            await loop.run_in_executor(background_pool, _background_pass, factory, worker_id, knowledge_concurrency)
+        except Exception:
+            logger.error("Background job failed", extra={"worker_id": worker_id}, exc_info=True)
+
+    lag_task = asyncio.create_task(_watch_loop_lag(stopped, active))
+    logger.info("Worker accepting Runs", extra={"worker_id": worker_id, "max_concurrent_runs": max_runs})
+    try:
+        while not stopped.is_set():
+            try:
+                await asyncio.wait_for(slots.acquire(), timeout=0.2)
+            except asyncio.TimeoutError:
+                continue
+            try:
+                task_id = await run_db(_claim_task, factory, worker_id)
+            except Exception:
+                slots.release()
+                logger.error("Claiming work failed", extra={"worker_id": worker_id}, exc_info=True)
+                await asyncio.sleep(poll_interval)
+                continue
+            if task_id is None:
+                slots.release()
+                background_tasks.difference_update({t for t in background_tasks if t.done()})
+                if background and len(background_tasks) < max(1, background_concurrency):
+                    task = asyncio.create_task(idle_pass())
+                    background_tasks.add(task)
+                waited = 0.0
+                while waited < poll_interval and not stopped.is_set():
+                    await asyncio.sleep(0.1)
+                    waited += 0.1
+                continue
+            task = asyncio.create_task(execute(task_id))
+            active.add(task)
+            task.add_done_callback(active.discard)
+    finally:
+        stopped.set()  # Run monitors watch this event and cancel their Runs
+        if active:
+            _, pending = await asyncio.wait(set(active), timeout=stop_timeout)
+            if pending:
+                logger.warning("%d Runs still running after the stop timeout; their leases will expire", len(pending))
+        lag_task.cancel()
+        if background_tasks:
+            await asyncio.wait(set(background_tasks), timeout=5)
+        background_pool.shutdown(wait=False)
+        logger.info("Worker stopped accepting Runs", extra={"worker_id": worker_id})
 
 
 def _sandbox_check(profile: str | None = None) -> int:

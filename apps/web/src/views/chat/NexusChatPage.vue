@@ -84,6 +84,13 @@
             <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat-alert" />
             <t-alert v-if="streamError" theme="warning" :message="$t('nativeRuns.streamError', { message: streamError })"
               class="nexus-chat-alert" />
+            <t-alert v-if="blockedSession" theme="warning" :message="$t('nativeRuns.blocked.message')"
+              class="nexus-chat-alert" data-testid="chat-blocked">
+              <template #operation>
+                <t-button size="small" theme="primary" :loading="releasing" data-testid="chat-blocked-release"
+                  @click="releaseBlockedSession">{{ $t('nativeRuns.blocked.release') }}</t-button>
+              </template>
+            </t-alert>
 
             <div v-if="loading && rows.length === 0" class="msg-skeleton-list" data-testid="chat-skeleton">
               <div class="msg-skeleton msg-skeleton-user">
@@ -244,6 +251,21 @@ let createdSessionId = ''
 
 const run = computed(() => native.state.value.run)
 const streamError = computed(() => native.streamError.value)
+const blockedSession = computed(() => native.blocked.value)
+const releasing = ref(false)
+
+/** Release the session a lost worker's Run left blocked; the interrupted Run is not run again. */
+async function releaseBlockedSession() {
+  releasing.value = true
+  try {
+    await native.releaseBlocked()
+    MessagePlugin.success(t('nativeRuns.blocked.released'))
+  } catch (error) {
+    MessagePlugin.error(t('nativeRuns.blocked.failed', { message: messageOf(error, '') }))
+  } finally {
+    releasing.value = false
+  }
+}
 
 const rows = computed<ChatRow[]>(() => {
   const current = run.value

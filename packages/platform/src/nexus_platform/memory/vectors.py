@@ -74,9 +74,12 @@ async def vector_ranking(factory: Callable[[], Session], *, tenant_id: UUID, own
     """Entry ids nearest to `query` for this owner, or None when the vector channel is unavailable."""
     if not _FACTORY or not query.strip():
         return None
-    with factory() as db:
-        model_id = embedding_model(db, tenant_id)
-        vectors = owner_vectors(db, tenant_id, owner_id, model_id) if model_id else []
+    def load():
+        with factory() as db:
+            model = embedding_model(db, tenant_id)
+            return model, (owner_vectors(db, tenant_id, owner_id, model) if model else [])
+    from nexus_platform.runs.dbexec import run_db  # the database call must not stall the Runs sharing this loop
+    model_id, vectors = await run_db(load)
     if not model_id or not vectors:
         return None
     embedder = None

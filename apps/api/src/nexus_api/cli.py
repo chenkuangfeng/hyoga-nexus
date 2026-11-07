@@ -32,7 +32,33 @@ def main(argv: list[str] | None = None) -> int:
     builtin = commands.add_parser("import-builtin-skills",
                                   help="publish the repository's builtin skills into the system space")
     builtin.add_argument("--dir", default=None, help="skills folder (default: [skills].builtin_dir, then ./skills)")
+    commands.add_parser("list-unknown", help="list sessions blocked because a worker was lost while running them")
+    resolve = commands.add_parser("resolve-unknown", help="release the session an interrupted Run left blocked")
+    resolve.add_argument("--run-id", required=True, help="the interrupted Run")
     args = parser.parse_args(argv)
+    if args.command in ("list-unknown", "resolve-unknown"):
+        from uuid import UUID
+        from nexus_platform.runs import unknown
+        from nexus_tools.builtins.registration import side_effects_by_name
+        engine = create_database_engine()
+        try:
+            with session_factory(engine)() as db:
+                if args.command == "list-unknown":
+                    rows = unknown.list_unknown_all(db, side_effects_by_name())
+                    for row in rows:
+                        print(f"run {row['run_id']}  session {row['session_id']}  tenant {row['tenant_id']}  "
+                              f"{row['run_status']}  {'no unfinished side effects' if row['safe'] else 'needs a decision'}")
+                    print(f"{len(rows)} blocked session(s)")
+                    return 0
+                try:
+                    cleared = unknown.resolve_unknown_operator(db, UUID(args.run_id))
+                except (ValueError, NotFound) as exc:
+                    print(f"Cannot resolve: {exc}", file=sys.stderr)
+                    return 2
+                print("Released" if cleared else "That Run was not blocking its session")
+                return 0
+        finally:
+            engine.dispose()
     if args.command == "import-builtin-skills":
         from pathlib import Path
         from nexus_core.platform import SYSTEM_USER_ID
