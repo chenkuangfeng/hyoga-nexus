@@ -9206,6 +9206,8 @@ export default {
       missingTools: "Tools it needs are not available in this space: {tools}",
       hiddenFromModel: "Hidden from the model",
       runsOnHost: "Runs on the host",
+      runOk: "Scripts can run on the chosen profile",
+      runBlocked: "Scripts cannot run on the chosen profile: {reason}",
       notOffered: "Turned off; it cannot be added"
     },
     sandboxProfile: {
@@ -9220,6 +9222,8 @@ export default {
       reasonLocalNotAllowed: "a local profile has no isolation and is limited to development mode with the operator's permission",
       reasonUnknown: "this profile does not exist",
       reasonOther: "unknown reason",
+      reasonUnavailable: "the sandbox is unavailable right now",
+      reasonSkillLocal: "this skill must run on the host, which the deployment does not allow",
       typeLocal: "local, no isolation",
       typeDocker: "Docker container",
       typeBwrap: "bubblewrap"

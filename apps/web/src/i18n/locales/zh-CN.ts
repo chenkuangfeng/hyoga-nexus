@@ -9199,6 +9199,8 @@ export default {
       missingTools: "需要的工具本空间不可用：{tools}",
       hiddenFromModel: "模型不可见",
       runsOnHost: "需在宿主运行",
+      runOk: "可在所选档位运行脚本",
+      runBlocked: "在所选档位不能运行脚本：{reason}",
       notOffered: "已停用，不能新增绑定"
     },
     sandboxProfile: {
@@ -9213,6 +9215,8 @@ export default {
       reasonLocalNotAllowed: "本机档位没有隔离，仅限开发模式且需运维允许",
       reasonUnknown: "该档位不存在",
       reasonOther: "原因未知",
+      reasonUnavailable: "沙箱当前不可用",
+      reasonSkillLocal: "该技能要求在宿主运行，部署未允许",
       typeLocal: "本机，无隔离",
       typeDocker: "Docker 容器",
       typeBwrap: "bubblewrap"

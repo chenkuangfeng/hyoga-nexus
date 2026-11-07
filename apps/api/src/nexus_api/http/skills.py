@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -28,10 +28,15 @@ class SkillPublishRequest(BaseModel):
 
 
 @router.get("/tenants/{tenant_id}/skills")
-def list_skills(tenant_id: UUID, principal: Principal = Depends(get_principal),
+def list_skills(tenant_id: UUID, sandbox_profile: str | None = Query(default=None, max_length=32),
+                principal: Principal = Depends(get_principal),
                 db: Session = Depends(get_database_session)) -> list[dict[str, Any]]:
-    """Skills visible in this Tenant. Requires active membership."""
-    return skills.list_skills(db, principal, tenant_id)
+    """Skills visible in this Tenant. Requires active membership.
+
+    ``sandbox_profile`` (empty = the deployment's default) adds ``run`` to each skill that ships scripts: whether
+    they can run on that sandbox profile and, when not, the reason.
+    """
+    return skills.list_skills(db, principal, tenant_id, sandbox_profile)
 
 
 @router.get("/tenants/{tenant_id}/skills/{name}/versions")

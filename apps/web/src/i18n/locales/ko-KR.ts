@@ -9217,6 +9217,8 @@ export default {
       missingTools: "필요한 도구를 이 공간에서 사용할 수 없습니다: {tools}",
       hiddenFromModel: "모델에 표시되지 않음",
       runsOnHost: "호스트에서 실행",
+      runOk: "선택한 프로필에서 스크립트를 실행할 수 있습니다",
+      runBlocked: "선택한 프로필에서 스크립트를 실행할 수 없습니다: {reason}",
       notOffered: "중지되어 추가할 수 없습니다"
     },
     sandboxProfile: {
@@ -9231,6 +9233,8 @@ export default {
       reasonLocalNotAllowed: "로컬 프로필은 격리가 없어 개발 모드에서 운영자가 허용한 경우에만 쓸 수 있습니다",
       reasonUnknown: "이 프로필이 없습니다",
       reasonOther: "알 수 없는 이유",
+      reasonUnavailable: "샌드박스를 지금 사용할 수 없습니다",
+      reasonSkillLocal: "이 스킬은 호스트에서 실행해야 하지만 배포에서 허용되지 않았습니다",
       typeLocal: "로컬(격리 없음)",
       typeDocker: "Docker 컨테이너",
       typeBwrap: "bubblewrap"

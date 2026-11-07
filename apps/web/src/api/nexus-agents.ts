@@ -190,10 +190,14 @@ export interface TenantSkill {
   model_invocable: boolean
   description: string
   disabled: boolean
+  /** Only when a sandbox profile was asked for: whether the skill's scripts can run there. `null` = it ships no scripts. */
+  run?: { ok: boolean, reason: string } | null
 }
 
-export async function listTenantSkills(tenantId: string): Promise<TenantSkill[]> {
-  const data: unknown = await get(`${tenantPath(tenantId)}/skills`)
+/** `sandboxProfile` is a profile name; `''` means the deployment's default. Leave it out to skip the run check. */
+export async function listTenantSkills(tenantId: string, sandboxProfile?: string): Promise<TenantSkill[]> {
+  const query = sandboxProfile === undefined ? '' : `?sandbox_profile=${encodeURIComponent(sandboxProfile)}`
+  const data: unknown = await get(`${tenantPath(tenantId)}/skills${query}`)
   if (!Array.isArray(data)) throw new Error('Unexpected skill list response')
   return data as TenantSkill[]
 }

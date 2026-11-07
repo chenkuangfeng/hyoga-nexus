@@ -9217,6 +9217,8 @@ export default {
       missingTools: "必要なツールがこのスペースでは利用できません: {tools}",
       hiddenFromModel: "モデルには非表示",
       runsOnHost: "ホストで実行",
+      runOk: "選択したプロファイルでスクリプトを実行できます",
+      runBlocked: "選択したプロファイルではスクリプトを実行できません：{reason}",
       notOffered: "無効のため追加できません"
     },
     sandboxProfile: {
@@ -9231,6 +9233,8 @@ export default {
       reasonLocalNotAllowed: "ローカルのプロファイルは分離がなく、開発モードかつ運用担当者の許可が必要です",
       reasonUnknown: "このプロファイルは存在しません",
       reasonOther: "理由不明",
+      reasonUnavailable: "サンドボックスが現在利用できません",
+      reasonSkillLocal: "このスキルはホストでの実行が必要ですが、デプロイで許可されていません",
       typeLocal: "ローカル（分離なし）",
       typeDocker: "Docker コンテナ",
       typeBwrap: "bubblewrap"

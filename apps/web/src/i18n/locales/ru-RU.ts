@@ -9217,6 +9217,8 @@ export default {
       missingTools: "Нужные инструменты недоступны в этом пространстве: {tools}",
       hiddenFromModel: "Скрыт от модели",
       runsOnHost: "Выполняется на хосте",
+      runOk: "Скрипты можно запускать в выбранном профиле",
+      runBlocked: "Скрипты нельзя запускать в выбранном профиле: {reason}",
       notOffered: "Отключено, добавить нельзя"
     },
     sandboxProfile: {
@@ -9231,6 +9233,8 @@ export default {
       reasonLocalNotAllowed: "локальный профиль без изоляции доступен только в режиме разработки с разрешения оператора",
       reasonUnknown: "такого профиля нет",
       reasonOther: "причина неизвестна",
+      reasonUnavailable: "песочница сейчас недоступна",
+      reasonSkillLocal: "навык должен работать на хосте, а развёртывание это не разрешает",
       typeLocal: "локально, без изоляции",
       typeDocker: "контейнер Docker",
       typeBwrap: "bubblewrap"

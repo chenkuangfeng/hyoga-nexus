@@ -61,7 +61,7 @@
 - [x] 2.7b 退役 `run_skill_script`、`scripts` 声明与 `nexus_skills.runner`：注册表、分组、`BUILTIN_TOOL_NAMES`、网关与测试同步；`allow_local_scripts` 迁移；已发布版本中既有绑定的运行时忽略与事件；发布校验提示改绑 `exec_skill`。
   - `RETIRED_TOOL_NAMES = {'run_skill_script'}`：保存的设置与已发布版本里的旧名字被接受，准备 Run 时忽略（未记事件）。`nexus_skills.runner`、`skill_scripts_allowed` / `skill_scripts_gate`、`[skills].allow_local_scripts` 已删除，开关移到 `[sandbox].allow_local_scripts`。`scripts` 声明仍可解析（旧技能不报错），但不再驱动任何行为。删除的旧测试：`test_skill_runner`、`test_skill_script_run`、`test_skill_config_gate`、`test_skill_approval_flow`，由 `test_exec_skill`、`test_skill_exec` 覆盖。**发布校验提示改绑未做**。
 - [x] 2.8 `execution` 属性与 `resolve_execution`：解析与校验、保存或发布时拒绝非内置的 `local`、运行时按策略、不回退、编辑器与详情展示声明值与有效位置；表驱动测试（声明 × 档位 × 来源 × 开关 × 开发模式）。
-  - `nexus_skills/policy.py::resolve_execution` 表驱动测试 12 格；运行时由 `RunStore.exec_skill` 查策略，不满足返回 `refused` 并写审计，集成测试覆盖「要宿主的内置技能：开关关闭被拒、打开后运行」。版本列表与技能列表返回 `execution`；编辑器在技能旁标「需在宿主运行」，**详情页的有效运行位置展示未做**。
+  - `nexus_skills/policy.py::resolve_execution` 表驱动测试 12 格；运行时由 `RunStore.exec_skill` 查策略，不满足返回 `refused` 并写审计，集成测试覆盖「要宿主的内置技能：开关关闭被拒、打开后运行」。版本列表与技能列表返回 `execution`；编辑器在技能旁标「需在宿主运行」，技能列表接口带 `sandbox_profile` 参数时，为带脚本的技能返回 `run:{ok,reason}`（与 `exec_skill` 同一套判定），编辑器随档位选择在每个技能下显示「可在所选档位运行脚本」或不能运行的原因；独立详情页未做。
 - [x] 2.9 测试：`exec_skill` 拒绝越界路径、不存在的脚本与白名单外的解释器，argv 不经 shell（含空格与元字符的参数原样到达），`stdin` 到达脚本，审计记录脚本哈希，多个脚本依次运行并通过 `/workspace` 交接；沙箱内无法修改技能目录；看不到其他租户技能；开放网络强制审批；三种档位下的参数断言（docker 参数列表、bwrap 参数列表）。
 - [ ] 2.10 在真实 Docker 与 bwrap 上验证挂载与执行（环境相关测试无环境时跳过并说明）。
 

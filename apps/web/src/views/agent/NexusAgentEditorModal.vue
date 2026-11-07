@@ -241,6 +241,11 @@
                     </span>
                   </t-checkbox>
                   <p v-if="skill.description" class="skill-desc">{{ skill.description }}</p>
+                  <p v-if="skill.run" :class="['skill-note', { 'skill-note--warn': !skill.run.ok }]">
+                    <t-icon :name="skill.run.ok ? 'check-circle' : 'error-circle'" />
+                    {{ skill.run.ok ? $t('nexusAgent.skillBinding.runOk')
+                      : $t('nexusAgent.skillBinding.runBlocked', { reason: sandboxReasonLabel(skill.run.reason) }) }}
+                  </p>
                   <p v-if="skill.disabled && !boundSkill(skill.name)" class="skill-note">
                     {{ $t('nexusAgent.skillBinding.notOffered') }}
                   </p>
@@ -513,7 +518,7 @@ async function loadSkills() {
   skillsLoading.value = true
   skillsError.value = ''
   try {
-    const listed = await listTenantSkills(props.tenantId)
+    const listed = await listTenantSkills(props.tenantId, form.sandbox_profile)
     if (request === skillsRequest) skills.value = listed
   } catch (error) {
     if (request === skillsRequest) {
@@ -603,6 +608,8 @@ function sandboxReasonLabel(reason: string): string {
   const key = ({
     sandbox_disabled: 'reasonSandboxDisabled', sandbox_not_accepted: 'reasonNotAccepted',
     sandbox_local_not_allowed: 'reasonLocalNotAllowed', sandbox_profile_unknown: 'reasonUnknown',
+    sandbox_unavailable: 'reasonUnavailable', local_not_allowed: 'reasonSkillLocal',
+    skill_execution_not_permitted: 'reasonSkillLocal',
   } as Record<string, string>)[reason] || 'reasonOther'
   return t(`nexusAgent.sandboxProfile.${key}`)
 }
@@ -709,6 +716,9 @@ async function load() {
     loading.value = false
   }
 }
+
+// The per-skill "can its scripts run here" line depends on the chosen profile, so changing it asks again.
+watch(() => form.sandbox_profile, () => { if (props.visible) void loadSkills() })
 
 watch(() => [props.visible, props.agentId, props.tenantId] as const, ([visible]) => {
   if (visible) void load()

@@ -312,11 +312,16 @@ def execution_allowed(prepared: PreparedExec, profile: str | None) -> tuple[bool
                              allow_local_scripts=settings.allow_local_scripts)
 
 
-def list_skills(db: Session, principal: Principal, tenant_id: UUID) -> list[dict[str, Any]]:
+def list_skills(db: Session, principal: Principal, tenant_id: UUID,
+                sandbox_profile: str | None = None) -> list[dict[str, Any]]:
     """Skills of the space plus the builtin skills, which every space can see and assign.
 
     Builtin entries carry ``scope = 'builtin'`` and ``disabled`` (the space switched them off: still listed so an
     administrator can switch them back on, but not assignable). Any active member may read the list.
+
+    With ``sandbox_profile`` (an empty string means the deployment's default profile) every skill that ships scripts
+    also carries ``run``: ``{ok, reason}``, whether its scripts can run on that profile. The answer comes from the
+    same rules ``exec_skill`` applies, so the editor can say so before a Run finds out.
     """
     context(db, principal, tenant_id)
     from nexus_platform.system import disabled_builtins
@@ -324,16 +329,53 @@ def list_skills(db: Session, principal: Principal, tenant_id: UUID) -> list[dict
     rows = db.execute(select(SkillRecord, SkillVersionRecord).outerjoin(
         SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
         .where(SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID))).order_by(SkillRecord.name)).all()
+    fit = _script_fit(db, [version for _, version in rows if version is not None], sandbox_profile) \
+        if sandbox_profile is not None else {}
     return [{'name': skill.name, 'source': skill.source, 'version': version.version if version else None,
              # What an agent binds: the version's id, and the tools the skill needs bound alongside it.
              'version_id': str(version.id) if version else None, 'tools': list(version.tools) if version else [],
              'execution': version.execution if version else 'sandbox',
              'model_invocable': version.model_invocable if version else True,
+             # Whether the scripts can run on the asked-for profile; None for a skill without scripts.
+             'run': fit.get(version.id) if version else None,
              'description': version.description if version else '',
              'scope': 'builtin' if skill.tenant_id == SYSTEM_TENANT_ID else 'space',
              'source_tenant_id': str(skill.tenant_id),
              'disabled': skill.tenant_id == SYSTEM_TENANT_ID and ('skill', skill.name) in off}
             for skill, version in rows]
+
+
+def _script_fit(db: Session, versions: list[SkillVersionRecord], profile: str) -> dict[UUID, dict[str, Any]]:
+    """For each version that ships scripts: can they run on `profile`, and if not, why (a stable reason code)."""
+    ids = [version.id for version in versions]
+    scripted = set(db.scalars(select(SkillVersionFileRecord.version_id).where(
+        SkillVersionFileRecord.version_id.in_(ids), SkillVersionFileRecord.path.like('scripts/%')))) if ids else set()
+    if not scripted:
+        return {}
+    from nexus_core.deployment import DeploymentConfigError
+    from nexus_platform.runs.tool_gates import deployment_gate_facts
+    from nexus_sandbox.settings import load_config
+    facts = deployment_gate_facts(profile)
+    try:
+        settings = load_config().get(profile)
+    except DeploymentConfigError:
+        settings = None
+    result: dict[UUID, dict[str, Any]] = {}
+    for version in versions:
+        if version.id not in scripted:
+            continue
+        if not facts.sandbox_enabled:
+            ok, reason = False, 'sandbox_disabled'
+        elif settings is None:
+            ok, reason = False, 'sandbox_profile_unknown'
+        else:
+            ok, reason = resolve_execution(version.execution, version.trust, profile_type=settings.backend,
+                                           accepted=facts.sandbox_accepted,
+                                           allow_local_scripts=settings.allow_local_scripts)
+            if not ok and reason == 'sandbox_unavailable':
+                reason = facts.sandbox_reason or 'sandbox_not_accepted'
+        result[version.id] = {'ok': ok, 'reason': reason}
+    return result
 
 
 def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str) -> list[dict[str, Any]]:
