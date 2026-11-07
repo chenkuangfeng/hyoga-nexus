@@ -1,7 +1,8 @@
 """Application-safe tool composition; deferred host execution tools are never registered."""
+from dataclasses import replace
 from functools import lru_cache
 
-from nexus_tools.registry import ToolRegistry
+from nexus_tools.registry import RegisteredTool, ToolRegistry
 from .ask_user import ask_user_tool
 from .checkpoint import checkpoint_tool
 from .conversations import conversation_tools
@@ -21,7 +22,14 @@ def builtins() -> ToolRegistry:
     Callers must not mutate the returned registry.
     """
     registry = ToolRegistry()
-    for tool in (ask_user_tool(), checkpoint_tool(), todo_tool(), *memory_tools(), *conversation_tools(), *skills_tools(), *tool_output_tools(),
-                 *knowledge_tools()):
-        registry.register(tool)
+    # The group is chosen where a tool is registered, so a tool cannot be registered without one and the
+    # editor, the gates and the registry always agree (openspec 2026-11-07-tool-expansion, R1).
+    for group, tools in (
+        ('base', (ask_user_tool(), checkpoint_tool(), todo_tool(), *tool_output_tools())),
+        ('memory', (*memory_tools(), *conversation_tools())),
+        ('skills', tuple(skills_tools())),
+        ('knowledge', tuple(knowledge_tools())),
+    ):
+        for tool in tools:
+            registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))
     return registry

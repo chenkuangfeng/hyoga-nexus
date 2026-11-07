@@ -98,7 +98,7 @@ class AuthorizedToolGateway:
                  bindings: dict[str, str], *, run_id: str, session_id: str, tenant_id: str,
                  services: object | None = None, spill: OutputSpill | None = None,
                  turn_budget: int = 0, injection_scan: bool = True, tool_access: str = 'standard',
-                 guard_rules: tuple | None = None):
+                 guard_rules: tuple | None = None, hidden_groups: frozenset[str] = frozenset()):
         self.registry, self.access, self.bindings = registry, access, bindings
         self.run_id, self.session_id, self.tenant_id = run_id, session_id, tenant_id
         self.services = services
@@ -112,6 +112,9 @@ class AuthorizedToolGateway:
         self.tool_access = tool_access
         #: Argument guard rules (tool-call-hardening F); loaded here so a malformed rule file stops startup.
         self.guard_rules = tool_guard.bundled_rules() if guard_rules is None else guard_rules
+        #: Tool groups that are unavailable or switched off for this Run (openspec 2026-11-07-tool-expansion, R1).
+        #: Their tools are not offered and a direct call is refused; the set can only narrow what binding allows.
+        self.hidden_groups = frozenset(hidden_groups)
 
     def _decide(self, tool) -> str:
         definition = tool.definition
@@ -138,6 +141,8 @@ class AuthorizedToolGateway:
         for name, version in self.bindings.items():
             tool = self.registry.get(name, version)
             if tool and tool.definition.capability == 'python_function':
+                if tool.definition.group in self.hidden_groups:
+                    continue  # the group is off or unavailable: the tool is not offered
                 if self._decide(tool) == 'deny':
                     continue  # never offered: a read-only agent does not see write tools
                 try:
@@ -177,6 +182,8 @@ class AuthorizedToolGateway:
             error = 'sandbox_unavailable'
         else:
             try:
+                if tool.definition.group in self.hidden_groups:
+                    raise RuntimeFault('tool_authorization_denied')
                 binding_id = await self.access.authorize(call.name, version)
             except RuntimeFault as exc:
                 # Stable denial codes the model can act on pass through; anything else stays generic.

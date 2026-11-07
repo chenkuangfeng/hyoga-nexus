@@ -81,7 +81,10 @@
   - 测试 `tests/test_knowledge_media.py` 只用假客户端验证流水线；真实 VLM / ASR 服务验证待环境（K4.2b）。
 - [x] K4.3 外部解析引擎（移植 WeKnora `internal/infrastructure/docparser` 的 MinerU、PaddleOCR-VL，代码完成，未经真实服务验证）。
   - `nexus_knowledge/ingest/engines.py`：`mineru`（自建 `/file_parse` 多部分上传）、`mineru_cloud`（mineru.net v4：申请上传地址 → PUT 文件 → 轮询 → 内联 Markdown 或结果压缩包）、`paddleocr_vl`（自建 `/layout-parsing`）、`paddleocr_vl_cloud`（AI Studio 作业：提交 → 轮询 → JSONL 结果）；输出 Markdown 后按标题切成章节，丢弃指向本地图片的引用。每个主机单独建客户端并走与模型调用相同的受限传输（含私网白名单）。空间级连接配置表 `knowledge_parser_configs`（迁移 `c6d7e8f9a0b1`，密钥加密、读取时打码、回传打码值保留原密钥、仅管理员可写）；库规则 `parser_engine_rules` 按文件类型选引擎，未命中走 builtin；`simple` 引擎并入 builtin 的子集。接口 `GET/PUT /knowledge/parser-engine-config`、`GET /knowledge/parser-engines`（含未配置原因）。测试 `tests/test_knowledge_engines.py`（模拟传输）。
-  - 仍待实现：`anydoc`（WeKnora 的 Go 进程内转换库，旧版 `.doc/.xls/.ppt` 需要转换器）、`markitdown`、`weknoracloud`（需要对应服务的协议资料或账号）。
+  - `anydoc` 已用 Python 原生实现（见 K4.4）。仍待实现：`markitdown`、`weknoracloud`（需要对应服务的协议资料或账号）。
+- [x] K4.4 `anydoc` 引擎：进程内转换 Office 与电子书，无需外部服务（已用 WeKnora 测试用的同一批样本验证）。
+  - WeKnora 的 anydoc 是第三方原生库（`firecrawl/anydoc`）的 cgo 绑定，源码不在仓库里，无法直接移植；`nexus_knowledge/ingest/anydoc.py` 用 Python 实现同一组文件类型：旧版二进制 `doc`（读 FIB 与分段表）、`ppt`（读文本原子）、`xls`（xlrd），`odt/odp/ods`（content.xml）、`rtf`（控制字分词，跳过字体表、样式、图片，解码 `\'hh` 与 `\uN`）、`epub`（按 spine 顺序，每章一节）、`html/htm`，以及 `docm/pptm/xlsm`（复用 OOXML 解析）；解包大小受限、拒绝 DTD。新增依赖 `olefile`、`xlrd`（纯 Python）。和 WeKnora 一样：没有规则时，builtin 读不了的格式自动走 anydoc，显式规则优先。夹具 `tests/fixtures/office/`（MIT，来自 firecrawl/anydoc v0.2.4，WeKnora 同款）；测试 `tests/test_knowledge_anydoc.py`；后端全量 1053 通过。
+  - 局限：`.doc` 不读样式，所以标题层级不会被识别；`rtf`/`epub` 里的公式对象不转文字。
 - [ ] K4.2b 真实视觉与语音模型验收：图片描述质量、扫描 PDF、音频转写、超大文件与超时（需用户提供模型服务）。
 
 ## K5 组织与增强

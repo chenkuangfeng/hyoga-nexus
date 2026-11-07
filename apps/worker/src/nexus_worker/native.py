@@ -22,6 +22,7 @@ from nexus_platform.errors import PlatformError
 from nexus_runtimes.native.models.network import provider_client
 from nexus_runtimes.native.models.factory import create_model
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
+from nexus_platform.runs.tool_gates import deployment_gate_facts, hidden_groups
 from nexus_runtimes.native.engine import CancellationToken, RunOrchestrator
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
@@ -173,7 +174,8 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             session_id=str(context.session_id), tenant_id=str(context.tenant_id),
             services=RunServices(store, context.progress.state), spill=spill,
             turn_budget=policy.tool_turn_budget_chars, injection_scan=policy.tool_injection_scan,
-            tool_access=policy.tool_access)
+            tool_access=policy.tool_access,
+            hidden_groups=hidden_groups(deployment_gate_facts(), policy.tool_groups_enabled))
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

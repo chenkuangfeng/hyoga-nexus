@@ -79,6 +79,9 @@ class NativePolicy:
     tool_failure_stop_at: int = 5
     #: Warn (never block) when tool output looks like an injected instruction.
     tool_injection_scan: bool = True
+    # Tool groups (openspec 2026-11-07-tool-expansion, R1). Missing groups take their `default_enabled`, so
+    # versions saved before a group existed do not gain its tools. The switch only narrows access.
+    tool_groups_enabled: dict[str, bool] = field(default_factory=dict)
 
     def __post_init__(self):
         if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
@@ -123,6 +126,11 @@ class NativePolicy:
             raise ValueError('tool_repeat_warn_at must be below tool_repeat_stop_at')
         if type(self.tool_injection_scan) is not bool:
             raise ValueError('Native switches must be boolean')
+        from .tool_groups import GROUP_IDS, group_of
+        if (not isinstance(self.tool_groups_enabled, dict)
+                or any(key not in GROUP_IDS or group_of(key).locked or type(value) is not bool
+                       for key, value in self.tool_groups_enabled.items())):
+            raise ValueError('tool_groups_enabled must map switchable tool group ids to booleans')
         for name in ('compact_high_ratio', 'compact_low_ratio'):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.1 <= value <= 1.0:

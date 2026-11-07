@@ -8,21 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from nexus_core.native import BUILTIN_TOOL_NAMES
+from nexus_core.native import BUILTIN_TOOL_NAMES, GROUP_IDS, TOOL_GROUPS
 
 from .registration import builtins
 
-#: Editor groups in display order. A tool not listed in ``TOOL_GROUPS`` falls into ``base``.
-GROUP_ORDER = ('base', 'memory', 'knowledge', 'skills')
-
-TOOL_GROUPS: dict[str, str] = {
-    'ask_user': 'base', 'todo': 'base', 'update_working_checkpoint': 'base', 'read_tool_output': 'base',
-    'read_memory': 'memory', 'search_memory': 'memory', 'propose_memory_draft': 'memory',
-    'start_long_term_update': 'memory', 'search_conversations': 'memory', 'read_conversation': 'memory',
-    'search_knowledge': 'knowledge', 'read_document': 'knowledge', 'list_documents': 'knowledge', 'query_knowledge_graph': 'knowledge',
-    'grep_chunks': 'knowledge', 'document_outline': 'knowledge',
-    'load_skill': 'skills', 'read_skill_file': 'skills', 'run_skill_script': 'skills',
-}
+#: Editor groups in display order; their definitions live in ``nexus_core.native.tool_groups``. Which group a
+#: tool belongs to is declared where it is registered (``registration.builtins``) and read from its definition.
+GROUP_ORDER = GROUP_IDS
 
 
 @dataclass(frozen=True)
@@ -55,8 +47,22 @@ def builtin_catalog() -> list[CatalogEntry]:
             continue
         definition = tool.definition
         entries.append(CatalogEntry(
-            name=name, description=definition.description, group=TOOL_GROUPS.get(name, 'base'),
+            name=name, description=definition.description, group=definition.group,
             risk=definition.risk, risk_level=definition.risk_level, read_only=definition.read_only,
             requires_approval=definition.requires_approval, side_effects=definition.side_effects,
         ))
     return entries
+
+
+def group_catalog() -> list[dict]:
+    """Every editor group in display order, including groups whose tools are not delivered yet.
+
+    `tool_count` is what the worker can run now; a group with none shows its `planned` phase instead, so the
+    editor can render it as a disabled "planned" section rather than hiding it.
+    """
+    counts: dict[str, int] = {}
+    for entry in builtin_catalog():
+        counts[entry.group] = counts.get(entry.group, 0) + 1
+    return [{'id': group.id, 'label': group.label, 'default_enabled': group.default_enabled, 'locked': group.locked,
+             'tool_count': counts.get(group.id, 0), 'planned': group.planned if not counts.get(group.id) else ''}
+            for group in TOOL_GROUPS]

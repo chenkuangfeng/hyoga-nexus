@@ -42,7 +42,8 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
     active tool resources (``POST .../tools/{name}/enable``). ``default_tools`` is the caller's Native
     preference for new agents. Listing a tool grants nothing: binding and per-call checks still apply.
     """
-    from nexus_tools.builtins.catalog import GROUP_ORDER, builtin_catalog
+    from nexus_tools.builtins.catalog import GROUP_ORDER, builtin_catalog, group_catalog
+    from nexus_platform.runs.tool_gates import deployment_gate_facts, unavailable_groups
     from nexus_platform.runs.settings import view as native_preferences
     with db.begin():
         user = resolve_user(db, principal)
@@ -55,6 +56,10 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
     return {
         "tools": [asdict(entry) | {"enabled_in_tenant": entry.name in enabled} for entry in builtin_catalog()],
         "groups": list(GROUP_ORDER),
+        # Per-group switch metadata for the editor: `available` is the deployment-side layer (sandbox accepted,
+        # search backend configured...), `reason` its stable code; `default_enabled` is the agent-side default.
+        "group_info": [info | {"available": info["id"] not in reasons, "reason": reasons.get(info["id"], "")}
+                       for info in group_catalog() for reasons in [unavailable_groups(deployment_gate_facts())]],
         "default_tools": default_tools,
         "can_enable_tools": membership.role in ADMIN_ROLES,
     }

@@ -177,7 +177,7 @@ def test_parser_config_api_is_admin_only_and_lists_engines(env):
             base = f'/api/v1/tenants/{tenant_id}/knowledge'
             listed = {e['Name']: e for e in client.get(f'{base}/parser-engines').json()['data']}
             assert listed['mineru']['Available'] is False and 'mineru_endpoint' in listed['mineru']['UnavailableReason']
-            assert listed['builtin']['Available'] and listed['anydoc']['UnavailableReason'].startswith('待实现')
+            assert listed['builtin']['Available'] and listed['anydoc']['Available'] and listed['markitdown']['UnavailableReason'].startswith('待实现')
             saved = client.put(f'{base}/parser-engine-config', json={'mineru_endpoint': 'http://m.test',
                                                                       'mineru_api_key': 'abc'}).json()['data']
             assert saved['mineru_api_key'] == '******'

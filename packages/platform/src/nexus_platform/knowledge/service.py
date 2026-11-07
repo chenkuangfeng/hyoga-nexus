@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import new_id, utc_now
 from nexus_knowledge import capabilities
 from nexus_knowledge.ingest.chunk import ChunkConfig
+from nexus_knowledge.ingest import anydoc
 from nexus_knowledge.ingest.parse import SUPPORTED_SUFFIXES, suffix_of
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import register_resource, deactivate_resource
@@ -361,7 +362,7 @@ def prepare_upload(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, fil
     filename = (filename or '').strip().replace('\\', '/').rsplit('/', 1)[-1]
     if not filename or len(filename) > 255:
         raise ValueError('filename must be 1-255 characters')
-    if suffix_of(filename) not in SUPPORTED_SUFFIXES | media.media_suffixes():
+    if suffix_of(filename) not in SUPPORTED_SUFFIXES | media.media_suffixes() | {f'.{t}' for t in anydoc.EXTRA}:
         raise ValueError(f'unsupported document type: {suffix_of(filename) or "(none)"}; '
                          'more parser engines are planned (K4)')
     media.check_upload(media.config_of(kb), filename)

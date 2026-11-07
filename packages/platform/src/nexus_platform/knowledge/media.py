@@ -149,6 +149,13 @@ async def parse(factory, config: MediaConfig, filename: str, data: bytes) -> lis
     suffix = suffix_of(filename)
     from . import parsers
     engine = parsers.engine_for(config.settings, filename)
+    if engine == parsers.ANYDOC:
+        import asyncio
+        from nexus_knowledge.ingest import anydoc
+        sections = [s for s in await asyncio.to_thread(anydoc.parse, suffix, data) if s.text.strip()]
+        if not sections:
+            raise EmptyDocument('document has no extractable text')
+        return sections
     if engine not in (parsers.BUILTIN, 'simple'):
         from nexus_knowledge.ingest import engines
         return await engines.parse_with(engine, parsers.http_client_for, config.parser_config or {}, filename, data)

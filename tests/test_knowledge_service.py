@@ -168,7 +168,7 @@ def test_write_access_and_capability_checks(env):
         with pytest.raises(NotFound):
             service.prepare_upload(db, other_id, outsider, kb_id, 'a.txt', b'x', 100)
         with pytest.raises(ValueError):
-            service.prepare_upload(db, tenant_id, owner, kb_id, 'a.doc', b'x', 100)
+            service.prepare_upload(db, tenant_id, owner, kb_id, 'a.exe', b'x', 100)
         with pytest.raises(ValueError):
             service.prepare_upload(db, tenant_id, owner, kb_id, 'a.txt', b'x' * 200, 100)
     with factory() as db, db.begin():

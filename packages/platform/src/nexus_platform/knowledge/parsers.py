@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import utc_now
 from nexus_knowledge import capabilities
-from nexus_knowledge.ingest import engines
+from nexus_knowledge.ingest import anydoc, engines
 from nexus_knowledge.ingest.parse import suffix_of
 from nexus_platform.authz.audit import audit
 from nexus_platform.identity.service import require_membership
@@ -28,6 +28,7 @@ from nexus_platform.tenants.service import ADMIN_ROLES
 from . import stores
 
 BUILTIN = 'builtin'
+ANYDOC = 'anydoc'
 _HTTP: list[Callable[[str], httpx.AsyncClient]] = []
 
 
@@ -100,7 +101,11 @@ _OPTIONAL = frozenset({
 
 
 def engine_for(settings: Mapping[str, Any] | None, filename: str) -> str:
-    """Engine chosen for a file by the base's rules (first matching rule wins); ``builtin`` otherwise."""
+    """Engine chosen for a file by the base's rules (first matching rule wins).
+
+    Without a rule the in-process ``anydoc`` engine takes the formats the builtin parser cannot read (legacy Office,
+    OpenDocument, RTF, EPUB, HTML - WeKnora's "prefer anydoc when available"); everything else uses ``builtin``.
+    """
     suffix = suffix_of(filename).lstrip('.')
     for rule in ((settings or {}).get('chunking_config') or {}).get('parser_engine_rules') or []:
         if not isinstance(rule, dict):
@@ -108,7 +113,7 @@ def engine_for(settings: Mapping[str, Any] | None, filename: str) -> str:
         types = {str(t).lstrip('.').lower() for t in rule.get('file_types') or []}
         if suffix in types and rule.get('engine'):
             return str(rule['engine'])
-    return BUILTIN
+    return ANYDOC if suffix in anydoc.EXTRA else BUILTIN
 
 
 def engine_list(config: Mapping[str, Any], builtin_types: list[str]) -> list[dict[str, Any]]:
@@ -119,7 +124,10 @@ def engine_list(config: Mapping[str, Any], builtin_types: list[str]) -> list[dic
             continue
         name = row['key']
         engine = engines.EXTERNAL.get(name)
-        if name in (BUILTIN, 'simple'):
+        if name == ANYDOC:
+            item = {'Name': name, 'Description': '进程内 Office / 电子书转换（无需外部服务）',
+                    'FileTypes': list(anydoc.SUPPORTED), 'Available': True, 'UnavailableReason': ''}
+        elif name in (BUILTIN, 'simple'):
             item = {'Name': name, 'Description': row['label'], 'FileTypes': builtin_types, 'Available': True,
                     'UnavailableReason': ''}
         elif engine is not None:
@@ -136,3 +144,4 @@ def engine_list(config: Mapping[str, Any], builtin_types: list[str]) -> list[dic
 for _name in engines.EXTERNAL:
     capabilities.mark_available('parser_engine', _name, verified=False)
 capabilities.mark_available('parser_engine', 'simple')
+capabilities.mark_available('parser_engine', ANYDOC)  # verified against the fixtures WeKnora tests with

@@ -90,7 +90,7 @@ def test_planned_features_and_limits_are_refused(api):
     kb_id = client.post(path + '/bases', json={'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
     too_big = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.txt', b'x' * (1024 * 1024 + 1))})
     assert too_big.status_code == 422
-    unsupported = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.doc', b'x')})
+    unsupported = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.exe', b'x')})
     assert unsupported.status_code == 422
     store = client.post(path + '/vector-stores', json={'name': 'w', 'engine': 'weaviate'})
     assert store.json()['error']['code'] == 'capability_planned'
@@ -160,8 +160,9 @@ def test_chunk_preview_parser_engines_and_engine_rules(api):
     engines = {e['Name']: e for e in client.get(path + '/parser-engines').json()['data']}
     assert engines['builtin']['Available'] and 'docx' in engines['builtin']['FileTypes']
     assert not engines['mineru']['Available'] and engines['mineru']['UnavailableReason'].startswith('未配置')  # implemented, not set up
-    assert not engines['anydoc']['Available'] and engines['anydoc']['UnavailableReason'].startswith('待实现')
+    assert engines['anydoc']['Available'] and 'doc' in engines['anydoc']['FileTypes']  # in-process, nothing to set up
+    assert not engines['markitdown']['Available'] and engines['markitdown']['UnavailableReason'].startswith('待实现')
     rule = client.post(path + '/bases', json={'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
                                               'settings': {'chunking_config': {'parser_engine_rules': [
-                                                  {'file_types': ['pdf'], 'engine': 'anydoc'}]}}})
+                                                  {'file_types': ['pdf'], 'engine': 'markitdown'}]}}})
     assert rule.status_code == 422 and rule.json()['error']['code'] == 'capability_planned'

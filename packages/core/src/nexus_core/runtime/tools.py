@@ -1,8 +1,9 @@
 """Vendor-neutral tools contracts; no SDK, database or platform imports."""
 from __future__ import annotations
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Callable, Literal, NamedTuple, Protocol
 from .cancellation import CancellationTokenPort
 
 
@@ -18,6 +19,21 @@ class ToolCall:
 
 TOOL_RISKS = ('read', 'probe', 'write', 'destructive')
 RISK_LEVELS = {'read': 'low', 'probe': 'low', 'write': 'medium', 'destructive': 'high'}
+
+
+TOOL_SOURCES = ('builtin', 'domain', 'mcp')
+_GROUP_ID = re.compile(r'[a-z][a-z0-9_]{0,31}')
+
+
+class ConcurrencyHint(NamedTuple):
+    """How one call may be scheduled next to its siblings in a batch (openspec 2026-11-07-tool-expansion, R3).
+
+    `parallel` may overlap with other parallel calls; `exclusive` waits for everything before it to finish and
+    runs alone; `serial` queues behind earlier calls with the same `key` (for example a file path) while
+    calls with other keys may still overlap.
+    """
+    mode: Literal['parallel', 'exclusive', 'serial']
+    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,8 +58,22 @@ class ToolDefinition:
     risk: Literal['read', 'probe', 'write', 'destructive'] | None = None
     # Capabilities the executing backend must provide (for example 'sandbox'); empty means none.
     required_capabilities: tuple[str, ...] = ()
+    # The four fields below are presentation, scheduling and provenance metadata. They stay out of `repr`
+    # because the engine digests `str(definitions)` to detect a changed tool block (`context_prefix_changed`);
+    # a redeploy that only regroups a tool, or a function address in `concurrency`, must not look like a change.
+    #: Editor and gating group (`nexus_core.native.tool_groups`); the tool is offered only while its group is.
+    group: str = field(default='base', repr=False)
+    #: Where the definition comes from; MCP tools get namespacing and audit by this value.
+    source: str = field(default='builtin', repr=False)
+    #: Optional per-call scheduling decision taking the normalized arguments. Omitted means the read-only,
+    #: idempotent rule applies. A raising function is treated as `exclusive` by the scheduler.
+    concurrency: Callable[[dict], ConcurrencyHint] | None = field(default=None, repr=False, compare=False)
+    #: May be listed by name only and described on demand (`tool_search`). Builtin base tools never are.
+    deferrable: bool = field(default=False, repr=False)
 
     def __post_init__(self):
+        if not _GROUP_ID.fullmatch(self.group) or self.source not in TOOL_SOURCES:
+            raise ValueError(f'Tool {self.name!r} has an invalid group or source')
         # A read-only declaration is a scheduling promise (P9): such a tool may run in parallel,
         # so it must not carry side effects or require approval.
         if self.read_only and (self.side_effects or self.requires_approval):

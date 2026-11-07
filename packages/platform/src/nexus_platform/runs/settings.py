@@ -31,6 +31,7 @@ LABELS = {
     'tool_access': '工具访问级别（read_only / standard / strict）', 'tool_turn_budget_chars': '每轮工具输出总上限（字符，0 为不限）',
     'tool_repeat_warn_at': '重复工具调用提醒次数（0 为关闭）', 'tool_repeat_stop_at': '重复工具调用停止次数（0 为关闭）',
     'tool_failure_stop_at': '同一工具连续失败停止次数（0 为关闭）', 'tool_injection_scan': '扫描工具输出中的疑似指令注入',
+    'tool_groups_enabled': '工具组开关（沙箱、Web 等高影响组默认关闭）',
 }
 
 
@@ -71,7 +72,7 @@ def view(db, user_id, tenant_id) -> dict:
     """Read current preference in the caller's transaction, including typed form metadata."""
     row = db.get(NativePreferenceRecord, (tenant_id, user_id))
     settings = _with_defaults(row.settings) if row else defaults()
-    schema = {group: [{'name': key, 'label': LABELS[key], 'type': 'boolean' if type(value) is bool else 'number' if type(value) in (int, float) else 'tools' if key == 'enabled_tools' else 'models' if isinstance(value, list) else 'string'}
+    schema = {group: [{'name': key, 'label': LABELS[key], 'type': 'boolean' if type(value) is bool else 'number' if type(value) in (int, float) else 'tools' if key == 'enabled_tools' else 'tool_groups' if key == 'tool_groups_enabled' else 'models' if isinstance(value, list) else 'string'}
                       for key, value in values.items()] for group, values in defaults().items()}
     from nexus_core.native import BUILTIN_TOOL_NAMES
     from nexus_platform.persistence.models import PlatformResourceRecord

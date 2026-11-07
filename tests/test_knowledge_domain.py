@@ -62,7 +62,7 @@ def test_csv_rows_keep_column_names_and_json_is_pretty_printed():
 
 def test_unsupported_and_empty_documents_fail_with_codes():
     with pytest.raises(UnsupportedDocument) as unsupported:
-        parse_document('a.doc', b'x')  # legacy binary Word needs an external parser engine
+        parse_document('a.exe', b'x')
     assert unsupported.value.code == 'unsupported_type'
     with pytest.raises(EmptyDocument):
         parse_document('a.txt', b'  \n ')

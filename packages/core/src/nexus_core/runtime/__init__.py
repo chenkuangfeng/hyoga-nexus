@@ -1,7 +1,7 @@
 """Compatibility exports for vendor-neutral runtime contracts; implementations live by responsibility."""
 from .errors import RuntimeFault
 from .cancellation import CancellationTokenPort
-from .tools import ToolCall, ToolDefinition, ToolDisposition, ToolResult, ToolGatewayPort
+from .tools import ConcurrencyHint, ToolCall, ToolDefinition, ToolDisposition, ToolResult, ToolGatewayPort
 from .models import ModelMessage, ModelRequest, ModelChunk, ChatModelPort
 from .events import LifecycleEvent, RuntimeLifecycleHook
 from .budgets import ExecutionBudget, RuntimeProgress
@@ -15,6 +15,7 @@ __all__ = [
     'RuntimeFault',
     'CancellationTokenPort',
     'ToolCall',
+    'ConcurrencyHint',
     'ToolDefinition',
     'ToolDisposition',
     'ToolResult',
