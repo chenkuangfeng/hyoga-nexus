@@ -442,8 +442,7 @@ export interface KnowledgeBaseProfile {
 
 /** Regenerates the AI description of a knowledge base synchronously. */
 export function generateKnowledgeBaseProfile(id: string) {
-  void id;
-  return nexus.planned('库画像生成', 'K5');
+  return nexus.generateProfile(id);
 }
 
 export function rebuildKBIndex(kbId: string) {

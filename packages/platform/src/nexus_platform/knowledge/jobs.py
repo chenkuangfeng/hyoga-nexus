@@ -77,6 +77,12 @@ async def run_job(factory: sessionmaker[Session], job_id: UUID) -> str:
             await _index(factory, job_id)
         elif kind == 'cleanup':
             await _cleanup(factory, job_id)
+        elif kind == 'enrich':
+            from . import enrich
+            try:
+                await enrich.run(factory, job_id)
+            except enrich.EnrichFailed as exc:
+                return _finish(factory, job_id, 'failed', str(exc))
         else:
             return 'missing'
         return _finish(factory, job_id, 'done')
@@ -191,6 +197,7 @@ async def _parse(factory, job_id: UUID) -> None:
         # chunk_count counts what readers see: ordinary chunks or parents, not children.
         version.state, version.chunk_count, version.indexed_count = (
             'parsed', sum(1 for c in chunks if c.parent is None), 0)
+        version.summary, version.enrichment = None, {}  # a re-parsed version is enriched again
         version.error_code = version.error_message = None
         version.updated_at = utc_now()
 
@@ -254,6 +261,8 @@ async def _activate(factory, job_id: UUID) -> None:
         version.state, version.updated_at = 'ready', utc_now()
         from .graph.build import schedule
         schedule(db, kb, kb.created_by)  # a base with a graph rebuilds it after a document change
+        from .enrich import schedule as schedule_enrichment
+        schedule_enrichment(db, kb, version.id, doc.id)
         index = stores.vector_index_for(db, kb)
         kb_id = kb.id
     if previous is not None:

@@ -139,6 +139,10 @@ class KnowledgeDocumentVersionRecord(Base):
     mime: Mapped[str] = mapped_column(String(128), nullable=False, default='')
     state: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: Document summary written by the model (K5.2); NULL until generated or when summaries are off.
+    summary: Mapped[str | None] = mapped_column(Text)
+    #: Which enrichments ran for this version: ``{"summary": "done", "questions": "done", "tags": "done"}``.
+    enrichment: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
     #: Chunks whose vectors (or keyword rows) are already in the vector store; resumes the embed stage.
     indexed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_code: Mapped[str | None] = mapped_column(String(64))
@@ -166,6 +170,8 @@ class KnowledgeChunkRecord(Base):
     parent_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     #: False for parents of a parent-child split: stored and readable, not embedded and not searched.
     indexed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    #: Questions the model wrote for this chunk (K5.2); each is an extra index row that resolves back to the chunk.
+    questions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
 
 class KnowledgeJobRecord(Base):
@@ -177,7 +183,7 @@ class KnowledgeJobRecord(Base):
 
     __tablename__ = 'knowledge_jobs'
     __table_args__ = (
-        CheckConstraint("kind IN ('index','cleanup')", name='ck_knowledge_jobs_kind'),
+        CheckConstraint("kind IN ('index','cleanup','enrich')", name='ck_knowledge_jobs_kind'),
         CheckConstraint("state IN ('pending','done','failed','cancelled')", name='ck_knowledge_jobs_state'),
         Index('ix_knowledge_jobs_due', 'state', 'available_at'),
     )

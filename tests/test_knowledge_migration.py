@@ -71,3 +71,22 @@ def test_organization_columns_round_trip_on_sqlite(tmp_path):
     assert 'knowledge_tags' not in inspect(engine).get_table_names()
     assert 'folder_path' not in {c['name'] for c in inspect(engine).get_columns('knowledge_documents')}
     command.upgrade(config, 'head')
+
+
+def test_enrichment_columns_and_job_kind_round_trip_on_sqlite(tmp_path):
+    from sqlalchemy import text
+    url = 'sqlite:///' + str(tmp_path / 'enrich.db')
+    config = Config('alembic.ini')
+    config.attributes['database_url'] = url
+    command.upgrade(config, 'head')
+    engine = create_engine(url)
+    assert 'summary' in {c['name'] for c in inspect(engine).get_columns('knowledge_document_versions')}
+    assert 'questions' in {c['name'] for c in inspect(engine).get_columns('knowledge_chunks')}
+    with engine.connect() as connection:
+        sql = connection.execute(text("SELECT sql FROM sqlite_master WHERE name='knowledge_jobs'")).scalar()
+    assert "'enrich'" in sql
+    command.downgrade(config, 'a4b5c6d7e8f9')
+    with engine.connect() as connection:
+        sql = connection.execute(text("SELECT sql FROM sqlite_master WHERE name='knowledge_jobs'")).scalar()
+    assert "'enrich'" not in sql
+    command.upgrade(config, 'head')

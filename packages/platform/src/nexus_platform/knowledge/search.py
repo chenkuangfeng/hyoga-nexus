@@ -201,9 +201,26 @@ def _degrade(db: Session, result: SearchResult, tenant_id: UUID, user_id: UUID, 
           {'channel': channel, 'reason': reason})
 
 
+def _resolve_question_rows(fused):
+    """Rows of generated questions (``q:<chunk>:<n>``) stand for their chunk; the best-ranked row of a chunk wins."""
+    out, seen = [], set()
+    for item in fused:
+        if item.chunk_id.startswith('q:'):
+            parts = item.chunk_id.split(':')
+            if len(parts) < 3:
+                continue
+            item = type(item)(parts[1], item.score, {**item.ranks, 'question': 1})
+        if item.chunk_id in seen:
+            continue
+        seen.add(item.chunk_id)
+        out.append(item)
+    return out
+
+
 def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: str = '') -> list[SearchHit]:
     allowed = {version for item in scoped for version in item.version_ids}
     names = {item.kb.id: item.kb.name for item in scoped}
+    fused = _resolve_question_rows(fused)
     ids, faq_ids = [], []
     for item in fused:
         if item.chunk_id.startswith('f:'):

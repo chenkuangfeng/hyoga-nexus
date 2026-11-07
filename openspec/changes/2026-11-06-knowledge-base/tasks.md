@@ -82,7 +82,9 @@
 
 - [x] K5.1 标签、文件夹、置顶、自定义元数据（自动打标见 K5.2）。
   - 迁移 `a4b5c6d7e8f9`：`knowledge_tags`、文档 `tag_ids/folder_path/custom_metadata`、FAQ 条目 `tag_id`、库 `pinned`。`nexus_platform.knowledge.organize`：标签增删改（删除在被使用时需 `force`，只从文档上摘掉，不删文档）、批量设置文档标签/文件夹/元数据、文件夹由路径派生（树含直接与累计数量、重命名整棵子树、拒绝 `..` 与移入自身）、置顶（置顶库排前）。检索可按标签、文件夹、元数据缩小范围（`DocumentFilter`），只缩小不放宽 Pre-Filter；`search_knowledge` 新增 `tags`（标签名）、`folder`、`metadata` 参数。FAQ 导入的「分类」列自动建为标签；FAQ 条目可设标签并按标签筛选。接口：`/bases/{id}/tags`、`PATCH /bases/{id}/documents`、`PUT /document-tags`、`/bases/{id}/folders`、`/bases/{id}/pin`，文档列表支持 `tag_ids`、`folder_path`、`file_type`。前端标签/文件夹/置顶/FAQ 标签接口已改接。测试 `tests/test_knowledge_organize.py`。
-- [ ] K5.2 文档摘要、提问生成、库画像。
+- [x] K5.2 文档摘要、提问生成、自动打标、库画像。
+  - 迁移 `b5c6d7e8f9a0`：块 `questions`、版本 `summary/enrichment`、作业类型 `enrich`。文档版本变为 `ready` 后，配置了模型的库排队 `enrich` 作业（`nexus_platform.knowledge.enrich`），按步骤幂等执行并记入 `version.enrichment`：`summary`（`settings.summary_model_id`）、`questions`（`question_generation_config`，每个问题是 `q:<块>:<n>` 的额外索引行，命中后还原为所属块，用户的措辞即使文档里没有也能召回）、`tags`（`auto_tag_config`，从已有标签中选或新建，默认已打标则跳过）。无版本的作业重生成库画像（`profile_config`），存入 `settings.generated_profile`，智能体的知识库目录在没有手写简介时使用它；文档列表工具附带摘要。全部模型调用用库创建者的 Key；失败按退避重试，不会把版本标为失败，也不影响检索。配置的模型必须是创建者可用的对话模型，问题数与标签数有范围校验。接口 `POST /bases/{id}/profile/generate`。测试 `tests/test_knowledge_enrich.py`、`tests/test_knowledge_enrich_domain.py`；后端全量 1021 通过。
+  - 未做：手动编辑摘要/生成的问题（前端对应接口仍为待实现）、重排（K5.3b）。
 - [x] K5.3a 元数据过滤（见 K5.1）、同义词、结构导航工具（RAGFlow `grep_chunks`、`navigate_structure`/大纲）。
   - 同义词：库设置 `settings.synonyms`（每组 2–10 个词，最多 200 组）；查询含其中一个词时关键词通道补充其余词，向量通道不变（`nexus_knowledge.retrieval.synonyms`）。编辑器高级设置里有同义词文本框（每行一组）。结构工具：`grep_chunks`（对可读绑定文档的当前块做精确子串匹配，返回带 `[ID:n]` 的片段）、`document_outline`（由块的章节路径生成标题/页码大纲与块区间）、`read_document` 新增 `section` 参数按标题路径读取。三者都是只读工具，同样受 Pre-Filter 约束；编辑器只把空间已启用的知识库工具加入智能体，`search_knowledge` 为必选。测试见 `tests/test_knowledge_tools.py`、`tests/test_knowledge_organize.py`。
 - [ ] K5.3b 重排（需要重排模型客户端，待实现）。

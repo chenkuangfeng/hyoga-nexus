@@ -45,7 +45,8 @@ def catalog_text(db: Session, tenant_id: UUID, user_id: UUID, agent_version_id: 
     bases = access.readable_bases(db, tenant_id, user_id, bound_base_ids(db, agent_version_id))
     lines = []
     for kb in bases:
-        description = ' '.join((kb.description or '').split())[:240]
+        profile = ((kb.settings or {}).get('generated_profile') or {}).get('description', '')
+        description = ' '.join((kb.description or profile or '').split())[:240]
         lines.append(f'- {kb.name} (id {kb.id})' + (f': {description}' if description else ''))
     return '\n'.join(lines)
 
@@ -190,12 +191,13 @@ async def list_documents_for_run(factory: sessionmaker[Session], run_id: UUID, k
             rows, total = _documents(db, kb.id, keyword, offset, limit)
             lines.append(f'## {kb.name} (id {kb.id}) — {total} documents')
             lines += [f'- {doc.filename} | document_id={doc.id} | chunks={chunks} | updated {doc.updated_at:%Y-%m-%d}'
-                      for doc, chunks in rows]
+                      + (f' | {summary[:120]}' if summary else '') for doc, chunks, summary in rows]
     return '\n'.join(lines)
 
 
 def _documents(db: Session, kb_id: UUID, keyword: str, offset: int, limit: int):
-    query = select(KnowledgeDocumentRecord, KnowledgeDocumentVersionRecord.chunk_count).join(
+    query = select(KnowledgeDocumentRecord, KnowledgeDocumentVersionRecord.chunk_count,
+                   KnowledgeDocumentVersionRecord.summary).join(
         KnowledgeDocumentVersionRecord, KnowledgeDocumentVersionRecord.id == KnowledgeDocumentRecord.current_version_id
     ).where(KnowledgeDocumentRecord.kb_id == kb_id, KnowledgeDocumentRecord.status == 'active')
     if keyword:
@@ -205,7 +207,7 @@ def _documents(db: Session, kb_id: UUID, keyword: str, offset: int, limit: int):
     total = db.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     rows = db.execute(query.order_by(KnowledgeDocumentRecord.filename).offset(max(0, offset))
                       .limit(max(1, min(limit, 100)))).all()
-    return [(doc, chunks) for doc, chunks in rows], total
+    return [(doc, chunks, summary or '') for doc, chunks, summary in rows], total
 
 
 def attach_citations(db: Session, run: RunRecord) -> None:

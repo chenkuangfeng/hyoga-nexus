@@ -128,6 +128,18 @@ def delete_base(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get
     return Response(status_code=204)
 
 
+@router.post('/bases/{kb_id}/profile/generate', status_code=202)
+def generate_profile(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, bool]:
+    """Queue regeneration of the base's profile (a short description built from its documents)."""
+    from nexus_platform.knowledge import enrich
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        kb = access.writable_base(db, kb_id, tenant_id, user.id)
+        enrich.request_profile(db, kb)
+    return {'queued': True}
+
+
 @router.post('/bases/{kb_id}/rebuild')
 def rebuild_base(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
                  db: Session = Depends(get_database_session)) -> dict[str, int]:

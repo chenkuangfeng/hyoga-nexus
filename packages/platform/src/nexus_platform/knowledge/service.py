@@ -95,6 +95,7 @@ def document_view(db: Session, doc: KnowledgeDocumentRecord) -> dict[str, Any]:
             'current_version': version_view(current) if current else None,
             'latest_version': version_view(latest) if latest else None,
             'parse_status': _parse_status(latest), 'file_type': suffix_of(doc.filename).lstrip('.'),
+            'summary': (current.summary if current and current.summary else None),
             'tag_ids': list(doc.tag_ids or []), 'folder_path': doc.folder_path or '',
             'custom_metadata': dict(doc.custom_metadata or {}),
             'created_at': doc.created_at.isoformat(), 'updated_at': doc.updated_at.isoformat()}
@@ -142,6 +143,7 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
             _authorize_chat_model(db, tenant_id, user_id, config.model_id)
     ChunkConfig.from_settings(chunk_size, chunk_overlap, (settings or {}).get('chunking_config'))
     synonym_rules.parse((settings or {}).get('synonyms'))  # rejects malformed synonym groups
+    _check_enrichment(db, tenant_id, user_id, settings)
     for rule in ((settings or {}).get('chunking_config') or {}).get('parser_engine_rules') or []:
         if isinstance(rule, dict) and rule.get('engine'):
             capabilities.require_available('parser_engine', str(rule['engine']))  # external engines are planned
@@ -196,6 +198,28 @@ def _unique_name(db: Session, tenant_id: UUID, name: str, exclude: UUID | None =
         query = query.where(KnowledgeBaseRecord.id != exclude)
     if db.scalar(query) is not None:
         raise Conflict('A knowledge base with this name already exists')
+
+
+def _check_enrichment(db: Session, tenant_id: UUID, user_id: UUID | None, settings: dict[str, Any] | None) -> None:
+    """Models named for summaries, question generation, auto-tagging and the profile must be chat models the
+    creator may use (they run with the creator's key), and counts must be in range."""
+    settings = settings or {}
+    config = settings.get('question_generation_config') or {}
+    if config.get('enabled') and not 1 <= int(config.get('question_count', 3)) <= 10:
+        raise ValueError('question_count must be between 1 and 10')
+    tag_config = settings.get('auto_tag_config') or {}
+    if tag_config.get('enabled') and not 1 <= int(tag_config.get('max_tags', 3)) <= 10:
+        raise ValueError('max_tags must be between 1 and 10')
+    if user_id is None:
+        return
+    wanted = {settings.get('summary_model_id'), config.get('model_id'), tag_config.get('model_id'),
+              (settings.get('profile_config') or {}).get('model_id')}
+    for value in wanted:
+        if value:
+            try:
+                _authorize_chat_model(db, tenant_id, user_id, UUID(str(value)))
+            except ValueError as exc:
+                raise ValueError(f'invalid model for knowledge enrichment: {exc}') from None
 
 
 def _authorize_chat_model(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
@@ -467,6 +491,7 @@ def chunks_of(db: Session, tenant_id: UUID, user_id: UUID, document_id: UUID, *,
 
 def chunk_view(chunk: KnowledgeChunkRecord) -> dict[str, Any]:
     return {'id': str(chunk.id), 'ordinal': chunk.ordinal, 'content': chunk.content, 'page': chunk.page,
+            'questions': list(chunk.questions or []),
             'section': list(chunk.section), 'char_start': chunk.char_start, 'char_end': chunk.char_end}
 
 
@@ -481,6 +506,8 @@ def cancel_graph_builds(db: Session, kb_id: UUID) -> None:
 # Implemented here (capability catalog, decision 5).
 capabilities.mark_available('kb_type', 'document')
 capabilities.mark_available('kb_type', 'faq')
+for _llm_feature in ('summary', 'question_generation', 'auto_tag', 'profile'):
+    capabilities.mark_available('kb_feature', _llm_feature)
 for _org_feature in ('tags', 'folders', 'pin', 'synonyms', 'structure_tools'):
     capabilities.mark_available('kb_feature', _org_feature)
 for _chunk_feature in ('chunking_strategy', 'parent_child', 'chunking_debug'):

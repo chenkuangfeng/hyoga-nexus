@@ -223,3 +223,7 @@ export async function renameFolder(kbId: string, source: string, target: string)
 export async function togglePin(kbId: string): Promise<Json> {
   return ok(await put(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/pin`, {}))
 }
+
+export async function generateProfile(kbId: string): Promise<Json> {
+  return ok(await post(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/profile/generate`, {}))
+}

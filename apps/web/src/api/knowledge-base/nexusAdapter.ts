@@ -142,11 +142,11 @@ export function toWeKnoraKnowledge(raw: unknown, kbName = ''): Json {
     tags: Array.isArray(doc.tag_ids) ? doc.tag_ids : [],
     tag_ids: Array.isArray(doc.tag_ids) ? doc.tag_ids : [],
     custom_metadata: doc.custom_metadata ?? {},
-    description: '',
+    description: doc.summary ?? '',
+    summary_status: doc.summary ? 'completed' : 'none',
     source: 'upload',
     channel: 'web',
     parse_status: parseStatus(doc),
-    summary_status: 'none',
     enable_status: 'enabled',
     error_message: latest.state === 'failed' ? (latest.error_message || latest.error_code || '') : '',
     chunk_count: current.chunk_count ?? 0,
@@ -170,6 +170,7 @@ export function toWeKnoraChunk(raw: unknown, knowledgeId: string): Json {
     is_enabled: true,
     chunk_type: 'text',
     metadata: { page: chunk.page ?? null, section: Array.isArray(chunk.section) ? chunk.section : [] },
+    generated_questions: (Array.isArray(chunk.questions) ? chunk.questions : []).map((question: string, index: number) => ({ id: `${chunk.id}:${index}`, question })),
   }
 }
 
