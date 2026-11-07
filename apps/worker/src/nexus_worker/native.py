@@ -24,6 +24,7 @@ from nexus_runtimes.native.models.factory import create_model
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_platform.runs.tool_gates import deployment_gate_facts, hidden_groups
 from .sandbox_runtime import session_for
+from .subagent import SubagentRunner
 from nexus_runtimes.native.engine import CancellationToken, RunOrchestrator
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
@@ -174,10 +175,12 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         sandbox = None if 'sandbox' in hidden else session_for(
             str(context.tenant_id), str(context.session_id), default_timeout=policy.sandbox_exec_timeout_seconds,
             output_limit=policy.sandbox_output_limit)
-        gateway = AuthorizedToolGateway(registry, ToolAccess(store),
-            {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
+        services = RunServices(store, context.progress.state, sandbox)
+        tool_access = ToolAccess(store)
+        bound = {name: version for name, version, _ in context.bindings}
+        gateway = AuthorizedToolGateway(registry, tool_access, bound, run_id=str(context.run_id),
             session_id=str(context.session_id), tenant_id=str(context.tenant_id),
-            services=RunServices(store, context.progress.state, sandbox), spill=spill,
+            services=services, spill=spill,
             turn_budget=policy.tool_turn_budget_chars, injection_scan=policy.tool_injection_scan,
             tool_access=policy.tool_access,
             hidden_groups=hidden, defer_min_tokens=policy.tool_search_min_tokens)
@@ -192,6 +195,15 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             budget = ExecutionBudget(**options)
         except ValueError:
             raise RuntimeFault('runtime_budget_invalid') from None
+        if 'collab' not in hidden:
+            # Delegated tasks (openspec 2026-11-07-tool-expansion 8.1): a nested run with a subset of these tools.
+            from .models import configured_routing
+            services.delegate = SubagentRunner(
+                build_model=(lambda: model_factory(context)) if model_factory else
+                (lambda: configured_routing(context, factory, resolver or StoredCredentialResolver(factory, DeploymentCredentialResolver()))),
+                registry=registry, parent_bindings=bound, parent_policy=policy, hidden_groups=hidden, access=tool_access,
+                services_store=store, sandbox=sandbox, token=token, parent_progress=context.progress, parent_budget=budget,
+                emit=store.emit, run_id=str(context.run_id), session_id=str(context.session_id), tenant_id=str(context.tenant_id))
         if compaction_model_factory is None and policy.compaction_model_profile_version_id:
             # The summarizer is authorized per summary call; a revoked grant degrades compaction only.
             from .models import compaction_model

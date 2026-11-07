@@ -5,6 +5,7 @@ from functools import lru_cache
 from nexus_tools.registry import RegisteredTool, ToolRegistry
 from .ask_user import ask_user_tool
 from .checkpoint import checkpoint_tool
+from .collab import collab_tools
 from .conversations import conversation_tools
 from .knowledge import knowledge_tools
 from .memory import memory_tools
@@ -33,6 +34,7 @@ def builtins() -> ToolRegistry:
         ('knowledge', tuple(knowledge_tools())),
         ('sandbox', tuple(sandbox_tools())),
         ('web', tuple(web_tools())),
+        ('collab', tuple(collab_tools())),
     ):
         for tool in tools:
             registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))
