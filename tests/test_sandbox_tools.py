@@ -92,7 +92,7 @@ def test_tools_fail_closed_without_a_sandbox_session(env):
 def test_access_levels_apply_to_sandbox_tools(env):
     gateway, call, _ = env
     read_only, _ = gateway('read_only')
-    assert {d.name for d in asyncio.run(read_only.definitions())} == {'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files'}
+    assert {d.name for d in asyncio.run(read_only.definitions())} == {'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files', 'sandbox_job_wait'}
     assert call(read_only, 'sandbox_exec', command='true').error_code == 'tool_authorization_denied'
     standard, port = gateway('standard')
     call(standard, 'sandbox_write_file', path='/workspace/a.txt', content='x')
@@ -115,7 +115,8 @@ def test_risk_and_scheduling_declarations():
     registry = builtins()
     risks = {name: registry.get(name, 'v1').definition.risk for name in SANDBOX_TOOL_NAMES}
     assert risks == {'sandbox_list_files': 'read', 'sandbox_read_file': 'read', 'sandbox_search_files': 'read',
-                     'sandbox_write_file': 'write', 'sandbox_edit_file': 'write', 'sandbox_exec': 'write'}
+                     'sandbox_write_file': 'write', 'sandbox_edit_file': 'write', 'sandbox_exec': 'write',
+                     'sandbox_exec_async': 'write', 'sandbox_job_wait': 'read', 'sandbox_job_cancel': 'write'}
     assert all(registry.get(name, 'v1').definition.group == 'sandbox' for name in SANDBOX_TOOL_NAMES)
     write = registry.get('sandbox_write_file', 'v1').definition
     assert write.concurrency({'path': '/workspace/./a'}).key == '/workspace/a'
@@ -138,3 +139,63 @@ def test_same_path_calls_in_one_batch_run_in_order_and_other_paths_overlap(env):
         return [(i, r.data) async for i, r in execute_batch(calls, definitions, gw, CancellationToken(), hook, 1, True)]
     out = asyncio.run(go())
     assert [i for i, _ in out] == [0, 1, 2] and 'one' in out[1][1]  # the read of a.txt saw the write before it
+
+
+# ---------------------------------------------------------------- background jobs
+
+def test_background_command_runs_reports_output_and_exit_code(env):
+    gateway, call, tmp_path = env
+    gw, _ = gateway()
+    started = call(gw, 'sandbox_exec_async', command='echo first; sleep 1; echo second; exit 3')
+    assert started.error_code is None
+    job = started.data.split()[3].rstrip('.')
+    running = call(gw, 'sandbox_job_wait', job_id=job, wait_seconds=0)
+    assert 'running' in running.data
+    done = call(gw, 'sandbox_job_wait', job_id=job, wait_seconds=10)
+    assert 'finished with exit_code 3' in done.data and 'first' in done.data and 'second' in done.data
+    assert str(tmp_path) not in done.data
+
+
+def test_background_command_runs_in_the_requested_directory_and_reports_a_bad_one(env):
+    gateway, call, _ = env
+    gw, _ = gateway()
+    call(gw, 'sandbox_write_file', path='/workspace/sub/marker.txt', content='x')
+    job = call(gw, 'sandbox_exec_async', command='ls', cwd='/workspace/sub').data.split()[3].rstrip('.')
+    assert 'marker.txt' in call(gw, 'sandbox_job_wait', job_id=job, wait_seconds=10).data
+    missing = call(gw, 'sandbox_exec_async', command='ls', cwd='/workspace/nope').data.split()[3].rstrip('.')
+    assert 'finished with exit_code 1' in call(gw, 'sandbox_job_wait', job_id=missing, wait_seconds=10).data
+    assert call(gw, 'sandbox_exec_async', command='ls', cwd='/outputs').error_code == 'sandbox_path_invalid'
+
+
+def test_cancel_kills_the_whole_process_tree(env):
+    gateway, call, tmp_path = env
+    gw, _ = gateway()
+    marker = tmp_path / 'sbx' / 't1' / 's1' / 'workspace' / 'late.txt'
+    job = call(gw, 'sandbox_exec_async', command=f'(sleep 3; echo late > {marker}) & sleep 60').data.split()[3].rstrip('.')
+    cancelled = call(gw, 'sandbox_job_cancel', job_id=job)
+    assert 'cancelled' in cancelled.data
+    import time
+    time.sleep(3.5)
+    assert not marker.exists()
+    assert 'cancelled' in call(gw, 'sandbox_job_wait', job_id=job, wait_seconds=0).data
+
+
+def test_job_limits_ids_and_cleanup_when_the_run_ends(env):
+    gateway, call, _ = env
+    gw, _ = gateway()
+    jobs = [call(gw, 'sandbox_exec_async', command='sleep 30').data.split()[3].rstrip('.') for _ in range(4)]
+    assert call(gw, 'sandbox_exec_async', command='sleep 30').error_code == 'sandbox_too_many_jobs'
+    assert call(gw, 'sandbox_job_wait', job_id='j0000000000', wait_seconds=0).error_code == 'sandbox_job_not_found'
+    assert call(gw, 'sandbox_job_cancel', job_id='../etc').error_code in ('sandbox_job_not_found', 'tool_arguments_invalid')
+    session = gw.services.sandbox
+    assert asyncio.run(session.close_jobs()) == 4
+    assert all('cancelled' in call(gw, 'sandbox_job_wait', job_id=job, wait_seconds=0).data for job in jobs)
+    assert asyncio.run(session.close_jobs()) == 0
+
+
+def test_background_command_past_its_timeout_is_killed_with_code_124(env):
+    gateway, call, _ = env
+    gw, _ = gateway()
+    job = call(gw, 'sandbox_exec_async', command='echo start; sleep 30', timeout_seconds=1).data.split()[3].rstrip('.')
+    done = call(gw, 'sandbox_job_wait', job_id=job, wait_seconds=10)
+    assert 'exit_code 124' in done.data and 'start' in done.data

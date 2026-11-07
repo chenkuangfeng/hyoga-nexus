@@ -5,9 +5,22 @@ manager's lease and carries the limits the agent chose, clamped to what the depl
 """
 from __future__ import annotations
 
-from nexus_core.sandbox import ExecResult, FileChunk, FileEntry, SandboxError, SearchHit
+import asyncio
+import re
+import shlex
+import time
+import uuid
+
+from nexus_core.sandbox import ExecResult, FileChunk, FileEntry, JobStatus, SandboxError, SearchHit
 from . import paths
 from .contracts import CommandExecutorPort, FileStorePort
+
+
+#: Background jobs keep their state in `/workspace/.jobs/<id>/` (`out`, `rc`, `pid`, `started`), so any worker can
+#: read it and a restart loses nothing. At most this many run at once in one session.
+MAX_JOBS = 4
+_JOB_ID = re.compile(r'j[0-9a-f]{10}')
+JOBS_DIR = '/workspace/.jobs'
 
 
 class SandboxSession:
@@ -47,3 +60,102 @@ class SandboxSession:
         """Files under `/outputs` for artifact registration."""
         collect = getattr(self.files, 'collect_outputs', None)
         return collect() if collect else []
+
+    # ------------------------------------------------------------------ background jobs
+
+    async def exec_async(self, command: str, *, cwd: str, timeout_seconds: float) -> str:
+        """Start `command` in the background and return its job id. Output goes to a file; see `job_status`.
+
+        The command runs in its own session (`setsid`) under `timeout`, so cancelling or timing out ends the whole
+        process tree. Working directories are limited to `/workspace` so bookkeeping paths stay relative.
+        """
+        if not command.strip() or len(command) > 20_000:
+            raise SandboxError('sandbox_command_invalid')
+        root, parts = paths.split(cwd)
+        if root != '/workspace':
+            raise SandboxError('sandbox_path_invalid', 'background commands run under /workspace')
+        running = [job for job in await self._jobs() if (await self._finished(job)) is None]
+        if len(running) >= MAX_JOBS:
+            raise SandboxError('sandbox_too_many_jobs', f'at most {MAX_JOBS} background commands at once; cancel or wait for one')
+        job_id = 'j' + uuid.uuid4().hex[:10]
+        timeout = int(min(timeout_seconds or self.default_timeout, self.max_timeout))
+        directory = f'.jobs/{job_id}'
+        target = '/'.join(parts)
+        enter = f'"$W/{target}"' if target else '"$W"'
+        # $W is the workspace root, exported so the detached shell can find the bookkeeping files after `cd`.
+        # The shell leads its own session, so its process group is the job's whole tree. A watchdog in that group
+        # records the timeout (rc 124) and kills the group; the shell records the real exit code and then kills the
+        # group too, so nothing the command left behind outlives the job. (`timeout(1)` would move the command to
+        # a group of its own, out of reach of `job_cancel`.)
+        inner = (f'cd {enter} 2>"$W/{directory}/out" || {{ echo 1 > "$W/{directory}/rc"; kill -KILL 0; }}; '
+                 f'( sleep {timeout}; echo 124 > "$W/{directory}/rc"; kill -KILL 0 ) & '
+                 f'sh -c {shlex.quote(command)} >>"$W/{directory}/out" 2>&1; echo $? > "$W/{directory}/rc"; kill -KILL 0')
+        script = (f'W=$(pwd); export W; mkdir -p {directory} && date +%s > {directory}/started '
+                  f'&& (setsid sh -c {shlex.quote(inner)} >/dev/null 2>&1 </dev/null & echo $! > {directory}/pid)')
+        started = await self.executor.run(script, cwd='/workspace', timeout_seconds=15, output_limit=2000)
+        if started.exit_code != 0:
+            raise SandboxError('sandbox_job_start_failed', (started.stderr or started.stdout)[:200])
+        return job_id
+
+    async def _jobs(self) -> list[str]:
+        try:
+            entries = await self.files.list_files(JOBS_DIR, limit=200)
+        except SandboxError:
+            return []
+        return [entry.path.rsplit('/', 1)[-1] for entry in entries if entry.kind == 'dir' and _JOB_ID.fullmatch(entry.path.rsplit('/', 1)[-1])]
+
+    async def _read(self, job_id: str, name: str) -> str | None:
+        try:
+            chunk = await self.files.read_file(f'{JOBS_DIR}/{job_id}/{name}', start_line=1, max_lines=100_000)
+        except SandboxError:
+            return None
+        return chunk.text
+
+    async def _finished(self, job_id: str) -> int | None:
+        """Exit code once the job wrote `rc`; None while it runs (a missing or unreadable code reads as -1)."""
+        text = await self._read(job_id, 'rc')
+        if text is None:
+            return None
+        try:
+            return int(text.strip())
+        except ValueError:
+            return -1
+
+    async def job_status(self, job_id: str, *, wait_seconds: float = 0, tail_chars: int = 4000) -> JobStatus:
+        """State and recent output of a job; waits up to `wait_seconds` for it to finish."""
+        if not _JOB_ID.fullmatch(job_id or ''):
+            raise SandboxError('sandbox_job_not_found')
+        if await self._read(job_id, 'started') is None:
+            raise SandboxError('sandbox_job_not_found')
+        deadline = time.monotonic() + max(0.0, min(wait_seconds, 60.0))
+        while True:
+            code = await self._finished(job_id)
+            if code is not None or time.monotonic() >= deadline:
+                break
+            await asyncio.sleep(0.4)
+        text = await self._read(job_id, 'out') or ''
+        cancelled = (await self._read(job_id, 'cancelled')) is not None
+        started = float((await self._read(job_id, 'started') or '0').strip() or 0)
+        state = 'cancelled' if cancelled else 'finished' if code is not None else 'running'
+        truncated = len(text) > tail_chars
+        return JobStatus(job_id, state, None if cancelled else code, text[-tail_chars:], truncated, max(0.0, time.time() - started))
+
+    async def job_cancel(self, job_id: str) -> JobStatus:
+        """Kill a running job's process group. A finished job is left as it is."""
+        status = await self.job_status(job_id)
+        if status.state == 'running':
+            pid = (await self._read(job_id, 'pid') or '').strip()
+            if pid.isdigit():
+                await self.executor.run(f'kill -9 -- -{pid} 2>/dev/null; echo cancelled > .jobs/{job_id}/cancelled; true',
+                                        cwd='/workspace', timeout_seconds=10, output_limit=500)
+            status = await self.job_status(job_id)
+        return status
+
+    async def close_jobs(self) -> int:
+        """Cancel every job still running (the Run that started them is over). Returns how many were cancelled."""
+        cancelled = 0
+        for job_id in await self._jobs():
+            if (await self._finished(job_id)) is None and (await self._read(job_id, 'cancelled')) is None:
+                await self.job_cancel(job_id)
+                cancelled += 1
+        return cancelled

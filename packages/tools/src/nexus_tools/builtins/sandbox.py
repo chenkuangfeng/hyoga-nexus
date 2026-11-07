@@ -115,6 +115,26 @@ def sandbox_tools():
                                                 timeout_seconds=arguments.get('timeout_seconds', 0))
         return ToolResult(_render_exec(result), error_code='sandbox_exec_timeout' if result.timed_out else None)
 
+    async def exec_async(arguments, context):
+        job_id = await sandbox_of(context).exec_async(arguments['command'], cwd=arguments.get('cwd', '/workspace'),
+                                                       timeout_seconds=arguments.get('timeout_seconds', 0))
+        return ToolResult(f'started background command {job_id}. Use sandbox_job_wait to read its output.')
+
+    def render_job(status):
+        head = {'running': f'{status.job_id}: running for {status.elapsed_seconds:.0f}s',
+                'finished': f'{status.job_id}: finished with exit_code {status.exit_code}',
+                'cancelled': f'{status.job_id}: cancelled'}[status.state]
+        body = f"\n--- output{' (last part)' if status.output_truncated else ''} ---\n{status.output}" if status.output else ''
+        return head + body
+
+    async def job_wait(arguments, context):
+        status = await sandbox_of(context).job_status(arguments['job_id'], wait_seconds=arguments.get('wait_seconds', 20),
+                                                       tail_chars=arguments.get('tail_chars', 4000))
+        return ToolResult(render_job(status))
+
+    async def job_cancel(arguments, context):
+        return ToolResult(render_job(await sandbox_of(context).job_cancel(arguments['job_id'])))
+
     def schema(properties, required=()):
         return {'type': 'object', 'properties': properties, 'required': list(required), 'additionalProperties': False}
 
@@ -152,3 +172,17 @@ def sandbox_tools():
         schema({'command': {'type': 'string', 'minLength': 1, 'maxLength': 20000}, 'cwd': _PATH,
                 'timeout_seconds': {'type': 'integer', 'minimum': 1, 'maximum': 3600}}, ['command']),
         side_effects=True, risk='destructive' if network_open else 'write', timeout_seconds=exec_timeout), _guarded(execute), show)
+    yield RegisteredTool(ToolDefinition('sandbox_exec_async',
+        'Start a long-running shell command in the background (under /workspace) and return a job id at once. '
+        'Read progress and output with sandbox_job_wait; stop it with sandbox_job_cancel. At most four run at a time.',
+        schema({'command': {'type': 'string', 'minLength': 1, 'maxLength': 20000}, 'cwd': _PATH,
+                'timeout_seconds': {'type': 'integer', 'minimum': 1, 'maximum': 3600}}, ['command']),
+        side_effects=True, risk='destructive' if network_open else 'write', timeout_seconds=60), _guarded(exec_async), show)
+    yield RegisteredTool(ToolDefinition('sandbox_job_wait',
+        'Wait up to wait_seconds (default 20, at most 60) for a background command to finish, then return its state and the end of its output.',
+        schema({'job_id': {'type': 'string', 'minLength': 2, 'maxLength': 16}, 'wait_seconds': {'type': 'integer', 'minimum': 0, 'maximum': 60},
+                'tail_chars': {'type': 'integer', 'minimum': 200, 'maximum': 20000}}, ['job_id']),
+        read_only=True, idempotent=True, concurrency=lambda a: _EXCLUSIVE, timeout_seconds=90), _guarded(job_wait), show)
+    yield RegisteredTool(ToolDefinition('sandbox_job_cancel', 'Kill a background command and everything it started.',
+        schema({'job_id': {'type': 'string', 'minLength': 2, 'maxLength': 16}}, ['job_id']),
+        side_effects=True, risk='write', timeout_seconds=30), _guarded(job_cancel), show)

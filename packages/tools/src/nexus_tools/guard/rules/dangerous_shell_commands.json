@@ -7,7 +7,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -31,7 +32,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -50,7 +52,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -72,7 +75,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -92,7 +96,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -111,7 +116,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -133,7 +139,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -155,7 +162,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -175,7 +183,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -194,7 +203,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -217,7 +227,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -240,7 +251,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -265,7 +277,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -291,7 +304,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -314,7 +328,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -333,7 +348,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -352,7 +368,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -374,7 +391,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -396,7 +414,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"
@@ -418,7 +437,8 @@
         "shell",
         "execute",
         "bash",
-        "sandbox_exec"
+        "sandbox_exec",
+        "sandbox_exec_async"
       ],
       "params": [
         "command"

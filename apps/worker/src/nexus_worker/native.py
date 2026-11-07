@@ -156,6 +156,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             await asyncio.sleep(0.2)
     monitor_task = asyncio.create_task(monitor())
     model = None
+    sandbox = None
     try:
         if model_factory:
             model = model_factory(context)
@@ -223,6 +224,10 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
     except Exception:
         outcome = RuntimeOutcome('failed', 'runtime_error')
     finally:
+        if sandbox is not None:
+            # Background commands belong to the Run that started them (openspec 2026-11-07-tool-expansion 4.7).
+            with suppress(Exception):
+                await sandbox.close_jobs()
         monitor_task.cancel()
         with suppress(asyncio.CancelledError):
             await monitor_task

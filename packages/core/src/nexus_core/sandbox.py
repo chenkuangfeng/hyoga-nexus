@@ -60,6 +60,17 @@ class ExecResult:
     duration_ms: int
 
 
+@dataclass(frozen=True)
+class JobStatus:
+    """State of a background command. `exit_code` is set once `state` is `finished` (None when killed)."""
+    job_id: str
+    state: Literal['running', 'finished', 'cancelled']
+    exit_code: int | None
+    output: str
+    output_truncated: bool
+    elapsed_seconds: float
+
+
 class SandboxSessionPort(Protocol):
     """What the sandbox tools may do for one (tenant, session). Implementations enforce every limit."""
 
@@ -70,3 +81,6 @@ class SandboxSessionPort(Protocol):
     async def search_files(self, query: str, path: str, *, glob: str, regex: bool, limit: int) -> list[SearchHit]: ...
     async def read_image(self, path: str) -> tuple[bytes, str]: ...
     async def exec(self, command: str, *, cwd: str, timeout_seconds: float) -> ExecResult: ...
+    async def exec_async(self, command: str, *, cwd: str, timeout_seconds: float) -> str: ...
+    async def job_status(self, job_id: str, *, wait_seconds: float, tail_chars: int) -> JobStatus: ...
+    async def job_cancel(self, job_id: str) -> JobStatus: ...
