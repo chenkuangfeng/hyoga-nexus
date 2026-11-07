@@ -1,1 +1,1 @@
-"""Execution backends behind the sandbox ports; only `local` is a development-only backend."""
+"""Command executors. `docker` is the isolating backend; `local` is a development stand-in."""

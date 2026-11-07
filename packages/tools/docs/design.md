@@ -52,3 +52,11 @@
 ## 测试
 
 `tests/test_tool_call_hardening.py`（参数容错、输出控制、循环检测、风险与访问级别、守卫）、`tests/test_tool_grants.py`（会话放行）、`tests/test_tool_output_spill.py`（外置）。
+
+## 工具分组与调度
+
+提案：`openspec/changes/2026-11-07-tool-expansion`。
+
+- **分组**：`ToolDefinition.group` 在注册处声明（`builtins/registration.py`），分组本身（标签、默认开关、是否锁定）定义在 `nexus_core.native.tool_groups`。`base` 锁定，`sandbox`、`web`、`collab`、`schedule`、`media` 默认关闭。门控两层：可用性（`nexus_platform.runs.tool_gates`，部署侧事实）与智能体开关（`NativePolicy.tool_groups_enabled`）。两层都通过的组之外，工具既不出现在定义里，直接调用也返回 `tool_authorization_denied`（网关 `hidden_groups`）。门控只能收紧，授权、访问级别、守卫、审批照常。记忆、知识库、技能脚本三处仍在 `preparation.py` 按名过滤。
+- **调度**：工具可声明 `concurrency(arguments)`，返回 `parallel` / `exclusive` / `serial(key)`。未声明时沿用「只读、幂等、无副作用、无审批才并行」。可能进入审批的调用（`gateway.may_suspend`：访问级别为 `ask`，或参数命中 `HIGH` 守卫规则）一律独占，因为挂起后从第一个待处理调用恢复，并行出去的兄弟调用会被重复执行。
+- **沙箱工具**（`builtins/sandbox.py`，`sandbox` 组）：`sandbox_list_files`、`sandbox_read_file`、`sandbox_search_files`、`sandbox_write_file`、`sandbox_edit_file`、`sandbox_exec`。模型只看到 `/workspace` 与 `/outputs`。读写同一文件按路径串行，列目录和搜索独占。`sandbox_exec` 的风险：沙箱网络关闭时为 `write`，打开时为 `destructive`；`dangerous_shell_commands.json` 的规则同样作用于它。没有沙箱会话时返回 `sandbox_unavailable`，而不是抛出 Run 级错误。沙箱本身见 `packages/sandbox`。

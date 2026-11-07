@@ -282,6 +282,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **虚拟路径**：模型看到 `/tenant`、`/outputs` 等虚拟路径，宿主路径由后端映射，不泄露宿主结构。
 - **文件写入**：临时文件加原子替换；不对并发写入做仲裁。
 - **产物**：记录为 Artifact，关联 Run 与来源；下载走授权检查。
+- **实现状态**（提案 `2026-11-07-tool-expansion`，进行中）：`docker` 后端、文件存储、租约、验收与六个 `sandbox_*` 工具已实现，单元测试覆盖；**真实 Docker 守护进程上的验收尚未运行**，在此之前该组对所有智能体不可见。`ssh` 后端、产物登记、后台作业未实现。
 - **门禁**：只有通过隔离验收的后端才能注册任意代码、shell、文件写入工具。验收项：CPU、内存、时间、输出大小限制；网络隔离；用户隔离；清理；崩溃后残留检查。未通过时工具不出现在工具列表中，而不是返回错误。
 - **部署环境**：候选后端的部署条件（容器运行时或远程执行环境）待确定。
 - **执行类工具约束**（提案 `2026-11-06-tool-call-hardening` 决定 3，随第 8 步实现）：工具可按参数声明能否并行（deepseek `isConcurrencySafe`）；同一路径的写入串行化（WeKnora `file_mutation_queue.go`）；shell 类工具必须经过参数守卫。
@@ -289,6 +290,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 ### 2.10 知识库
 
 借鉴：WeKnora（功能基线：库类型、索引策略、向量库与存储后端注册、FAQ、Wiki、Neo4j 图谱、数据源）；RAGFlow `internal/agentic_rag/`（证据登记 `[ID:n]`、判断与断路、检索工具正交化）与 `internal/service/graph/`（GraphRAG 检索）；FastGPT（训练队列、同义词）；Dify（元数据过滤、重排）；Octop `infra/knowledge/`（`gate.py` 能力门控、`citations.py` 机器可读引用）。实施提案 `openspec/changes/2026-11-06-knowledge-base`（K0–K7 分阶段）。
+
+**Wiki 库（K6）**：开启 `indexing.wiki` 的库（`type=wiki` 恒开启）在文档 ready 后由 worker 的 `wiki` 任务用创建者的 Key 合成页面：摘要页 `summary/*`、实体页 `entity/*`、概念页 `concept/*`，并维护 `index` 简介页；页面以 slug 为键，`[[slug|名]]` 链接在写入时校验并派生入/出链，每次写入保留修订并带乐观锁；目录（文件夹）由一次分类规划调用复用已有文件夹生成，用户的归类不被覆盖。页面作为索引行（页面 id 充当“版本”）进入库的向量库，与文档共用 Pre-Filter、混合检索与重排；删除文档触发撤回（无来源页面删除，共享页面重写）。接口在 `/knowledge/bases/{id}/wiki`，实现见 `nexus_platform/knowledge/wiki.py`、`wiki_ingest.py` 与 `nexus_knowledge/wiki/`。
 
 **功能范围**：完整保留 WeKnora 知识库功能。后端能力目录逐项返回已实现（附是否经过真实环境验证）或待实现及所属阶段；前端不隐藏任何入口，待实现项标记并禁止提交，后端对选择待实现能力的写请求返回 `capability_planned`。
 

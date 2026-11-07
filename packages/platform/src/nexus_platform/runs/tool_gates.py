@@ -57,6 +57,24 @@ def hidden_groups(facts: GateFacts, switches: dict[str, bool] | None) -> frozens
 
 
 def deployment_gate_facts() -> GateFacts:
-    """Facts read from the deployment. The sandbox and web sections are filled in as those backends land
-    (openspec 2026-11-07-tool-expansion, stages B and E); until then every such group is unavailable."""
-    return GateFacts()
+    """Facts read from the deployment: whether the sandbox is enabled and accepted. The web section is filled in
+    when the web tools land (openspec 2026-11-07-tool-expansion, stage E).
+
+    The sandbox counts as accepted when a stored isolation report matches the current backend, image and limits.
+    The `local` backend never passes acceptance; it is offered only when the operator set `allow_local` and the
+    platform runs in development auth mode, the same gate skill scripts use. A broken `[sandbox]` section
+    leaves the group unavailable rather than failing the Run.
+    """
+    from nexus_core.deployment import DeploymentConfigError
+    try:
+        from nexus_sandbox import acceptance
+        from nexus_sandbox.settings import load_settings
+        settings = load_settings()
+    except DeploymentConfigError:
+        return GateFacts()
+    if not settings.enabled:
+        return GateFacts()
+    if settings.backend == 'local':
+        from nexus_platform.configuration import auth_settings
+        return GateFacts(sandbox_enabled=True, sandbox_accepted=settings.allow_local and auth_settings().mode == 'development')
+    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings))

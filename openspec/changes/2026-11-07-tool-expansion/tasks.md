@@ -33,25 +33,40 @@
 
 ## 3. 沙箱后端（阶段 B）
 
-- [ ] 3.1 `nexus_sandbox.contracts`：`CommandExecutorPort`、`FileStorePort`、`VirtualPath`、`SandboxLease`。
-- [ ] 3.2 `paths`：虚拟路径映射与越界拒绝（含符号链接）；单元测试覆盖穿越样例。
-- [ ] 3.3 `backends/docker`：容器生命周期、卷、`exec`、资源限制、超时与取消杀进程组、输出上限、环境从零构造。
-- [ ] 3.4 `lease`：Run 持有、空闲回收、崩溃后遗留容器回收。
-- [ ] 3.5 `[sandbox]` 部署配置读取与校验（`deployment.py`），配置错误不泄露细节；`configs/README.md` 与示例同步。
+- [x] 3.1 `nexus_sandbox.contracts`：`CommandExecutorPort`、`FileStorePort`、`VirtualPath`、`SandboxLease`。
+  - 契约放在 `nexus_core.sandbox`（工具包只依赖 core），`nexus_sandbox.contracts` 提供 `CommandExecutorPort`、`FileStorePort` 并再导出。
+- [x] 3.2 `paths`：虚拟路径映射与越界拒绝（含符号链接）；单元测试覆盖穿越样例。
+  - `paths`：按真实路径拒绝符号链接越界；`tests/test_sandbox.py`。
+- [x] 3.3 `backends/docker`：容器生命周期、卷、`exec`、资源限制、超时与取消杀进程组、输出上限、环境从零构造。
+  - `backends/docker`、`backends/local`（开发替身）、`backends/output`；用记录型 `docker` 替身脚本测试参数与流程。**未在真实守护进程上运行**：当前开发机的用户无权访问 Docker 套接字。取消时按命令标记杀进程组的脚本只能在真实容器里验证，已列入验收的 `cancellation` 项。
+- [x] 3.4 `lease`：Run 持有、空闲回收、崩溃后遗留容器回收。
+  - `manager`：目录、容器名、空闲与孤儿回收（`reap`）。后台定期调用 `reap` 尚未接入 worker 循环。
+- [x] 3.5 `[sandbox]` 部署配置读取与校验（`deployment.py`），配置错误不泄露细节；`configs/README.md` 与示例同步。
+  - `[sandbox]` 读取与校验、`configs/nexus.example.toml`、`configs/README.md`、`.gitignore`。
 - [ ] 3.6 `acceptance` 全部探测项与迁移 `sandbox_acceptance`；worker 启动自检与 `sandbox-check` 命令；验收报告输出到文件。
+  - 部分完成：验收模块 12 项探测与按指纹失效的报告已实现；`--sandbox-check` 命令已加入 worker（调整：用参数而非子命令）。调整：报告保存在 `workspace_root/acceptance.json`，不建 `sandbox_acceptance` 表——工作区里有未提交的知识库迁移，新迁移无法稳定接在链上；迁移链稳定后再改表。
 - [ ] 3.7 在真实 Docker 上跑通验收并保存报告；无 Docker 的环境相关测试跳过并说明。
+  - 未做：需要有 Docker 权限的环境运行 `--sandbox-check`。
 
 ## 4. 沙箱工具组（阶段 B）
 
-- [ ] 4.1 `sandbox_list_files`、`sandbox_read_file`、`sandbox_search_files`（`read`，`parallel`）。
-- [ ] 4.2 `sandbox_write_file`、`sandbox_edit_file`（`write`，按路径 `serial`；原子写入；写后递增全局写入计数，读缓存失效）。
-- [ ] 4.3 `sandbox_exec`（风险随网络配置；`exclusive`）；`public_result` 不含宿主路径。
-- [ ] 4.4 守卫规则：`dangerous_shell_commands.json` 的 `tools` 增加沙箱命令工具；新增路径越界与敏感位置规则及测试。
+- [x] 4.1 `sandbox_list_files`、`sandbox_read_file`、`sandbox_search_files`（`read`，`parallel`）。
+- [x] 4.2 `sandbox_write_file`、`sandbox_edit_file`（`write`，按路径 `serial`；原子写入；写后递增全局写入计数，读缓存失效）。
+  - `sandbox_write_file` / `sandbox_edit_file` 按路径串行、原子写入。读缓存失效计数（`mutation_epoch`）已在文件存储里维护，目前没有读缓存使用它。
+- [x] 4.3 `sandbox_exec`（风险随网络配置；`exclusive`）；`public_result` 不含宿主路径。
+  - 风险随 `[sandbox].network`；`public_result` 不含宿主路径（测试断言）。
+- [x] 4.4 守卫规则：`dangerous_shell_commands.json` 的 `tools` 增加沙箱命令工具；新增路径越界与敏感位置规则及测试。
+  - `dangerous_shell_commands.json` 的 shell 类规则加入 `sandbox_exec`。路径越界与敏感位置的专门规则未加：路径越界已由 `paths` 拒绝。
 - [ ] 4.5 `sandbox` 组 `availability`（部署启用且验收通过）与默认关闭；编辑器的沙箱分区、不可用原因展示。
+  - 部分完成：`sandbox` 组 `availability`（部署启用且验收通过；`local` 需 `allow_local` 与开发认证模式）与默认关闭已完成；编辑器的沙箱分区待前端。
 - [ ] 4.6 `/outputs` 产物登记（新表）、下载授权检查、审计。
+  - 未做。
 - [ ] 4.7 `sandbox_exec_async`、`sandbox_job_wait`、`sandbox_job_cancel`；Run 终态回收作业；与路线图 3.24 的关系写入文档。
+  - 未做，与路线图 3.24 一并设计。
 - [ ] 4.8 `run_skill_script` 在沙箱可用时改走沙箱后端（决定 5）；不可用时保持现有门禁；原有技能脚本测试保持通过。
+  - 未做。
 - [ ] 4.9 端到端：开启沙箱组的智能体能写文件、运行脚本、读回产物；关闭组或 `read_only` 时工具不可见；`strict` 下写与命令进入审批。
+  - 部分完成：`tests/test_sandbox_tools.py` 用本地后端经真实网关走通写、读、编辑、搜索、命令、访问级别与批次调度；真实 Docker 与 worker 端到端待验收后进行。
 
 ## 5. Schema 清洗与 `tool_search`（阶段 D）
 

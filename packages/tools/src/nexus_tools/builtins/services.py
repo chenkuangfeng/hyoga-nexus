@@ -10,9 +10,11 @@ class RunServices:
     is released when the Run ends.
     """
 
-    def __init__(self, store, run_state: dict):
+    def __init__(self, store, run_state: dict, sandbox=None):
         self._store = store
         self.run_state = run_state
+        #: The Run's `SandboxSessionPort`, supplied only while the `sandbox` tool group is offered.
+        self.sandbox = sandbox
 
     def __getattr__(self, name):
         return getattr(self._store, name)
@@ -37,3 +39,11 @@ def run_state_of(context) -> dict:
     if not isinstance(state, dict):
         raise RuntimeFault('tool_unavailable')
     return state
+
+
+def sandbox_of(context):
+    """Return the Run's sandbox session, or fail closed when none was wired (group off or backend missing)."""
+    sandbox = getattr(store_of(context), 'sandbox', None)
+    if sandbox is None:
+        raise RuntimeFault('tool_unavailable')
+    return sandbox

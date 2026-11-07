@@ -13,3 +13,6 @@ dist/
 
 # Local deployment configuration may contain database credentials.
 configs/nexus.toml
+
+# Sandbox session workspaces and the isolation acceptance report (configs/nexus.toml [sandbox].workspace_root).
+data/sandbox/

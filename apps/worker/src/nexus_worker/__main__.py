@@ -123,11 +123,34 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
         logger.info("Worker stopped", extra={"worker_id": worker_id})
 
 
+def _sandbox_check() -> int:
+    """Run the isolation acceptance against `[sandbox]` and print each item. Returns the process exit code."""
+    import asyncio
+    import json
+    from nexus_core.deployment import DeploymentConfigError
+    from nexus_core.sandbox import SandboxError
+    from nexus_sandbox import acceptance
+    from nexus_sandbox.settings import load_settings
+    try:
+        report = asyncio.run(acceptance.run(load_settings()))
+    except (DeploymentConfigError, SandboxError) as error:
+        print(f"sandbox check not run: {getattr(error, 'code', error)}")
+        return 2
+    for item in report["items"]:
+        print(f"{'PASS' if item['ok'] else 'FAIL'}  {item['name']}: {item['detail']}")
+    print(json.dumps({"passed": report["passed"], "report": str(acceptance.report_path(load_settings()))}))
+    return 0 if report["passed"] else 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hyoga Nexus durable Run queue worker")
     parser.add_argument("--once", action="store_true", help="process at most one queued task")
     parser.add_argument("--poll-interval", type=float, default=1.0)
+    parser.add_argument("--sandbox-check", action="store_true",
+                        help="run the sandbox isolation acceptance, store the report and exit (0 = passed)")
     args = parser.parse_args()
+    if args.sandbox_check:
+        raise SystemExit(_sandbox_check())
     try:
         database_url = resolve_database_url()
     except DatabaseConfigurationError as exc:

@@ -8,6 +8,7 @@ from .checkpoint import checkpoint_tool
 from .conversations import conversation_tools
 from .knowledge import knowledge_tools
 from .memory import memory_tools
+from .sandbox import sandbox_tools
 from .skills import skills_tools
 from .tool_output import tool_output_tools
 from .todo import todo_tool
@@ -29,6 +30,7 @@ def builtins() -> ToolRegistry:
         ('memory', (*memory_tools(), *conversation_tools())),
         ('skills', tuple(skills_tools())),
         ('knowledge', tuple(knowledge_tools())),
+        ('sandbox', tuple(sandbox_tools())),
     ):
         for tool in tools:
             registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))

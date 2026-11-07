@@ -1,12 +1,13 @@
 {
-  "_source": "octop-harness db8f47b security/tool_guard/rules/dangerous_shell_commands.yaml (same fields; JSON to avoid a YAML dependency). Applies to future shell tools; no current tool matches.",
+  "_source": "octop-harness db8f47b security/tool_guard/rules/dangerous_shell_commands.yaml (same fields; JSON to avoid a YAML dependency). Applies to shell-style tools: shell, execute, bash and sandbox_exec.",
   "rules": [
     {
       "id": "TOOL_CMD_DANGEROUS_RM",
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -29,7 +30,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -47,7 +49,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -68,7 +71,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -87,7 +91,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -105,7 +110,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -126,7 +132,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -147,7 +154,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -166,7 +174,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -184,7 +193,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -206,7 +216,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -228,7 +239,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -252,7 +264,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -277,7 +290,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -299,7 +313,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -317,7 +332,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -335,7 +351,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -356,7 +373,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -377,7 +395,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"
@@ -398,7 +417,8 @@
       "tools": [
         "shell",
         "execute",
-        "bash"
+        "bash",
+        "sandbox_exec"
       ],
       "params": [
         "command"

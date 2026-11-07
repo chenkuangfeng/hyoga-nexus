@@ -73,3 +73,25 @@ data_dir = "data/knowledge"
 max_upload_mb = 50
 # Index jobs a worker runs at the same time (1-8). Parsing and embedding use memory; keep 1 on small hosts.
 index_concurrency = 1
+
+[sandbox]
+# Sandbox for the file and command tools (openspec 2026-11-07-tool-expansion). Off by default.
+# Enabling it is not enough: run `uv run python -m nexus_worker --sandbox-check` and have it pass, then switch the
+# "sandbox" tool group on per agent. The report is stored under workspace_root and is valid only for the
+# backend, image and limits it was run with.
+enabled = false
+# "docker" isolates commands in one container per session. "local" runs them as the server user with NO isolation:
+# development only, and it needs allow_local = true and the development auth mode.
+backend = "docker"
+# The image must already be present (it is never pulled) and offer sh, timeout and python3.
+image = "python:3.12-slim"
+cpus = 1.0
+memory_mb = 512
+pids = 128
+# "none" gives the container no network. "bridge" opens it, and then sandbox_exec asks for approval on every call.
+network = "none"
+idle_seconds = 900
+workspace_quota_mb = 512
+exec_timeout_max_seconds = 120
+workspace_root = "data/sandbox"
+allow_local = false

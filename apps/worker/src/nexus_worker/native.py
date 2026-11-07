@@ -23,6 +23,7 @@ from nexus_runtimes.native.models.network import provider_client
 from nexus_runtimes.native.models.factory import create_model
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_platform.runs.tool_gates import deployment_gate_facts, hidden_groups
+from .sandbox_runtime import session_for
 from nexus_runtimes.native.engine import CancellationToken, RunOrchestrator
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
@@ -169,13 +170,17 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         except (ValueError, TypeError):
             raise RuntimeFault('runtime_budget_invalid') from None
         spill = OutputSpill(policy.tool_output_inline_limit, policy.tool_preview_chars, policy.tool_output_page_chars)
+        hidden = hidden_groups(deployment_gate_facts(), policy.tool_groups_enabled)
+        sandbox = None if 'sandbox' in hidden else session_for(
+            str(context.tenant_id), str(context.session_id), default_timeout=policy.sandbox_exec_timeout_seconds,
+            output_limit=policy.sandbox_output_limit)
         gateway = AuthorizedToolGateway(registry, ToolAccess(store),
             {name: version for name, version, _ in context.bindings}, run_id=str(context.run_id),
             session_id=str(context.session_id), tenant_id=str(context.tenant_id),
-            services=RunServices(store, context.progress.state), spill=spill,
+            services=RunServices(store, context.progress.state, sandbox), spill=spill,
             turn_budget=policy.tool_turn_budget_chars, injection_scan=policy.tool_injection_scan,
             tool_access=policy.tool_access,
-            hidden_groups=hidden_groups(deployment_gate_facts(), policy.tool_groups_enabled))
+            hidden_groups=hidden)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

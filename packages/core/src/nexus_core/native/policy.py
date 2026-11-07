@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
                       'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script',
                       'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph', 'grep_chunks',
-                      'document_outline')
+                      'document_outline', 'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
+                      'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec')
+#: Tools of the `sandbox` group (openspec 2026-11-07-tool-expansion, section 4).
+SANDBOX_TOOL_NAMES = frozenset({'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
+                                'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec'})
 #: Knowledge tools (openspec 2026-11-06-knowledge-base K1.8); offered only when the agent binds a knowledge base.
 KNOWLEDGE_TOOL_NAMES = frozenset({'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph',
                                   'grep_chunks', 'document_outline'})
@@ -82,6 +86,10 @@ class NativePolicy:
     # Tool groups (openspec 2026-11-07-tool-expansion, R1). Missing groups take their `default_enabled`, so
     # versions saved before a group existed do not gain its tools. The switch only narrows access.
     tool_groups_enabled: dict[str, bool] = field(default_factory=dict)
+    #: Default and ceiling of one sandbox command, and the output kept per stream. The deployment's
+    #: `[sandbox].exec_timeout_max_seconds` still caps the timeout.
+    sandbox_exec_timeout_seconds: int = 30
+    sandbox_output_limit: int = 20000
 
     def __post_init__(self):
         if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
@@ -126,6 +134,8 @@ class NativePolicy:
             raise ValueError('tool_repeat_warn_at must be below tool_repeat_stop_at')
         if type(self.tool_injection_scan) is not bool:
             raise ValueError('Native switches must be boolean')
+        _check_int(self.sandbox_exec_timeout_seconds, 1, 3600, 'sandbox_exec_timeout_seconds')
+        _check_int(self.sandbox_output_limit, 1000, 200000, 'sandbox_output_limit')
         from .tool_groups import GROUP_IDS, group_of
         if (not isinstance(self.tool_groups_enabled, dict)
                 or any(key not in GROUP_IDS or group_of(key).locked or type(value) is not bool
