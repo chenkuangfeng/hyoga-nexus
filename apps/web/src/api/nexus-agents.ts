@@ -59,9 +59,26 @@ export interface AgentToolEntry {
   enabled_in_tenant: boolean
 }
 
+/**
+ * One tool group of `GET /agent-tools` (openspec 2026-11-07-tool-expansion). `available` is the deployment side
+ * (sandbox accepted, web enabled...) and `reason` its stable code; `default_enabled` is the agent-side default of
+ * `behavior.tool_groups_enabled`; a group with no tools yet carries the phase that delivers them in `planned`.
+ */
+export interface AgentToolGroupInfo {
+  id: string
+  label: string
+  default_enabled: boolean
+  locked: boolean
+  tool_count: number
+  planned: string
+  available: boolean
+  reason: string
+}
+
 export interface AgentToolCatalog {
   tools: AgentToolEntry[]
   groups: string[]
+  group_info?: AgentToolGroupInfo[]
   /** The caller's Native default `enabled_tools`, used to preselect tools for a new agent. */
   default_tools: string[]
   /** Whether the caller may enable a tool for the space (owner or admin). */

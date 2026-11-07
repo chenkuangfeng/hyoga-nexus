@@ -200,6 +200,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **ToolGateway（单调守卫）**：每次调用依次经过 schema 校验、当前授权查询（查数据库，不读快照）、风险分级、审批（如需）、执行、结果投影、审计。守卫只能收紧权限；模型不能通过参数选择主体、空间或 Run。
 - **结果投影与 Spill**：工具作者提供公开结果投影。未绑定 `read_tool_output` 时，结果最多 4000 字符进入模型与事件并截断。绑定后，超过 `tool_output_inline_limit` 的公开结果写入 Run 级 `tool_outputs` 表，模型只看到预览与句柄；`read_tool_output` 按句柄与 offset 分页读取，只能读取同一 Run 的输出，每次读取写入审计。引擎在视图层裁剪更早的工具结果（只改模型视图，不改源消息）。截断与外置必须显式标注。
 - **内置工具**：平台类（知识检索、记忆读取、检查点、待办、询问用户）；领域类（观澜，由领域包注册）；受控执行类（代码、文件、Web），仅在沙箱后端通过验收后开放（见 2.9）。
+- **工具分组与门控**（提案 `openspec/changes/2026-11-07-tool-expansion`，实施中，设计见 `packages/tools/docs/design.md`）：每个工具声明 `group`；工具组出现在 Run 里需要两层同时满足——部署侧可用（沙箱通过验收、`[web].enabled`、绑定了 Wiki 库……）与智能体开关（`tool_groups_enabled`，高影响组默认关闭）。门控只收紧，授权、访问级别、守卫、审批照常。调度按调用声明 `parallel` / `exclusive` / `serial(key)`；可能进入审批的调用一律独占。绑定工具的 schema 过大时，MCP 等可延迟工具改经 `tool_search` / `tool_describe` / `tool_call`，Run 内工具块不变。
+- **协作与定时**：`delegate_task` 在进程内嵌套一个 Run，工具集是父级的子集且不含 `collab`，需审批的操作被拒绝，用掉的 token 计入父级；`cronjob_*` 创建的任务以所有者身份在固定智能体版本上无人值守运行，没有提问与审批，每人最多 10 个活动任务，最短间隔 15 分钟。
 - **工具调用加固**（提案 `openspec/changes/archive/2026-11-06-tool-call-hardening`，已实施，设计见 `packages/tools/docs/design.md`）。借鉴 WeKnora `registry.go`、`param_cast.go`、`json_repair.go`、`truncate.go`、`policy/`；hermes `arg_coercion.py`、`agent/tool_guardrails.py`、`enforce_turn_budget`、`approval_floors.py`、`threat_patterns.py`；octop-harness `tool_guard`、`tool_order`；deepseek `repeat-tool-reminder`。
   - 执行顺序：授权 → 访问级别判断 → 参数预处理（JSON 修复、按 schema 保守转换类型、校验并返回字段级错误）→ 参数守卫 → 审批（会话放行只覆盖访问级别和 `requires_approval` 带来的审批）→ 执行 → 注入扫描 → 外置（计入每轮总预算）→ 头尾截断。
   - 工具定义按名称排序；风险改为 `read` / `probe` / `write` / `destructive`，智能体访问级别 `read_only` / `standard`（默认）/ `strict`。

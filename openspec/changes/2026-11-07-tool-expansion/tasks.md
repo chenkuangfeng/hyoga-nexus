@@ -22,6 +22,7 @@
 - [x] 1.5 一致性测试：注册表、`BUILTIN_TOOL_NAMES`、分组声明三者互相检查。
   - `tests/test_tool_groups.py`：注册表与 `BUILTIN_TOOL_NAMES` 一致、分组合法、门控与网关隐藏。
 - [ ] 1.6 目录接口返回 `availability` 与 `reason`（接口已完成：`/agent-tools` 的 `group_info`）；智能体编辑器按组显示整组开关、逐工具勾选、风险徽标与不可用原因。
+  - 未做前端：已在 `src/api/nexus-agents.ts` 补了 `group_info` 的类型。智能体编辑器是 6800 行的移植文件，本机内存只有约 1.8 GB，无法运行 `vue-tsc` / `pnpm build` 验证，不盲改。
 
 ## 2. 调度增强（阶段 C，沙箱依赖它）
 
@@ -96,9 +97,12 @@
 
 ## 8. 协作、定时与视觉（阶段 G，每项开始前补设计并再确认）
 
-- [ ] 8.1 `delegate_task`：补设计、确认、实现、测试（子集权限、不可递归、审批冒泡、预算扣减）。
-- [ ] 8.2 `cronjob`：补设计、确认、实现、测试（无人值守约束、提示扫描、配额）。
-- [ ] 8.3 `vision_analyze`（可选）：补设计、确认、实现。
+- [x] 8.1 `delegate_task`：补设计、确认、实现、测试（子集权限、不可递归、审批冒泡、预算扣减）。
+  - `apps/worker/src/nexus_worker/subagent.py` + `builtins/collab.py`。调整：子智能体是进程内嵌套 Run，消息只在内存，不建 `parent_run_id` 的子 Run 记录；工具调用记在父 Run 上，另写 `subagent.started` / `subagent.finished` 两个事件。审批不冒泡：子智能体内需审批的操作直接被拒绝（`tool_approval_unavailable`），由父级决定。预算：token 取父级剩余的一份（至少 1000，否则 `budget_exhausted`），用掉的计入父级。`tests/test_subagent.py`。
+- [x] 8.2 `cronjob`：补设计、确认、实现、测试（无人值守约束、提示扫描、配额）。
+  - `nexus_platform/schedule/`（规则、服务）、`CronJobRecord` + 迁移 `f9a0b1c2d3e4`、`cronjob_list` / `cronjob_manage`、worker 的 `ScheduleBridge` 与 `schedule_tick`。调整：一个任务一个会话，每次触发往同一会话加消息，便于用会话识别无人值守；规则只支持 interval（≥15 分钟）/ daily / weekly，不支持 cron 表达式；无人值守的 Run 不提供 `ask_user` 与 `cronjob_manage`，需审批的操作被拒绝；创建上限每人 10 个活动任务；提示入库前做注入扫描；任务绑定创建时的智能体版本，版本不再是已发布版本、或用户/空间不可用时任务被挂起（`suspended`）。`tests/test_schedule.py`。**代码已在工作区完成并通过测试，但尚未提交**：迁移接在 `e8f9a0b1c2d3`（记忆文档亲和度，另一项未提交的工作）之后，先提交会让远端迁移链缺父；`tests/test_run_transactions.py` 的表数量断言也要随两边一起变成 91。待那项工作提交后一并提交。任务的 REST 接口与界面未做。
+- [x] 8.3 `vision_analyze`（可选）：补设计、确认、实现。
+  - `builtins/media.py`、`nexus_worker/vision.py`、`NativePolicy.vision_model_profile_version_id`；沙箱端口新增 `read_image`。调整：图片只能来自沙箱工作区，所以 `media` 组可用性要求沙箱可用（`sandbox_required`）。未对真实视觉模型验证。`tests/test_vision_tool.py`。
 
 ## 9. 收尾
 
