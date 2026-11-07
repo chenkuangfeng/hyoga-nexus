@@ -359,6 +359,28 @@ def delete_document(tenant_id: UUID, document_id: UUID, principal: Principal = D
     return Response(status_code=204)
 
 
+# ---------------------------------------------------------------- image gallery (K4.2)
+
+@router.get('/bases/{kb_id}/images')
+def list_images(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_length=200),
+                knowledge_ids: str = Query('', max_length=4000), offset: int = Query(0, ge=0),
+                limit: int = Query(30, ge=1, le=100), principal: Principal = Depends(get_principal),
+                db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Images of a base (image documents with their model-written captions). ``url`` is relative to this API."""
+    from nexus_platform.knowledge import media
+    user = _user(db, principal, tenant_id)
+    kb = access.readable_base(db, kb_id, tenant_id, user.id)
+    ids = []
+    for value in knowledge_ids.split(','):
+        try:
+            ids.append(UUID(value))
+        except ValueError:
+            continue
+    items, total = media.list_images(db, kb, keyword=keyword, document_ids=ids or None, offset=offset, limit=limit)
+    prefix = f'/api/v1/tenants/{tenant_id}/knowledge/'
+    return {'items': [{**item, 'url': prefix + item['url']} for item in items], 'total': total}
+
+
 # ---------------------------------------------------------------- organization (K5)
 
 class TagInput(BaseModel):

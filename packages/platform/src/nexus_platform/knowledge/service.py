@@ -34,7 +34,7 @@ from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.identity.service import require_membership
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
-from . import access, stores
+from . import access, media, stores
 from nexus_knowledge.retrieval import synonyms as synonym_rules
 from .graph import config as graph_config
 from . import faq as faq_rules
@@ -212,6 +212,12 @@ def _check_enrichment(db: Session, tenant_id: UUID, user_id: UUID | None, settin
         raise ValueError('max_tags must be between 1 and 10')
     if user_id is None:
         return
+    for key, model_type in (('vlm_config', 'vision'), ('asr_config', 'speech')):
+        block = settings.get(key) or {}
+        if block.get('enabled'):
+            if not block.get('model_id'):
+                raise ValueError(f'{key} needs a {model_type} model (model_id)')
+            _authorize_model_of_type(db, tenant_id, user_id, UUID(str(block['model_id'])), model_type)
     wanted = {settings.get('summary_model_id'), config.get('model_id'), tag_config.get('model_id'),
               (settings.get('profile_config') or {}).get('model_id')}
     for value in wanted:
@@ -222,14 +228,18 @@ def _check_enrichment(db: Session, tenant_id: UUID, user_id: UUID | None, settin
                 raise ValueError(f'invalid model for knowledge enrichment: {exc}') from None
 
 
-def _authorize_chat_model(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
+def _authorize_model_of_type(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID, model_type: str) -> None:
     from nexus_platform.models.provider_settings import authorize_model
     from nexus_platform.persistence.models import ModelProfileRecord
 
     version = authorize_model(db, tenant_id, user_id, version_id)
     profile = db.get(ModelProfileRecord, version.profile_id)
-    if profile is None or profile.model_type != 'chat':
-        raise ValueError('graph.model_id must be a chat model')
+    if profile is None or profile.model_type != model_type:
+        raise ValueError(f'the model must be a {model_type} model')
+
+
+def _authorize_chat_model(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
+    _authorize_model_of_type(db, tenant_id, user_id, version_id, 'chat')
 
 
 def _authorize_embedding(db: Session, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
@@ -345,9 +355,10 @@ def prepare_upload(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, fil
     filename = (filename or '').strip().replace('\\', '/').rsplit('/', 1)[-1]
     if not filename or len(filename) > 255:
         raise ValueError('filename must be 1-255 characters')
-    if suffix_of(filename) not in SUPPORTED_SUFFIXES:
+    if suffix_of(filename) not in SUPPORTED_SUFFIXES | media.media_suffixes():
         raise ValueError(f'unsupported document type: {suffix_of(filename) or "(none)"}; '
                          'more parser engines are planned (K4)')
+    media.check_upload(media.config_of(kb), filename)
     if not data:
         raise ValueError('file is empty')
     if len(data) > max_bytes:

@@ -32,11 +32,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
 from nexus_knowledge.index import IndexRow, collection_name
 from nexus_knowledge.ingest.chunk import ChunkConfig, chunk_document
-from nexus_knowledge.ingest.parse import ParseError, parse_document
+from nexus_knowledge.ingest.parse import ParseError
 from nexus_knowledge.text import tokenize
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord)
-from . import embedding, stores
+from . import embedding, media, stores
 
 logger = logging.getLogger(__name__)
 
@@ -176,13 +176,14 @@ async def _parse(factory, job_id: UUID) -> None:
         _, version, doc, kb = _load(db, job_id)
         blob = stores.blob_store_for(db, kb)
         key, filename = version.blob_key, doc.filename
+        media_config = media.config_of(kb)
         try:
             config = ChunkConfig.from_settings(kb.chunk_size, kb.chunk_overlap, (kb.settings or {}).get('chunking_config'))
         except ValueError as exc:
             raise JobFailed('invalid_chunking', str(exc)) from exc
     data = await blob.get(key)
     try:
-        chunks = chunk_document(parse_document(filename, data), config)
+        chunks = chunk_document(await media.parse(factory, media_config, filename, data), config)
     except ParseError as exc:
         raise JobFailed(exc.code, str(exc)) from exc
     with factory() as db, db.begin():

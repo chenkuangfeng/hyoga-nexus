@@ -42,11 +42,31 @@ async def knowledge_completer(factory, tenant_id: UUID, user_id: UUID, model_ver
     return await _collect(model, request)
 
 
+def knowledge_vision(factory, tenant_id: UUID, user_id: UUID, model_version_id: UUID, purpose: str):
+    from nexus_platform.models.provider_settings import owner_model_call
+    from nexus_runtimes.native.models.media import create_vision
+    call = owner_model_call(factory, tenant_id=tenant_id, owner_id=user_id, version_id=model_version_id,
+                            purpose=purpose, model_type='vision')
+    return create_vision(model=call.model_name, api_key=call.lease.reveal_for_call(), options=call.options,
+                         share_connections=True)
+
+
+def knowledge_speech(factory, tenant_id: UUID, user_id: UUID, model_version_id: UUID, purpose: str):
+    from nexus_platform.models.provider_settings import owner_model_call
+    from nexus_runtimes.native.models.media import create_transcriber
+    call = owner_model_call(factory, tenant_id=tenant_id, owner_id=user_id, version_id=model_version_id,
+                            purpose=purpose, model_type='speech')
+    return create_transcriber(model=call.model_name, api_key=call.lease.reveal_for_call(), options=call.options,
+                              share_connections=True)
+
+
 def install_embedder() -> None:
     from nexus_platform.knowledge.embedding import set_embedder_factory
     from nexus_platform.knowledge.graph.llm import set_completer
     set_embedder_factory(knowledge_embedder)
     set_completer(knowledge_completer)
+    from nexus_platform.knowledge.media import set_media_factory
+    set_media_factory(vision=knowledge_vision, speech=knowledge_speech)
 
 
 def knowledge_tick(factory: sessionmaker[Session], loop, concurrency: int) -> bool:

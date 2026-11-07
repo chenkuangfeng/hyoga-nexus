@@ -1,4 +1,5 @@
-import { get, post } from '@/utils/request';
+import { get } from '@/utils/request';
+import { knowledgePath } from '../knowledge-base/nexusKnowledgeApi';
 
 // ---------------------------------------------------------------------------
 // Image Gallery API
@@ -108,67 +109,17 @@ export async function listGalleryImages(
   kbId: string,
   params: ImageListParams = {},
 ): Promise<ImageListResult> {
-  if (params.knowledgeIds && params.knowledgeIds.length) {
-    const res = await post<{
-      success: boolean;
-      data: ImageAsset[];
-      total: number;
-      page: number;
-      page_size: number;
-    }>(`/api/v1/knowledge-bases/${kbId}/images`, {
-      keyword: params.keyword,
-      search_in: params.searchIn,
-      sort_by: params.sortBy,
-      sort_order: params.sortOrder,
-      is_enabled: params.isEnabled,
-      knowledge_ids: params.knowledgeIds,
-      attr_filters: params.attrFilters,
-      attr_rules: params.attrRules,
-      page: params.page,
-      page_size: params.pageSize,
-    });
-    return {
-      items: res.data,
-      total: res.total,
-      page: res.page,
-      pageSize: res.page_size,
-    };
-  }
-
-  const query = new URLSearchParams();
+  // Nexus lists the image documents of a base with their model-written captions (openspec
+  // 2026-11-06-knowledge-base K4.2). Attribute filters, sort rules and the enabled state are not supported yet.
+  const pageSize = params.pageSize ?? 30;
+  const page = params.page ?? 1;
+  const query = new URLSearchParams({ offset: String((page - 1) * pageSize), limit: String(pageSize) });
   if (params.keyword) query.set('keyword', params.keyword);
-  if (params.searchIn && params.searchIn.length) {
-    query.set('search_in', params.searchIn.join(','));
-  }
-  if (params.sortBy) query.set('sort_by', params.sortBy);
-  if (params.sortOrder) query.set('sort_order', params.sortOrder);
-  if (typeof params.isEnabled === 'boolean') {
-    query.set('is_enabled', String(params.isEnabled));
-  }
-  if (params.attrFilters && Object.keys(params.attrFilters).length) {
-    query.set('attr_filters', JSON.stringify(params.attrFilters));
-  }
-  if (params.attrRules && Object.keys(params.attrRules).length) {
-    query.set('attr_rules', JSON.stringify(params.attrRules));
-  }
-  if (params.page) query.set('page', String(params.page));
-  if (params.pageSize) query.set('page_size', String(params.pageSize));
-
-  const qs = query.toString();
-  const res = await get<{
-    success: boolean;
-    data: ImageAsset[];
-    total: number;
-    page: number;
-    page_size: number;
-  }>(`/api/v1/knowledge-bases/${kbId}/images${qs ? `?${qs}` : ''}`);
-
-  return {
-    items: res.data,
-    total: res.total,
-    page: res.page,
-    pageSize: res.page_size,
-  };
+  if (params.knowledgeIds && params.knowledgeIds.length) query.set('knowledge_ids', params.knowledgeIds.join(','));
+  const res = await get<{ items: ImageAsset[]; total: number }>(
+    `${knowledgePath()}/bases/${encodeURIComponent(kbId)}/images?${query}`,
+  );
+  return { items: res.items ?? [], total: res.total ?? 0, page, pageSize };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,13 +182,16 @@ export interface GalleryConfig {
 
 /** Fetch the gallery contract for a knowledge base. */
 export async function fetchGalleryConfig(kbId: string): Promise<GalleryConfig> {
-  const res = await get<{ success: boolean; data: GalleryConfig }>(
-    `/api/v1/knowledge-bases/${kbId}/gallery-config`,
-  );
+  // One builtin attribute (the caption) is searchable; further attributes come with image attribute observation.
+  void kbId;
   return {
-    attribute_sources: res.data.attribute_sources ?? [],
-    attributes: res.data.attributes ?? [],
-    mode: res.data.mode === 'custom' ? 'custom' : 'all',
-    status: res.data.status ?? {},
+    attribute_sources: ['builtin'],
+    attributes: [{
+      id: 'builtin:caption', source: 'builtin', name: 'caption', type: 'text', label: '描述',
+      description: '模型写的图片描述与图中文字',
+      usage: { in_filter: false, in_searchfield: true, in_sortfield: false }, usage_from: 'source',
+    }],
+    mode: 'all',
+    status: {},
   };
 }

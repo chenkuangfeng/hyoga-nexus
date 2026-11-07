@@ -76,7 +76,10 @@
 - [x] K4.1 解析引擎规则与 Office 文档；分块策略、父子分块、分块调试。
   - Office：`ingest/office.py` 用标准库解析 `.docx`（标题样式转章节）、`.pptx`（每页一段，页码=幻灯片号）、`.xlsx`（每个工作表一段，`列名: 值`）；拒绝 DTD 与超大解压（64MB）。分块：`ChunkConfig` 与策略 `auto|heading|heuristic|recursive|legacy`、自定义分隔符；`auto` 按文档特征选择并给出被否决的层级。父子分块：父块不索引、子块索引，命中子块返回父块文本（同一父块只返回一次）；块表新增 `parent_id`、`indexed`（迁移 `f3a4b5c6d7e8`），读取/块列表/图谱构建只看父块或普通块。接口 `POST /knowledge/chunk-preview`（分块调试）、`GET /knowledge/parser-engines`；解析引擎规则里选了未实现的引擎返回 `capability_planned`。外部引擎（MarkItDown、AnyDoc、MinerU、PaddleOCR 等）仍待实现。
   - 测试：`tests/test_knowledge_domain.py`（Office、策略、父子、预览）、`tests/test_knowledge_service.py`（父子检索、docx 入库）、`tests/test_knowledge_api.py`；后端全量 1008 通过。
-- [ ] K4.2 OCR、VLM 图片描述、图片库；ASR。
+- [x] K4.2 OCR、VLM 图片描述、图片库；ASR（代码完成，未经真实模型服务验证，能力目录标 `verified=false`）。
+  - 客户端 `nexus_runtimes/native/models/media.py`（OpenAI 兼容：视觉对话带图片、`/audio/transcriptions`，与对话模型同一受限传输）；平台 `nexus_platform/knowledge/media.py`：图片（png/jpg/webp/gif）由视觉模型输出描述与图中文字，作为文档文本入索引；扫描 PDF 无文字层时，按页取内嵌图片（pypdf，最多 30 页）逐页识别；音频（mp3/wav/m4a/flac/ogg/aac）由语音模型转写。配置 `settings.vlm_config`（model_id、description_language、custom_instructions）与 `asr_config`（model_id、language），模型须是创建者可用的 vision / speech 类型；未配置模型时上传图片/音频直接拒绝并说明原因。模型调用用库创建者的 Key。图片库：`GET /bases/{id}/images`（图片文档与模型写的描述，支持关键词），前端图片库接入；图片属性筛选与排序仍待实现。worker 注入视觉/语音客户端工厂。
+  - 测试 `tests/test_knowledge_media.py` 只用假客户端验证流水线；真实 VLM / ASR 服务验证待环境（K4.2b）。
+- [ ] K4.2b 真实视觉与语音模型验收：图片描述质量、扫描 PDF、音频转写、超大文件与超时（需用户提供模型服务）。
 
 ## K5 组织与增强
 
