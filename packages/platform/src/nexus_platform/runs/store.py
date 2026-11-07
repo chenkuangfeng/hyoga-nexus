@@ -1,12 +1,15 @@
 """Durable execution store; model execution stays in runtimes."""
 from __future__ import annotations
 from nexus_platform.persistence.unit_of_work import SqlAlchemyUnitOfWork
+import logging
+import time
 from dataclasses import asdict
 from datetime import timedelta, timezone
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
+from nexus_core.run_events import EPHEMERAL_KINDS, BusEvent, BusUnavailable
 from nexus_core.native.policy import NativePolicy, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
 from nexus_memory.switches import MEMORY_TOOL_NAMES
@@ -53,6 +56,75 @@ class DurableRuntimeStore:
         self.factory, self.context, self.worker_id, self.task_id = factory, context, worker_id, task_id
         behavior = _behavior(context)
         self.page_chars, self.summary_chars = behavior.tool_output_page_chars, behavior.summary_max_chars
+        self._producer = None  # fencing lease on the live event bus; None while no bus keeps ephemeral text
+        self.lease_check_seconds = 1.0
+
+    # -- live event channel (openspec 2026-11-07-run-event-streaming) ---------------------------------
+
+    def stream_start(self) -> None:
+        """Register as the Run's producer on the bus and mark the session's live Run.
+
+        Failures never stop the Run: without the bus the viewer simply sees streamed text later, from
+        the stored message.
+        """
+        from nexus_platform.runs.bus import channels
+        current = channels()
+        if current is None:
+            return
+        self.lease_check_seconds = current.settings.lease_check_seconds
+        try:
+            self._producer = current.bus.start_producer(self.context.run_id, self.worker_id)
+            current.marker.claim(self.context.session_id, self.context.run_id, current.settings.live_ttl_seconds)
+        except Exception:
+            _log.warning("Live stream could not start", extra={"run_id": str(self.context.run_id)}, exc_info=True)
+
+    def stream_finish(self) -> None:
+        """Release the producer lease and the live marker once the Run has stopped."""
+        from nexus_platform.runs.bus import channels
+        current = channels()
+        if current is None:
+            return
+        try:
+            if self._producer is not None:
+                current.bus.finish_producer(self._producer)
+            current.marker.clear(self.context.session_id, self.context.run_id)
+        except Exception:
+            _log.warning("Live stream could not finish", extra={"run_id": str(self.context.run_id)}, exc_info=True)
+        self._producer = None
+
+    def wait_for_signal(self, timeout: float) -> bool:
+        """Block up to ``timeout`` seconds for a cancel wake-up; True when one arrived. Runs in a thread."""
+        from nexus_platform.runs.bus import channels
+        current = channels()
+        if current is None:
+            time.sleep(timeout)
+            return False
+        return current.control.wait(self.context.run_id, timeout)
+
+    def _renew_stream(self) -> None:
+        from nexus_platform.runs.bus import channels
+        current = channels()
+        if current is None:
+            return
+        try:
+            if self._producer is not None and not current.bus.renew_producer(self._producer):
+                self._producer = current.bus.start_producer(self.context.run_id, self.worker_id)
+            current.marker.touch(self.context.session_id, self.context.run_id, current.settings.live_ttl_seconds)
+        except Exception:
+            _log.warning("Live stream renewal failed", extra={"run_id": str(self.context.run_id)}, exc_info=True)
+
+    def _publish_ephemeral(self, kind: str, payload: dict[str, object]) -> bool:
+        """Send an unstored event to the bus; True when the bus keeps it (so it must not be written to the database)."""
+        from nexus_platform.runs.bus import channels
+        current = channels()
+        if current is None or not current.bus.supports_ephemeral:
+            return False
+        try:
+            current.bus.publish(BusEvent(str(self.context.run_id), kind, payload, None, utc_now().isoformat()))
+        except BusUnavailable:
+            pass  # the viewer catches up from the stored message; ephemeral text is never worth failing a Run
+        return True
+
 
     def _run(self, db: Session) -> RunRecord:
         task = db.get(OutboxRecord, self.task_id)
@@ -65,6 +137,8 @@ class DurableRuntimeStore:
         return run
 
     async def emit(self, kind: str, payload: dict[str, object]) -> None:
+        if kind in EPHEMERAL_KINDS and self._publish_ephemeral(kind, payload):
+            return
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
@@ -123,6 +197,7 @@ class DurableRuntimeStore:
                 raise RuntimeFault('interrupted')
             run = self._run(db)
             task.lease_until = run.lease_until = now + timedelta(seconds=60)
+            self._renew_stream()
             try:
                 require_membership(db, run.tenant_id, run.principal_id)
             except PlatformError:

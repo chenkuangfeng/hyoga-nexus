@@ -6,6 +6,8 @@ worker 领取平台 Outbox，装配 Native Engine，并通过短事务保存消�
 uv run python -m nexus_worker
 ```
 
+**嵌入模式**：在 `configs/nexus.toml` 设 `[deployment].mode = "embedded"`，API 进程会在 lifespan 中启动 `embedded_workers` 个 worker 线程（`nexus_worker/embedded.py`），无需单独启动 worker 与 Redis；线程异常会在停顿后自动重启，API 停止时优雅退出。一个 worker 同一时刻执行一个 Run，所以该数也是同时执行的 Run 数。后台作业只由第一个线程运行，并受 `background_concurrency` 限制。多机或需要重启不中断 Run 时使用默认的 `split`，并按需配置 `[run_events].backend = "redis"`。
+
 在仓库根目录运行上述命令，配置步骤见[项目入口](../../README.md#本地开发)。API 与 worker 自动读取同一个 `configs/nexus.toml` 中的 `[database].url`，启动前运行 `uv run alembic -c alembic.ini upgrade head`。SQLite 用于本轮隔离测试；PostgreSQL 部署验收仍待目标环境执行。
 
 推荐通过前端「用户设置 → 模型供应商」创建供应商、填写 API 地址与 Key，添加账号可用模型，并设置个人/空间默认模型。管理员先在 API 与 worker 共用的 `configs/nexus.toml` 的 `[security]` 中配置相同的 `credential_encryption_key`（Fernet 格式），随后重启服务；主密钥不进入仓库。可以在本地安全终端生成后保存到部署秘密管理中：

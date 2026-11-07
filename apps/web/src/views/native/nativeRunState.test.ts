@@ -8,6 +8,7 @@ import {
   canCancel,
   canSteer,
   changesRunView,
+  dropEphemeral,
   emptyRunState,
   failureCode,
   isTerminal,
@@ -117,4 +118,23 @@ test('failure codes are exposed only for failed or interrupted Runs', () => {
   assert.equal(failureCode(run({ status: 'failed', error_code: 'model_timeout', error_message: 'secret detail' })), 'model_timeout')
   assert.equal(failureCode(run({ status: 'completed', error_code: null })), null)
   assert.equal(failureCode(null), null)
+})
+
+test('live-only text is kept in arrival order, never moves the resume cursor, and is dropped on resync', () => {
+  const stored = (sequence: number, event_type: string, payload: Record<string, unknown> = {}): RunEvent =>
+    ({ event_id: `s${sequence}`, run_id: 'run-1', sequence, event_type, schema_version: 1, payload, occurred_at: '' })
+  let state = emptyRunState(run())
+  state = appendEvent(state, stored(4, 'run.started'))
+  // Same sequence as the last stored event, yet it must not be taken for a replay.
+  state = appendEvent(state, { ...stored(4, 'message.delta', { text: '你', turn: 1 }), ephemeral: true })
+  state = appendEvent(state, { ...stored(4, 'message.delta', { text: '好', turn: 1 }), ephemeral: true })
+  assert.equal(state.events.length, 3)
+  assert.equal(state.lastSequence, 4)
+  assert.deepEqual(assistantSegments(state.events), [{ turn: 1, text: '你好' }])
+  state = dropEphemeral(state)
+  assert.deepEqual(state.events.map(event => event.event_type), ['run.started'])
+  assert.equal(state.lastSequence, 4)
+  // The stored whole text then supplies the answer.
+  state = appendEvent(state, stored(5, 'message.completed', { turn: 1, text: '你好吗' }))
+  assert.deepEqual(assistantSegments(state.events), [{ turn: 1, text: '你好吗' }])
 })

@@ -85,3 +85,7 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 服务位于 `orgs/service.py`。树的结构性修改在事务内锁定整棵树；移动节点时拒绝移入自身子树，并要求同一棵树内移动。主节点切换在同一事务中完成。删除节点要求没有子节点、人员和绑定。
 
 空间视图按绑定节点的子树读取节点结构，并按用户去重列出人员。加入空间的接口只接受绑定子树内的人员，并需要 `members:manage`；owner 不能经此途径创建。组织管理接口只接受平台管理员，不使用租户角色，因此也不受空间的角色升级检查约束。
+
+## Run 事件通道（runs/bus）
+
+`config.py` 读取 `[run_events]` 与 `[deployment]`；`memory.py`、`redis_backend.py`、`database.py` 实现 `nexus_core.run_events` 的端口；`factory.py` 管理进程级通道；`hook.py` 在 `after_commit` 发布持久事件并在取消请求时发控制信号；`stream.py` 是订阅管线（数据库重放、通道消费、去重、补读、`resync`）。`control.py` 为 Redis 与数据库后端的控制唤醒与活动标记。配额在 `runs/quotas.py`，按模型限流在 `runs/model_limits.py`。

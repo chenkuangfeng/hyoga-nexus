@@ -49,7 +49,7 @@
                                                 └─▶ SSE 续读
 ```
 
-**进程与存储**：API 与 worker 始终是两个进程。多租户部署使用 PostgreSQL 作为事实源，Outbox 派发。单机部署使用单个 SQLite 文件作为事实源，两个进程共用该文件；写入使用 `BEGIN IMMEDIATE`，派发使用同一套账本规则（见 2.12）。两种部署的执行模型相同（见 2.2）。
+**进程与存储**：默认（`[deployment].mode = "split"`）API 与 worker 是两个进程；`embedded` 模式下 worker 线程运行在 API 进程内，事件通道用进程内 memory，不需要 Redis，适合本地与小规模部署（见 2.12「实时事件通道」）。多租户部署使用 PostgreSQL 作为事实源，Outbox 派发。单机部署使用单个 SQLite 文件作为事实源，两个进程共用该文件；写入使用 `BEGIN IMMEDIATE`，派发使用同一套账本规则（见 2.12）。两种部署的执行模型相同（见 2.2）。
 
 ### 1.3 包职责与依赖规则
 
@@ -396,6 +396,20 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 备选方案：Redis Streams 与数据库不在同一事务，需要持续对账；RabbitMQ 增加运维成本。当前规模不需要。复评条件：队列积压、数据库连接争用、Outbox 维护成本，或需要多类型消息路由。
 
 **事件**：持久序号 `sequence` 作为 SSE 的 `id` 与 `Last-Event-ID` 游标；JSON 响应保留独立 `event_id`。先提交事件再投递。每页最多 500 条；SSE 名称为 `run.event`。等待或终态结束当前连接；浏览器重连不创建新 Run。
+
+**实时事件通道**（openspec `2026-11-07-run-event-streaming`）：数据库是 Run 与持久事件的唯一事实源；通道只携带一份实时副本，加上不入库的临时事件（`message.delta`）。通道丢失、断档或不可用只影响实时性，不影响最终状态。
+
+| 后端 | 配置 | 说明 |
+| --- | --- | --- |
+| `database`（默认） | `[run_events].backend` | 无额外服务。每个 API 进程、每个活跃 Run 一个共享轮询器向所有订阅者扇出，间隔在 `poll_min_ms` 到 `poll_max_ms` 间自适应；`message.delta` 仍写库 |
+| `redis` | 需 `uv sync --extra redis` | Redis Streams：`XADD MAXLEN ~`、阻塞 `XREAD`、断档返回 `StreamGap`、生产者令牌围栏（Lua 比较后写入）、取消唤醒；`message.delta` 不写库 |
+| `memory` | 仅 `embedded` | 进程内有界日志，条件变量唤醒 |
+
+- 事件分级：持久事件（除 `message.delta` 外）同事务写库，提交后由 `Session` 的 `after_commit` 钩子发布到通道（事件统一经 `SqlAlchemyRunEventRepository.append`，回滚则丢弃，通道不会出现库里没有的事件）；临时事件只发布到通道，不带 SSE `id`，`Last-Event-ID` 永远指向持久序号。每个回合结束时与助手消息同事务写入持久事件 `message.completed {turn, text}`，已完成 Run 的历史时间线只靠持久事件重建。
+- 订阅顺序：先从数据库重放 `after_sequence` 之后的持久事件，再读通道；持久事件按 `sequence` 去重，序号跳跃则从数据库补读（也修复通道漏发）；已被 `message.completed` 覆盖的回合的临时文本丢弃；断档、结束标记、生产者租约过期各自补读数据库后再收尾。续连（游标大于 0）先发 `stream.resync`，客户端丢弃未入库文本后再收到通道回放。
+- SSE 为异步生成器：连接内不持有数据库会话与线程，授权与重放使用短会话；空闲时按 `heartbeat_seconds` 发心跳注释。
+- 控制与标记：取消请求同时写库并向 Run 的控制键发信号，worker 的监视循环阻塞等待该信号，数据库租约与取消检查降为每 `lease_check_seconds` 一次；信号丢失只退化为该间隔。会话的活动 Run 标记（`GET /sessions/{id}/live-run`）随执行续期、终态清除。
+- 并发：一个 worker 同一时刻执行一个 Run，并发 Run 数等于 worker 数；`embedded` 用 `embedded_workers` 个线程，每线程独立事件循环，仅第一个线程运行空闲时的后台作业（受 `background_concurrency` 限制）。准入在全局活动会话上限之外支持 `max_concurrent_sessions_per_tenant` / `_per_user`（默认不限，超限 429 `session_limit_reached`），后台模型调用可按模型限流（`[model_limits]`，不影响交互式 Run）。
 
 **输入回答**：`POST .../runs/{run_id}/input` 携带 `input_request_id`、回答与 `Idempotency-Key`；重复提交返回相同结果；回答继续同一 Run，预算累计。
 

@@ -25,7 +25,8 @@ dependencies = [
     "python-multipart>=0.0.20,<1",
 ]
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "httpx>=0.27,<1"]
+dev = ["pytest>=8,<10", "httpx>=0.27,<1", "redis>=5,<9", "fakeredis[lua]>=2.26,<3"]
+redis = ["redis>=5,<9"]
 [tool.hatch.build.targets.wheel]
 packages = ["apps/api/src/nexus_api", "apps/worker/src/nexus_worker"]
 [tool.uv.workspace]

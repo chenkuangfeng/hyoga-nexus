@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -75,10 +76,31 @@ def install_knowledge_embedder() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from nexus_platform.persistence.database import create_database_engine, session_factory
+    from nexus_platform.runs.bus import deployment_settings, install_channels, reset_channels, run_event_settings
+    # Read first: an invalid [deployment] or [run_events] stops start-up instead of changing behaviour silently.
+    deployment, events = deployment_settings(), run_event_settings()
     ensure_default_space()
     ensure_system_space()
     install_knowledge_embedder()
-    yield
+    workers = None
+    if deployment.mode == "embedded" or events.backend != "database":
+        # Publishing from this process (events, cancel wake-ups) needs the channels installed here; the
+        # database backend publishes nothing, so a plain split deployment skips this.
+        engine = create_database_engine()
+        factory = session_factory(engine)
+        _app.state.database_engine, _app.state.session_factory = engine, factory
+        _app.state.run_channels = install_channels(factory, events)
+        if deployment.mode == "embedded":
+            from nexus_worker.embedded import EmbeddedWorkers
+            workers = EmbeddedWorkers(factory, deployment)
+            workers.start()
+    try:
+        yield
+    finally:
+        if workers is not None:
+            await asyncio.to_thread(workers.stop)
+        reset_channels()
 
 
 app = FastAPI(title="Hyoga Nexus", version="0.1.0", lifespan=lifespan)
@@ -206,7 +228,13 @@ def ready():
             connection.execute(text("SELECT 1"))
     except SQLAlchemyError:
         return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "database_unavailable"})
-    return {"status": "ready", "database": "ok"}
+    body = {"status": "ready", "database": "ok"}
+    held = getattr(app.state, "run_channels", None)
+    if held is not None and held.bus.name != "database":
+        # A bus outage degrades live streaming (viewers fall back to the database) but does not stop Runs,
+        # so it is reported, not treated as not-ready.
+        body["run_event_bus"] = "ok" if held.bus.ping() else "degraded"
+    return body
 
 @app.get("/api/v1/capabilities")
 def capabilities():

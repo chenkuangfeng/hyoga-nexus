@@ -49,6 +49,40 @@ credential_encryption_key = "HmvXsdL-PwdU0c6IqTPB3giNH_mdxuTqd1c_LjnnxGE="
 [platform]
 # Sessions allowed to hold queued, started or unknown work at once; new sessions beyond this get 503.
 max_concurrent_sessions = 8
+# Fairness limits on top of the cap above (distinct sessions holding work). Off unless set; beyond them a
+# new session gets 429 session_limit_reached while Runs in sessions already holding a slot are still accepted.
+# max_concurrent_sessions_per_tenant = 4
+# max_concurrent_sessions_per_user = 2
+
+[deployment]
+# split (default): the API and one or more worker processes (`python -m nexus_worker`) run separately.
+# embedded: the API process also runs the workers, with the in-process memory event channel and no Redis.
+# One worker executes one Run at a time, so embedded_workers is how many Runs can execute at once.
+mode = "split"
+# embedded_workers = 4
+# Idle-time jobs (schedules, knowledge index, memory capture and consolidation, embeddings) while embedded.
+# background_concurrency = 1
+
+[run_events]
+# How a Run's live events travel from the worker to viewers. Stored events always stay in the database; this
+# only decides how fast viewers see them and whether streamed text (message.delta) is kept off the database.
+#   database (default): no extra service; one shared poller per Run in each API process, text is stored.
+#   redis: Redis Streams (install the extra: uv sync --extra redis); text is not stored, cancel wakes the worker.
+#   memory: embedded mode only (API and worker in one process).
+backend = "database"
+# redis_url = "redis://localhost:6379/0"
+# prefix = "nexus"
+# maxlen = 4096                  # events kept per Run on the channel
+# retention_seconds = 300        # how long a finished Run's stream stays readable
+# heartbeat_seconds = 15
+# poll_min_ms = 250              # database backend: poll interval bounds
+# poll_max_ms = 1000
+# lease_check_seconds = 1.0      # worker's database lease and cancel check; 5.0 when the channel wakes the worker
+
+[model_limits]
+# Cap on concurrent background model calls (memory capture, consolidation, knowledge enrichment) per model, so
+# they cannot use up a provider's rate limit that interactive Runs need. Interactive Runs are never held back.
+# max_background_per_model = 4
 
 [model_connection_pool]
 # Per provider origin, shared by worker Native Runs. Applied when the worker starts.

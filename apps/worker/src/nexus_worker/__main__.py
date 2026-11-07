@@ -13,6 +13,7 @@ from nexus_runtimes.native.models.network import configure_connection_pool
 from nexus_platform.persistence.database import create_database_engine, session_factory
 from nexus_core.platform import utc_now
 from nexus_platform.runs import session_ledger as ledger
+from nexus_platform.runs.bus import install_channels
 from nexus_platform.runs.service import claim_next, process_claimed
 
 logging.basicConfig(level=logging_level())
@@ -37,14 +38,15 @@ def start_process_epoch(factory, instance_id: str) -> int:
 
 #: One event loop for the worker process. Shared HTTP connection pools are bound to the loop that
 #: created them, so Runs must not each create and close their own loop.
-_LOOP: asyncio.AbstractEventLoop | None = None
+_LOOP = threading.local()
 
 
 def _worker_loop() -> asyncio.AbstractEventLoop:
-    global _LOOP
-    if _LOOP is None or _LOOP.is_closed():
-        _LOOP = asyncio.new_event_loop()
-    return _LOOP
+    """This thread's event loop; embedded deployments run several worker threads in one process."""
+    loop = getattr(_LOOP, "loop", None)
+    if loop is None or loop.is_closed():
+        loop = _LOOP.loop = asyncio.new_event_loop()
+    return loop
 
 
 from nexus_worker.memory_capture import (capture_tick, consolidation_tick, embedding_tick, install_embedder,
@@ -103,35 +105,47 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     signal.signal(signal.SIGTERM, stop)
     logger.info("Worker started", extra={"worker_id": worker_id})
     try:
-        while not stopped.is_set():
-            try:
-                processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch, watchdog=watchdog)
-                if not processed:
-                    # Scheduled tasks that are due start their Runs here (openspec 2026-11-07-tool-expansion 8.2).
-                    from .schedule import schedule_tick
-                    processed = schedule_tick(factory)
-                if not processed:
-                    # Knowledge index and cleanup jobs (openspec 2026-11-06-knowledge-base K1.5).
-                    processed = knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency)
-                if not processed:
-                    # Memory capture runs only while no Run is waiting (stage 3); it is off unless an owner opted in.
-                    processed = capture_tick(factory, worker_id)
-                if not processed:
-                    # Consolidation (one owner per tick) and retention (hourly) are maintenance: idle time only.
-                    processed = consolidation_tick(factory, worker_id)
-                    retention_tick(factory)
-                if not processed:
-                    processed = embedding_tick(factory, _worker_loop()) > 0
-            except Exception:
-                logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id}, exc_info=True)
-                processed = False
-            if once:
-                return
-            if not processed:
-                stopped.wait(poll_interval)
+        install_channels(factory)
+        run_loop(factory, worker_id, stopped, epoch=epoch, watchdog=watchdog, poll_interval=poll_interval, once=once,
+                 knowledge_concurrency=knowledge_concurrency)
     finally:
         engine.dispose()
         logger.info("Worker stopped", extra={"worker_id": worker_id})
+
+
+def run_loop(factory, worker_id: str, stopped: threading.Event, *, epoch: int, watchdog, poll_interval: float = 1.0,
+             once: bool = False, background: bool = True, knowledge_concurrency: int = 1) -> None:
+    """Claim and run work until ``stopped`` is set. Installs no signal handlers, so it can run in a thread.
+
+    ``background`` turns the idle-time jobs (schedules, knowledge index, memory capture, consolidation,
+    embeddings) on or off; an embedded deployment runs them from one thread only.
+    """
+    while not stopped.is_set():
+        try:
+            processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch, watchdog=watchdog)
+            if background and not processed:
+                # Scheduled tasks that are due start their Runs here (openspec 2026-11-07-tool-expansion 8.2).
+                from .schedule import schedule_tick
+                processed = schedule_tick(factory)
+            if background and not processed:
+                # Knowledge index and cleanup jobs (openspec 2026-11-06-knowledge-base K1.5).
+                processed = knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency)
+            if background and not processed:
+                # Memory capture runs only while no Run is waiting (stage 3); it is off unless an owner opted in.
+                processed = capture_tick(factory, worker_id)
+            if background and not processed:
+                # Consolidation (one owner per tick) and retention (hourly) are maintenance: idle time only.
+                processed = consolidation_tick(factory, worker_id)
+                retention_tick(factory)
+            if background and not processed:
+                processed = embedding_tick(factory, _worker_loop()) > 0
+        except Exception:
+            logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id}, exc_info=True)
+            processed = False
+        if once:
+            return
+        if not processed:
+            stopped.wait(poll_interval)
 
 
 def _sandbox_check(profile: str | None = None) -> int:

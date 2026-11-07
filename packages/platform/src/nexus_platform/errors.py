@@ -39,6 +39,12 @@ class ServiceUnavailable(PlatformError):
     status_code = 503
 
 
+class TooManyActiveSessions(PlatformError):
+    """A tenant or user is at its limit of sessions holding work; retry after one finishes."""
+    code = "session_limit_reached"
+    status_code = 429
+
+
 class SessionCapacityExceeded(ServiceUnavailable):
     """The deployment already has its maximum number of active sessions; no record is written."""
     code = "session_capacity_exceeded"

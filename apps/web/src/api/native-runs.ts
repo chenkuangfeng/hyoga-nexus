@@ -177,6 +177,8 @@ export interface RunEventStreamOptions {
   afterSequence: number
   signal: AbortSignal
   onEvent: (event: RunEvent) => void
+  /** The server will replay live-only text, or lost some: drop what was shown from `message.delta`. */
+  onResync?: () => void
   /** Called when the server ends the stream (Run terminal or waiting for input/approval). */
   onEnd: () => void
 }
@@ -193,6 +195,10 @@ export async function streamRunEvents(tenantId: string, runId: string, options: 
     signal: options.signal,
     openWhenHidden: true,
     onmessage(message) {
+      if (message.event === 'stream.resync') {
+        options.onResync?.()
+        return
+      }
       if (message.event !== 'run.event' || !message.data) return
       let parsed: unknown
       try {

@@ -59,6 +59,18 @@ class QueueFull(LedgerError):
     code = "queue_full"
 
 
+class TenantCapacityFull(LedgerError):
+    """The tenant already has its maximum number of sessions holding work."""
+
+    code = "tenant_session_limit"
+
+
+class UserCapacityFull(LedgerError):
+    """The user already has their maximum number of sessions holding work."""
+
+    code = "user_session_limit"
+
+
 class CapacityFull(LedgerError):
     """The deployment already has ``max_sessions`` sessions holding work; a new session is refused."""
 
@@ -131,7 +143,7 @@ def require_epoch(db: Session, epoch: int) -> None:
 
 def enqueue(
     db: Session, *, session_id: UUID, run_id: UUID, admission_id: UUID, now: datetime,
-    max_sessions: int | None = None,
+    max_sessions: int | None = None, max_per_tenant: int | None = None, max_per_user: int | None = None,
 ) -> AdmissionView:
     """Append an admission to the session FIFO as ``queued``.
 
@@ -161,6 +173,8 @@ def enqueue(
             )) or 0
             if active >= max_sessions:
                 raise CapacityFull(f"{active} sessions already hold work (limit {max_sessions})")
+        if holding == 0 and (max_per_tenant is not None or max_per_user is not None):
+            _check_fairness(db, run_id, max_per_tenant, max_per_user)
     row = SessionAdmissionRecord(
         admission_id=admission_id, session_id=session_id, run_id=run_id,
         status="queued", owner_epoch=None, created_at=now, updated_at=now,
@@ -168,6 +182,23 @@ def enqueue(
     db.add(row)
     db.flush()
     return _view(row)
+
+
+def _check_fairness(db: Session, run_id: UUID, max_per_tenant: int | None, max_per_user: int | None) -> None:
+    """Refuse a new session slot when the Run's tenant or user already holds their limit."""
+    run = db.get(RunRecord, run_id)
+    if run is None:
+        return
+    for limit, column, owner, error in (
+            (max_per_tenant, RunRecord.tenant_id, run.tenant_id, TenantCapacityFull),
+            (max_per_user, RunRecord.principal_id, run.principal_id, UserCapacityFull)):
+        if limit is None:
+            continue
+        held = db.scalar(select(func.count(func.distinct(SessionAdmissionRecord.session_id)))
+                         .join(RunRecord, RunRecord.id == SessionAdmissionRecord.run_id)
+                         .where(SessionAdmissionRecord.status.in_(_SLOT_STATUSES), column == owner)) or 0
+        if held >= limit:
+            raise error(f"{held} sessions already hold work (limit {limit})")
 
 
 def session_blocked(db: Session, session_id: UUID) -> bool:

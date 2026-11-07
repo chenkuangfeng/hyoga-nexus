@@ -28,3 +28,9 @@ Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始
 | `/agents/{agent_id}/copy` | POST | 把草稿复制为新的未发布智能体，不复制版本与共享，绑定与模型按调用者重新授权 |
 
 智能体草稿的 `budgets.generation` 只接受 `temperature`（0–2）与 `reasoning_effort`（`off/auto/minimal/low/medium/high/xhigh/max`），其他键或越界值返回 422。Native 运行准备阶段与故障转移模型以智能体值覆盖模型档案的同名选项（`auto` 沿用模型档案，`off` 不发送思考参数）；上下文压缩使用的摘要模型不受影响。
+
+## 实时事件
+
+- SSE 路径：鉴权后立即 `db.close()`，之后的重放与状态检查各开短会话（`stream_run_events` 的 `page`、`status` 回调）；通道由 `get_run_channels` 提供（进程内已安装的非 database 通道优先，否则按应用的会话工厂构建 database 通道）。
+- 临时事件以 `ephemeral: true` 下发，`sequence` 为其前最后一个持久事件的序号，没有 SSE `id`；`stream.resync` 通知客户端丢弃未入库文本。
+- 嵌入模式在 lifespan 内创建引擎与会话工厂、安装通道并启动 `EmbeddedWorkers`，关闭时先停线程再重置通道。

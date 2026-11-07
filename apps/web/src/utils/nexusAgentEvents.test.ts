@@ -151,3 +151,24 @@ test('approvals that may be remembered offer the session option and guard rules 
   assert.equal(guarded.grant_scope, undefined)
   assert.equal(guarded.description, '- 可能删除文件')
 })
+
+test('message.completed alone rebuilds a finished answer (history without stored deltas)', () => {
+  const stream = toAgentEventStream([
+    ev('tool.started', { invocation_id: 'c1', name: 'search' }),
+    ev('tool.completed', { invocation_id: 'c1' }),
+    ev('message.completed', { turn: 1, text: '结果如下' }),
+  ], 'completed')
+  assert.equal(stream.length, 2)
+  assert.deepEqual(stream[1], { ...stream[1], type: 'answer', content: '结果如下', done: true })
+})
+
+test('message.completed replaces streamed text of the same turn and closes the answer', () => {
+  const stream = toAgentEventStream([
+    ev('message.delta', { text: '结果', turn: 1 }),
+    ev('message.completed', { turn: 1, text: '结果如下' }),
+    ev('message.delta', { text: '补充', turn: 2 }),
+  ], 'running')
+  assert.equal(stream.length, 2)
+  assert.deepEqual(stream[0], { ...stream[0], content: '结果如下', done: true })
+  assert.deepEqual(stream[1], { ...stream[1], content: '补充', done: false })
+})

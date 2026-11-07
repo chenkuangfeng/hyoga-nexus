@@ -20,3 +20,5 @@ FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型�
 
 - [功能需求](docs/requirements.md)
 - [模块设计](docs/design.md)
+
+**实时事件**：`GET /tenants/{tenant}/runs/{run}/events`（`Accept: text/event-stream`）为异步 SSE，续连用 `Last-Event-ID`；通道后端、嵌入模式与配置见 `configs/nexus.example.toml` 的 `[run_events]`、`[deployment]` 与 [总体架构 2.12](../../docs/architecture.md)。`GET /tenants/{tenant}/sessions/{session}/live-run` 返回会话正在生成的 Run（无则 204）。

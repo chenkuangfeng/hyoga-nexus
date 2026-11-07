@@ -39,7 +39,9 @@ async def knowledge_completer(factory, tenant_id: UUID, user_id: UUID, model_ver
     request = ModelRequest(messages=(ModelMessage(role='system', content=system),
                                      ModelMessage(role='user', content=user_text)),
                            tools=(), max_output_tokens=max_tokens)
-    return await _collect(model, request)
+    from nexus_platform.runs.model_limits import background_limiter
+    async with background_limiter().aslot(call.model_name):  # model_limits: background calls share a provider's limit
+        return await _collect(model, request)
 
 
 def knowledge_vision(factory, tenant_id: UUID, user_id: UUID, model_version_id: UUID, purpose: str):

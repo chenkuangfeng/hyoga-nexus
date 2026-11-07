@@ -22,6 +22,7 @@ import {
 } from '@/api/native-runs'
 import {
   appendEvent,
+  dropEphemeral,
   changesRunView,
   emptyRunState,
   isActive,
@@ -97,6 +98,7 @@ export function useNativeRun(getTenantId: () => string | null) {
           afterSequence: state.value.lastSequence,
           signal,
           onEvent: event => handleEvent(tenantId, runId, event),
+          onResync: () => { state.value = dropEphemeral(state.value) },
           onEnd: () => { /* handled after the loop body */ },
         })
       } catch (error) {

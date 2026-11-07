@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from nexus_core.platform import new_id
 from nexus_platform.configuration import max_concurrent_sessions
-from nexus_platform.errors import SessionCapacityExceeded, SessionQueueFull
+from nexus_platform.errors import SessionCapacityExceeded, SessionQueueFull, TooManyActiveSessions
+from .quotas import session_quotas
 
 from . import session_ledger
 
@@ -24,6 +25,7 @@ class SqlAlchemyAdmissionRepository:
         self.session = session
         # Read once per repository (per submission); a config change applies to the next request.
         self.max_sessions = max_sessions if max_sessions is not None else max_concurrent_sessions()
+        self.quotas = session_quotas()
 
     def enqueue(self, session_id: UUID, run_id: UUID, at: datetime) -> int:
         """Append the Run to its session FIFO and return its 1-based position.
@@ -34,12 +36,14 @@ class SqlAlchemyAdmissionRepository:
         try:
             session_ledger.enqueue(
                 self.session, session_id=session_id, run_id=run_id, admission_id=new_id(), now=at,
-                max_sessions=self.max_sessions,
+                max_sessions=self.max_sessions, max_per_tenant=self.quotas.per_tenant, max_per_user=self.quotas.per_user,
             )
         except session_ledger.QueueFull as exc:
             raise SessionQueueFull(str(exc)) from exc
         except session_ledger.CapacityFull as exc:
             raise SessionCapacityExceeded(str(exc)) from exc
+        except (session_ledger.TenantCapacityFull, session_ledger.UserCapacityFull) as exc:
+            raise TooManyActiveSessions(str(exc)) from exc
         position = session_ledger.queue_position(self.session, run_id)
         assert position is not None
         return position

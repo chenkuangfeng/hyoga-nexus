@@ -9,3 +9,5 @@
 既有 `from nexus_core.runtime import ModelMessage`、`from nexus_core.native import NativePolicy` 可继续使用；具体模块与包入口导出同一类型。类型的具体类定义不再集中在入口文件中。
 
 文档：[需求](docs/requirements.md)、[设计](docs/design.md)。
+
+`run_events.py` 定义实时事件通道契约（`RunEventBus`、`ControlChannel`、`LiveRunMarker`、`BusEvent`、`StreamGap` 等），仅依赖标准库。

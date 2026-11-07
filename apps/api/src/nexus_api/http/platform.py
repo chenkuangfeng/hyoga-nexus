@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-import time
 
+from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import Response, StreamingResponse
@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole
+from nexus_core.run_events import BusEvent
 from nexus_platform.agents import service as agents
 from nexus_platform.auth import accounts
 from nexus_platform.memory import snapshots
@@ -33,6 +34,7 @@ from nexus_platform.persistence.models import (
     UserRecord,
 )
 from nexus_platform.runs import service as runs
+from nexus_platform.runs.bus.stream import stream_run_events
 from nexus_platform.runs.watchdog_service import acknowledge_watchdog, attention_required
 from nexus_platform.sessions import service as sessions
 from nexus_platform.tenants import service as tenants
@@ -40,7 +42,7 @@ from nexus_platform.authz import resources as authz
 from nexus_platform.authz.audit import audit
 from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.permissions import require_api_permission
-from nexus_api.dependencies.platform import get_database_session, get_principal, get_tenant_header
+from nexus_api.dependencies.platform import get_database_session, get_principal, get_run_channels, get_tenant_header
 from nexus_api.schemas.platform import (
     InputResponse,
     AgentDraftInput,
@@ -529,6 +531,28 @@ def get_run(
     return view
 
 
+@router.get("/tenants/{tenant_id}/sessions/{session_id}/live-run")
+def get_live_run(
+    tenant_id: UUID,
+    session_id: UUID,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """The Run of this session that is generating now, or 204 when none is.
+
+    Lets the client attach to a stream when it opens a session without scanning the Run list. The marker is
+    held on the event channel (Redis / memory) or, on the database backend, read from the Run table.
+    """
+    sessions.get_session_for_user(db, principal, tenant_id, session_id)
+    marker = get_run_channels(request).marker
+    run_id = marker.get(session_id)
+    if run_id is None:
+        return Response(status_code=204)
+    run = runs.get_run(db, principal, tenant_id, UUID(run_id))
+    return {"run_id": str(run.id), "status": run.status}
+
+
 @router.get("/tenants/{tenant_id}/runs/{run_id}/events", response_model=list[RunEventView])
 def list_run_events(
     tenant_id: UUID,
@@ -547,25 +571,44 @@ def list_run_events(
         cursor = max(cursor, int(last_event_id))
     runs.get_run(db, principal, tenant_id, run_id)
     if 'text/event-stream' in request.headers.get('accept', ''):
-        def stream():
-            nonlocal cursor
-            while True:
-                try:
-                    run = runs.get_run(db, principal, tenant_id, run_id)
-                    rows = runs.list_events(db, principal, tenant_id, run_id, cursor, limit)
-                except Exception:
+        # Release this request's connection now: the stream below opens short sessions of its own, so a
+        # viewer waiting for the next event holds no database connection and no worker thread.
+        db.close()
+        factory = request.app.state.session_factory
+        channels = get_run_channels(request)
+
+        def page(after: int, size: int):
+            with factory() as session:
+                run = runs.get_run(session, principal, tenant_id, run_id)
+                rows = runs.list_events(session, principal, tenant_id, run_id, after, size)
+                return [BusEvent(str(row.run_id), row.event_type, row.payload, row.sequence,
+                                 row.occurred_at.isoformat(), str(row.sequence)) for row in rows], run.status
+
+        def current_status() -> str:
+            with factory() as session:
+                return runs.get_run(session, principal, tenant_id, run_id).status
+
+        async def stream():
+            heartbeat = ': heartbeat\n\n'
+            async for item in stream_run_events(channels, run_id, cursor, page, current_status):
+                if item.kind == 'heartbeat':
+                    yield heartbeat
+                elif item.kind == 'resync':
+                    yield 'event: stream.resync\ndata: {}\n\n'
+                elif item.kind == 'closed':
                     yield 'event: stream.closed\ndata: {}\n\n'
-                    return
-                for row in rows:
-                    data = event_view(row).model_dump_json()
-                    yield f'id: {row.sequence}\nevent: run.event\ndata: {data}\n\n'
-                    cursor = row.sequence
-                if len(rows) == limit:
-                    continue
-                if run.status in ('completed', 'failed', 'cancelled', 'interrupted', 'waiting_input', 'waiting_approval'):
-                    return
-                yield ': heartbeat\n\n'
-                time.sleep(0.25)
+                elif item.event.sequence is None:
+                    # Unsequenced text carries no SSE id, so Last-Event-ID always names a stored event.
+                    data = RunEventView(event_id=uuid4(), run_id=run_id, sequence=item.cursor, event_type=item.event.kind,
+                        schema_version=1, payload=item.event.payload, ephemeral=True,
+                        occurred_at=datetime.now(timezone.utc)).model_dump_json()
+                    yield f'event: run.event\ndata: {data}\n\n'
+                else:
+                    event = item.event
+                    data = RunEventView(event_id=uuid5(run_id, str(event.sequence)), run_id=run_id,
+                        sequence=event.sequence, event_type=event.kind, schema_version=1, payload=event.payload,
+                        occurred_at=event.occurred_at).model_dump_json()
+                    yield f'id: {event.sequence}\nevent: run.event\ndata: {data}\n\n'
         return StreamingResponse(stream(), media_type='text/event-stream',
             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
     return [event_view(row) for row in runs.list_events(db, principal, tenant_id, run_id, cursor, limit)]

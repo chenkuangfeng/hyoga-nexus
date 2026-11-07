@@ -34,6 +34,26 @@ def get_database_session(request: Request) -> Iterator[Session]:
         session.close()
 
 
+def get_run_channels(request: Request):
+    """Run event channels for this application.
+
+    A process-wide installation (the embedded worker's memory bus, or a Redis bus both sides share) is
+    reused so publisher and viewer see the same bus; otherwise the application builds the database bus
+    over its own session factory, which keeps separate applications (and tests) on their own databases.
+    """
+    from nexus_platform.runs.bus import build_channels, channels
+    factory = request.app.state.session_factory
+    held = getattr(request.app.state, "run_channels", None)
+    shared = channels()
+    if shared is not None and shared.bus.name != "database":
+        held = request.app.state.run_channels = shared
+    elif held is None or getattr(request.app.state, "run_channels_factory", None) is not factory:
+        # Rebuilt when the application's session factory changes (separate databases in tests).
+        held = request.app.state.run_channels = build_channels(factory)
+        request.app.state.run_channels_factory = factory
+    return held
+
+
 SESSION_COOKIE = "nexus_session"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 # Cookie-authenticated writes must carry this header. Browsers cannot send it cross-site without a

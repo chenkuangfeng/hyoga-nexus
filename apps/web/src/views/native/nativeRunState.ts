@@ -37,8 +37,19 @@ export function emptyRunState(run: RunView | null = null): RunState {
  * event delivered twice across a reconnect never renders twice.
  */
 export function appendEvent(state: RunState, event: RunEvent): RunState {
+  // Live-only text has no sequence of its own: it is kept in arrival order and never moves the resume cursor.
+  if (event.ephemeral) return { ...state, events: [...state.events, event] }
   if (event.sequence <= state.lastSequence) return state
   return { ...state, events: [...state.events, event], lastSequence: event.sequence }
+}
+
+/**
+ * Forget live-only text. The server asks for this (`stream.resync`) when it is about to replay text the
+ * client already holds, or when the channel lost some: stored events, including `message.completed`, stay.
+ */
+export function dropEphemeral(state: RunState): RunState {
+  if (!state.events.some(event => event.ephemeral)) return state
+  return { ...state, events: state.events.filter(event => !event.ephemeral) }
 }
 
 export function withRun(state: RunState, run: RunView): RunState {
@@ -49,11 +60,17 @@ export function withRun(state: RunState, run: RunView): RunState {
 export function assistantSegments(events: readonly RunEvent[]): TextSegment[] {
   const segments: TextSegment[] = []
   for (const event of events) {
-    if (event.event_type !== 'message.delta') continue
+    if (event.event_type !== 'message.delta' && event.event_type !== 'message.completed') continue
     const text = event.payload.text
     if (typeof text !== 'string') continue
     const turn = typeof event.payload.turn === 'number' ? event.payload.turn : 0
     const last = segments[segments.length - 1]
+    if (event.event_type === 'message.completed') {
+      // The stored whole text of the turn replaces whatever streamed text arrived for it.
+      if (last && last.turn === turn) last.text = text
+      else segments.push({ turn, text })
+      continue
+    }
     if (last && last.turn === turn) {
       last.text += text
     } else {

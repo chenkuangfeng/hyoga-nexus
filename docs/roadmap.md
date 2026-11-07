@@ -86,6 +86,7 @@
   - [ ] 3.25 智能体与模型设置界面（`openspec/changes/2026-11-05-weknora-agent-tool-model-settings`）：智能体列表与编辑器（基本信息、提示词、模型与生成参数、工具配置）、内置工具目录、智能体级温度与思考强度（运行时覆盖模型档案选项）、归档与复制、设置 → 模型管理接入平台接口。后端与单元测试已完成；完整前端构建与浏览器验证待在内存充足的环境执行。
   - [x] 3.26 工具调用加固（`openspec/changes/archive/2026-11-06-tool-call-hardening`，已实施）：参数容错（JSON 修复、类型转换、字段级校验错误）；工具定义按名排序；头尾截断与每轮工具输出总预算；工具输出注入扫描；工具循环检测（`tool_loop_detected`）；风险四级与智能体访问级别；审批「本会话允许」（`action_grants`）；执行前参数守卫（`CRITICAL` 硬拒绝、`HIGH` 必须审批）。
   - [ ] 3.27 工具扩展（`openspec/changes/2026-11-07-tool-expansion`，实施中）：工具分组与两层门控（部署可用性 × 智能体开关，`sandbox`、`web`、`collab`、`schedule`、`media` 默认关闭）；按调用调度（并行 / 独占 / 按 key 串行）；`sandbox` 组六个工具与沙箱后端（真实 Docker 验收待运行）；`tool_search` 渐进加载与 schema 清洗；`web_search` / `web_fetch`；`delegate_task`；`cronjob_*`；`vision_analyze`。Wiki 组的门控已就绪，工具随知识库 K6.1。未完成：编辑器分组开关界面、产物登记、后台作业、技能脚本迁入沙箱。
+  - [ ] 3.28 Run 事件通道与部署模式（`openspec/changes/2026-11-07-run-event-streaming`，实施中）：`database` / `redis` / `memory` 三个事件通道后端；持久事件提交后发布，`message.delta` 在 redis / memory 下不入库，回合结束写持久事件 `message.completed`；订阅管线（重放、去重、补读、`stream.resync`）与异步 SSE；取消唤醒、生产者围栏、会话活动 Run 标记与 `live-run` 接口；`embedded` 部署模式；每租户 / 用户活动会话上限与后台模型调用按模型限流。未完成：压测对比数据、故障注入验收（Redis / worker / 客户端）、前端 `vue-tsc` 与浏览器测试。
 - **验收**：3.2 真实供应商验收通过；契约测试全部通过；既有 Native 测试保持通过；没有隔离后端时执行类工具不可见；记忆草稿不进入提示。
 - **依赖**：2。
 

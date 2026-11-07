@@ -6,6 +6,8 @@
  *
  * 映射规则：
  * - `message.delta`：同一轮（turn）的文本合并为一个 `answer` 事件；遇到工具事件、轮次变化或运行结束时该 answer 标记为 done。
+ *   该事件可能只存在于实时通道（`ephemeral`），不一定写库。
+ * - `message.completed`：该轮助手文本的持久事件；替换同一轮已流出的文本并标记 done，已完成 Run 的历史只靠它重建回答。
  * - `tool.started` / `tool.completed` / `tool.failed`：按 invocation_id 对应为一个 `tool_call`，pending / success 随之更新。
  * - `approval.requested` / `approval.resolved`：映射为 WeKnora 的 `tool_approval_required`，由 `ToolApprovalCard` 渲染。
  *   事件不携带工具参数（只对 Run 所有者通过审批接口开放），参数由调用方经 `approvalArgs` 传入。
@@ -126,6 +128,7 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
   const approvalById = new Map<string, AgentStreamApproval>()
   const promptById = new Map<string, AgentStreamPrompt>()
   let openAnswer: AgentStreamAnswer | null = null
+  const answerByTurn = new Map<number, AgentStreamAnswer>()
 
   const closeAnswer = () => {
     if (openAnswer) openAnswer.done = true
@@ -143,7 +146,27 @@ export function toAgentEventStream(events: readonly RunEvent[], runStatus: strin
         } else {
           closeAnswer()
           openAnswer = { type: 'answer', id: `answer-${event.run_id}-${turn}-${event.sequence}`, turn, content: text, done: false }
+          answerByTurn.set(turn, openAnswer)
           stream.push(openAnswer)
+        }
+        break
+      }
+      case 'message.completed': {
+        // The stored whole text of the turn. Streamed deltas of the same turn (live, or kept in the log by the
+        // database channel) are replaced by it; a finished Run rebuilt from stored events has only this one.
+        const text = typeof payload.text === 'string' ? payload.text : ''
+        const turn = typeof payload.turn === 'number' ? payload.turn : 0
+        if (!text) break
+        const existing = answerByTurn.get(turn)
+        if (existing) {
+          existing.content = text
+          existing.done = true
+          if (openAnswer === existing) openAnswer = null
+        } else {
+          closeAnswer()
+          const answer: AgentStreamAnswer = { type: 'answer', id: `answer-${event.run_id}-${turn}-${event.sequence}`, turn, content: text, done: true }
+          answerByTurn.set(turn, answer)
+          stream.push(answer)
         }
         break
       }

@@ -210,6 +210,9 @@ class RunEventView(BaseModel):
     schema_version: int
     payload: dict[str, Any]
     occurred_at: datetime
+    #: True for live-only text (``message.delta`` on a channel that keeps it off the database): it has no
+    #: stored sequence, so ``sequence`` is only the position of the last stored event before it.
+    ephemeral: bool = False
 
 
 class ResourceGrantCreate(BaseModel):

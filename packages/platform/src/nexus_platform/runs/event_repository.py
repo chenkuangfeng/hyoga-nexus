@@ -30,4 +30,8 @@ class SqlAlchemyRunEventRepository:
                              schema_version=1, payload=payload, occurred_at=at)
         self.session.add(row)
         self.session.flush()
+        # Published to the live bus only once this transaction commits (runs/bus/hook.py).
+        from nexus_platform.runs.bus.hook import queue_event
+        from nexus_core.run_events import BusEvent
+        queue_event(self.session, BusEvent(str(run_id), kind, payload, sequence, at.isoformat() if at else None))
         return row

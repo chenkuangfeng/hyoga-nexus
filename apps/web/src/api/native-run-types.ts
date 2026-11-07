@@ -41,6 +41,8 @@ export interface RunEvent {
   schema_version: number
   payload: Record<string, unknown>
   occurred_at: string
+  /** Live-only text: not stored, `sequence` is just the last stored event before it. Dropped on `stream.resync`. */
+  ephemeral?: boolean
 }
 
 export interface SessionView {

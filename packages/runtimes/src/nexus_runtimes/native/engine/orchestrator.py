@@ -196,7 +196,11 @@ class RunOrchestrator:
                         raise RuntimeFault('budget_exhausted')
                     working.record(response.text)
                     # The completion event and the assistant message are adjacent writes (P7).
-                    await commit_group(events=[completed], message=ModelMessage('assistant', response.text, tuple(response.calls)))
+                    # `message.completed` carries the turn's whole text as a stored event: streamed `message.delta`
+                    # text may live only on the live event bus, and the timeline of a finished Run is rebuilt
+                    # from stored events (openspec 2026-11-07-run-event-streaming).
+                    group = [completed] + ([('message.completed', {'turn': turn, 'text': response.text})] if response.text else [])
+                    await commit_group(events=group, message=ModelMessage('assistant', response.text, tuple(response.calls)))
                     terminal = False
                     judgement = judge.judge(response.text, response.finish_reason, response.calls)
                     if judgement.decision == JudgeDecision.INCOMPLETE_TOOL_CALL:

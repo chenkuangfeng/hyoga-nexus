@@ -135,14 +135,21 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
     monitor_error = None
     # Watchdog state lives for this Run only; a worker restart forgets it, so an open stall may be re-reported once.
     watch_alerted: set[str] = set()
+    store.stream_start()
     async def monitor():
         nonlocal monitor_error
         next_watch = 0.0
+        next_check = 0.0
         while True:
             try:
-                if (stopped and stopped.is_set()) or store.heartbeat():
+                # The database lease and cancel check runs every `lease_check_seconds`; a cancel signal on the
+                # run-event channel brings it forward, so cancelling is quick without a check every 0.2 s.
+                due = time.monotonic() >= next_check
+                if (stopped and stopped.is_set()) or (due and store.heartbeat()):
                     token.cancel()
                     return
+                if due:
+                    next_check = time.monotonic() + store.lease_check_seconds
             except Exception:
                 monitor_error = 'interrupted'
                 token.cancel()
@@ -154,7 +161,8 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
                 except Exception:
                     # Observation failures must never stop or fail the Run it observes.
                     logger.warning("Run watchdog check failed", extra={"task_id": str(task_id)}, exc_info=True)
-            await asyncio.sleep(0.2)
+            if await asyncio.to_thread(store.wait_for_signal, 0.2):
+                next_check = 0.0
     monitor_task = asyncio.create_task(monitor())
     model = None
     sandbox = None
@@ -247,3 +255,4 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
     if monitor_error:
         outcome = RuntimeOutcome('interrupted', monitor_error)
     store.finish(outcome)
+    store.stream_finish()

@@ -12,6 +12,7 @@ Contract notes:
 """
 from __future__ import annotations
 
+from nexus_platform.runs.model_limits import background_limiter
 import asyncio
 import html
 import json
@@ -169,7 +170,8 @@ def owner_extractor(factory: sessionmaker[Session]) -> Callable[..., Any]:
                              share_connections=True)
         request = build_request(messages, related, context=context, rejected_topics=rejected_topics,
                                 instructions=instructions)
-        text, usage = asyncio.run(_collect_with_usage(model, request))
+        with background_limiter().slot(call.model_name):  # model_limits: background calls share a provider's limit
+            text, usage = asyncio.run(_collect_with_usage(model, request))
         return rules.ExtractorReply(parse_output(text), usage)
     return extractor
 
@@ -210,7 +212,8 @@ def owner_merger(factory: sessionmaker[Session]) -> Callable[..., Any]:
             raise NotFound('Model unavailable')
         model = create_model(model=call.model_name, api_key=call.lease.reveal_for_call(), options=call.options,
                              share_connections=True)
-        return parse_output(asyncio.run(_collect(model, build_merge_request(entries))))
+        with background_limiter().slot(call.model_name):
+            return parse_output(asyncio.run(_collect(model, build_merge_request(entries))))
     return merger
 
 
