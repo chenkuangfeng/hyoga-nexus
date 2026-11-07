@@ -111,6 +111,10 @@ def test_final_answer_handles_become_citations(kb_env):
         event = db.scalar(select(RunEventRecord).where(RunEventRecord.run_id == run.id,
                                                       RunEventRecord.event_type == 'knowledge.citation_invalid'))
         assert event.payload['handles'] == [9]
+        # The cited document is counted once for the person who asked (document affinity, memory evolution D5).
+        from nexus_platform.persistence.models import MemoryDocAffinityRecord
+        [affinity] = db.scalars(select(MemoryDocAffinityRecord).where(MemoryDocAffinityRecord.owner_user_id == run.principal_id))
+        assert affinity.hits == 1 and str(affinity.document_id) == citation['document_id']
 
 
 def test_knowledge_tools_need_a_bound_base_and_bases_need_the_search_tool(kb_env):

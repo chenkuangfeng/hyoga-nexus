@@ -30,6 +30,7 @@ from nexus_knowledge.text import query_tokens
 from nexus_platform.authz.audit import audit
 from nexus_platform.persistence.models import (WikiPageRecord, FaqEntryRecord, KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord)
+from nexus_platform.memory import doc_affinity
 from . import access, embedding, stores
 from . import faq as faq_rules
 from . import rerank as rerank_rules
@@ -174,11 +175,12 @@ async def search(factory: sessionmaker[Session], db: Session, tenant_id: UUID, u
     rerank_config = next((c for c in (rerank_rules.config_of(item.kb.settings) for item in scoped) if c), None) \
         if rerank else None
     if rerank_config is None:
-        result.hits = _load_hits(db, fused, scoped, limit, query)
+        result.hits = doc_affinity.apply(db, tenant_id, user_id, _load_hits(db, fused, scoped, limit, query))
         return result
     # Rerank a wider pool, then cut to the requested size.
     pool = _load_hits(db, fused, scoped, min(rerank_rules.policy.MAX_CANDIDATES, max(limit * 3, limit)), query)
     result.hits, diag = await rerank_rules.rerank_hits(factory, tenant_id, user_id, rerank_config, query, pool, limit)
+    result.hits = doc_affinity.apply(db, tenant_id, user_id, result.hits)
     result.rerank = {'outcome': diag.outcome, 'model_id': diag.model_id, 'threshold': diag.threshold,
                      'effective_threshold': diag.effective_threshold, 'candidates': diag.candidate_count,
                      'results': diag.result_count, 'top_score': diag.top_score, 'error': diag.error}

@@ -320,3 +320,18 @@ class MemoryCaptureJobRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: Token usage reported by the extraction call (stage 5, D7): `{input_tokens, output_tokens, cached_tokens}`.
     usage: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class MemoryDocAffinityRecord(Base):
+    """How often one person's answers cited a knowledge document (openspec 2026-11-06-memory-evolution D5).
+
+    Counted when a completed Run cites the document. Searches the same person makes later give documents with
+    ``hits >= 2`` a small, capped score boost (see ``memory/doc_affinity.py``). The row holds no text; a deleted
+    or no longer readable document simply stops being boosted.
+    """
+    __tablename__ = 'memory_doc_affinity'
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
+    last_cited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -203,6 +203,22 @@ def list_memory_topics(tenant_id: UUID, principal: Principal = Depends(get_princ
     return list_topics(db, principal, tenant_id)
 
 
+@router.get('/memory-doc-affinity')
+def list_memory_doc_affinity(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                             db: Session = Depends(get_database_session)):
+    """Knowledge documents the caller's answers keep citing; documents with 2+ citations rank slightly higher."""
+    from nexus_platform.memory.doc_affinity import list_affinity
+    return list_affinity(db, principal, tenant_id)
+
+
+@router.delete('/memory-doc-affinity')
+def clear_memory_doc_affinity(tenant_id: UUID, document_id: UUID | None = None,
+                              principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Forget one document's counter (``document_id``) or all of the caller's counters."""
+    from nexus_platform.memory.doc_affinity import clear
+    return {'deleted': clear(db, principal, tenant_id, document_id)}
+
+
 @router.post('/memory-consolidation', status_code=202)
 def request_memory_consolidation(tenant_id: UUID, principal: Principal = Depends(get_principal),
                                  db: Session = Depends(get_database_session)):

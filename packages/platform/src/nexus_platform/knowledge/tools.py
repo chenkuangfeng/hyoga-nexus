@@ -238,6 +238,9 @@ def attach_citations(db: Session, run: RunRecord) -> None:
     citations, invalid = resolve_citations(message.content, EvidenceRegistry.from_state(evidence))
     if citations:
         message.runtime_metadata = {**(message.runtime_metadata or {}), 'citations': citations}
+        from nexus_platform.memory import doc_affinity  # the person's most cited documents rank slightly higher later
+        doc_affinity.record(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                            document_ids=[c.get('document_id') for c in citations if c.get('document_id')])
     if invalid:
         append_event(db, run.id, 'knowledge.citation_invalid', {'message_id': str(message.id), 'handles': invalid})
 
