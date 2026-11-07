@@ -11,7 +11,7 @@
 ```text
 提交内容 ──► 解析与名字校验（loader）──► 规则扫描（guard，带 scanner_version）
                                              │ 结论 safe / caution / dangerous
-              来源（builtin/admin/import/agent）┤
+              来源（builtin/admin/import/agent/user）┤
                                              ▼
                               放行矩阵 policy.decide(source, verdict) → allow | need_ack | pending_review | block
 ```
@@ -25,17 +25,27 @@
 
 ```text
 skill_propose(name, skill_md, files, base_hash?) ─┐
-POST .../skills:import (zip)  ───────────────────┤► skill_submissions(pending) ─► 管理员审核
+POST .../skills:import (zip)  ───────────────────┤
+POST .../skill-submissions（成员）  ──────────────┤► skill_submissions(pending) ─► 管理员审核
                                                    │       │ 通过：重校验依赖 + 重扫 + 基础哈希 → publish
                                                    │       └ 拒绝：理由必填
 ```
 
-- `skill_submissions`：`id`、`tenant_id`、`origin`(agent|import)、`name`、`skill_md`、`files`(JSON，受大小上限)、`base_hash`(新建为空)、`scan`、`state`、`submitted_by`、`run_id?`、`reviewed_by`、`review_reason`、时间戳。
+- `skill_submissions`：`id`、`tenant_id`、`origin`(user|agent|import)、`name`、`skill_md`、`files`(JSON，受大小上限)、`base_hash`(新建为空)、`scan`、`state`、`submitted_by`、`run_id?`、`reviewed_by`、`review_reason`、时间戳。
 - 并发保护：通过时在事务内读取技能当前 `content_hash`；与 `base_hash` 不同则置 `superseded`。新建时若同名技能已存在，同样 `superseded`。
-- 限额：待审总数与每用户每小时提交数（读配置，默认 20 / 10）。
+- 限额：待审总数与每用户每小时提交数（读配置，默认 20 / 10）；另限每用户同时待审数（默认 5），防止一个成员占满队列。
 - `skill_propose` 在 `skills` 组，风险 `write`；`agent` 来源遇 `dangerous` 在工具内直接返回拒绝，不入库。工具结果不含扫描细节以外的内部信息。
 - 提交内容属于模型生成数据，审核界面显示时按纯文本渲染；差异对比由服务端计算，只比较文本。
-- 审计：提交、通过、拒绝、放行发现、重扫，均记 `audit`。
+- 审计：提交、撤回、通过、拒绝、放行发现、重扫，均记 `audit`。
+
+### 3.1 成员自定义技能
+
+- 权限：`skills:submit` 加入 API 权限目录（`authz/permissions.py` 的 admin 基线、角色授予界面、五种语言的权限文案）；owner 为完全访问，天然拥有。`require_api_permission(..., 'skills:submit')` 在提交、撤回、查看自己的提交时检查；审核、发布仍是 `tools:manage`。
+- 接口（租户下）：`POST /skill-submissions`（新建或修改，带 `base_hash`）、`GET /skill-submissions?mine=true`、`GET /skill-submissions/{id}`（成员只能读自己的，管理员读全部）、`POST /skill-submissions/{id}/withdraw`（仅 `pending` 且为本人）。管理员的审核接口见第 3 节，成员无权访问。他人的提交对成员返回 404，不暴露存在性。
+- 提交时同步扫描并把发现返回给提交人，让他修改后再交；`dangerous` 直接拒绝，不入库。通过前管理员仍会重扫。
+- 通过后：调用既有 `publish`，版本 `trust='user'`，`created_by` 为审核人，另在 `skill_submissions` 里保留提交人；版本详情接口返回「提交人」，不在模型可见的内容里出现。
+- 提交内容是用户输入，渲染时按纯文本；资源文件沿用 `check_files` 的路径与大小规则。
+- 技能是租户共享的：审核通过后，同租户所有可绑定技能的智能体都能使用它。审核页要明确提示这一点。
 
 ## 4. 目录与调用方控制
 
