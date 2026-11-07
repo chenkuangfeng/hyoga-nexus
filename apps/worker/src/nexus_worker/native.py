@@ -25,6 +25,7 @@ from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_platform.runs.tool_gates import deployment_gate_facts, hidden_groups
 from .sandbox_runtime import session_for
 from .subagent import SubagentRunner
+import nexus_platform.persistence.models.schedule  # noqa: F401  (registers cron_jobs with the metadata)
 from nexus_runtimes.native.engine import CancellationToken, RunOrchestrator
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_tools.gateway import AuthorizedToolGateway, OutputSpill
@@ -179,6 +180,15 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         services = RunServices(store, context.progress.state, sandbox)
         tool_access = ToolAccess(store)
         bound = {name: version for name, version, _ in context.bindings}
+        from nexus_platform.schedule.service import is_scheduled_session
+        if is_scheduled_session(factory, context.session_id):
+            # A scheduled run has nobody to ask: no questions, no approvals (whatever needs one is refused), no new schedules.
+            from .subagent import NoApprovalAccess
+            tool_access = NoApprovalAccess(tool_access)
+            bound = {name: version for name, version in bound.items() if name not in ('ask_user', 'cronjob_manage')}
+        elif 'schedule' not in hidden:
+            from .schedule import ScheduleBridge
+            services.schedule = ScheduleBridge(factory, context.principal, context.tenant_id, context.session_id)
         gateway = AuthorizedToolGateway(registry, tool_access, bound, run_id=str(context.run_id),
             session_id=str(context.session_id), tenant_id=str(context.tenant_id),
             services=services, spill=spill,

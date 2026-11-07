@@ -6,7 +6,7 @@ BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_d
                       'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph', 'grep_chunks',
                       'document_outline', 'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                       'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'sandbox_exec_async', 'sandbox_job_wait',
-                      'sandbox_job_cancel', 'web_search', 'web_fetch', 'delegate_task', 'vision_analyze')
+                      'sandbox_job_cancel', 'web_search', 'web_fetch', 'delegate_task', 'vision_analyze', 'cronjob_list', 'cronjob_manage')
 #: Tools of the `sandbox` group (openspec 2026-11-07-tool-expansion, section 4).
 SANDBOX_TOOL_NAMES = frozenset({'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                                 'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'sandbox_exec_async',

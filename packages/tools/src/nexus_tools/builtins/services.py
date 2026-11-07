@@ -10,7 +10,7 @@ class RunServices:
     is released when the Run ends.
     """
 
-    def __init__(self, store, run_state: dict, sandbox=None, delegate=None, vision=None):
+    def __init__(self, store, run_state: dict, sandbox=None, delegate=None, vision=None, schedule=None):
         self._store = store
         self.run_state = run_state
         #: The Run's `SandboxSessionPort`, supplied only while the `sandbox` tool group is offered.
@@ -19,6 +19,8 @@ class RunServices:
         self.delegate = delegate
         #: Image analyzer for `vision_analyze` (`async analyze(image, mime, question) -> str`), when a vision model is set.
         self.vision = vision
+        #: Scheduled-task service for `cronjob_*` (`async list/create/change`), while the `schedule` group is offered.
+        self.schedule = schedule
 
     def __getattr__(self, name):
         return getattr(self._store, name)

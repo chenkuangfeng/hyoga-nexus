@@ -11,6 +11,7 @@ from .knowledge import knowledge_tools
 from .media import media_tools
 from .memory import memory_tools
 from .sandbox import sandbox_tools
+from .schedule import schedule_tools
 from .skills import skills_tools
 from .tool_output import tool_output_tools
 from .todo import todo_tool
@@ -37,6 +38,7 @@ def builtins() -> ToolRegistry:
         ('web', tuple(web_tools())),
         ('collab', tuple(collab_tools())),
         ('media', tuple(media_tools())),
+        ('schedule', tuple(schedule_tools())),
     ):
         for tool in tools:
             registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))

@@ -100,6 +100,10 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
             try:
                 processed = run_once(factory, worker_id, stopped=stopped, ledger_epoch=epoch, watchdog=watchdog)
                 if not processed:
+                    # Scheduled tasks that are due start their Runs here (openspec 2026-11-07-tool-expansion 8.2).
+                    from .schedule import schedule_tick
+                    processed = schedule_tick(factory)
+                if not processed:
                     # Knowledge index and cleanup jobs (openspec 2026-11-06-knowledge-base K1.5).
                     processed = knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency)
                 if not processed:
@@ -112,7 +116,7 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
                 if not processed:
                     processed = embedding_tick(factory, _worker_loop()) > 0
             except Exception:
-                logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id})
+                logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id}, exc_info=True)
                 processed = False
             if once:
                 return
