@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { NexusAgent } from '../../api/nexus-agents.ts'
-import { draftFromForm, formForNewAgent, formFromAgent, validateForm } from './nexusAgentForm.ts'
+import { SKILL_BASE_TOOLS, draftFromForm, formForNewAgent, formFromAgent, skillHasNewerVersion, skillToolNeeds, validateForm } from './nexusAgentForm.ts'
 
 const TENANT = 't-1'
 
@@ -105,4 +105,52 @@ test('knowledge bases are bound together with the required search tool', () => {
   assert.deepEqual(back.knowledge_bases, [{ id: 'kb-1', source_tenant_id: TENANT }])
   const cleared = draftFromForm({ ...back, knowledge_bases: [] }, { ...base, resource_bindings: draft.resource_bindings as never }, null, TENANT)
   assert.equal(cleared.resource_bindings.some(b => b.kind === 'knowledge_base'), false)
+})
+
+test('bound skills are read from the agent and written back with their own space and version', () => {
+  const builtin = { kind: 'skill', resource_id: 'weekly-report', resource_version_id: 'v-9', source_tenant_id: 'system', config: {} }
+  const form = formFromAgent(agent({ resource_bindings: [...agent().resource_bindings, builtin] }))
+  assert.deepEqual(form.skills, [
+    { name: 'report', version_id: 's-1', source_tenant_id: TENANT },
+    { name: 'weekly-report', version_id: 'v-9', source_tenant_id: 'system' },
+  ])
+  const draft = draftFromForm(form, agent(), null, TENANT)
+  const skills = draft.resource_bindings.filter(b => b.kind === 'skill')
+  assert.deepEqual(skills.map(b => [b.resource_id, b.resource_version_id, b.source_tenant_id]),
+    [['report', 's-1', TENANT], ['weekly-report', 'v-9', 'system']])
+})
+
+test('clearing the skills removes their bindings, and a new agent has none', () => {
+  const form = { ...formFromAgent(agent()), skills: [] }
+  assert.equal(draftFromForm(form, agent(), null, TENANT).resource_bindings.some(b => b.kind === 'skill'), false)
+  assert.deepEqual(formForNewAgent(null, 'm-1', []).skills, [])
+})
+
+test('the sandbox profile is stored only when chosen, and the default leaves no key behind', () => {
+  assert.equal(formForNewAgent(null, 'm-1', []).sandbox_profile, '')
+  const chosen = { ...formFromAgent(agent()), sandbox_profile: 'strict' }
+  assert.equal((draftFromForm(chosen, agent(), null, TENANT).budgets.behavior as Record<string, unknown>).sandbox_profile, 'strict')
+  const stored = agent({ budgets: { behavior: { sandbox_profile: 'strict', project_name: 'x' } } })
+  const form = formFromAgent(stored)
+  assert.equal(form.sandbox_profile, 'strict')
+  const back = draftFromForm({ ...form, sandbox_profile: '' }, stored, null, TENANT)
+  assert.deepEqual(back.budgets.behavior, { project_name: 'x' })  // other behavior keys are kept
+  assert.equal('behavior' in draftFromForm({ ...formFromAgent(agent({ budgets: {} })), sandbox_profile: '' }, agent({ budgets: {} }), null, TENANT).budgets, false)
+})
+
+test('a skill needs the skill readers and the tools it declares; missing ones are named', () => {
+  const offered = new Set(['load_skill', 'read_skill_file', 'read_memory'])
+  assert.deepEqual(skillToolNeeds([], offered), { needed: [...SKILL_BASE_TOOLS], missing: [] })
+  assert.deepEqual(skillToolNeeds(['read_memory', 'search_memory', 'load_skill'], offered),
+    { needed: ['load_skill', 'read_skill_file', 'read_memory', 'search_memory'], missing: ['search_memory'] })
+  assert.deepEqual(skillToolNeeds([], new Set()).missing, ['load_skill', 'read_skill_file'])
+})
+
+test('a newer version is reported only for a bound skill with a known latest version', () => {
+  const bound = { name: 'a', version_id: 'v1', source_tenant_id: 's' }
+  assert.equal(skillHasNewerVersion(bound, 'v2'), true)
+  assert.equal(skillHasNewerVersion(bound, 'v1'), false)
+  assert.equal(skillHasNewerVersion(undefined, 'v2'), false)
+  assert.equal(skillHasNewerVersion(bound, null), false)
+  assert.equal(skillHasNewerVersion({ ...bound, version_id: '' }, 'v2'), false)
 })

@@ -56,7 +56,12 @@ export interface AgentToolEntry {
   read_only: boolean
   requires_approval: boolean
   side_effects: boolean
+  /** Assignable in this space: a builtin tool is, unless the space switched it off; "enabled" never means an agent uses it. */
   enabled_in_tenant: boolean
+  /** Registered under the system space, so every space (personal ones too) can assign it. */
+  builtin?: boolean
+  /** This space switched the builtin tool off (openspec 2026-11-07-skill-evolution). */
+  disabled?: boolean
 }
 
 /**
@@ -75,10 +80,25 @@ export interface AgentToolGroupInfo {
   reason: string
 }
 
+/** Why a sandbox profile cannot be used right now (stable codes of the platform's tool gates). */
+export type SandboxProfileReason =
+  'sandbox_disabled' | 'sandbox_not_accepted' | 'sandbox_local_not_allowed' | 'sandbox_profile_unknown' | ''
+
+/** One sandbox profile the operator defined (`sandbox_profiles` of `GET /agent-tools`); an agent picks one by name. */
+export interface AgentSandboxProfile {
+  name: string
+  type: 'local' | 'docker' | 'bwrap'
+  default: boolean
+  available: boolean
+  reason: SandboxProfileReason | string
+}
+
 export interface AgentToolCatalog {
   tools: AgentToolEntry[]
   groups: string[]
   group_info?: AgentToolGroupInfo[]
+  /** Empty when the sandbox is off or its configuration is broken. */
+  sandbox_profiles?: AgentSandboxProfile[]
   /** The caller's Native default `enabled_tools`, used to preselect tools for a new agent. */
   default_tools: string[]
   /** Whether the caller may enable a tool for the space (owner or admin). */
@@ -141,6 +161,41 @@ export async function getAgentToolCatalog(tenantId: string): Promise<AgentToolCa
 /** Enable a builtin tool for the whole space (owner/admin; the server checks `tools:manage`). */
 export async function enableTenantTool(tenantId: string, name: string): Promise<void> {
   await post(`${tenantPath(tenantId)}/tools/${encodeURIComponent(name)}/enable`, {})
+}
+
+/** Stop offering a builtin tool or skill in this space only (owner/admin). Published agents keep their bindings. */
+export async function disableBuiltinResource(tenantId: string, kind: 'tool' | 'skill', resourceId: string): Promise<void> {
+  await put(`${tenantPath(tenantId)}/builtin-disabled/${kind}/${encodeURIComponent(resourceId)}`, {})
+}
+
+/** Offer a switched-off builtin tool or skill in this space again. */
+export async function restoreBuiltinResource(tenantId: string, kind: 'tool' | 'skill', resourceId: string): Promise<void> {
+  await del(`${tenantPath(tenantId)}/builtin-disabled/${kind}/${encodeURIComponent(resourceId)}`)
+}
+
+/**
+ * One entry of `GET /skills`: the space's own skills and the builtin ones. A builtin skill (`scope = 'builtin'`) is
+ * registered under the system space, so binding it uses its `source_tenant_id`. `disabled` marks one this space
+ * switched off. `version_id` and `tools` are what an agent binds and what must be bound beside it.
+ */
+export interface TenantSkill {
+  name: string
+  source: string
+  scope: 'builtin' | 'space'
+  source_tenant_id: string
+  version: number | null
+  version_id: string | null
+  tools: string[]
+  execution: 'sandbox' | 'local'
+  model_invocable: boolean
+  description: string
+  disabled: boolean
+}
+
+export async function listTenantSkills(tenantId: string): Promise<TenantSkill[]> {
+  const data: unknown = await get(`${tenantPath(tenantId)}/skills`)
+  if (!Array.isArray(data)) throw new Error('Unexpected skill list response')
+  return data as TenantSkill[]
 }
 
 export async function getNativeDefaults(tenantId: string): Promise<NativeDefaults> {

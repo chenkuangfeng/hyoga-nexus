@@ -325,6 +325,10 @@ def list_skills(db: Session, principal: Principal, tenant_id: UUID) -> list[dict
         SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
         .where(SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID))).order_by(SkillRecord.name)).all()
     return [{'name': skill.name, 'source': skill.source, 'version': version.version if version else None,
+             # What an agent binds: the version's id, and the tools the skill needs bound alongside it.
+             'version_id': str(version.id) if version else None, 'tools': list(version.tools) if version else [],
+             'execution': version.execution if version else 'sandbox',
+             'model_invocable': version.model_invocable if version else True,
              'description': version.description if version else '',
              'scope': 'builtin' if skill.tenant_id == SYSTEM_TENANT_ID else 'space',
              'source_tenant_id': str(skill.tenant_id),

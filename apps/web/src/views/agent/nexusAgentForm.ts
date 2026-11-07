@@ -42,6 +42,26 @@ export interface AgentEditorForm {
   memory_recall: boolean
   /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
   tool_access: ToolAccess
+  /** Bound skills (openspec 2026-11-07-skill-evolution): the name, the version bound and the space that owns it. */
+  skills: SkillBinding[]
+  /** `budgets.behavior.sandbox_profile`: the sandbox profile this agent runs on; empty takes the deployment's default. */
+  sandbox_profile: string
+}
+
+export interface SkillBinding { name: string, version_id: string, source_tenant_id: string }
+
+/** Tools every agent with a skill needs: the skill is read with them (the server refuses to publish otherwise). */
+export const SKILL_BASE_TOOLS = ['load_skill', 'read_skill_file'] as const
+
+/** Tools to bind with a skill, and which of them this space cannot offer (not enabled, or switched off). */
+export function skillToolNeeds(declared: readonly string[], offered: ReadonlySet<string>): { needed: string[], missing: string[] } {
+  const needed = [...new Set([...SKILL_BASE_TOOLS, ...declared])]
+  return { needed, missing: needed.filter(name => !offered.has(name)) }
+}
+
+/** Whether a newer version than the bound one exists. A skill without a published version has none. */
+export function skillHasNewerVersion(bound: SkillBinding | undefined, latestVersionId: string | null): boolean {
+  return !!bound && !!latestVersionId && !!bound.version_id && bound.version_id !== latestVersionId
 }
 
 export interface KnowledgeBinding { id: string, source_tenant_id: string }
@@ -60,6 +80,12 @@ function accessOf(budgets: Record<string, unknown> | undefined): ToolAccess {
   const behavior = budgets?.behavior
   const value = behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).tool_access : undefined
   return (TOOL_ACCESS_LEVELS as readonly string[]).includes(value as string) ? (value as ToolAccess) : 'standard'
+}
+
+function sandboxProfileOf(budgets: Record<string, unknown> | undefined): string {
+  const behavior = budgets?.behavior
+  const value = behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).sandbox_profile : undefined
+  return typeof value === 'string' ? value : ''
 }
 
 function memoryOf(budgets: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -105,6 +131,9 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     memory_enabled: memoryOf(budgets).enabled !== false,
     memory_recall: memoryOf(budgets).recall !== false,
     tool_access: accessOf(budgets),
+    skills: (agent.resource_bindings || []).filter(b => b.kind === 'skill')
+      .map(b => ({ name: b.resource_id, version_id: b.resource_version_id || '', source_tenant_id: b.source_tenant_id })),
+    sandbox_profile: sandboxProfileOf(budgets),
   }
 }
 
@@ -126,6 +155,8 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     memory_enabled: true,
     memory_recall: true,
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
+    skills: [],
+    sandbox_profile: '',
   }
 }
 
@@ -174,16 +205,23 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
 
   const behavior = budgets.behavior && typeof budgets.behavior === 'object' ? { ...(budgets.behavior as Record<string, unknown>) } : {}
   if (form.tool_access !== 'standard' || 'tool_access' in behavior) behavior.tool_access = form.tool_access
+  // An empty profile means "the deployment's default": the key is dropped rather than stored as an empty string.
+  if (form.sandbox_profile) behavior.sandbox_profile = form.sandbox_profile
+  else delete behavior.sandbox_profile
   if (Object.keys(behavior).length) budgets.behavior = behavior
 
-  const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool' && b.kind !== 'knowledge_base')
+  const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool' && b.kind !== 'knowledge_base' && b.kind !== 'skill')
   // Binding a knowledge base needs search_knowledge (the server refuses to publish otherwise). The other knowledge
   // tools are chosen in the editor (only those the space has enabled are offered).
   const toolNames = form.knowledge_bases.length
     ? [...new Set([...form.allowed_tools, REQUIRED_KNOWLEDGE_TOOL])]
     : [...new Set(form.allowed_tools)]
+  // Tools are bound with this space as their source; the server points a builtin tool at the system space.
   const tools: AgentDraftInput['resource_bindings'] = toolNames.map(name => ({
     kind: 'tool', resource_id: name, resource_version_id: 'v1', source_tenant_id: tenantId, config: {},
+  }))
+  const skills: AgentDraftInput['resource_bindings'] = form.skills.map(skill => ({
+    kind: 'skill', resource_id: skill.name, resource_version_id: skill.version_id, source_tenant_id: skill.source_tenant_id, config: {},
   }))
   const bases: AgentDraftInput['resource_bindings'] = form.knowledge_bases.map(kb => ({
     kind: 'knowledge_base', resource_id: kb.id, resource_version_id: '', source_tenant_id: kb.source_tenant_id, config: {},
@@ -195,6 +233,6 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
     instructions: form.system_prompt,
     model_profile_version_id: form.model_id,
     budgets,
-    resource_bindings: [...kept.map((b: AgentResourceBinding) => ({ ...b })), ...tools, ...bases],
+    resource_bindings: [...kept.map((b: AgentResourceBinding) => ({ ...b })), ...skills, ...tools, ...bases],
   }
 }

@@ -1,9 +1,9 @@
 <template>
   <!--
     Nexus agent editor (openspec 2026-11-05-weknora-agent-tool-model-settings).
-    Markup, classes and styles follow WeKnora `views/agent/AgentEditorModal.vue` for the four sections
-    Nexus supports: basic info, prompts, model and tools. Other WeKnora sections (knowledge, web search,
-    MCP, skills, multimodal, suggestions, sharing) are omitted until their backends exist.
+    Markup, classes and styles follow WeKnora `views/agent/AgentEditorModal.vue` for the sections Nexus
+    supports: basic info, prompts, model, tools, skills and knowledge. Other WeKnora sections (web search,
+    MCP, multimodal, suggestions, sharing) are omitted until their backends exist.
   -->
   <SettingsModalShell :visible="visible" :title="isEdit ? $t('agent.editor.editTitle') : $t('agent.editor.createTitle')"
     v-model="currentSection" :nav-groups="navGroups" :loading="loading" :z-index="1000" @close="requestClose">
@@ -203,6 +203,77 @@
         </div>
       </div>
 
+      <!-- 技能（openspec 2026-11-07-skill-evolution）：内置技能在所有空间可见、可分配；技能只提供步骤，不授予权限 -->
+      <div v-show="currentSection === 'skills'" class="section">
+        <div class="section-header">
+          <h2>{{ $t('nexusAgent.skillBinding.navLabel') }}</h2>
+          <p class="section-description">{{ $t('nexusAgent.skillBinding.desc') }}</p>
+        </div>
+        <t-alert v-if="skillsError" theme="error" :message="skillsError" class="skill-alert">
+          <template #operation>
+            <t-link theme="primary" @click="loadSkills">{{ $t('nexusAgent.skillBinding.retry') }}</t-link>
+          </template>
+        </t-alert>
+        <t-loading :loading="skillsLoading" size="small">
+          <t-checkbox-group :value="form.skills.map(skill => skill.name)" class="skill-groups" @change="onSkillsChange">
+            <section v-for="group in skillGroups" v-show="group.items.length" :key="group.key" class="skill-group">
+              <header class="tool-group-header">
+                <span class="tool-group-bar" />
+                <span class="tool-group-title">{{ group.label }}</span>
+                <span class="tool-group-count">{{ group.items.length }}</span>
+              </header>
+              <div class="skill-list">
+                <div v-for="skill in group.items" :key="skill.name"
+                  :class="['skill-row', { 'skill-row--off': skill.disabled }]">
+                  <t-checkbox :value="skill.name" :disabled="!skillSelectable(skill)">
+                    <span class="skill-name">{{ skill.name }}</span>
+                    <span v-if="skill.version" class="skill-tag skill-tag--muted">
+                      {{ $t('nexusAgent.skillBinding.version', { version: skill.version }) }}
+                    </span>
+                    <span v-if="skill.scope === 'builtin'" class="skill-tag skill-tag--muted">{{ $t('nexusAgent.builtin') }}</span>
+                    <span v-if="skill.disabled" class="skill-tag">{{ $t('nexusAgent.disabledHere') }}</span>
+                    <span v-if="skillIsOutdated(skill)" class="skill-tag">{{ $t('nexusAgent.skillBinding.newVersion') }}</span>
+                    <span v-if="!skill.model_invocable" class="skill-tag skill-tag--muted">
+                      {{ $t('nexusAgent.skillBinding.hiddenFromModel') }}
+                    </span>
+                    <span v-if="skill.execution === 'local'" class="skill-tag skill-tag--muted">
+                      {{ $t('nexusAgent.skillBinding.runsOnHost') }}
+                    </span>
+                  </t-checkbox>
+                  <p v-if="skill.description" class="skill-desc">{{ skill.description }}</p>
+                  <p v-if="skill.disabled && !boundSkill(skill.name)" class="skill-note">
+                    {{ $t('nexusAgent.skillBinding.notOffered') }}
+                  </p>
+                  <p v-if="boundSkill(skill.name) && skillMissingTools(skill).length" class="skill-note skill-note--warn">
+                    <t-icon name="error-circle" />
+                    {{ $t('nexusAgent.skillBinding.missingTools', { tools: skillMissingTools(skill).map(toolLabel).join('、') }) }}
+                  </p>
+                  <div v-if="skillIsOutdated(skill) || (skill.scope === 'builtin' && canManageSpace)" class="skill-actions">
+                    <t-link v-if="skillIsOutdated(skill)" theme="primary" size="small" @click="updateSkill(skill)">
+                      {{ $t('nexusAgent.skillBinding.update') }}
+                    </t-link>
+                    <template v-if="skill.scope === 'builtin' && canManageSpace">
+                      <t-link v-if="skill.disabled" theme="primary" size="small" :disabled="switching === `skill:${skill.name}`"
+                        @click="switchBuiltin('skill', skill.name, false)">{{ $t('nexusAgent.restore') }}</t-link>
+                      <t-popconfirm v-else :content="$t('nexusAgent.disableHint')"
+                        @confirm="switchBuiltin('skill', skill.name, true)">
+                        <t-link theme="default" size="small" :disabled="switching === `skill:${skill.name}`">
+                          {{ $t('nexusAgent.disableHere') }}
+                        </t-link>
+                      </t-popconfirm>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </t-checkbox-group>
+          <div v-if="!skillsLoading && !skillsError && !skills.length" class="skill-empty">
+            <p>{{ $t('nexusAgent.skillBinding.empty') }}</p>
+            <p class="skill-empty-hint">{{ $t('nexusAgent.skillBinding.emptyHint') }}</p>
+          </div>
+        </t-loading>
+      </div>
+
       <!-- 知识库（openspec 2026-11-06-knowledge-base K1.9）：绑定后智能体获得 search_knowledge 等工具 -->
       <div v-show="currentSection === 'knowledge'" class="section">
         <div class="section-header">
@@ -252,6 +323,25 @@
             </div>
           </div>
 
+          <!-- Sandbox profile: defined by the operator; an agent only picks one by name (empty = the default). -->
+          <div v-if="sandboxProfiles.length" class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusAgent.sandboxProfile.label') }}</label>
+              <p class="desc">{{ $t('nexusAgent.sandboxProfile.desc') }}</p>
+            </div>
+            <div class="setting-control sandbox-control">
+              <t-select v-model="form.sandbox_profile" :options="sandboxOptions" :popup-props="{ overlayClassName: 'reasoning-level-select-popup' }" />
+              <p v-if="chosenSandboxProfile && !chosenSandboxProfile.available" class="sandbox-note" role="status">
+                <t-icon name="error-circle" />
+                {{ $t('nexusAgent.sandboxProfile.unavailable', { reason: sandboxReasonLabel(chosenSandboxProfile.reason) }) }}
+              </p>
+              <p v-else-if="chosenSandboxProfile" class="sandbox-note sandbox-note--ok" role="status">
+                <t-icon name="check-circle" />
+                {{ $t('nexusAgent.sandboxProfile.available') }}
+              </p>
+            </div>
+          </div>
+
           <div class="setting-row setting-row-vertical">
             <div class="setting-info">
               <label>{{ $t('agent.editor.allowedTools') }}</label>
@@ -278,15 +368,28 @@
                           <span v-if="tool.requires_approval" class="tool-card-badge">{{ $t('nexusAgent.requiresApproval') }}</span>
                           <span v-if="tool.read_only" class="tool-card-badge tool-card-badge--muted">{{ $t('nexusAgent.readOnly') }}</span>
                           <span class="tool-card-badge tool-card-badge--muted">{{ $t(`nexusAgent.risk.${tool.risk || 'write'}`) }}</span>
+                          <span v-if="tool.builtin" class="tool-card-badge tool-card-badge--muted">{{ $t('nexusAgent.builtin') }}</span>
                         </div>
                         <span class="tool-card-desc">{{ toolDescription(tool) }}</span>
-                        <span v-if="!tool.enabled_in_tenant" class="tool-card-hint">
+                        <span v-if="tool.disabled" class="tool-card-hint">
+                          {{ $t('nexusAgent.disabledHere') }}
+                          <t-link v-if="canManageSpace" theme="primary" size="small" :disabled="switching === `tool:${tool.name}`"
+                            @click.stop.prevent="switchBuiltin('tool', tool.name, false)">{{ $t('nexusAgent.restore') }}</t-link>
+                        </span>
+                        <span v-else-if="!tool.enabled_in_tenant" class="tool-card-hint">
                           <template v-if="catalog?.can_enable_tools">
                             {{ $t('nexusAgent.notEnabled') }}
                             <t-link theme="primary" size="small" :disabled="enabling === tool.name"
                               @click.stop.prevent="enableTool(tool.name)">{{ $t('nexusAgent.enable') }}</t-link>
                           </template>
                           <template v-else>{{ $t('nexusAgent.enableHint') }}</template>
+                        </span>
+                        <span v-else-if="tool.builtin && canManageSpace" class="tool-card-hint" @click.stop.prevent>
+                          <t-popconfirm :content="$t('nexusAgent.disableHint')" @confirm="switchBuiltin('tool', tool.name, true)">
+                            <t-link theme="default" size="small" :disabled="switching === `tool:${tool.name}`">
+                              {{ $t('nexusAgent.disableHere') }}
+                            </t-link>
+                          </t-popconfirm>
                         </span>
                       </div>
                     </t-checkbox>
@@ -346,15 +449,17 @@ import AgentAvatar from '@/components/AgentAvatar.vue'
 import { copyWithToast } from '@/utils/clipboard'
 import { levelDescriptionKey, levelLabelKey } from '@/utils/reasoningEffort'
 import {
-  createNexusAgent, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent, publishNexusAgent,
-  updateNexusAgent, type AgentToolCatalog, type AgentToolEntry, type NativeDefaults, type NexusAgent,
+  createNexusAgent, disableBuiltinResource, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent,
+  listTenantSkills, publishNexusAgent, restoreBuiltinResource, updateNexusAgent, type AgentSandboxProfile,
+  type AgentToolCatalog, type AgentToolEntry, type NativeDefaults, type NexusAgent, type TenantSkill,
 } from '@/api/nexus-agents'
 import { getModelSettings, type ModelSettingsView } from '@/api/nexus-models'
 import { listKnowledgeBases } from '@/api/knowledge-base'
 import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@/views/settings/nexusModelCards'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_TIMEOUT_SECONDS, MAX_OUTPUT_TOKENS_LIMIT, MAX_ROUNDS_LIMIT, REASONING_EFFORTS,
-  KNOWLEDGE_TOOLS, draftFromForm, formForNewAgent, formFromAgent, validateForm, type AgentEditorForm,
+  KNOWLEDGE_TOOLS, draftFromForm, formForNewAgent, formFromAgent, skillHasNewerVersion, skillToolNeeds, validateForm,
+  type AgentEditorForm,
 } from './nexusAgentForm'
 
 const props = defineProps<{ visible: boolean; tenantId: string; agentId: string | null }>()
@@ -389,10 +494,118 @@ const navGroups = computed(() => [
   {
     key: 'capability', label: t('agentEditor.navGroups.capability'), items: [
       { key: 'tools', icon: 'tools', label: t('agent.editor.toolsConfig'), badge: form.allowed_tools.length || undefined },
+      { key: 'skills', icon: 'book', label: t('nexusAgent.skillBinding.navLabel'), badge: form.skills.length || undefined },
       { key: 'knowledge', icon: 'folder', label: '知识库', badge: form.knowledge_bases.length || undefined },
     ],
   },
 ])
+
+// ---- Skills (openspec 2026-11-07-skill-evolution). The list holds the space's own skills and the builtin ones, which
+// every space can see and assign. Choosing a skill grants nothing: the tools needed to read it are bound beside it.
+const skills = ref<TenantSkill[]>([])
+const skillsLoading = ref(false)
+const skillsError = ref('')
+const switching = ref('')
+let skillsRequest = 0
+
+async function loadSkills() {
+  const request = ++skillsRequest
+  skillsLoading.value = true
+  skillsError.value = ''
+  try {
+    const listed = await listTenantSkills(props.tenantId)
+    if (request === skillsRequest) skills.value = listed
+  } catch (error) {
+    if (request === skillsRequest) {
+      skills.value = []
+      skillsError.value = errorMessage(error) || t('nexusAgent.skillBinding.loadFailed')
+    }
+  } finally {
+    if (request === skillsRequest) skillsLoading.value = false
+  }
+}
+
+const canManageSpace = computed(() => !!catalog.value?.can_enable_tools)
+const offeredTools = computed(() => new Set((catalog.value?.tools || []).filter(tool => tool.enabled_in_tenant).map(tool => tool.name)))
+const builtinSkills = computed(() => skills.value.filter(skill => skill.scope === 'builtin'))
+const spaceSkills = computed(() => skills.value.filter(skill => skill.scope !== 'builtin'))
+const skillGroups = computed(() => [
+  { key: 'builtin', label: t('nexusAgent.skillBinding.builtinGroup'), items: builtinSkills.value },
+  { key: 'space', label: t('nexusAgent.skillBinding.spaceGroup'), items: spaceSkills.value },
+])
+const boundSkill = (name: string) => form.skills.find(skill => skill.name === name)
+const skillSelectable = (skill: TenantSkill) => !!skill.version_id && (!skill.disabled || !!boundSkill(skill.name))
+const skillMissingTools = (skill: TenantSkill) => skillToolNeeds(skill.tools, offeredTools.value).missing
+const skillIsOutdated = (skill: TenantSkill) => skillHasNewerVersion(boundSkill(skill.name), skill.version_id)
+
+function onSkillsChange(names: Array<string | number | boolean>) {
+  const chosen = new Set(names.map(String))
+  const next = [] as typeof form.skills
+  for (const skill of skills.value) {
+    if (!chosen.has(skill.name) || !skill.version_id) continue
+    // A skill that is already bound keeps its version; a newly chosen one takes the latest.
+    next.push(boundSkill(skill.name) || { name: skill.name, version_id: skill.version_id, source_tenant_id: skill.source_tenant_id })
+    for (const tool of skillToolNeeds(skill.tools, offeredTools.value).needed) {
+      if (offeredTools.value.has(tool) && !form.allowed_tools.includes(tool)) form.allowed_tools.push(tool)
+    }
+  }
+  // Bound skills the list no longer shows (removed or hidden by an administrator) stay until the user clears them.
+  const listed = new Set(skills.value.map(skill => skill.name))
+  form.skills = [...next, ...form.skills.filter(skill => !listed.has(skill.name) && chosen.has(skill.name))]
+}
+
+function updateSkill(skill: TenantSkill) {
+  const bound = boundSkill(skill.name)
+  if (!bound || !skill.version_id) return
+  bound.version_id = skill.version_id
+  MessagePlugin.success(t('nexusAgent.skillBinding.updated', { name: skill.name }))
+}
+
+/** Turn a builtin tool or skill off for this space only, or back on. Published agent versions are not touched. */
+async function switchBuiltin(kind: 'tool' | 'skill', name: string, off: boolean) {
+  switching.value = `${kind}:${name}`
+  try {
+    if (off) await disableBuiltinResource(props.tenantId, kind, name)
+    else await restoreBuiltinResource(props.tenantId, kind, name)
+    const [tools] = await Promise.all([getAgentToolCatalog(props.tenantId), loadSkills()])
+    catalog.value = tools
+    MessagePlugin.success(t(off ? 'nexusAgent.disableDone' : 'nexusAgent.restoreDone', { name: kind === 'tool' ? toolLabel(name) : name }))
+  } catch (error) {
+    MessagePlugin.error(errorMessage(error) || t('nexusAgent.switchFailed'))
+  } finally {
+    switching.value = ''
+  }
+}
+
+// ---- Sandbox profile: the operator defines profiles; an agent only picks one by name. Empty means the default.
+const sandboxProfiles = computed<AgentSandboxProfile[]>(() => catalog.value?.sandbox_profiles || [])
+const sandboxOptions = computed(() => {
+  const fallback = sandboxProfiles.value.find(profile => profile.default)
+  return [
+    { value: '', label: t('nexusAgent.sandboxProfile.defaultOption', { name: fallback?.name || '-' }) },
+    ...sandboxProfiles.value.map(profile => ({
+      value: profile.name,
+      label: t('nexusAgent.sandboxProfile.option', { name: profile.name, type: sandboxTypeLabel(profile.type) })
+        + (profile.available ? '' : ` · ${sandboxReasonLabel(profile.reason)}`),
+    })),
+  ]
+})
+const chosenSandboxProfile = computed(() => form.sandbox_profile
+  ? sandboxProfiles.value.find(profile => profile.name === form.sandbox_profile)
+  : sandboxProfiles.value.find(profile => profile.default))
+
+function sandboxTypeLabel(type: string): string {
+  const key = type === 'local' ? 'typeLocal' : type === 'docker' ? 'typeDocker' : type === 'bwrap' ? 'typeBwrap' : ''
+  return key ? t(`nexusAgent.sandboxProfile.${key}`) : type
+}
+
+function sandboxReasonLabel(reason: string): string {
+  const key = ({
+    sandbox_disabled: 'reasonSandboxDisabled', sandbox_not_accepted: 'reasonNotAccepted',
+    sandbox_local_not_allowed: 'reasonLocalNotAllowed', sandbox_profile_unknown: 'reasonUnknown',
+  } as Record<string, string>)[reason] || 'reasonOther'
+  return t(`nexusAgent.sandboxProfile.${key}`)
+}
 
 // Knowledge bases the agent may bind: the space's own and those shared into it.
 const knowledgeBases = ref<Array<{ id: string, name: string, description: string, shared: boolean, tenant_id: string,
@@ -477,6 +690,7 @@ async function load() {
     const [settings, tools] = await Promise.all([getModelSettings(props.tenantId), getAgentToolCatalog(props.tenantId)])
     modelSettings.value = settings
     catalog.value = tools
+    void loadSkills()
     if (props.agentId) {
       const loaded = await getNexusAgent(props.tenantId, props.agentId)
       agent.value = loaded
@@ -943,6 +1157,46 @@ async function save() {
 .kb-bind-tag { margin-left: 6px; padding: 0 6px; border-radius: var(--app-radius-pill); font-size: var(--app-text-xs);
   color: var(--td-brand-color); background: var(--td-brand-color-1); }
 .kb-bind-desc { margin-left: 8px; color: var(--td-text-color-secondary); font-size: var(--app-text-xs); }
+
+/* Skills (openspec 2026-11-07-skill-evolution). Status is always written out, never colour alone. */
+.skill-alert { margin-bottom: 12px; }
+.skill-groups { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+.skill-list { display: flex; flex-direction: column; gap: 8px; }
+.skill-row {
+  padding: 10px 14px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-md);
+
+  &--off { background: var(--td-bg-color-secondarycontainer); }
+}
+.skill-name { font-weight: 500; }
+.skill-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: var(--app-text-2xs);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--td-warning-color);
+  border: 1px solid var(--td-warning-color-light);
+  border-radius: var(--app-radius-xs);
+
+  &--muted {
+    color: var(--td-text-color-secondary);
+    background: var(--td-bg-color-container-hover);
+    border-color: transparent;
+  }
+}
+.skill-desc { margin: 4px 0 0 24px; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
+.skill-note { margin: 4px 0 0 24px; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
+.skill-note--warn { color: var(--td-warning-color); }
+.skill-actions { display: flex; gap: 14px; margin: 6px 0 0 24px; }
+.skill-empty { padding: 24px 0; text-align: center; color: var(--td-text-color-secondary); }
+.skill-empty-hint { margin-top: 4px; font-size: var(--app-text-xs); }
+.sandbox-control { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.sandbox-note { margin: 0; font-size: var(--app-text-xs); line-height: 1.5; color: var(--td-warning-color); }
+.sandbox-note--ok { color: var(--td-text-color-secondary); }
 .tools-overview {
   display: flex;
   flex-direction: column;

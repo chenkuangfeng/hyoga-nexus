@@ -57,6 +57,9 @@ def test_builtin_skills_are_listed_in_every_space(database):
     assert set(builtin) == {'text-stats', 'weekly-report'}
     assert all(r['source'] == 'builtin' and r['source_tenant_id'] == str(SYSTEM_TENANT_ID) and not r['disabled']
                for r in builtin.values())
+    # What an agent needs to bind a skill: the version id and the tools it declares.
+    assert builtin['weekly-report']['tools'] == ['read_memory', 'search_memory'] and builtin['text-stats']['tools'] == []
+    assert all(r['version_id'] and r['execution'] == 'sandbox' and r['model_invocable'] for r in builtin.values())
 
 
 def test_a_space_skill_cannot_take_a_builtin_name(database):

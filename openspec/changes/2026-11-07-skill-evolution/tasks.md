@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端已完成（前端未做）；S2 已完成 2.1–2.9（档位、投射、`exec_skill`、`run_skill_script` 退役、`execution` 策略）；2.10（真实 Docker 与 bwrap 上验证）未做，需要你在有环境时验证。已完成的任务才勾选。
+状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端与编辑器前端已完成；S2 已完成 2.1–2.9（档位、投射、`exec_skill`、`run_skill_script` 退役、`execution` 策略）及编辑器里的档位选择；2.10（真实 Docker 与 bwrap 上验证）未做，需要你在有环境时验证。已完成的任务才勾选。
 
 ## 0. 准备
 
@@ -36,7 +36,7 @@
 - [x] 1.7 规则扫描器 `nexus_skills.guard` 与 `ScanResult`（规则表带样例，扫描器版本号，建议性 lint 独立）；`policy.decide` 放行矩阵逐格测试；`publish` 接入；`acknowledge_findings`；审计；需重扫标记。
   - `guard/scan.py`（19 条规则，每条有样例）、`policy.py`（逐格测试）、`publish` 接入、错误带发现列表、`rescan` 与接口、版本列表返回 `verdict`、`findings`、`rescan_needed`。调整：建议性 lint 随创建流程（S4）实现，本期未做；`agent` / `user` 来源在 S5 的审核流程之前只会得到 `skill_review_required` 或 `skill_scan_refused`。
 - [ ] 1.8 名字规则与保留词；frontmatter 已知键、未知键保留与提示、保守修复；`model_invocable` / `user_invocable` 解析；索引与 `read_for_run` 的过滤；编辑器可绑定内置技能与工具并标「内置」；前端隐藏对内置工具的启用按钮。
-  - 后端已完成：PyYAML 6.0.3（`packages/skills`，锁文件已更新）、`safe_load` 加重复键拒绝、两种保守修复、`extra` 与 `notes`、名字规则、`model_invocable` / `user_invocable` / `execution` 解析与存储、索引与读取过滤、非内置来源声明 `local` 被拒绝。**前端未做**：编辑器标「内置」、隐藏启用按钮、空间停用界面、「有新版本」提示。
+  - 后端已完成：PyYAML 6.0.3（`packages/skills`，锁文件已更新）、`safe_load` 加重复键拒绝、两种保守修复、`extra` 与 `notes`、名字规则、`model_invocable` / `user_invocable` / `execution` 解析与存储、索引与读取过滤、非内置来源声明 `local` 被拒绝。前端（`apps/web` 智能体编辑器，已做）：内置工具标「内置」；本空间停用 / 恢复（管理员，带确认说明停用只影响本空间、已发布版本不变）；`enable` 按钮只在非内置且未启用的旧情形出现；新增「技能」分区，列出内置技能与本空间技能，选择技能时一并绑定读取技能所需的工具、缺工具时点名提示，已停用的内置技能不能新增绑定，绑定旧版本时显示「有新版本」并可更新；技能列表接口增加 `version_id`、`tools`、`execution`、`model_invocable`。**未做**：用浏览器实际点过这些界面，以及完整 `vue-tsc --build` 与 `pnpm build`（见下）。
 - [x] 1.9 测试：既有技能、绑定、会话快照、脚本相关测试保持通过。
   - 全量 `pytest`：1285 通过、1 跳过。新增 `tests/test_system_space.py`、`test_system_space_migration.py`、`test_skills_scan.py`、`test_skills_release.py`，改写 `test_skills_builtin_import.py`，并更新 `test_skills_rules.py`、`test_agent_editor.py`、`test_run_transactions.py`。
 
@@ -47,7 +47,7 @@
 - [x] 2.2 档位参数落到各后端：`docker`（`install_network`、`tmpfs_mb`、`env_passthrough` 名单与敏感名拒绝）、`bwrap`（`install_network`、`memory_mb`）、`local`；`extra_args` 明确不支持并有测试。
   - `tmpfs_mb`、`env_passthrough` 已落到 docker / bwrap / local；`install_network` 已解析校验，要到 S3 的依赖构建才使用。docker 容器名在非 `default` 档位带档位名，容器带 `nexus.sandbox.profile` 标签，回收只处理本档位。
 - [x] 2.3 智能体设置 `sandbox_profile`；已发布版本固定；缺省取 `default_profile`；`SandboxManager` 按档位构造。
-  - `NativePolicy.sandbox_profile`（名字校验）、worker 按档位取管理器与会话、编辑器 `/agent-tools` 返回 `sandbox_profiles`（名字、类型、是否默认、是否可用、原因）。**前端未做**：智能体编辑器里选择档位的控件。
+  - `NativePolicy.sandbox_profile`（名字校验）、worker 按档位取管理器与会话、编辑器 `/agent-tools` 返回 `sandbox_profiles`（名字、类型、是否默认、是否可用、原因）。前端已做：工具分区里的「沙箱档位」选择（默认档位 + 运维定义的档位，标出类型与是否可用，不可用时说明原因并提示沙箱工具与技能脚本不会出现）。
 - [x] 2.4 `local` 档位门禁：非开发模式或 `allow_local` 关闭时可用性为 `sandbox_local_not_allowed`；启动日志与管理接口提示；默认 `default_profile = "local"` 对应的测试说明（沙箱仍默认关闭）。
   - 管理接口的提示以 `/agent-tools` 的 `sandbox_profiles[].reason` 提供；启动日志的提示未单独加。
 - [x] 2.5 可用性与验收按档位：`tool_gates` 按智能体档位计算；`acceptance-<档位>.json`；指纹含档位参数；`--sandbox-check --profile`；迁移 `sandbox_acceptance`（若采用表存储）带档位列。
@@ -61,7 +61,7 @@
 - [x] 2.7b 退役 `run_skill_script`、`scripts` 声明与 `nexus_skills.runner`：注册表、分组、`BUILTIN_TOOL_NAMES`、网关与测试同步；`allow_local_scripts` 迁移；已发布版本中既有绑定的运行时忽略与事件；发布校验提示改绑 `exec_skill`。
   - `RETIRED_TOOL_NAMES = {'run_skill_script'}`：保存的设置与已发布版本里的旧名字被接受，准备 Run 时忽略（未记事件）。`nexus_skills.runner`、`skill_scripts_allowed` / `skill_scripts_gate`、`[skills].allow_local_scripts` 已删除，开关移到 `[sandbox].allow_local_scripts`。`scripts` 声明仍可解析（旧技能不报错），但不再驱动任何行为。删除的旧测试：`test_skill_runner`、`test_skill_script_run`、`test_skill_config_gate`、`test_skill_approval_flow`，由 `test_exec_skill`、`test_skill_exec` 覆盖。**发布校验提示改绑未做**。
 - [x] 2.8 `execution` 属性与 `resolve_execution`：解析与校验、保存或发布时拒绝非内置的 `local`、运行时按策略、不回退、编辑器与详情展示声明值与有效位置；表驱动测试（声明 × 档位 × 来源 × 开关 × 开发模式）。
-  - `nexus_skills/policy.py::resolve_execution` 表驱动测试 12 格；运行时由 `RunStore.exec_skill` 查策略，不满足返回 `refused` 并写审计，集成测试覆盖「要宿主的内置技能：开关关闭被拒、打开后运行」。版本列表返回 `execution`；**编辑器展示未做**（前端）。
+  - `nexus_skills/policy.py::resolve_execution` 表驱动测试 12 格；运行时由 `RunStore.exec_skill` 查策略，不满足返回 `refused` 并写审计，集成测试覆盖「要宿主的内置技能：开关关闭被拒、打开后运行」。版本列表与技能列表返回 `execution`；编辑器在技能旁标「需在宿主运行」，**详情页的有效运行位置展示未做**。
 - [x] 2.9 测试：`exec_skill` 拒绝越界路径、不存在的脚本与白名单外的解释器，argv 不经 shell（含空格与元字符的参数原样到达），`stdin` 到达脚本，审计记录脚本哈希，多个脚本依次运行并通过 `/workspace` 交接；沙箱内无法修改技能目录；看不到其他租户技能；开放网络强制审批；三种档位下的参数断言（docker 参数列表、bwrap 参数列表）。
 - [ ] 2.10 在真实 Docker 与 bwrap 上验证挂载与执行（环境相关测试无环境时跳过并说明）。
 
