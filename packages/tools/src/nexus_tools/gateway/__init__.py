@@ -8,8 +8,10 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from nexus_core.native.policy import TOOL_OUTPUT_READER, TOOL_OUTPUT_STORE_LIMIT
+from nexus_core.schema import restore as restore_schema_names
 from nexus_core.runtime import CancellationTokenPort, RuntimeFault, ToolCall, ToolResult
 from nexus_tools import arguments as tool_arguments
+from nexus_tools import bridge as tool_bridge
 from nexus_tools import guard as tool_guard
 from nexus_tools import output as tool_output
 from nexus_tools import policy as tool_policy
@@ -70,6 +72,7 @@ def prepare_arguments(tool, text: str) -> tuple[dict | None, ToolResult | None]:
         return None, ToolResult('参数必须是 JSON 对象，工具未执行。', error_code='tool_arguments_invalid')
     schema = tool.definition.parameters
     try:
+        parsed = restore_schema_names(parsed, schema)  # undo renames made for the provider (nexus_core.schema)
         parsed = tool_arguments.coerce(parsed, schema)
         problems = tool_arguments.describe_errors(schema, parsed)
     except RecursionError:
@@ -98,7 +101,8 @@ class AuthorizedToolGateway:
                  bindings: dict[str, str], *, run_id: str, session_id: str, tenant_id: str,
                  services: object | None = None, spill: OutputSpill | None = None,
                  turn_budget: int = 0, injection_scan: bool = True, tool_access: str = 'standard',
-                 guard_rules: tuple | None = None, hidden_groups: frozenset[str] = frozenset()):
+                 guard_rules: tuple | None = None, hidden_groups: frozenset[str] = frozenset(),
+                 defer_min_tokens: int = 0):
         self.registry, self.access, self.bindings = registry, access, bindings
         self.run_id, self.session_id, self.tenant_id = run_id, session_id, tenant_id
         self.services = services
@@ -115,6 +119,9 @@ class AuthorizedToolGateway:
         #: Tool groups that are unavailable or switched off for this Run (openspec 2026-11-07-tool-expansion, R1).
         #: Their tools are not offered and a direct call is refused; the set can only narrow what binding allows.
         self.hidden_groups = frozenset(hidden_groups)
+        #: Progressive loading (R4): deferrable tools heavier than this many tokens are reached through the bridge tools.
+        self.defer_min_tokens = defer_min_tokens
+        self._catalog: dict | None = None
 
     def _decide(self, tool) -> str:
         definition = tool.definition
@@ -136,6 +143,12 @@ class AuthorizedToolGateway:
         The batch scheduler uses it to keep such a call out of a parallel group (openspec 2026-11-07-tool-expansion,
         section 2). It is deliberately pessimistic: a session grant that would skip the approval is not consulted.
         """
+        if call.name == tool_bridge.TOOL_CALL and self._catalog is not None:
+            try:
+                inner = json.loads(call.arguments)
+                return self.may_suspend(replace(call, name=inner['name'], arguments=json.dumps(inner.get('arguments', {}))))
+            except (ValueError, KeyError, TypeError):
+                return False
         version = self.bindings.get(call.name)
         tool = self.registry.get(call.name, version) if version else None
         if tool is None:
@@ -151,9 +164,8 @@ class AuthorizedToolGateway:
         """Called by the engine before each turn's tool calls: resets the per-turn output budget."""
         self.turn_used = 0
 
-    async def definitions(self):
-        """Callable tool definitions, sorted by name so the tool block is byte-stable across agent versions
-        whose bindings differ only in order (prompt caching; WeKnora registry, octop `tool_order`)."""
+    async def _offered(self):
+        """Every definition this Run may call, authorized and not hidden, in binding order."""
         output = []
         for name, version in self.bindings.items():
             tool = self.registry.get(name, version)
@@ -167,7 +179,53 @@ class AuthorizedToolGateway:
                 except RuntimeFault:
                     continue
                 output.append(tool.definition)
-        return tuple(sorted(output, key=lambda definition: definition.name))
+        return output
+
+    async def definitions(self):
+        """Callable tool definitions, sorted by name so the tool block is byte-stable across agent versions
+        whose bindings differ only in order (prompt caching; WeKnora registry, octop `tool_order`).
+
+        With progressive loading active, heavy deferrable tools are replaced by the three bridge tools; the
+        choice depends only on the bound tools, so it is the same for every turn of a Run."""
+        offered = await self._offered()
+        deferrable = [d for d in offered if tool_bridge.is_deferrable(d)]
+        if tool_bridge.should_defer(deferrable, self.defer_min_tokens):
+            self._catalog = {d.name: d for d in deferrable}
+            offered = [d for d in offered if d.name not in self._catalog] + tool_bridge.bridge_definitions(self._catalog)
+        else:
+            self._catalog = None
+        return tuple(sorted(offered, key=lambda definition: definition.name))
+
+    async def _bridge(self, call: ToolCall, cancellation: CancellationTokenPort) -> ToolResult:
+        """Serve `tool_search` / `tool_describe` / `tool_call` while progressive loading is active."""
+        catalog = self._catalog or {}
+        try:
+            arguments = json.loads(call.arguments or '{}')
+            if not isinstance(arguments, dict):
+                raise ValueError
+        except ValueError:
+            return ToolResult('参数必须是 JSON 对象。', error_code='tool_arguments_invalid')
+        if call.name == tool_bridge.TOOL_CALL:
+            name, inner = arguments.get('name'), arguments.get('arguments', {})
+            if isinstance(inner, str):
+                try:
+                    inner = json.loads(inner)
+                except ValueError:
+                    inner = None
+            if name not in catalog or not isinstance(inner, dict):
+                return ToolResult(f'{name}: not an available tool. Find tools with tool_search.', error_code='tool_not_registered')
+            # The real tool runs the whole pipeline under its own name.
+            return await self.execute(replace(call, name=name, arguments=json.dumps(inner, ensure_ascii=False)), cancellation)
+        invocation_id = await self.access.start(call, None)
+        if call.name == tool_bridge.TOOL_SEARCH:
+            found = tool_bridge.search(catalog, [q for q in arguments.get('queries', []) if isinstance(q, str)],
+                                       min(int(arguments.get('limit', 5) or 5), tool_bridge.MAX_RESULTS))
+            text = '\n'.join(f'- {n}: {catalog[n].description.strip().splitlines()[0][:100]}' for n in found) or 'no matching tools'
+        else:
+            names = [n for n in arguments.get('names', []) if isinstance(n, str)]
+            text = tool_bridge.describe(catalog, names)
+        await self.access.finish(invocation_id, 'completed', text[:1000], None)
+        return ToolResult(text)
 
     async def _externalize(self, invocation_id: str, tool, public: str) -> str:
         """Replace a large public output with a preview and a handle; the full text goes to the store (P2).
@@ -189,6 +247,11 @@ class AuthorizedToolGateway:
 
     async def execute(self, call: ToolCall, cancellation: CancellationTokenPort) -> ToolResult:
         cancellation.check()
+        if call.name in tool_bridge.BRIDGE_NAMES and self.defer_min_tokens:
+            if self._catalog is None:
+                await self.definitions()  # a resumed Run executes before it lists tools
+            if self._catalog is not None:
+                return await self._bridge(call, cancellation)
         version = self.bindings.get(call.name)
         tool = self.registry.get(call.name, version) if version else None
         binding_id = None

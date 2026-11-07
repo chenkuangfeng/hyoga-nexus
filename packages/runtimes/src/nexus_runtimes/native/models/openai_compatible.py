@@ -5,6 +5,7 @@ from typing import AsyncIterator
 from urllib.parse import urlsplit
 import httpx
 from openai import AsyncOpenAI, APIError, APIConnectionError, APIStatusError, APITimeoutError
+from nexus_core.schema import sanitize as sanitize_schema
 from nexus_core.runtime import ModelChunk, ModelRequest, RuntimeFault
 from .errors import ERROR_BODY_LIMIT, ModelFault, failure, mark_output, bound_error_response
 from .usage import usage_chunk
@@ -49,7 +50,7 @@ class OpenAICompatibleModel:
                 options[name] = self._options[name]
         if request.tools:
             options['tools'] = [{'type': 'function', 'function': {
-                'name': t.name, 'description': t.description, 'parameters': t.parameters}} for t in request.tools]
+                'name': t.name, 'description': t.description, 'parameters': sanitize_schema(t.parameters)}} for t in request.tools]
             options['parallel_tool_calls'] = False
         stream, started = None, False
         try:

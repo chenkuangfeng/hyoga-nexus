@@ -24,7 +24,8 @@ class GateFacts:
     sandbox_enabled: bool = False
     #: Latest isolation acceptance passed for the configured backend, image and settings.
     sandbox_accepted: bool = False
-    web_backend_configured: bool = False
+    #: The operator enabled outbound web access (`[web].enabled`).
+    web_enabled: bool = False
     #: The agent binds a Wiki-type knowledge base. Wiki tools arrive with knowledge-base K6.1.
     wiki_base_bound: bool = False
 
@@ -40,7 +41,7 @@ def _sandbox(facts: GateFacts) -> str:
 AVAILABILITY: dict[str, Callable[[GateFacts], str]] = {
     'sandbox': _sandbox,
     'wiki': lambda facts: '' if facts.wiki_base_bound else 'wiki_base_not_bound',
-    'web': lambda facts: '' if facts.web_backend_configured else 'web_backend_missing',
+    'web': lambda facts: '' if facts.web_enabled else 'web_disabled',
 }
 
 
@@ -66,15 +67,27 @@ def deployment_gate_facts() -> GateFacts:
     leaves the group unavailable rather than failing the Run.
     """
     from nexus_core.deployment import DeploymentConfigError
+    web_enabled = _web_enabled()
     try:
         from nexus_sandbox import acceptance
         from nexus_sandbox.settings import load_settings
         settings = load_settings()
     except DeploymentConfigError:
-        return GateFacts()
+        return GateFacts(web_enabled=web_enabled)
     if not settings.enabled:
-        return GateFacts()
+        return GateFacts(web_enabled=web_enabled)
     if settings.backend == 'local':
         from nexus_platform.configuration import auth_settings
-        return GateFacts(sandbox_enabled=True, sandbox_accepted=settings.allow_local and auth_settings().mode == 'development')
-    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings))
+        return GateFacts(sandbox_enabled=True, sandbox_accepted=settings.allow_local and auth_settings().mode == 'development',
+                         web_enabled=web_enabled)
+    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings), web_enabled=web_enabled)
+
+
+def _web_enabled() -> bool:
+    """Whether `[web].enabled` is true. A missing or broken section means off."""
+    from nexus_core.deployment import DeploymentConfigError
+    try:
+        from nexus_tools.web.settings import load_settings
+        return load_settings().enabled
+    except (DeploymentConfigError, ImportError):
+        return False

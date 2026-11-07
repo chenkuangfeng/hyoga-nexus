@@ -60,3 +60,9 @@
 - **分组**：`ToolDefinition.group` 在注册处声明（`builtins/registration.py`），分组本身（标签、默认开关、是否锁定）定义在 `nexus_core.native.tool_groups`。`base` 锁定，`sandbox`、`web`、`collab`、`schedule`、`media` 默认关闭。门控两层：可用性（`nexus_platform.runs.tool_gates`，部署侧事实）与智能体开关（`NativePolicy.tool_groups_enabled`）。两层都通过的组之外，工具既不出现在定义里，直接调用也返回 `tool_authorization_denied`（网关 `hidden_groups`）。门控只能收紧，授权、访问级别、守卫、审批照常。记忆、知识库、技能脚本三处仍在 `preparation.py` 按名过滤。
 - **调度**：工具可声明 `concurrency(arguments)`，返回 `parallel` / `exclusive` / `serial(key)`。未声明时沿用「只读、幂等、无副作用、无审批才并行」。可能进入审批的调用（`gateway.may_suspend`：访问级别为 `ask`，或参数命中 `HIGH` 守卫规则）一律独占，因为挂起后从第一个待处理调用恢复，并行出去的兄弟调用会被重复执行。
 - **沙箱工具**（`builtins/sandbox.py`，`sandbox` 组）：`sandbox_list_files`、`sandbox_read_file`、`sandbox_search_files`、`sandbox_write_file`、`sandbox_edit_file`、`sandbox_exec`。模型只看到 `/workspace` 与 `/outputs`。读写同一文件按路径串行，列目录和搜索独占。`sandbox_exec` 的风险：沙箱网络关闭时为 `write`，打开时为 `destructive`；`dangerous_shell_commands.json` 的规则同样作用于它。没有沙箱会话时返回 `sandbox_unavailable`，而不是抛出 Run 级错误。沙箱本身见 `packages/sandbox`。
+
+## 渐进加载、schema 清洗与 Web 工具
+
+- **渐进加载**（`bridge.py`）：`source == 'mcp'` 或声明 `deferrable` 的工具，其 schema 估算 token 之和达到 `NativePolicy.tool_search_min_tokens`（默认 6000，0 关闭）时，不再直接发给模型，改为 `tool_search` / `tool_describe` / `tool_call` 三个桥接工具。目录写在 `tool_search` 的描述里，Run 内工具块不变。`tool_call` 展开为真实工具后走完整网关管线；只能调用已绑定、已授权、未被分组隐藏、且确实被延迟的工具。当前没有内置工具声明 `deferrable`，所以现有行为不变，MCP 接入后生效。
+- **schema 清洗**（`nexus_core.schema`）：发给供应商的是清洗后的副本（属性名、类型数组、缺失的 `properties` 与 `required`、`$ref` 旁的 `default`、顶层组合子），模型返回的参数由 `restore` 还原属性名。
+- **Web 工具**（`builtins/web.py`、`web/`，`web` 组）：`web_search` 的后端注册表有 tavily、brave、searxng，请求形状按各家公开 API 编写，未对真实服务验证；`web_fetch` 逐跳校验（协议、端口 80/443/8080/8443、解析出的每个地址都必须是公网地址），连接到校验过的字面地址并保留 SNI，手动跟随最多 5 次重定向，正文有字节上限；结果带「外部网页内容」前缀，并经过网关的注入扫描。`[web].enabled` 默认关闭。

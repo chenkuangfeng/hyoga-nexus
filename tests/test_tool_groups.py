@@ -66,7 +66,7 @@ def test_high_impact_groups_default_to_off_and_old_versions_gain_nothing():
 
 def test_unavailable_groups_report_stable_reasons():
     reasons = unavailable_groups(GateFacts())
-    assert reasons == {'sandbox': 'sandbox_disabled', 'wiki': 'wiki_base_not_bound', 'web': 'web_backend_missing'}
+    assert reasons == {'sandbox': 'sandbox_disabled', 'wiki': 'wiki_base_not_bound', 'web': 'web_disabled'}
     assert unavailable_groups(GateFacts(sandbox_enabled=True))['sandbox'] == 'sandbox_not_accepted'
     assert 'sandbox' not in unavailable_groups(GateFacts(sandbox_enabled=True, sandbox_accepted=True))
 

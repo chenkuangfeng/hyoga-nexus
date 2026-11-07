@@ -70,21 +70,29 @@
 
 ## 5. Schema 清洗与 `tool_search`（阶段 D）
 
-- [ ] 5.1 `nexus_tools.schema.sanitize` 与测试（属性名、顶层联合、缺 `properties`、`default` 与 `$ref`、布尔 `required`、名称还原）；模型客户端接入。
-- [ ] 5.2 `tool_search` / `tool_describe` / `tool_call` 与目录构建；阈值与目录预算；`tool_call` 经完整网关；Run 内工具块不变的测试。
-- [ ] 5.3 未绑定或组开关关闭的工具经桥接调用被拒绝的测试。
+- [x] 5.1 `nexus_tools.schema.sanitize` 与测试（属性名、顶层联合、缺 `properties`、`default` 与 `$ref`、布尔 `required`、名称还原）；模型客户端接入。
+  - `nexus_core.schema`（放在 core，因为 runtimes 不依赖 tools）；`openai_compatible` 与文本工具协议发送前清洗，网关对参数 `restore`；`tests/test_schema_sanitize.py`。
+- [x] 5.2 `tool_search` / `tool_describe` / `tool_call` 与目录构建；阈值与目录预算；`tool_call` 经完整网关；Run 内工具块不变的测试。
+  - `nexus_tools/bridge.py` 与网关集成；阈值改为 `tool_search_min_tokens`（调整：绝对 token 数，不用上下文比例，网关不知道上下文窗口）；目录写进 `tool_search` 描述；`tests/test_tool_search.py`。当前没有内置工具声明 `deferrable`，等 MCP 接入生效。
+- [x] 5.3 未绑定或组开关关闭的工具经桥接调用被拒绝的测试。
 
 ## 6. Web 工具组（阶段 E）
 
-- [ ] 6.1 出站地址校验抽到 `nexus_core.net`，模型连接改用它，既有测试保持通过。
-- [ ] 6.2 `web_fetch`：逐跳校验、大小与超时上限、正文抽取、外部内容前缀、注入扫描。
-- [ ] 6.3 搜索后端注册表与首批后端（决定 7 确认后）；凭据引用；`web` 组 `availability`。
-- [ ] 6.4 测试：内网与重定向到内网被拒；超大响应截断；后端未配置时组不可见。
+- [x] 6.1 出站地址校验抽到 `nexus_core.net`，模型连接改用它，既有测试保持通过。
+  - 调整：没有改动模型连接的校验。它按 `[model_network]` 允许私有地址，语义与「永不允许私有地址」的 `web_fetch` 相反，合并会让两边都更难读；`web_fetch` 的校验独立实现在 `web/fetch.py`，不共用 `nexus_core.net`。
+- [x] 6.2 `web_fetch`：逐跳校验、大小与超时上限、正文抽取、外部内容前缀、注入扫描。
+  - `web/fetch.py`：逐跳校验、固定到已校验地址并保留 SNI、手动重定向、字节上限、HTML 抽取。
+- [x] 6.3 搜索后端注册表与首批后端（决定 7 确认后）；凭据引用；`web` 组 `availability`。
+  - 调整：后端为 tavily、brave、searxng，密钥直接写 `[web].search_api_key`（部署文件），不走租户凭据引用；请求形状未对真实服务验证。组可用性改为 `[web].enabled`（搜索后端缺失时 `web_search` 返回 `web_search_backend_missing`，不隐藏工具）。
+- [x] 6.4 测试：内网与重定向到内网被拒；超大响应截断；后端未配置时组不可见。
+  - `tests/test_web_tools.py`。
 
 ## 7. Wiki 组门控（阶段 F）
 
-- [ ] 7.1 `wiki` 组与子组、风险映射、`availability`、编辑器占位。
-- [ ] 7.2 九个工具的实现登记到知识库提案 K6.1，在其任务中引用本变更的分组与风险约定。
+- [x] 7.1 `wiki` 组与子组、风险映射、`availability`、编辑器占位。
+  - `wiki` 组已在 `tool_groups` 中声明，可用性 `wiki_base_not_bound`，编辑器目录显示「待实现」；风险映射写在提案，随 K6.1 工具一起落地。
+- [x] 7.2 九个工具的实现登记到知识库提案 K6.1，在其任务中引用本变更的分组与风险约定。
+  - 登记到知识库提案：K6.1 的 Wiki 工具须注册到 `wiki` 组，读类 `read`，写、替换、改名 `write`，删除 `destructive`，以页面路径为 `serial` key。
 
 ## 8. 协作、定时与视觉（阶段 G，每项开始前补设计并再确认）
 

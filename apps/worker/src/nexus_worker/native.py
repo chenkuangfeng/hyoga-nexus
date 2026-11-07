@@ -180,7 +180,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             services=RunServices(store, context.progress.state, sandbox), spill=spill,
             turn_budget=policy.tool_turn_budget_chars, injection_scan=policy.tool_injection_scan,
             tool_access=policy.tool_access,
-            hidden_groups=hidden)
+            hidden_groups=hidden, defer_min_tokens=policy.tool_search_min_tokens)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

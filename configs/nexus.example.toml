@@ -95,3 +95,17 @@ workspace_quota_mb = 512
 exec_timeout_max_seconds = 120
 workspace_root = "data/sandbox"
 allow_local = false
+
+[web]
+# Outbound web access for the "web" tool group (web_search, web_fetch). Off by default. Enabling it only makes the
+# group available: each agent still has to switch it on. web_fetch refuses non-public addresses on every hop.
+enabled = false
+# Search provider for web_search: "tavily", "brave" or "searxng" (empty = web_search reports no backend).
+# The request shapes follow each provider's public API and have not been exercised against the live services.
+search_backend = ""
+search_api_key = ""
+# Base URL of your SearXNG instance (JSON output must be enabled there). It is set by you, so it may be internal.
+search_url = ""
+timeout_seconds = 15
+fetch_max_bytes = 2000000
+fetch_max_chars = 20000

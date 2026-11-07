@@ -5,7 +5,7 @@ BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_d
                       'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script',
                       'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph', 'grep_chunks',
                       'document_outline', 'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
-                      'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec')
+                      'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'web_search', 'web_fetch')
 #: Tools of the `sandbox` group (openspec 2026-11-07-tool-expansion, section 4).
 SANDBOX_TOOL_NAMES = frozenset({'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                                 'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec'})
@@ -88,6 +88,9 @@ class NativePolicy:
     tool_groups_enabled: dict[str, bool] = field(default_factory=dict)
     #: Default and ceiling of one sandbox command, and the output kept per stream. The deployment's
     #: `[sandbox].exec_timeout_max_seconds` still caps the timeout.
+    #: Progressive tool loading (R4): deferrable tools (MCP and tools that declare it) whose schemas together reach
+    #: this many tokens are reached through tool_search / tool_describe / tool_call. 0 turns it off.
+    tool_search_min_tokens: int = 6000
     sandbox_exec_timeout_seconds: int = 30
     sandbox_output_limit: int = 20000
 
@@ -134,6 +137,7 @@ class NativePolicy:
             raise ValueError('tool_repeat_warn_at must be below tool_repeat_stop_at')
         if type(self.tool_injection_scan) is not bool:
             raise ValueError('Native switches must be boolean')
+        _check_int(self.tool_search_min_tokens, 0, 200000, 'tool_search_min_tokens')
         _check_int(self.sandbox_exec_timeout_seconds, 1, 3600, 'sandbox_exec_timeout_seconds')
         _check_int(self.sandbox_output_limit, 1000, 200000, 'sandbox_output_limit')
         from .tool_groups import GROUP_IDS, group_of
