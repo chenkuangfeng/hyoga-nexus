@@ -175,7 +175,8 @@ class KnowledgeChunkRecord(Base):
 
 
 class KnowledgeJobRecord(Base):
-    """Resumable background work. ``kind``: ``index`` (one version) or ``cleanup`` (a deleted document or base).
+    """Resumable background work. ``kind``: ``index`` (one version), ``cleanup`` (a deleted document or base), ``enrich`` or ``wiki`` (synthesis of a
+    ready version, or retraction of a deleted document when ``version_id`` is NULL).
 
     Each stage commits with its effects, so a crash resumes at the last committed stage; failures back off
     (``available_at``) and stop after the retry limit with ``state='failed'``.
@@ -183,7 +184,7 @@ class KnowledgeJobRecord(Base):
 
     __tablename__ = 'knowledge_jobs'
     __table_args__ = (
-        CheckConstraint("kind IN ('index','cleanup','enrich')", name='ck_knowledge_jobs_kind'),
+        CheckConstraint("kind IN ('index','cleanup','enrich','wiki')", name='ck_knowledge_jobs_kind'),
         CheckConstraint("state IN ('pending','done','failed','cancelled')", name='ck_knowledge_jobs_state'),
         Index('ix_knowledge_jobs_due', 'state', 'available_at'),
     )
@@ -389,4 +390,111 @@ class ParserEngineConfigRecord(Base):
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), primary_key=True)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     updated_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WikiPageRecord(Base):
+    """One page of a wiki knowledge base (WeKnora ``WikiPage``).
+
+    Pages are searched through the base's vector store with the page id as the index "version" (like FAQ entries):
+    a page is searchable only while ``status='published'`` and ``index_state='ready'``. Every edit bumps
+    ``version`` (optimistic lock) and snapshots the previous state in ``knowledge_wiki_revisions``.
+    ``source_refs`` lists the document ids the page was synthesized from; ``in_links``/``out_links`` are derived
+    from the ``[[slug]]`` links of ``content`` and rebuilt on every write.
+    """
+
+    __tablename__ = 'knowledge_wiki_pages'
+    __table_args__ = (
+        UniqueConstraint('kb_id', 'slug', name='uq_wiki_pages_slug'),
+        CheckConstraint("status IN ('published','draft','archived','deleting')", name='ck_wiki_pages_status'),
+        CheckConstraint("index_state IN ('pending','ready','failed')", name='ck_wiki_pages_index_state'),
+        Index('ix_wiki_pages_kb', 'kb_id', 'status', 'page_type'),
+        Index('ix_wiki_pages_pending', 'index_state', 'status'),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
+    slug: Mapped[str] = mapped_column(String(200), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    page_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default='published')
+    content: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    aliases: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    folder_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    category_path: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_refs: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    in_links: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    out_links: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    page_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    #: ``pipeline`` | ``agent`` | ``user`` | ``revert`` — author kind of the current version.
+    last_edit_source: Mapped[str] = mapped_column(String(16), nullable=False, default='pipeline')
+    last_editor_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    index_state: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')
+    index_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    index_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WikiRevisionRecord(Base):
+    """Immutable snapshot of a superseded wiki page version (WeKnora ``WikiPageRevision``)."""
+
+    __tablename__ = 'knowledge_wiki_revisions'
+    __table_args__ = (UniqueConstraint('page_id', 'version', name='uq_wiki_revisions_version'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
+    page_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_wiki_pages.id', ondelete='CASCADE'), nullable=False)
+    slug: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    page_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    aliases: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    edit_source: Mapped[str] = mapped_column(String(16), nullable=False, default='pipeline')
+    editor_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WikiFolderRecord(Base):
+    """A directory node of a wiki base (WeKnora ``WikiFolder``); ``path`` is ``a/b`` from the root."""
+
+    __tablename__ = 'knowledge_wiki_folders'
+    __table_args__ = (UniqueConstraint('kb_id', 'path', name='uq_wiki_folders_path'),)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
+    parent_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WikiIssueRecord(Base):
+    """A quality issue reported on a wiki page by lint or by an agent (WeKnora ``WikiPageIssue``)."""
+
+    __tablename__ = 'knowledge_wiki_issues'
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','resolved','ignored')", name='ck_wiki_issues_status'),
+        Index('ix_wiki_issues_kb', 'kb_id', 'status'),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), nullable=False)
+    slug: Mapped[str] = mapped_column(String(200), nullable=False)
+    issue_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default='')
+    suspected_knowledge_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')
+    reported_by: Mapped[str] = mapped_column(String(32), nullable=False, default='lint')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

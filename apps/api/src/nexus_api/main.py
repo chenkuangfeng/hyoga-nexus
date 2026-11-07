@@ -82,6 +82,8 @@ from nexus_api.http.auth import router as auth_router
 app.include_router(auth_router)
 from nexus_api.http.knowledge import router as knowledge_router
 app.include_router(knowledge_router)
+from nexus_api.http.knowledge_wiki import router as knowledge_wiki_router
+app.include_router(knowledge_wiki_router)
 
 
 @app.middleware("http")

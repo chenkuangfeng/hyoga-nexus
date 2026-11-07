@@ -60,6 +60,10 @@ from .knowledge import (
     FaqEntryRecord,
     KnowledgeTagRecord,
     ParserEngineConfigRecord,
+    WikiFolderRecord,
+    WikiIssueRecord,
+    WikiPageRecord,
+    WikiRevisionRecord,
 )
 __all__ = [
     'SessionMemorySnapshotRecord',
@@ -143,4 +147,8 @@ __all__ = [
     'FaqEntryRecord',
     'KnowledgeTagRecord',
     'ParserEngineConfigRecord',
+    'WikiFolderRecord',
+    'WikiIssueRecord',
+    'WikiPageRecord',
+    'WikiRevisionRecord',
 ]

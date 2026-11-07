@@ -84,9 +84,8 @@ def test_base_document_and_search_flow(api):
 
 def test_planned_features_and_limits_are_refused(api):
     client, path, identity, _ = api
-    wiki = client.post(path + '/bases', json={'name': 'wiki', 'type': 'wiki'})
-    assert wiki.status_code == 422 and wiki.json()['error']['code'] == 'capability_planned'
-    assert wiki.json()['error']['details']['stage'] == 'K6'
+    planned = client.post(path + '/vector-stores', json={'name': 'w', 'engine': 'pinecone'})
+    assert planned.status_code == 422 and planned.json()['error']['code'] == 'capability_planned'
     kb_id = client.post(path + '/bases', json={'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
     too_big = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.txt', b'x' * (1024 * 1024 + 1))})
     assert too_big.status_code == 422
@@ -134,7 +133,7 @@ def test_capabilities_reflect_implemented_features(api):
     items = {(i['group'], i['key']): i for i in client.get(path + '/capabilities').json()['items']}
     assert items[('kb_type', 'document')]['status'] == 'available'
     assert items[('vector_engine', 'milvus')]['verified'] is False
-    assert items[('kb_type', 'wiki')]['status'] == 'planned'
+    assert items[('kb_type', 'wiki')]['status'] == 'available' and items[('kb_type', 'wiki')]['verified'] is False
     assert items[('kb_feature', 'retrieval_test')]['status'] == 'available'
 
 

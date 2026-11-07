@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from nexus_knowledge.evidence import EvidenceRegistry, resolve_citations
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, MessageRecord, NativeRunStateRecord,
-                                               ResourceBindingRecord, RunRecord)
+                                               ResourceBindingRecord, RunRecord, WikiPageRecord)
 from . import access, organize, search
 
 STATE_KEY = 'knowledge_evidence'
@@ -141,7 +141,22 @@ async def read_document_for_run(factory: sessionmaker[Session], run_id: UUID, do
         run = _run(db, run_id)
         bound = bound_base_ids(db, UUID(run.config_snapshot['agent_version_id']))
         doc = db.get(KnowledgeDocumentRecord, doc_uuid)
-        if doc is None or doc.status != 'active' or doc.kb_id not in bound or doc.current_version_id is None:
+        if doc is None:
+            wiki_page = db.get(WikiPageRecord, doc_uuid)  # a Wiki search hit names its page id as document_id
+            if wiki_page is not None and wiki_page.status == 'published' and wiki_page.kb_id in bound:
+                kb = db.get(KnowledgeBaseRecord, wiki_page.kb_id)
+                if kb is not None and access.can_read(db, kb, run.tenant_id, run.principal_id):
+                    links = ', '.join(wiki_page.out_links or [])
+                    ref = {'kb_id': str(kb.id), 'document_id': str(wiki_page.id), 'version_id': str(wiki_page.id),
+                           'filename': f'Wiki · {wiki_page.title}', 'page': None, 'section': list(wiki_page.category_path or []),
+                           'ordinal': 0}
+                    text = f'# {wiki_page.title} ({wiki_page.slug})\n{wiki_page.content}' + (f'\n\nLinks: {links}' if links else '')
+                    registry = _registry(state)
+                    body = _passage(registry, f'w:{wiki_page.id}', text, ref)
+                    _save(state, registry)
+                    return f'<knowledge_document chunks="1">\n{_FENCE_NOTE}\n{body}\n</knowledge_document>'
+            return 'Document not found.'
+        if doc.status != 'active' or doc.kb_id not in bound or doc.current_version_id is None:
             return 'Document not found.'
         kb = db.get(KnowledgeBaseRecord, doc.kb_id)
         if kb is None or not access.can_read(db, kb, run.tenant_id, run.principal_id):

@@ -102,7 +102,16 @@
 
 ## K6 Wiki 库
 
-- [ ] K6.1 Wiki 合成、反向链接、修订、目录、Wiki 检索；前端 Wiki 浏览。
+- [x] K6.1 Wiki 合成、反向链接、修订、目录、Wiki 检索；前端 Wiki 浏览。
+  - 数据：`knowledge_wiki_pages`（slug 唯一、乐观锁 `version`、`source_refs`、`in_links/out_links`、`index_state`）、`knowledge_wiki_revisions`（每次写入前快照）、`knowledge_wiki_folders`、`knowledge_wiki_issues`；任务类型增加 `wiki`；迁移 `d7e8f9a0b1c2`。
+  - 领域 `nexus_knowledge.wiki`：提示词逐字移植自 WeKnora `prompts_wiki.go`（摘要、知识抽取、页面修改、目录规划、去重、首页简介及三档抽取粒度），`rules.py` 做 slug 规范化、`[[slug|名]]` 链接解析/清理、分类路径、模型回复解析、同名候选预选。
+  - 合成 `wiki_ingest`（创建者 Key，库设置 `wiki_config.synthesis_model_id` 必填）：文档 ready 后排 `wiki` 任务 → 摘要页 `summary/<文档>` → 抽取实体/概念 → 词面预选 + 模型去重合并（新名并入别名）→ 以文档原文摘录为依据逐页写入（未知或自指链接去除）→ 一次调用规划目录并复用现有文件夹 → 本文档不再产出的页面去除来源 → 更新 `index` 页简介。删除文档排“撤回”任务：无来源页面删除、共享页面按“已删除/保留来源”提示词重写、其他页面指向已删页面的链接清除。开启 Wiki 或更换模型时对已有文档补跑。
+  - 页面接口 `wiki.py` + `knowledge_wiki.py`：页面增删改（过期 `version` 回 409 与 `current_version`）、修订列表/读取/回退（回退本身是新修订）、文件夹增删改移（子树路径与页面分类跟随）、目录首页、链接图（总览/邻域）、统计、页面搜索、lint 问题（断链/孤页/空页）与状态、重建链接。读需读权限，改需写权限。
+  - 检索：页面行写入库的向量索引（`w:<页面>:<n>`，页面 id 充当“版本”），Pre-Filter 范围含已发布且已索引的页面；命中带 slug，`read_document` 接受页面 id 返回全文。Wiki 页面默认不参与带标签/文件夹/元数据过滤的检索。
+  - 前端：`api/wiki` 改指 Nexus；移除 Wiki 待实现拦截；能力 `kb_type/wiki`、`indexing/wiki`、`kb_feature/wiki_pages` 上线（`verified=false`，待真实模型验收）。
+  - 测试 `tests/test_knowledge_wiki.py`（规则、合成端到端、去重合并与撤回、页面/修订/目录/图/lint/权限、HTTP）。
+  - 未做：WeKnora 的“按块引用”二遍抽取（`WikiCandidateSlug`/`WikiChunkCitation`）与续写（`finish_reason=length`）——以文档摘录代替；智能体写 Wiki 的工具；与记忆演进 6.4 文档亲和度的衔接。
+- [ ] K6.2 真实模型验收 Wiki 合成质量（需环境）。
 
 ## K7 数据源
 

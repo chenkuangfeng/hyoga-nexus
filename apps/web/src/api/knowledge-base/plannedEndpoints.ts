@@ -12,7 +12,6 @@ interface PlannedEndpoint { pattern: RegExp, feature: string, stage: string }
 
 export const PLANNED_ENDPOINTS: readonly PlannedEndpoint[] = [
   { pattern: /^\/api\/v1\/datasource(\/|\?|$)/, feature: '数据源同步', stage: 'K7' },
-  { pattern: /^\/api\/v1\/knowledgebase\/[^/]+\/wiki(\/|\?|$)/, feature: 'Wiki', stage: 'K6' },
   { pattern: /^\/api\/v1\/initialization\/extract\//, feature: '知识图谱抽取', stage: 'K2' },
   { pattern: /^\/api\/v1\/initialization\/(initialize|config)\//, feature: '知识库模型配置', stage: 'K5' },
   { pattern: /^\/api\/v1\/system\/(parser-engines|docreader)/, feature: '解析引擎', stage: 'K4' },

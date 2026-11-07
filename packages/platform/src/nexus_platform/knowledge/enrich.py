@@ -83,7 +83,7 @@ def profile_enabled(kb: KnowledgeBaseRecord) -> bool:
 
 def schedule(db: Session, kb: KnowledgeBaseRecord, version_id: UUID | None, document_id: UUID | None = None) -> None:
     """Queue an enrich job for a ready version (or, with no version, a profile refresh)."""
-    if kb.kb_type != 'document':
+    if kb.kb_type not in ('document', 'wiki'):
         return
     if version_id is not None and not steps_of(kb) and not profile_enabled(kb):
         return

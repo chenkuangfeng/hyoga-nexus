@@ -83,6 +83,12 @@ async def run_job(factory: sessionmaker[Session], job_id: UUID) -> str:
                 await enrich.run(factory, job_id)
             except enrich.EnrichFailed as exc:
                 return _finish(factory, job_id, 'failed', str(exc))
+        elif kind == 'wiki':
+            from . import wiki_ingest
+            try:
+                await wiki_ingest.run(factory, job_id)
+            except wiki_ingest.WikiFailed as exc:
+                return _finish(factory, job_id, 'failed', str(exc))
         else:
             return 'missing'
         return _finish(factory, job_id, 'done')
@@ -267,6 +273,8 @@ async def _activate(factory, job_id: UUID) -> None:
         schedule(db, kb, kb.created_by)  # a base with a graph rebuilds it after a document change
         from .enrich import schedule as schedule_enrichment
         schedule_enrichment(db, kb, version.id, doc.id)
+        from .wiki_ingest import schedule as schedule_wiki
+        schedule_wiki(db, kb, version.id, doc.id)
         index = stores.vector_index_for(db, kb)
         kb_id = kb.id
     if previous is not None:

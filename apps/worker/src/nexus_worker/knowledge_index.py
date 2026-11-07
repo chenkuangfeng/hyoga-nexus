@@ -93,4 +93,7 @@ def knowledge_tick(factory: sessionmaker[Session], loop, concurrency: int) -> bo
         return True
     if loop.run_until_complete(faq_tick(factory)) > 0:
         return True
+    from nexus_platform.knowledge.wiki_ingest import index_tick as wiki_tick
+    if loop.run_until_complete(wiki_tick(factory)) > 0:
+        return True
     return loop.run_until_complete(run_graph_due(factory, 1)) > 0

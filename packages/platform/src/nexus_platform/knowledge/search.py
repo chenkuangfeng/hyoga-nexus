@@ -28,7 +28,7 @@ from nexus_knowledge.retrieval.fuse import Candidate, fuse
 from nexus_knowledge.retrieval import synonyms
 from nexus_knowledge.text import query_tokens
 from nexus_platform.authz.audit import audit
-from nexus_platform.persistence.models import (FaqEntryRecord, KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
+from nexus_platform.persistence.models import (WikiPageRecord, FaqEntryRecord, KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord)
 from . import access, embedding, stores
 from . import faq as faq_rules
@@ -109,7 +109,12 @@ def resolve_scope(db: Session, tenant_id: UUID, user_id: UUID, *, bound: Sequenc
             KnowledgeDocumentRecord.current_version_id.is_not(None))).all()
         if doc_filter is not None and not doc_filter.empty():
             docs = [d for d in docs if doc_filter.matches(d)]
-        out.append(ScopedBase(kb, tuple(sorted(str(d.current_version_id) for d in docs))))
+        versions = tuple(sorted(str(d.current_version_id) for d in docs))
+        if kb.indexing.get('wiki') and not (doc_filter is not None and not doc_filter.empty()):
+            # Wiki pages are searched through the same index; their ids play the role of versions.
+            from .wiki_ingest import scope_ids as wiki_scope
+            versions = tuple(sorted({*versions, *wiki_scope(db, kb.id)}))
+        out.append(ScopedBase(kb, versions))
     return out, ignored
 
 
@@ -234,8 +239,14 @@ def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: 
     allowed = {version for item in scoped for version in item.version_ids}
     names = {item.kb.id: item.kb.name for item in scoped}
     fused = _resolve_question_rows(fused)
-    ids, faq_ids = [], []
+    ids, faq_ids, wiki_ids = [], [], []
     for item in fused:
+        if item.chunk_id.startswith('w:'):
+            try:
+                wiki_ids.append(UUID(item.chunk_id.split(':')[1]))
+            except (ValueError, IndexError):
+                pass
+            continue
         if item.chunk_id.startswith('f:'):
             try:
                 faq_ids.append(UUID(item.chunk_id.split(':')[1]))
@@ -258,13 +269,26 @@ def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: 
         faq_by_id = {str(e.id): e for e in db.scalars(select(FaqEntryRecord).where(
             FaqEntryRecord.id.in_(faq_ids), FaqEntryRecord.status == 'active', FaqEntryRecord.enabled.is_(True),
             FaqEntryRecord.index_state == 'ready'))}
+    wiki_by_id = {}
+    if wiki_ids:
+        wiki_by_id = {str(p.id): p for p in db.scalars(select(WikiPageRecord).where(
+            WikiPageRecord.id.in_(wiki_ids), WikiPageRecord.status == 'published', WikiPageRecord.index_state == 'ready'))}
     parents = {}
     parent_ids = {c.parent_id for c, _, _ in by_id.values() if c.parent_id is not None}
     if parent_ids:
         parents = {p.id: p for p in db.scalars(select(KnowledgeChunkRecord).where(KnowledgeChunkRecord.id.in_(parent_ids)))}
     hits, seen_entries, seen_parents = [], set(), set()
+    seen_pages: set[str] = set()
     for item in fused:
-        if item.chunk_id.startswith('f:'):
+        if item.chunk_id.startswith('w:'):
+            page = wiki_by_id.get(item.chunk_id.split(':')[1]) if item.chunk_id.count(':') >= 2 else None
+            if page is None or str(page.id) not in allowed or str(page.id) in seen_pages:
+                continue
+            seen_pages.add(str(page.id))
+            hits.append(SearchHit(f'w:{page.id}', round(item.score, 6), item.ranks, wiki_hit_text(page), str(page.kb_id),
+                                  names.get(page.kb_id, ''), str(page.id), f'Wiki · {page.title}', str(page.id), 0,
+                                  None, list(page.category_path or [])))
+        elif item.chunk_id.startswith('f:'):
             entry = faq_by_id.get(item.chunk_id.split(':')[1]) if item.chunk_id.count(':') >= 2 else None
             if entry is None or str(entry.id) not in allowed or str(entry.id) in seen_entries:
                 continue
@@ -296,6 +320,12 @@ def _load_hits(db: Session, fused, scoped: list[ScopedBase], limit: int, query: 
         if len(hits) >= limit:
             break
     return hits
+
+
+def wiki_hit_text(page: WikiPageRecord, limit: int = 3000) -> str:
+    """What the model gets for a wiki page hit: title, slug, summary and the start of the page."""
+    body = page.content if len(page.content) <= limit else page.content[:limit] + '\n…'
+    return f'# {page.title} ({page.slug})\n{page.summary}\n\n{body}'.strip()
 
 
 def hit_view(hit: SearchHit) -> dict[str, Any]:

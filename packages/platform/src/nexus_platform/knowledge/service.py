@@ -122,6 +122,8 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
         raise ValueError(f'type must be one of {", ".join(KB_TYPES)}')
     capabilities.require_available('kb_type', kb_type)
     normalized = {key: bool(indexing.get(key, DEFAULT_INDEXING[key])) for key in INDEXING_KEYS}
+    if kb_type == 'wiki':
+        normalized['wiki'] = True  # a wiki base always synthesizes pages
     for key, enabled in normalized.items():
         if enabled:
             capabilities.require_available('indexing', key)
@@ -131,6 +133,17 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
         if normalized['graph'] or normalized['wiki']:
             raise ValueError('FAQ knowledge bases index questions and answers only (no graph or wiki)')
         faq_rules.validate_config(settings)
+    if normalized['wiki']:
+        # Synthesis calls a chat model with the creator's key (decision 6).
+        raw = (settings or {}).get('wiki_config') or {}
+        try:
+            model = UUID(str(raw.get('synthesis_model_id'))) if raw.get('synthesis_model_id') else None
+        except ValueError:
+            model = None
+        if model is None:
+            raise ValueError('a wiki needs a synthesis model (wiki_config.synthesis_model_id)')
+        if user_id is not None:
+            _authorize_chat_model(db, tenant_id, user_id, model)
     if normalized['graph']:
         # Graph building calls a chat model with the creator's key (decision 6) and needs a valid configuration.
         config = graph_config.parse(settings)
@@ -299,12 +312,18 @@ def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, change
         settings=changes['settings'] if isinstance(changes.get('settings'), dict) else kb.settings, user_id=user_id)
     graph_changed = normalized.get('graph') != bool(kb.indexing.get('graph')) or (
         isinstance(changes.get('settings'), dict) and changes['settings'].get('graph') != kb.settings.get('graph'))
+    wiki_changed = normalized.get('wiki') and (not kb.indexing.get('wiki') or (
+        isinstance(changes.get('settings'), dict)
+        and changes['settings'].get('wiki_config') != (kb.settings or {}).get('wiki_config')))
     kb.indexing, kb.embedding_model_version_id = normalized, embedding
     kb.chunk_size = int(chunk.get('chunk_size', kb.chunk_size))
     kb.chunk_overlap = int(chunk.get('chunk_overlap', kb.chunk_overlap))
     if isinstance(changes.get('settings'), dict):
         kb.settings = dict(changes['settings'])
     kb.updated_at = utc_now()
+    if wiki_changed:
+        from .wiki_ingest import backfill
+        backfill(db, kb)
     if graph_changed:
         from .graph.build import schedule
         schedule(db, kb, user_id, delay=timedelta(0))
@@ -489,6 +508,8 @@ def delete_document(db: Session, tenant_id: UUID, user_id: UUID, document_id: UU
     _queue(db, kb, kind='cleanup', document_id=doc.id)
     from .graph.build import schedule
     schedule(db, kb, user_id)
+    from .wiki_ingest import schedule as schedule_wiki
+    schedule_wiki(db, kb, None, doc.id)  # a wiki base removes the document's facts from its pages
     audit(db, tenant_id, user_id, 'knowledge_document.deleted', 'knowledge_document', str(doc.id),
           {'kb_id': str(kb.id)})
 
@@ -545,3 +566,6 @@ capabilities.mark_available('graph_store', 'builtin')
 for _feature in ('graph_settings', 'graph_browser'):
     capabilities.mark_available('kb_feature', _feature)
 capabilities.mark_available('kb_feature', 'rerank', verified=False)
+for _wiki_item in ('kb_type', 'indexing'):
+    capabilities.mark_available(_wiki_item, 'wiki', verified=False)
+capabilities.mark_available('kb_feature', 'wiki_pages', verified=False)
