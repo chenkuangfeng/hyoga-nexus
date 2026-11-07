@@ -2,6 +2,9 @@ class PlatformError(Exception):
     code = "platform_error"
     status_code = 400
 
+    #: Optional structured detail returned with the error (for example the findings that blocked a skill).
+    details: dict | None = None
+
     def __init__(self, message: str):
         super().__init__(message)
 

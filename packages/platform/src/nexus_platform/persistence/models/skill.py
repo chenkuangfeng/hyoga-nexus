@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -55,6 +55,11 @@ class SkillVersionRecord(Base):
     scan_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     #: Structured scanner result: ``{"verdict": "safe|caution|dangerous", "findings": [...]}``.
     scan: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    #: False hides the skill from the model (not indexed, ``load_skill`` refuses it).
+    model_invocable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    user_invocable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    #: Declared place for the skill's scripts: ``sandbox`` or ``local`` (builtin skills only).
+    execution: Mapped[str] = mapped_column(String(16), nullable=False, default="sandbox", server_default="sandbox")
     #: Frontmatter keys this platform does not know, kept verbatim, plus parse notes such as ``frontmatter_repaired``.
     extra: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)

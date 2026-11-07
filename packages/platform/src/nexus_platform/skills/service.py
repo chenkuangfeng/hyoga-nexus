@@ -28,6 +28,8 @@ from nexus_platform.persistence.models import (
     SkillVersionFileRecord, SkillVersionRecord,
 )
 from nexus_skills.guard import check_declared_scripts, static_hints
+from nexus_skills.guard.scan import SCANNER_VERSION, ScanResult, scan_skill
+from nexus_skills.policy import decide
 from nexus_skills.loader import ScriptSpec, parse_skill
 from nexus_skills.loader.frontmatter import SkillFormatError
 from nexus_skills.versions import SkillFileError, check_files, content_hash, normalize_path
@@ -40,6 +42,23 @@ RESOURCE_KIND = 'skill'
 INDEX_LIMIT = 6000
 #: Tools a skill may declare as dependencies: the Native builtins, which include the skill readers.
 AVAILABLE_TOOL_NAMES = frozenset(BUILTIN_TOOL_NAMES)
+
+
+class SkillScanBlocked(InvalidConfiguration):
+    """The scan result keeps a skill from being published; ``details`` carries the verdict and the findings."""
+
+    def __init__(self, code: str, scan: ScanResult):
+        super().__init__(code)
+        self.code = code
+        self.details = {'verdict': scan.verdict, 'scanner_version': scan.version, 'truncated': scan.truncated,
+                        'findings': [{'rule': f.rule, 'severity': f.severity, 'category': f.category,
+                                      'path': f.path, 'line': f.line, 'excerpt': f.excerpt}
+                                     for f in scan.findings[:20]]}
+
+
+#: Scan outcomes that stop a publish, as the stable error code returned to the caller.
+_SCAN_STOPS = {'need_ack': 'skill_ack_required', 'block': 'skill_scan_blocked', 'refuse': 'skill_scan_refused',
+               'review': 'skill_review_required'}
 
 
 def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -55,23 +74,27 @@ def _translate(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 @_translate
 def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, files: dict[str, str],
-            *, source: str = 'admin') -> dict[str, Any]:
+            *, source: str = 'admin', acknowledge_findings: bool = False) -> dict[str, Any]:
     """Publish a new immutable version of a space skill; creates the skill on first publish.
 
     Checks, in order: administrator permission, SKILL.md rules, resource rules, declared scripts
-    present, dependency tools known, a name already taken by a builtin skill, a source conflict, and a change
-    in content since the last version. The version is registered as a platform resource so bindings can name it.
+    present, dependency tools known, a name already taken by a builtin skill, the scan against the release policy
+    for ``source`` (``acknowledge_findings`` lets an administrator release a skill the policy would stop), a source
+    conflict, and a change in content since the last version. The version is registered as a platform resource so
+    bindings can name it.
     """
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         require_api_permission(db, tenant_id, user.id, PUBLISH_PERMISSION)
-        return _publish_version(db, tenant_id, user.id, skill_md, files, source)
+        return _publish_version(db, tenant_id, user.id, skill_md, files, source, acknowledged=acknowledge_findings)
 
 
 def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str, files: dict[str, str],
-                     source: str) -> dict[str, Any]:
+                     source: str, *, acknowledged: bool = False) -> dict[str, Any]:
     """Publish inside the caller's transaction; the caller has already authorized the actor."""
     parsed = parse_skill(skill_md)
+    if parsed.execution == 'local' and source != BUILTIN_SOURCE:
+        raise InvalidConfiguration('skill_execution_not_permitted')
     clean = check_files(files)
     missing = check_declared_scripts(parsed, clean)
     if missing:
@@ -82,6 +105,11 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
     if tenant_id != SYSTEM_TENANT_ID and db.scalar(select(SkillRecord.id).where(
             SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == parsed.name).limit(1)) is not None:
         raise InvalidConfiguration('skill_name_taken_by_builtin')
+    scan = scan_skill(skill_md, clean)
+    decision = decide(source, scan.verdict, acknowledged=acknowledged)
+    if decision != 'allow':
+        raise SkillScanBlocked(_SCAN_STOPS[decision], scan)
+    released = acknowledged and decide(source, scan.verdict) in ('need_ack', 'block')
     digest = content_hash(skill_md, clean)
     now = utc_now()
     skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name))
@@ -105,7 +133,10 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
         skill_md=skill_md, body=parsed.body, tools=list(parsed.tools),
         scripts=[{'name': s.name, 'path': s.path, 'interpreter': s.interpreter, 'timeout': s.timeout,
                   'args': s.args, 'risk_level': s.risk_level} for s in parsed.scripts],
-        scan_hints=hints, trust=source, content_hash=digest, created_by=user_id, created_at=now,
+        scan_hints=hints, trust=source, scan_version=scan.version, scan=scan.as_dict(),
+        model_invocable=parsed.model_invocable, user_invocable=parsed.user_invocable, execution=parsed.execution,
+        extra={'values': parsed.extra, 'notes': list(parsed.notes)},
+        content_hash=digest, created_by=user_id, created_at=now,
     )
     db.add(version)
     db.flush()
@@ -115,9 +146,15 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
                                   version_id=str(version.id), active=True, created_at=now))
     skill.current_version_id = version.id
     audit(db, tenant_id, user_id, 'skill.published', 'skill', str(skill.id),
-          {'name': parsed.name, 'version': number, 'content_hash': digest, 'scan_hint_count': len(hints)})
+          {'name': parsed.name, 'version': number, 'content_hash': digest, 'scan_hint_count': len(hints),
+           'source': source, 'verdict': scan.verdict})
+    if released:
+        # The administrator released findings the policy would have stopped: record who, and what was released.
+        audit(db, tenant_id, user_id, 'skill.findings_acknowledged', 'skill', str(skill.id),
+              {'name': parsed.name, 'version': number, 'verdict': scan.verdict,
+               'rules': sorted({f.rule for f in scan.findings})})
     return {'skill': parsed.name, 'version': number, 'version_id': str(version.id), 'content_hash': digest,
-            'scan_hints': hints}
+            'scan_hints': hints, 'verdict': scan.verdict, 'findings': len(scan.findings), 'notes': list(parsed.notes)}
 
 
 def _live(db: Session, tenant_id: UUID, name: str, version: SkillVersionRecord) -> bool:
@@ -154,7 +191,8 @@ def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_
     snapshot = db.get(SessionSkillSnapshotRecord, session_id)
     if snapshot is not None and snapshot.tenant_id == tenant_id and snapshot.agent_version_id == agent_version_id:
         return snapshot.index_text
-    lines = [f'{name} | {version.description}' for name, version in sorted(bound_versions(db, agent_version_id).items())]
+    lines = [f'{name} | {version.description}' for name, version in sorted(bound_versions(db, agent_version_id).items())
+             if version.model_invocable]
     text = '\n'.join(lines)[:INDEX_LIMIT]
     if snapshot is None:
         db.add(SessionSkillSnapshotRecord(session_id=session_id, tenant_id=tenant_id, agent_version_id=agent_version_id,
@@ -172,7 +210,7 @@ def read_for_run(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
     again here. Output is fenced as data so the body cannot close the wrapper or pose as a new message.
     """
     version = bound_versions(db, agent_version_id).get(name)
-    if version is None:
+    if version is None or not version.model_invocable:
         raise NotFound('skill_unavailable')
     try:
         authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
@@ -278,7 +316,36 @@ def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str
                           .order_by(SkillVersionRecord.version)).all()
     return [{'version': v.version, 'version_id': str(v.id), 'content_hash': v.content_hash, 'description': v.description,
              'tools': list(v.tools), 'scripts': [s['name'] for s in v.scripts], 'scan_hints': list(v.scan_hints),
+             'trust': v.trust, 'verdict': (v.scan or {}).get('verdict', 'unscanned'),
+             'findings': list((v.scan or {}).get('findings', [])), 'scan_version': v.scan_version,
+             'rescan_needed': v.scan_version < SCANNER_VERSION,
+             'model_invocable': v.model_invocable, 'user_invocable': v.user_invocable, 'execution': v.execution,
+             'notes': list((v.extra or {}).get('notes', [])),
              'created_at': v.created_at.isoformat()} for v in versions]
+
+
+def rescan(db: Session, principal: Principal, tenant_id: UUID, name: str, version: int) -> dict[str, Any]:
+    """Scan one published version again with the current scanner and store the new result beside it.
+
+    The version's content, hash and bindings do not change; only ``scan`` and ``scan_version`` are replaced.
+    Needs ``tools:manage``. Use it after the scanner is upgraded (the list marks such versions ``rescan_needed``).
+    """
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        require_api_permission(db, tenant_id, user.id, PUBLISH_PERMISSION)
+        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+        row = None if skill is None else db.scalar(select(SkillVersionRecord).where(
+            SkillVersionRecord.skill_id == skill.id, SkillVersionRecord.version == version))
+        if row is None:
+            raise NotFound('skill_not_found')
+        files = {item.path: item.content for item in db.scalars(select(SkillVersionFileRecord).where(
+            SkillVersionFileRecord.version_id == row.id))}
+        result = scan_skill(row.skill_md, files)
+        row.scan, row.scan_version = result.as_dict(), result.version
+        audit(db, tenant_id, user.id, 'skill.rescanned', 'skill', str(skill.id),
+              {'name': name, 'version': version, 'verdict': result.verdict, 'scanner_version': result.version})
+        return {'skill': name, 'version': version, 'verdict': result.verdict, 'findings': len(result.findings),
+                'scan_version': result.version}
 
 
 #: Source label for skills imported from the repository's ``skills/`` directory.

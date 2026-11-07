@@ -25,8 +25,8 @@ DESCRIPTION_MAX = 1024
 BODY_MAX = 32_000
 TOOLS_MAX = 32
 SCRIPTS_MAX = 20
-#: Names may use letters, digits, underscore and hyphen, and must be a single path segment.
-_NAME_RE = re.compile(r'^[\w-]+$')
+#: Names are lower-case letters and digits joined by single hyphens (one path segment, 1-64 characters).
+_NAME_RE = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
 _TOOL_RE = re.compile(r'^[a-z][a-z0-9_]{0,63}$')
 _SCRIPT_NAME_RE = re.compile(r'^[a-z][a-z0-9_-]{0,63}$')
 #: Interpreters a script may declare. Anything else is rejected at parse time and at publish time.
@@ -55,6 +55,19 @@ class ParsedSkill:
     body: str
     tools: tuple[str, ...] = ()
     scripts: tuple[ScriptSpec, ...] = ()
+    #: False hides the skill from the model: it is not listed in the skill index and ``load_skill`` refuses it.
+    model_invocable: bool = True
+    #: Whether a user may invoke the skill directly. Stored and validated; the user-side entry point comes later.
+    user_invocable: bool = True
+    #: Where the skill's scripts are meant to run: ``sandbox`` (default) or ``local`` (builtin skills only).
+    execution: str = 'sandbox'
+    #: Frontmatter keys the platform does not act on, kept verbatim.
+    extra: dict[str, Any] = field(default_factory=dict)
+    #: Non-blocking notes from parsing (unknown keys, a repaired frontmatter).
+    notes: tuple[str, ...] = ()
+
+
+EXECUTION_VALUES = frozenset({'sandbox', 'local'})
 
 
 def parse_skill(markdown: str) -> ParsedSkill:
@@ -63,7 +76,8 @@ def parse_skill(markdown: str) -> ParsedSkill:
     Raises :class:`SkillFormatError` with a stable code (for example ``skill_name_invalid``) when the
     document breaks a rule. The message is safe to show to the author.
     """
-    values, body = frontmatter.split(markdown)
+    document = frontmatter.split_document(markdown)
+    values, body = document.values, document.body
     name = _required_string(values, 'name')
     if len(name) > NAME_MAX or not _NAME_RE.match(name):
         raise SkillFormatError('skill_name_invalid')
@@ -77,7 +91,15 @@ def parse_skill(markdown: str) -> ParsedSkill:
         raise SkillFormatError('skill_body_too_large')
     tools = _tools(values.get('tools', []))
     scripts = _scripts(values.get('scripts', []))
-    return ParsedSkill(name=name, description=description, body=body.strip('\n'), tools=tools, scripts=scripts)
+    execution = values.get('execution', 'sandbox')
+    if execution not in EXECUTION_VALUES:
+        raise SkillFormatError('skill_execution_invalid')
+    flags = {key: values.get(key, True) for key in ('model_invocable', 'user_invocable')}
+    if any(not isinstance(value, bool) for value in flags.values()):
+        raise SkillFormatError('skill_flag_invalid')
+    return ParsedSkill(name=name, description=description, body=body.strip('\n'), tools=tools, scripts=scripts,
+                       model_invocable=flags['model_invocable'], user_invocable=flags['user_invocable'],
+                       execution=execution, extra=document.extra, notes=document.notes)
 
 
 def _required_string(values: dict[str, Any], key: str) -> str:

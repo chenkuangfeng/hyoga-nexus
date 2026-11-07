@@ -117,10 +117,10 @@ async def request_context(request: Request, call_next):
 
 @app.exception_handler(PlatformError)
 async def platform_error_handler(request: Request, exc: PlatformError):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": {"code": exc.code, "message": str(exc), "request_id": request.state.request_id}},
-    )
+    error = {"code": exc.code, "message": str(exc), "request_id": request.state.request_id}
+    if exc.details:
+        error["details"] = exc.details
+    return JSONResponse(status_code=exc.status_code, content={"error": error})
 
 
 @app.exception_handler(CapabilityPlanned)

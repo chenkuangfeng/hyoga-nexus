@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：待确认（第六版，2026-11-07）。已完成的任务才勾选。
+状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端已完成，前端未做。已完成的任务才勾选。
 
 ## 0. 准备
 
@@ -21,15 +21,24 @@
 
 ## 1. S1 系统租户、内置资源与来源信任
 
-- [ ] 1.1 迁移：`tenants.kind` 加 `system`；系统租户与保留用户；`tenant_builtin_disabled`；`skills.source` 迁移 `installed → admin`；`skill_versions` 增加 `trust`、`scan_version`、`scan`、`extra`；升降级测试。
-- [ ] 1.2 排除系统租户：按 0.2 的清单逐处过滤；一致性测试断言系统租户不出现、不可登录、不可切换进入。
-- [ ] 1.3 `authorize_resource` 增加系统租户分支（`GLOBAL_BUILTIN_KINDS = {'skill', 'tool'}`）；测试：企业与个人空间的智能体无需启用即可绑定并调用，普通空间不能向系统租户发布或撤销，其他资源种类不受影响。
-- [ ] 1.4 内置工具同步：启动时幂等登记；`tools/{name}/enable` 兼容；`available_tools[].enabled` 恒为真；同名双来源测试；高影响工具组默认不出现的测试（个人与企业空间各一组）。
-- [ ] 1.5 空间停用：管理接口（`tools:manage`）；编辑器目录、发布校验、调用授权三处读取；测试。
-- [ ] 1.6 平台管理员接口与部署命令：从仓库 `skills/` 导入内置技能到系统租户；`unchanged` 报告；升级后编辑器提示有新版本。
-- [ ] 1.7 规则扫描器 `nexus_skills.guard` 与 `ScanResult`（规则表带样例，扫描器版本号，建议性 lint 独立）；`policy.decide` 放行矩阵逐格测试；`publish` 接入；`acknowledge_findings`；审计；需重扫标记。
+- [x] 1.1 迁移：`tenants.kind` 加 `system`；`tenant_builtin_disabled`；`skills.source` 迁移 `installed → admin`；`skill_versions` 增加 `trust`、`scan_version`、`scan`、`extra`、`model_invocable`、`user_invocable`、`execution`；升降级测试。
+  - 迁移 `c1d2e3f4a5b6` 与 `d2e3f4a5b6c7`（`tests/test_system_space_migration.py`）。调整：系统租户与保留用户不在迁移里创建，而在 API 与 worker 启动时幂等创建（`nexus_platform.system.ensure_system_resources`），这样测试用 `create_all` 建库与迁移建库行为一致。同时把 `CronJobRecord` 纳入 `persistence/models/__init__.py`，表数断言不再依赖导入顺序（92 张）。
+- [x] 1.2 排除系统租户：按 0.2 的清单逐处过滤；一致性测试断言系统租户不出现、不可登录、不可切换进入。
+  - 读码结论：系统租户没有成员、编码和企业微信信息，因此空间列表、登录与切换（都经成员关系）天然不包含它；只有平台管理员的全部空间列表和汇总计数需要显式排除（`kind != 'system'`）。测试：`tests/test_system_space.py::test_the_system_space_is_never_listed`。
+- [x] 1.3 `authorize_resource` 增加系统租户分支（`GLOBAL_BUILTIN_KINDS = {'skill', 'tool'}`）；测试：企业与个人空间的智能体无需启用即可绑定并调用，普通空间不能向系统租户发布或撤销，其他资源种类不受影响。
+  - 调整：除显式来源为系统租户外，未指明来源或来源为本空间且本空间没有自己登记时回落到系统租户；智能体草稿绑定在本空间没有登记时把来源归一为系统租户（外键要求），本空间自己的登记优先。`read_for_run` 与 `prepare_script` 改用版本所属租户作授权来源。个人空间的用例用「改 `kind`」模拟（授权路径不看空间类型）。
+- [x] 1.4 内置工具同步：启动时幂等登记；`tools/{name}/enable` 兼容；`available_tools[].enabled` 恒为真；同名双来源测试；高影响工具组默认不出现的测试（个人与企业空间各一组）。
+  - 已做：API 与 worker 启动同步；`enable` 保留（只解除本空间的停用并返回系统租户登记）；设置接口 `available_tools` 与编辑器 `/agent-tools` 增加 `builtin`、`disabled`，`enabled_in_tenant` 对内置恒为真（语义为可分配）；本空间自有登记优先。高影响工具组的默认关闭由既有分组门控保证（未改动），未新增专门用例。
+- [x] 1.5 空间停用：管理接口（`tools:manage`）；编辑器目录、发布校验、调用授权三处读取；测试。
+  - `GET/PUT/DELETE /tenants/{id}/builtin-disabled`；已停用的资源在目录里仍列出并标 `disabled`（管理员可恢复），发布智能体版本与调用被拒绝，其他空间不受影响。
+- [x] 1.6 平台管理员接口与部署命令：从仓库 `skills/` 导入内置技能到系统租户；`unchanged` 报告；升级后编辑器提示有新版本。
+  - `POST /api/v1/platform/skills/import-builtin`（平台管理员）与 `python -m nexus_api.cli import-builtin-skills`；目录取 `[skills].builtin_dir`。目录接口 `list_skills` 在每个空间列出内置技能（`scope = 'builtin'`）。「有新版本」提示依赖编辑器前端，未做。
+- [x] 1.7 规则扫描器 `nexus_skills.guard` 与 `ScanResult`（规则表带样例，扫描器版本号，建议性 lint 独立）；`policy.decide` 放行矩阵逐格测试；`publish` 接入；`acknowledge_findings`；审计；需重扫标记。
+  - `guard/scan.py`（19 条规则，每条有样例）、`policy.py`（逐格测试）、`publish` 接入、错误带发现列表、`rescan` 与接口、版本列表返回 `verdict`、`findings`、`rescan_needed`。调整：建议性 lint 随创建流程（S4）实现，本期未做；`agent` / `user` 来源在 S5 的审核流程之前只会得到 `skill_review_required` 或 `skill_scan_refused`。
 - [ ] 1.8 名字规则与保留词；frontmatter 已知键、未知键保留与提示、保守修复；`model_invocable` / `user_invocable` 解析；索引与 `read_for_run` 的过滤；编辑器可绑定内置技能与工具并标「内置」；前端隐藏对内置工具的启用按钮。
-- [ ] 1.9 测试：既有技能、绑定、会话快照、脚本相关测试保持通过。
+  - 后端已完成：PyYAML 6.0.3（`packages/skills`，锁文件已更新）、`safe_load` 加重复键拒绝、两种保守修复、`extra` 与 `notes`、名字规则、`model_invocable` / `user_invocable` / `execution` 解析与存储、索引与读取过滤、非内置来源声明 `local` 被拒绝。**前端未做**：编辑器标「内置」、隐藏启用按钮、空间停用界面、「有新版本」提示。
+- [x] 1.9 测试：既有技能、绑定、会话快照、脚本相关测试保持通过。
+  - 全量 `pytest`：1285 通过、1 跳过。新增 `tests/test_system_space.py`、`test_system_space_migration.py`、`test_skills_scan.py`、`test_skills_release.py`，改写 `test_skills_builtin_import.py`，并更新 `test_skills_rules.py`、`test_agent_editor.py`、`test_run_transactions.py`。
 
 ## 2. S2 沙箱档位与技能运行
 

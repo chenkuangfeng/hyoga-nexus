@@ -23,6 +23,8 @@ class SkillPublishRequest(BaseModel):
     """SKILL.md text plus resource files keyed by relative path (``refs/...``, ``scripts/...``)."""
     skill_md: str = Field(min_length=1, max_length=64_000)
     files: dict[str, str] = Field(default_factory=dict)
+    #: An administrator releases findings the release policy would otherwise stop (recorded in the audit log).
+    acknowledge_findings: bool = False
 
 
 @router.get("/tenants/{tenant_id}/skills")
@@ -43,7 +45,8 @@ def skill_versions(tenant_id: UUID, name: str, principal: Principal = Depends(ge
 def publish_skill(tenant_id: UUID, body: SkillPublishRequest, principal: Principal = Depends(get_principal),
                   db: Session = Depends(get_database_session)) -> dict[str, Any]:
     """Publish a new immutable version. Requires the tools-management permission (administrators)."""
-    return skills.publish(db, principal, tenant_id, body.skill_md, body.files)
+    return skills.publish(db, principal, tenant_id, body.skill_md, body.files,
+                          acknowledge_findings=body.acknowledge_findings)
 
 
 @router.post("/platform/skills/import-builtin")
@@ -55,3 +58,10 @@ def import_builtin_skills(principal: Principal = Depends(get_principal), db: Ses
     """
     from nexus_platform.configuration import builtin_skills_dir
     return skills.import_builtin(db, principal, builtin_skills_dir())
+
+
+@router.post("/tenants/{tenant_id}/skills/{name}/versions/{version}/rescan")
+def rescan_skill_version(tenant_id: UUID, name: str, version: int, principal: Principal = Depends(get_principal),
+                         db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Scan a published version again with the current scanner (administrators). Content is unchanged."""
+    return skills.rescan(db, principal, tenant_id, name, version)

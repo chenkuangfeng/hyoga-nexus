@@ -31,14 +31,53 @@ def test_missing_or_unterminated_frontmatter_is_rejected():
         parse_skill('---\nname: a\ndescription: b\n')
 
 
-def test_unknown_or_duplicate_keys_are_rejected_not_ignored():
-    with pytest.raises(SkillFormatError, match='frontmatter_key_unknown:licence'):
-        parse_skill(_md('licence: MIT\n'))
+def test_unknown_keys_are_kept_with_a_note_and_duplicates_are_rejected():
+    skill = parse_skill(_md('licence: MIT\nversion: 1.2\n'))
+    assert skill.extra == {'licence': 'MIT', 'version': 1.2}
+    assert skill.notes == ('frontmatter_key_unknown:licence',)  # `version` is a common foreign key: kept, no note
     with pytest.raises(SkillFormatError, match='frontmatter_key_duplicate:name'):
         parse_skill('---\nname: a\nname: b\ndescription: d\n---\n')
 
 
-@pytest.mark.parametrize('name', ['', 'has space', 'slash/name', 'x' * 65, 'my-Claude-helper', 'anthropic-tools'])
+def test_yaml_block_lists_and_multiline_descriptions_are_accepted():
+    skill = parse_skill('---\nname: a\ndescription: |\n  First line\n  second line\ntools:\n  - read_memory\n'
+                        '  - search_memory\n---\nBody\n')
+    assert skill.tools == ('read_memory', 'search_memory')
+    assert skill.description == 'First line\nsecond line'
+
+
+def test_a_slightly_broken_frontmatter_is_repaired_and_marked():
+    nested = parse_skill('---\nname: report-writer\n  version: 1.2.6\n  description: Writes reports\n---\nB\n')
+    assert nested.name == 'report-writer' and nested.description == 'Writes reports'
+    assert 'frontmatter_repaired' in nested.notes and nested.extra == {'version': '1.2.6'}
+    colon = parse_skill('---\nname: a\ndescription: Weekly: report writer\n---\nB\n')
+    assert colon.description == 'Weekly: report writer' and 'frontmatter_repaired' in colon.notes
+    with pytest.raises(SkillFormatError, match='frontmatter_invalid'):
+        parse_skill('---\nname: [unclosed\n---\nB\n')
+
+
+def test_frontmatter_is_never_executed():
+    # A python object tag is refused by the safe loader ...
+    with pytest.raises(SkillFormatError, match='frontmatter_invalid'):
+        parse_skill('---\nname: a\ndescription: d\ntools: !!python/object/apply:os.system ["echo hi"]\n---\nB\n')
+    # ... and where the colon repair rewrites a value, the result is plain text, never an object.
+    skill = parse_skill('---\nname: a\ndescription: !!python/object/apply:os.system ["echo hi"]\n---\nB\n')
+    assert isinstance(skill.description, str) and skill.description.startswith('!!python/object')
+
+
+def test_invocation_flags_and_execution_are_validated():
+    default = parse_skill(_md())
+    assert default.model_invocable and default.user_invocable and default.execution == 'sandbox'
+    hidden = parse_skill(_md('model_invocable: false\nuser_invocable: false\nexecution: local\n'))
+    assert not hidden.model_invocable and not hidden.user_invocable and hidden.execution == 'local'
+    with pytest.raises(SkillFormatError, match='skill_flag_invalid'):
+        parse_skill(_md('model_invocable: "no"\n'))
+    with pytest.raises(SkillFormatError, match='skill_execution_invalid'):
+        parse_skill(_md('execution: remote\n'))
+
+
+@pytest.mark.parametrize('name', ['', 'has space', 'slash/name', 'x' * 65, 'my-Claude-helper', 'anthropic-tools',
+                                  'Upper', 'under_score', '-lead', 'trail-', 'double--hyphen'])
 def test_invalid_or_reserved_names_are_rejected(name):
     with pytest.raises(SkillFormatError):
         parse_skill(_md(name=name))
