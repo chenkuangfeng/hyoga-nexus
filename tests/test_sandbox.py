@@ -39,9 +39,10 @@ def _write_config(tmp_path, body):
     return path
 
 
-def test_settings_default_to_disabled_docker(tmp_path):
+def test_settings_default_to_a_disabled_local_profile(tmp_path):
     settings = load_settings(_write_config(tmp_path, ''))
-    assert settings.enabled is False and settings.backend == 'docker' and settings.network == 'none'
+    assert settings.enabled is False and settings.backend == 'local' and settings.profile == 'local'
+    assert settings.network == 'none' and settings.allow_local is False
 
 
 @pytest.mark.parametrize('body', ['[sandbox]\nbackend = "vm"', '[sandbox]\nmemory_mb = 1', '[sandbox]\nnetwork = "host"',

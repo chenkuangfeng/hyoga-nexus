@@ -11,7 +11,7 @@ url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
 
 数据库配置优先级：调用者显式 URL > 文件 `[database].url`。文件缺失或没有数据库字段会报配置错误，不回退其他来源；非法 TOML、错误类型及空连接串同样报错。Alembic 编程调用可通过 `Config.attributes["database_url"]` 显式注入测试连接串；不再使用 `alembic.ini` 的数据库默认值。错误不包含连接串或原始配置片段。
 
-文件分段：`[database]` 数据库，`[auth]` 认证与 Cookie，`[logging]` 日志级别，`[security]` 凭据加密主密钥，`[model_credentials]` 模型供应商密钥（同时作为白名单），`[model_network]` 私有地址白名单，`[wecom]` 企业微信登录，`[platform]` 与 `[model_connection_pool]` 运行限制，`[watchdog]` Run 停滞检测（只报告，不取消），`[knowledge]` 知识库内置存储目录（原文件与内置 SQLite 向量库）、单次上传上限与索引并发数，`[sandbox]` 沙箱（默认关闭；启用后须运行 `uv run python -m nexus_worker --sandbox-check` 并通过隔离验收，沙箱工具组才会出现，且仍需在智能体里打开），`[web]` 联网工具组（默认关闭；`web_search` 的后端与密钥、`web_fetch` 的大小与超时限制），`[skills]` 技能（`allow_local_scripts` 本地脚本门禁，仅开发模式；`builtin_dir` 内置技能目录，缺省 `skills`）。用户模型与智能体配置仍保存在数据库中，不在此文件管理。
+文件分段：`[database]` 数据库，`[auth]` 认证与 Cookie，`[logging]` 日志级别，`[security]` 凭据加密主密钥，`[model_credentials]` 模型供应商密钥（同时作为白名单），`[model_network]` 私有地址白名单，`[wecom]` 企业微信登录，`[platform]` 与 `[model_connection_pool]` 运行限制，`[watchdog]` Run 停滞检测（只报告，不取消），`[knowledge]` 知识库内置存储目录（原文件与内置 SQLite 向量库）、单次上传上限与索引并发数，`[sandbox]` 沙箱（默认关闭；运维用 `[sandbox.profiles.<名字>]` 定义 `local` / `docker` / `bwrap` 档位，`default_profile` 缺省为 `local`，智能体按名字选择档位；`local` 不是隔离，仅在 `allow_local = true` 且开发认证模式下可用；启用后须运行 `uv run python -m nexus_worker --sandbox-check [--profile 名字]` 并通过隔离验收，沙箱工具组才会出现，且仍需在智能体里打开；旧的扁平键仍有效，等同一个名为 `default` 的档位），`[web]` 联网工具组（默认关闭；`web_search` 的后端与密钥、`web_fetch` 的大小与超时限制），`[skills]` 技能（`allow_local_scripts` 本地脚本门禁，仅开发模式；`builtin_dir` 内置技能目录，缺省 `skills`）。用户模型与智能体配置仍保存在数据库中，不在此文件管理。
 
 ## 模块文档
 

@@ -77,6 +77,8 @@ class BwrapBackend:
                  '--remount-ro', '/',  # the root is a tmpfs: only /workspace, /outputs and /tmp stay writable
                  '--clearenv', '--setenv', 'PATH', _PATH, '--setenv', 'HOME', '/workspace',
                  '--setenv', 'LANG', 'C.UTF-8', '--setenv', 'LC_ALL', 'C.UTF-8', '--setenv', 'TMPDIR', '/tmp',
+                 *[flag for key in self.settings.env_passthrough if key in os.environ
+                   for flag in ('--setenv', key, os.environ[key])],
                  '--chdir', cwd, '--', '/bin/sh', '-c', command]
         return args
 

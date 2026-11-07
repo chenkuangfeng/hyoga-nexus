@@ -75,29 +75,50 @@ max_upload_mb = 50
 index_concurrency = 1
 
 [sandbox]
-# Sandbox for the file and command tools (openspec 2026-11-07-tool-expansion). Off by default.
-# Enabling it is not enough: run `uv run python -m nexus_worker --sandbox-check` and have it pass, then switch the
-# "sandbox" tool group on per agent. The report is stored under workspace_root and is valid only for the
-# backend, image and limits it was run with.
+# Sandbox for the file and command tools and for skill scripts (openspec 2026-11-07-tool-expansion, 2026-11-07-skill-evolution).
+# Off by default. The operator defines named profiles; an agent picks one by name (its `sandbox_profile` setting) and can
+# never create or change one. Enabling is not enough: run `uv run python -m nexus_worker --sandbox-check` (every
+# docker and bwrap profile, or --profile NAME) and have it pass, then switch the "sandbox" tool group on per agent.
+# A report is stored per profile under workspace_root and is valid only for the profile's type, image and limits.
 enabled = false
-# "docker" isolates commands in one container per session. "bwrap" (bubblewrap, Linux) puts every command in its own
-# namespace jail: no daemon or image, the host's /usr is mounted read-only. It has no process-count limit and no
-# background commands (sandbox_exec_async is refused); `cpus`, `pids` and `image` do not apply to it.
-# "local" runs them as the server user with NO isolation:
-# development only, and it needs allow_local = true and the development auth mode.
-backend = "docker"
-# The image must already be present (it is never pulled) and offer sh, timeout and python3.
-image = "python:3.12-slim"
-cpus = 1.0
-memory_mb = 512
-pids = 128
-# "none" gives the container no network. "bridge" opens it, and then sandbox_exec asks for approval on every call.
-network = "none"
-idle_seconds = 900
-workspace_quota_mb = 512
-exec_timeout_max_seconds = 120
+# Profile used by agents that name none. "local" is for development only: it runs commands as the server user with NO
+# isolation and is usable only with allow_local = true AND the development auth mode. In production, point this at a
+# docker or bwrap profile (or name one per agent).
+default_profile = "local"
 workspace_root = "data/sandbox"
 allow_local = false
+# Lets builtin skills that declare `execution = "local"` run on a `local` profile. Development only.
+allow_local_scripts = false
+
+[sandbox.profiles.local]
+type = "local"
+
+# [sandbox.profiles.docker]
+# type = "docker"                  # one container per session, hardened: non-root, read-only root, no capabilities
+# image = "python:3.12-slim"       # must already be present (never pulled); needs sh, timeout and python3
+# cpus = 1.0
+# memory_mb = 512
+# pids = 128
+# network = "none"                 # none | bridge. "bridge" opens it, and then every command asks for approval
+# install_network = "bridge"       # network of the temporary environment that builds a skill's dependencies
+# tmpfs_mb = 64
+# idle_seconds = 900
+# workspace_quota_mb = 512
+# exec_timeout_max_seconds = 120   # ceiling of one sandbox_exec call
+# skill_timeout_seconds = 120      # default and ceiling of one exec_skill call
+# skill_timeout_max_seconds = 600
+# env_passthrough = []             # host variable names to forward; names that look like credentials are refused
+
+# [sandbox.profiles.bwrap]
+# type = "bwrap"                   # bubblewrap (Linux): a namespace jail per command, the host's /usr mounted read-only
+# memory_mb = 512                  # address-space limit; there is no process-count limit and no CPU quota
+# network = "none"                 # none | bridge
+# install_network = "bridge"
+# workspace_quota_mb = 512
+# exec_timeout_max_seconds = 120
+#                                  # no background commands (sandbox_exec_async is refused)
+#
+# The older flat layout (backend, image, cpus ... directly under [sandbox]) still works: it defines one profile named "default".
 
 [skills]
 # Folder whose skill sub-folders become builtin skills (assignable in every space). Imported by a platform administrator

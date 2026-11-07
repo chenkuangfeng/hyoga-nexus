@@ -27,6 +27,12 @@
 
 `--unshare-all --cap-drop ALL --die-with-parent --new-session --remount-ro /`，环境用 `--clearenv` 重建，网络仅在 `network = "bridge"` 时 `--share-net`；服务进程为 root 时以 65534 运行。资源限制用外层 shell 的 `ulimit`（`-v` 地址空间按 `memory_mb`、`-f` 单文件按配额、`-c 0`、`-n 1024`）。与 docker 后端的差异：没有进程数限制（`RLIMIT_NPROC` 按宿主用户统计，不可用，需要 cgroup）、没有 CPU 配额、`image`/`cpus`/`pids` 不生效、不支持后台命令（隔离环境随启动它的 shell 结束，`exec_async` 返回 `sandbox_background_unsupported`）、解释器与库就是宿主的。验收的进程数探测预计不通过，是否放行由运维验证后决定。
 
+## 档位
+
+`[sandbox.profiles.<名字>]` 定义命名档位，类型为 `local`、`docker`、`bwrap`；`default_profile` 缺省为 `local`；档位只能由运维在部署配置里定义，智能体设置 `sandbox_profile` 只能选名字，已发布的智能体版本固定其档位。每个档位解析为一个 `SandboxSettings`，后端、管理器和验收都按档位工作：每个档位有自己的 `SandboxManager`，docker 容器名在非 `default` 档位时带档位名，容器带 `nexus.sandbox.profile` 标签，空闲与孤儿回收只处理本档位；验收报告为 `acceptance.json`（旧的 `default` 档位）或 `acceptance-<档位>.json`，指纹含档位的类型、镜像与限制。`--sandbox-check` 默认检查全部 docker 与 bwrap 档位，`--profile` 只检查一个。
+
+不适用于某类型的键直接报错（例如 bwrap 档位里的 `pids`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时只有隐式的 `local` 档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
+
 ## 验收项
 
 connectivity、user、network、time_limit、output_limit、memory_limit、process_limit、tenant_isolation、path_escape、environment、cancellation、cleanup_and_residue。`local` 后端在任何探测运行前被拒绝，因为内存与进程数探测本身带有破坏性。

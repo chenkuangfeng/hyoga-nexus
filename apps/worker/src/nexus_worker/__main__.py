@@ -134,23 +134,49 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
         logger.info("Worker stopped", extra={"worker_id": worker_id})
 
 
-def _sandbox_check() -> int:
-    """Run the isolation acceptance against `[sandbox]` and print each item. Returns the process exit code."""
+def _sandbox_check(profile: str | None = None) -> int:
+    """Run the isolation acceptance against `[sandbox]` profiles and print each item. Returns the process exit code.
+
+    With a profile name only that profile is checked; without one every profile that can be accepted is checked
+    (`local` profiles never are: they are not an isolation boundary). Exit 0 means every checked profile passed.
+    """
     import asyncio
     import json
     from nexus_core.deployment import DeploymentConfigError
     from nexus_core.sandbox import SandboxError
     from nexus_sandbox import acceptance
-    from nexus_sandbox.settings import load_settings
+    from nexus_sandbox.settings import load_config
     try:
-        report = asyncio.run(acceptance.run(load_settings()))
-    except (DeploymentConfigError, SandboxError) as error:
-        print(f"sandbox check not run: {getattr(error, 'code', error)}")
+        config = load_config()
+    except DeploymentConfigError as error:
+        print(f"sandbox check not run: {error}")
         return 2
-    for item in report["items"]:
-        print(f"{'PASS' if item['ok'] else 'FAIL'}  {item['name']}: {item['detail']}")
-    print(json.dumps({"passed": report["passed"], "report": str(acceptance.report_path(load_settings()))}))
-    return 0 if report["passed"] else 1
+    if profile is not None:
+        chosen = [config.get(profile)] if config.get(profile) is not None else []
+        if not chosen:
+            print("sandbox check not run: no such profile")
+            return 2
+    else:
+        chosen = [item for item in config.profiles.values() if item.backend != "local"]
+    if not chosen:
+        print("sandbox check not run: no docker or bwrap profile is defined")
+        return 2
+    exit_code = 0
+    for settings in chosen:
+        print(f"== profile {settings.profile} ({settings.backend})")
+        try:
+            report = asyncio.run(acceptance.run(settings))
+        except SandboxError as error:
+            print(f"sandbox check not run: {getattr(error, 'code', error)}")
+            exit_code = max(exit_code, 2)
+            continue
+        for item in report["items"]:
+            print(f"{'PASS' if item['ok'] else 'FAIL'}  {item['name']}: {item['detail']}")
+        print(json.dumps({"profile": settings.profile, "passed": report["passed"],
+                          "report": str(acceptance.report_path(settings))}))
+        if not report["passed"]:
+            exit_code = max(exit_code, 1)
+    return exit_code
 
 
 def main() -> None:
@@ -159,9 +185,11 @@ def main() -> None:
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--sandbox-check", action="store_true",
                         help="run the sandbox isolation acceptance, store the report and exit (0 = passed)")
+    parser.add_argument("--profile", default=None,
+                        help="with --sandbox-check: check only this profile (default: every docker and bwrap profile)")
     args = parser.parse_args()
     if args.sandbox_check:
-        raise SystemExit(_sandbox_check())
+        raise SystemExit(_sandbox_check(args.profile))
     try:
         database_url = resolve_database_url()
     except DatabaseConfigurationError as exc:

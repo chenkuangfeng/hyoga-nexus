@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端已完成，前端未做。已完成的任务才勾选。
+状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端已完成（前端未做）；S2 的档位部分（2.1–2.5）已完成，技能投射、`exec_skill`、`run_skill_script` 退役与 `execution` 策略（2.6–2.10）进行中。已完成的任务才勾选。
 
 ## 0. 准备
 
@@ -42,11 +42,16 @@
 
 ## 2. S2 沙箱档位与技能运行
 
-- [ ] 2.1 `[sandbox]` 档位配置：解析与校验（未知类型、缺 `image`、越界值，错误只含键名）；旧扁平键映射为 `default` 档位；`configs/nexus.example.toml` 与 `configs/README.md` 同步。
-- [ ] 2.2 档位参数落到各后端：`docker`（`install_network`、`tmpfs_mb`、`env_passthrough` 名单与敏感名拒绝）、`bwrap`（`install_network`、`memory_mb`）、`local`；`extra_args` 明确不支持并有测试。
-- [ ] 2.3 智能体设置 `sandbox_profile`；已发布版本固定；缺省取 `default_profile`；`SandboxManager` 按档位构造。
-- [ ] 2.4 `local` 档位门禁：非开发模式或 `allow_local` 关闭时可用性为 `sandbox_local_not_allowed`；启动日志与管理接口提示；默认 `default_profile = "local"` 对应的测试说明（沙箱仍默认关闭）。
-- [ ] 2.5 可用性与验收按档位：`tool_gates` 按智能体档位计算；`acceptance-<档位>.json`；指纹含档位参数；`--sandbox-check --profile`；迁移 `sandbox_acceptance`（若采用表存储）带档位列。
+- [x] 2.1 `[sandbox]` 档位配置：解析与校验（未知类型、缺 `image`、越界值，错误只含键名）；旧扁平键映射为 `default` 档位；`configs/nexus.example.toml` 与 `configs/README.md` 同步。
+  - `nexus_sandbox/settings.py`：`SandboxConfig` / `SandboxSettings`、`load_config`、`load_settings(profile=)`。不适用于某类型的键报错（例如 bwrap 的 `pids`）；没有任何沙箱配置时只有隐式的 `local` 档位。调整：默认超时与输出上限仍是智能体设置（`sandbox_exec_timeout_seconds`、`sandbox_output_limit`），不放进档位。
+- [x] 2.2 档位参数落到各后端：`docker`（`install_network`、`tmpfs_mb`、`env_passthrough` 名单与敏感名拒绝）、`bwrap`（`install_network`、`memory_mb`）、`local`；`extra_args` 明确不支持并有测试。
+  - `tmpfs_mb`、`env_passthrough` 已落到 docker / bwrap / local；`install_network` 已解析校验，要到 S3 的依赖构建才使用。docker 容器名在非 `default` 档位带档位名，容器带 `nexus.sandbox.profile` 标签，回收只处理本档位。
+- [x] 2.3 智能体设置 `sandbox_profile`；已发布版本固定；缺省取 `default_profile`；`SandboxManager` 按档位构造。
+  - `NativePolicy.sandbox_profile`（名字校验）、worker 按档位取管理器与会话、编辑器 `/agent-tools` 返回 `sandbox_profiles`（名字、类型、是否默认、是否可用、原因）。**前端未做**：智能体编辑器里选择档位的控件。
+- [x] 2.4 `local` 档位门禁：非开发模式或 `allow_local` 关闭时可用性为 `sandbox_local_not_allowed`；启动日志与管理接口提示；默认 `default_profile = "local"` 对应的测试说明（沙箱仍默认关闭）。
+  - 管理接口的提示以 `/agent-tools` 的 `sandbox_profiles[].reason` 提供；启动日志的提示未单独加。
+- [x] 2.5 可用性与验收按档位：`tool_gates` 按智能体档位计算；`acceptance-<档位>.json`；指纹含档位参数；`--sandbox-check --profile`；迁移 `sandbox_acceptance`（若采用表存储）带档位列。
+  - 报告是文件（`acceptance.json` 给旧的 `default` 档位，`acceptance-<档位>.json` 给其他档位），没有表，因此无需迁移。`--sandbox-check` 默认检查全部 docker 与 bwrap 档位。同时修正 `sandbox_exec` 的风险等级与网关超时：改为按全部档位计算（任一 docker / bwrap 档位开放网络即 `destructive`），否则档位化后会误读顶层键而降级风险。
 - [ ] 2.6 技能投射：`docker` / `bwrap` 只读挂载 `/skills`，`local` 宿主路径；`NEXUS_SKILL_DIR`、`NEXUS_SKILL_OUTPUT_DIR`；文件数与字节上限；其他会话 / 租户 / 未绑定技能不可见。
 - [ ] 2.7 执行器端口新增可选 `env` 与 `stdin`（docker `exec -i`，bwrap 与 local 写标准输入，默认仍 `DEVNULL`）；`sandbox_exec` 新增可选 `stdin`（≤ 65536 字节）。
 - [ ] 2.7a `exec_skill`：纯逻辑 `nexus_skills/exec.py`（脚本路径规范化、解释器选择、环境变量与 `PATH` 构造、argv 组装）；工具定义放 `nexus_tools/builtins/skills.py`（`skills` 组）；`RunStore.exec_skill`（取内容、授权、哈希校验、审计、恢复提示）；可用性按所选档位沙箱可用；`skill_timeout_seconds` / `skill_timeout_max_seconds`；`load_skill` 的 `${NEXUS_SKILL_DIR}` 替换。

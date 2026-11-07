@@ -56,7 +56,7 @@
 - 投射：按会话、按内容哈希原子写出到 `<workspace_root>/<tenant>/<session>/skills/`；总文件数 ≤ 1000、总字节 ≤ 32 MB（WeKnora 上限），超限时该会话的技能脚本不可用而内联加载不受影响；其他会话、其他租户与未绑定的技能不在其中；宿主不执行投射目录里的任何内容，不自动安装依赖。
 - 审批：`exec_skill` 的风险等级与 `sandbox_exec` 一致（隔离无网络为 `write`，开放网络为 `destructive`），审批沿用 `tool_access`；它不是任意 shell，所以不要求 `sandbox` 组打开，但必须所选档位的沙箱可用。需要管道、串联、`cd` 时模型改用 `sandbox_exec`，该工具仍受 `sandbox` 组开关约束。
 - 正文里的路径：`load_skill` 返回正文前，把 `${NEXUS_SKILL_DIR}` 替换为本会话沙箱内技能目录的真实路径，未能解析（沙箱不可用等）则原样保留。
-- 超时：`exec_skill` 用档位的 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（600）；`sandbox_exec` 沿用 `default_timeout_seconds` / `exec_timeout_max_seconds`。
+- 超时：`exec_skill` 用档位的 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（600）；`sandbox_exec` 沿用智能体设置的默认超时与档位的 `exec_timeout_max_seconds`。
 - 多个脚本：模型对每个脚本各调用一次 `exec_skill`，步骤之间用 `/workspace` 里的文件交接，成品放 `/outputs`；顺序由 `SKILL.md` 说明，平台不编排；有副作用的调用依次执行。
 - 恢复提示：命令失败且 stderr 命中「缺模块 / 缺解释器 / 环境未构建」时，在结果里附一句固定的恢复方向（管理员需要重装依赖，或该技能不适用于当前档位）。不做命令黑名单。
 
@@ -144,9 +144,7 @@ install_network = "bridge"       # 依赖构建期使用的网络
 tmpfs_mb = 64
 idle_seconds = 900
 workspace_quota_mb = 512
-default_timeout_seconds = 30
 exec_timeout_max_seconds = 120
-output_limit_bytes = 20000
 
 [sandbox.profiles.bwrap]
 type = "bwrap"
@@ -154,9 +152,7 @@ memory_mb = 512                  # 地址空间上限
 network = "none"
 install_network = "bridge"
 workspace_quota_mb = 512
-default_timeout_seconds = 30
 exec_timeout_max_seconds = 120
-output_limit_bytes = 20000
 ```
 
 ### 7.2 参数与参考来源
@@ -172,8 +168,7 @@ output_limit_bytes = 20000
 | `install_network` | — | ✓ | ✓ | 本变更新增：构建依赖需要联网，与运行期网络分开 |
 | `tmpfs_mb`、只读根、`cap-drop ALL`、`no-new-privileges`、非 root | — | ✓ 固定加固，不可配置关闭 | `--cap-drop ALL`、`--remount-ro /` 固定 | 现有 docker 后端；Hermes 的加固集合 |
 | `workspace_quota_mb` | ✓ | ✓ 默认 512 | ✓ 默认 512 | Hermes `container_disk`（我们只限文件工具与单文件大小，不是磁盘配额） |
-| `default_timeout_seconds` / `exec_timeout_max_seconds` | ✓ | ✓ | ✓ | WeKnora `DefaultTimeoutSec`、Hermes `terminal.timeout`、Octop `command_timeout` |
-| `output_limit_bytes` | ✓ | ✓ | ✓ | Octop `max_output_bytes`（头尾截断沿用现有实现） |
+| `exec_timeout_max_seconds`（`sandbox_exec` 的上限）、`skill_timeout_seconds` / `skill_timeout_max_seconds`（`exec_skill`） | ✓ | ✓ | ✓ | WeKnora `DefaultTimeoutSec`（120 / 600）、Hermes `terminal.timeout`、Octop `command_timeout`。默认超时与输出保留上限仍是智能体设置 `sandbox_exec_timeout_seconds`、`sandbox_output_limit`（已实现），不重复放进档位 |
 | `idle_seconds` | — | ✓ 容器空闲回收 | —（无常驻容器） | Hermes `lifetime_seconds`、WeKnora 沙箱 TTL |
 | `allocation` | — | `session`（默认）/ `user`（同一用户的会话共享容器） | `session` | WeKnora `AllocationMode`、Octop `sandbox_scope`；`user` 本期不做 |
 | `env_passthrough`（显式转发的宿主环境变量名） | — | ✓ 默认空 | ✓ 默认空 | Hermes `docker_forward_env`；名字含 `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 的拒绝转发 |

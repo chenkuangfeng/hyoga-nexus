@@ -44,11 +44,11 @@ class SandboxManager:
         files = HostFileStore(workspace, outputs, quota_bytes=self.settings.workspace_quota_mb * 1024 * 1024)
         key = f'{tenant_id}/{session_id}'
         if self.settings.backend == 'docker':
-            executor = DockerExecutor(self.docker, container_name(str(tenant_id), str(session_id)), workspace, outputs)
+            executor = DockerExecutor(self.docker, container_name(str(tenant_id), str(session_id), self.settings.profile), workspace, outputs)
         elif self.settings.backend == 'bwrap':
             executor = BwrapExecutor(self.bwrap, workspace, outputs)
         else:
-            executor = LocalExecutor(files.roots)
+            executor = LocalExecutor(files.roots, self.settings.env_passthrough)
         self._last_used[key] = time.monotonic()
         self._executors[key] = executor
         return SandboxSession(files, executor, default_timeout=default_timeout,
@@ -67,7 +67,7 @@ class SandboxManager:
         if self.docker is None:
             return []
         now = time.monotonic() if now is None else now
-        live = {container_name(*key.split('/', 1)) for key, used in self._last_used.items()
+        live = {container_name(*key.split('/', 1), self.settings.profile) for key, used in self._last_used.items()
                 if now - used < self.settings.idle_seconds}
         removed = []
         for name in await self.docker.list_managed():

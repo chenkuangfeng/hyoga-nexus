@@ -47,7 +47,7 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
     from nexus_core.platform import SYSTEM_TENANT_ID
     from nexus_tools.builtins.catalog import GROUP_ORDER, builtin_catalog, group_catalog
     from nexus_platform.system import disabled_builtins
-    from nexus_platform.runs.tool_gates import deployment_gate_facts, unavailable_groups
+    from nexus_platform.runs.tool_gates import deployment_gate_facts, sandbox_profiles, unavailable_groups
     from nexus_platform.runs.settings import view as native_preferences
     with db.begin():
         user = resolve_user(db, principal)
@@ -70,6 +70,8 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
         # search backend configured...), `reason` its stable code; `default_enabled` is the agent-side default.
         "group_info": [info | {"available": info["id"] not in reasons, "reason": reasons.get(info["id"], "")}
                        for info in group_catalog() for reasons in [unavailable_groups(deployment_gate_facts())]],
+        # Profiles the operator defined; an agent picks one by name in `sandbox_profile` (empty: the default).
+        "sandbox_profiles": sandbox_profiles(),
         "default_tools": default_tools,
         "can_enable_tools": membership.role in ADMIN_ROLES,
     }

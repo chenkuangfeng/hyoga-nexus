@@ -1,4 +1,5 @@
 """Immutable user-configured Native policy and validation; never grants authority."""
+import re
 from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
@@ -97,6 +98,9 @@ class NativePolicy:
     vision_model_profile_version_id: str = ''
     sandbox_exec_timeout_seconds: int = 30
     sandbox_output_limit: int = 20000
+    #: Name of the deployment's sandbox profile this agent runs on; empty takes the deployment's default profile.
+    #: Only profiles the operator defined can be chosen (openspec 2026-11-07-skill-evolution, S2).
+    sandbox_profile: str = ''
 
     def __post_init__(self):
         if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
@@ -144,6 +148,9 @@ class NativePolicy:
         _check_int(self.tool_search_min_tokens, 0, 200000, 'tool_search_min_tokens')
         _check_int(self.sandbox_exec_timeout_seconds, 1, 3600, 'sandbox_exec_timeout_seconds')
         _check_int(self.sandbox_output_limit, 1000, 200000, 'sandbox_output_limit')
+        if not isinstance(self.sandbox_profile, str) or (
+                self.sandbox_profile and not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}', self.sandbox_profile)):
+            raise ValueError('sandbox_profile must be empty or a profile name')
         from .tool_groups import GROUP_IDS, group_of
         if (not isinstance(self.tool_groups_enabled, dict)
                 or any(key not in GROUP_IDS or group_of(key).locked or type(value) is not bool

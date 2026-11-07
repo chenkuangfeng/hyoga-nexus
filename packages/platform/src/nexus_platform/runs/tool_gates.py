@@ -22,8 +22,12 @@ from nexus_core.native import GROUP_IDS, group_enabled
 class GateFacts:
     """Deployment facts the availability checks read. Built once per process or request, never per tool call."""
     sandbox_enabled: bool = False
-    #: Latest isolation acceptance passed for the configured backend, image and settings.
+    #: Latest isolation acceptance passed for the agent's sandbox profile (or, for a `local` profile, the operator
+    #: allowed it in development mode).
     sandbox_accepted: bool = False
+    #: Why an enabled sandbox is not usable when that is not simply "no accepted report": an unknown profile name or
+    #: a `local` profile outside development mode.
+    sandbox_reason: str = ''
     #: The operator enabled outbound web access (`[web].enabled`).
     web_enabled: bool = False
     #: The agent binds a Wiki-type knowledge base. Wiki tools arrive with knowledge-base K6.1.
@@ -33,7 +37,9 @@ class GateFacts:
 def _sandbox(facts: GateFacts) -> str:
     if not facts.sandbox_enabled:
         return 'sandbox_disabled'
-    return '' if facts.sandbox_accepted else 'sandbox_not_accepted'
+    if facts.sandbox_accepted:
+        return ''
+    return facts.sandbox_reason or 'sandbox_not_accepted'
 
 
 #: group id -> check returning '' when available, else a stable reason code. Groups missing here are always
@@ -59,30 +65,58 @@ def hidden_groups(facts: GateFacts, switches: dict[str, bool] | None) -> frozens
     return frozenset(group for group in GROUP_IDS if group in unavailable or not group_enabled(switches, group))
 
 
-def deployment_gate_facts() -> GateFacts:
-    """Facts read from the deployment: whether the sandbox is enabled and accepted. The web section is filled in
-    when the web tools land (openspec 2026-11-07-tool-expansion, stage E).
+def profile_facts(config, settings, web_enabled: bool = False) -> GateFacts:
+    """Gate facts for one sandbox profile of an enabled `[sandbox]` section (`settings` None: no such profile)."""
+    from nexus_platform.configuration import auth_settings
+    from nexus_sandbox import acceptance
+    from nexus_sandbox.settings import sandbox_local_allowed
+    if settings is None:
+        return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_profile_unknown', web_enabled=web_enabled)
+    if settings.backend == 'local':
+        allowed = sandbox_local_allowed(settings, development_mode=auth_settings().mode == 'development')
+        return GateFacts(sandbox_enabled=True, sandbox_accepted=allowed,
+                         sandbox_reason='' if allowed else 'sandbox_local_not_allowed', web_enabled=web_enabled)
+    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings), web_enabled=web_enabled)
 
-    The sandbox counts as accepted when a stored isolation report matches the current backend, image and limits.
-    The `local` backend never passes acceptance; it is offered only when the operator set `allow_local` and the
-    platform runs in development auth mode, the same gate skill scripts use. A broken `[sandbox]` section
-    leaves the group unavailable rather than failing the Run.
+
+def deployment_gate_facts(profile: str | None = None) -> GateFacts:
+    """Facts read from the deployment for one agent: whether the sandbox is enabled and its profile usable.
+
+    `profile` is the agent's `sandbox_profile`; empty or None takes the deployment's default profile. A stored
+    isolation report counts only when it matches that profile's backend, image and limits. A `local` profile never
+    passes acceptance: it is usable only when the operator set `allow_local` and the platform runs in development
+    auth mode (reason `sandbox_local_not_allowed` otherwise). A broken `[sandbox]` section leaves the group
+    unavailable rather than failing the Run.
     """
     from nexus_core.deployment import DeploymentConfigError
     web_enabled = _web_enabled()
     try:
-        from nexus_sandbox import acceptance
-        from nexus_sandbox.settings import load_settings
-        settings = load_settings()
+        from nexus_sandbox.settings import load_config
+        config = load_config()
     except DeploymentConfigError:
         return GateFacts(web_enabled=web_enabled)
-    if not settings.enabled:
+    if not config.enabled:
         return GateFacts(web_enabled=web_enabled)
-    if settings.backend == 'local':
-        from nexus_platform.configuration import auth_settings
-        return GateFacts(sandbox_enabled=True, sandbox_accepted=settings.allow_local and auth_settings().mode == 'development',
-                         web_enabled=web_enabled)
-    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings), web_enabled=web_enabled)
+    return profile_facts(config, config.get(profile), web_enabled)
+
+
+def sandbox_profiles() -> list[dict]:
+    """Every profile the operator defined, for the agent editor: name, type, whether it is the default and, when
+    it cannot be used, the stable reason code. Empty when the sandbox is off or its configuration is broken."""
+    from nexus_core.deployment import DeploymentConfigError
+    try:
+        from nexus_sandbox.settings import load_config
+        config = load_config()
+    except DeploymentConfigError:
+        return []
+    if not config.enabled:
+        return []
+    listed = []
+    for name, settings in config.profiles.items():
+        reason = _sandbox(profile_facts(config, settings))
+        listed.append({'name': name, 'type': settings.backend, 'default': name == config.default_profile,
+                       'available': not reason, 'reason': reason})
+    return listed
 
 
 def _web_enabled() -> bool:

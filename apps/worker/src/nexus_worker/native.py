@@ -173,10 +173,10 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         except (ValueError, TypeError):
             raise RuntimeFault('runtime_budget_invalid') from None
         spill = OutputSpill(policy.tool_output_inline_limit, policy.tool_preview_chars, policy.tool_output_page_chars)
-        hidden = hidden_groups(deployment_gate_facts(), policy.tool_groups_enabled)
+        hidden = hidden_groups(deployment_gate_facts(policy.sandbox_profile), policy.tool_groups_enabled)
         sandbox = None if 'sandbox' in hidden else session_for(
             str(context.tenant_id), str(context.session_id), default_timeout=policy.sandbox_exec_timeout_seconds,
-            output_limit=policy.sandbox_output_limit)
+            output_limit=policy.sandbox_output_limit, profile=policy.sandbox_profile)
         services = RunServices(store, context.progress.state, sandbox)
         tool_access = ToolAccess(store)
         bound = {name: version for name, version, _ in context.bindings}

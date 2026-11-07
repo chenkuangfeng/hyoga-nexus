@@ -22,14 +22,21 @@ from ...settings import SandboxSettings
 from ..output import Sink
 
 LABEL = 'nexus.sandbox'
+#: Label naming the profile that owns a container, so each profile's manager reclaims only its own.
+PROFILE_LABEL = 'nexus.sandbox.profile'
 #: `timeout` exits with 124 on expiry (137 when it had to send SIGKILL).
 _TIMEOUT_CODES = (124, 137)
 _GRACE_SECONDS = 2
 
 
-def container_name(tenant_id: str, session_id: str) -> str:
-    """Stable, collision-resistant container name for a (tenant, session) pair."""
-    return 'nexus-sbx-' + hashlib.sha256(f'{tenant_id}\0{session_id}'.encode()).hexdigest()[:20]
+def container_name(tenant_id: str, session_id: str, profile: str = 'default') -> str:
+    """Stable, collision-resistant container name for a (tenant, session, profile) triple.
+
+    The profile joins the hash only when it is not ``default``, so containers created before profiles existed keep
+    their names. Two profiles of one session (an agent version that changed its profile) never share a container.
+    """
+    material = f'{tenant_id}\0{session_id}' + ('' if profile == 'default' else f'\0{profile}')
+    return 'nexus-sbx-' + hashlib.sha256(material.encode()).hexdigest()[:20]
 
 
 async def run_cli(binary: str, *args: str, timeout: float = 60) -> tuple[int, str, str]:
@@ -59,13 +66,15 @@ class DockerBackend:
         s = self.settings
         uid = os.getuid() if os.getuid() != 0 else 65534
         gid = os.getgid() if os.getuid() != 0 else 65534
-        return ['run', '-d', '--name', name, '--label', f'{LABEL}=1', '--pull', 'never', '--init',
-                '--network', s.network, '--read-only', '--tmpfs', '/tmp:rw,size=64m',
+        passthrough = [flag for key in s.env_passthrough if key in os.environ for flag in ('-e', f'{key}={os.environ[key]}')]
+        return ['run', '-d', '--name', name, '--label', f'{LABEL}=1', '--label', f'{PROFILE_LABEL}={s.profile}',
+                '--pull', 'never', '--init',
+                '--network', s.network, '--read-only', '--tmpfs', f'/tmp:rw,size={s.tmpfs_mb}m',
                 '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
                 '--cpus', str(s.cpus), '--memory', f'{s.memory_mb}m', '--memory-swap', f'{s.memory_mb}m',
                 '--pids-limit', str(s.pids), '--user', f'{uid}:{gid}',
                 '-v', f'{workspace.resolve()}:/workspace', '-v', f'{outputs.resolve()}:/outputs',
-                '-e', 'HOME=/workspace', '-e', 'LANG=C.UTF-8', '-w', '/workspace',
+                '-e', 'HOME=/workspace', '-e', 'LANG=C.UTF-8', *passthrough, '-w', '/workspace',
                 s.image, 'sleep', '2147483647']
 
     async def ensure(self, name: str, workspace: Path, outputs: Path) -> None:
@@ -88,8 +97,9 @@ class DockerBackend:
         await run_cli(self.binary, 'rm', '-f', name)
 
     async def list_managed(self) -> list[str]:
-        """Names of every container this deployment created (label match), for idle and orphan reclamation."""
-        code, out, _ = await run_cli(self.binary, 'ps', '-a', '--filter', f'label={LABEL}=1', '--format', '{{.Names}}')
+        """Names of the containers this profile created (label match), for idle and orphan reclamation."""
+        code, out, _ = await run_cli(self.binary, 'ps', '-a', '--filter', f'label={LABEL}=1',
+                                     '--filter', f'label={PROFILE_LABEL}={self.settings.profile}', '--format', '{{.Names}}')
         return [line for line in out.splitlines() if line] if code == 0 else []
 
     # ------------------------------------------------------------------ commands

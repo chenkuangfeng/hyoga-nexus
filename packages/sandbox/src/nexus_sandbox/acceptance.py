@@ -36,12 +36,16 @@ class Item:
 def fingerprint(settings: SandboxSettings) -> str:
     """Hash of everything that changes what the sandbox can do; a report is valid only for its fingerprint."""
     material = [settings.backend, settings.image, settings.cpus, settings.memory_mb, settings.pids, settings.network,
-                settings.workspace_quota_mb]
+                settings.workspace_quota_mb, settings.tmpfs_mb, list(settings.env_passthrough)]
     return hashlib.sha256(json.dumps(material).encode()).hexdigest()[:32]
 
 
 def report_path(settings: SandboxSettings) -> Path:
-    return settings.root / REPORT_FILE
+    """Where the report of this profile is stored: `acceptance.json` for the legacy `default` profile (so reports
+    made before profiles still count), `acceptance-<profile>.json` for the others."""
+    if settings.profile == 'default':
+        return settings.root / REPORT_FILE
+    return settings.root / f'acceptance-{settings.profile}.json'
 
 
 def passed(settings: SandboxSettings) -> bool:

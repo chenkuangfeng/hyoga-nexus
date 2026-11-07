@@ -57,14 +57,30 @@ def _guarded(handler):
 
 
 def _exec_settings() -> tuple[float, bool]:
-    """(gateway timeout for sandbox_exec, whether the sandbox network is open). An unreadable section counts as open."""
+    """(gateway timeout for sandbox_exec, whether any isolating sandbox profile opens the network).
+
+    The tool definitions are shared by the whole process while an agent picks its own profile, so the answer has to
+    hold for every profile: the risk is `destructive` as soon as one docker or bwrap profile has a network, and the
+    timeout covers the largest `exec_timeout_max_seconds`. A `local` profile is development-only and is not counted
+    as opening the network. Both the profile layout and the older flat keys are read; an unreadable section counts as
+    open, which is the cautious answer.
+    """
     try:
         values = section('sandbox')
     except DeploymentConfigError:
         return 135, True
-    maximum = values.get('exec_timeout_max_seconds', 120)
-    return (float(maximum) + 15 if isinstance(maximum, int) and not isinstance(maximum, bool) else 135,
-            values.get('network', 'none') != 'none')
+
+    def number(table, key, default):
+        value = table.get(key, default)
+        return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+    profiles = values.get('profiles')
+    if isinstance(profiles, dict) and profiles:
+        tables = [table for table in profiles.values() if isinstance(table, dict)]
+        maximum = max([number(table, 'exec_timeout_max_seconds', 120) for table in tables] or [120])
+        open_network = any(table.get('type') != 'local' and table.get('network', 'none') != 'none' for table in tables)
+        return float(maximum) + 15, open_network
+    return float(number(values, 'exec_timeout_max_seconds', 120)) + 15, values.get('network', 'none') != 'none'
 
 
 def _render_exec(result: ExecResult) -> str:
