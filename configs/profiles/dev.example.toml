@@ -1,0 +1,29 @@
+# Profile 1 - development or one person: one process, nothing to install beyond Python.
+# Copy to configs/nexus.toml. The API process also runs the worker; events travel in memory.
+#
+#   uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1     (a single API process: no --workers)
+
+[database]
+# SQLite has a single writer, so it is held to 4 Runs at once. It is for trying things out, not for load.
+url = "sqlite:///./nexus.db"
+
+[auth]
+mode = "development"
+dev_user_id = "9600543"
+cookie_secure = false
+
+[security]
+# Public development-only key (it is in the repository). Generate your own before saving real model keys.
+credential_encryption_key = "6Tw_7VZ6wYazj8Hafud6R5DpWSj7hID8Rk5z6jHtS9I="
+
+[deployment]
+# The worker runs inside the API process: one thread, one event loop, Runs as coroutines.
+mode = "embedded"
+
+[run_events]
+# memory is the default for embedded mode; stated here to make the choice visible.
+backend = "memory"
+
+[worker]
+max_concurrent_runs = 4
+db_threads = 8

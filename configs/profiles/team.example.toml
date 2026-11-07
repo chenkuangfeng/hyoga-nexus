@@ -1,0 +1,42 @@
+# Profile 2 - a team of a few dozen on one machine. PostgreSQL is required (SQLite is a single writer).
+# Copy to configs/nexus.toml.
+#
+# Embedded (below): one process to run. An API restart interrupts the Runs in progress.
+#   uv run uvicorn nexus_api.main:app --host 0.0.0.0 --port 8000        (a single API process: no --workers)
+# To keep Runs alive across API restarts, set mode = "split" and run the worker separately:
+#   uv run uvicorn nexus_api.main:app --host 0.0.0.0 --port 8000
+#   uv run python -m nexus_worker
+# (split with a single API and a single worker may keep backend = "database"; no Redis needed.)
+
+[database]
+url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
+
+[auth]
+mode = "session"
+cookie_secure = true            # serve over HTTPS (a reverse proxy in front)
+
+[security]
+# Generate: uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+credential_encryption_key = "CHANGE_ME"
+
+[platform]
+max_concurrent_sessions = 32            # sessions holding queued or running work, across the whole deployment
+max_concurrent_sessions_per_user = 4    # keeps one person from using up every slot
+
+[deployment]
+mode = "embedded"
+
+[run_events]
+backend = "memory"
+
+[worker]
+max_concurrent_runs = 16
+db_threads = 12                 # the worker's database pool holds db_threads + 4 connections
+
+[api]
+threads = 40                    # threads for synchronous endpoints; the API's pool holds threads + 4 connections
+
+[model_connection_pool]
+max_connections = 64            # per model provider address
+max_keepalive_connections = 32
+keepalive_expiry_seconds = 5.0

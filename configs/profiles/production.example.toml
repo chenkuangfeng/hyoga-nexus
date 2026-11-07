@@ -1,0 +1,58 @@
+# Profile 3 - production on one 32-core / 128 GB server (starting point; load-test before relying on it).
+# Copy to configs/nexus.toml. Needs PostgreSQL and Redis.
+#
+# Layout: PostgreSQL ~8 cores/32 GB (a separate machine is better), Redis ~1 core/4 GB,
+# 4 API processes, 8 worker processes, the rest for sandboxes and the system.
+#
+#   uv run uvicorn nexus_api.main:app --workers 4 --host 0.0.0.0 --port 8000 --proxy-headers
+#   for i in $(seq 1 8); do uv run python -m nexus_worker & done
+#
+# Put a reverse proxy (Nginx, Caddy) in front for TLS; turn proxy buffering off and raise the read timeout so
+# server-sent events stream (see apps/api/README.md). No sticky sessions are needed.
+#
+# PostgreSQL max_connections must exceed every process's pool: 8 workers x 16 + 4 API x 44 + a few for tools
+# is about 310; set it to 400, or put PgBouncer (transaction mode) in front.
+
+[database]
+url = "postgresql+psycopg://nexus:CHANGE_ME@127.0.0.1:5432/nexus"
+
+[auth]
+mode = "session"
+cookie_secure = true
+
+[security]
+credential_encryption_key = "CHANGE_ME"
+
+[platform]
+max_concurrent_sessions = 128            # at least workers x max_concurrent_runs, or this limit is reached first
+max_concurrent_sessions_per_tenant = 32  # fairness: one tenant cannot use every slot
+max_concurrent_sessions_per_user = 4
+
+[deployment]
+mode = "split"
+
+[run_events]
+backend = "redis"                        # needed with several API processes: the memory bus is per process
+redis_url = "redis://127.0.0.1:6379/0"
+maxlen = 4096
+retention_seconds = 300
+lease_check_seconds = 5.0                # a cancel wakes the worker through Redis; this check is the safety net
+
+[worker]                                 # per worker process
+max_concurrent_runs = 16                 # 8 processes x 16 = 128 Runs; a crash loses this many, so do not raise it casually
+db_threads = 12
+stop_timeout_seconds = 30
+
+[api]                                    # per API process
+threads = 40
+
+[model_connection_pool]                  # per worker process and provider address
+max_connections = 64
+max_keepalive_connections = 32
+keepalive_expiry_seconds = 5.0
+
+[model_limits]
+max_background_per_model = 4             # memory capture / knowledge enrichment, so they leave room for chats
+
+[watchdog]
+# defaults
