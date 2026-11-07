@@ -1,58 +1,84 @@
 # 实施任务
 
-状态：待确认（2026-11-07）。已完成的任务才勾选。
+状态：待确认（第三版，2026-11-07）。已完成的任务才勾选。
 
 ## 0. 准备
 
-- [ ] 0.1 补读 Hermes：`skills_guard.py` 规则表与放行逻辑、`skills_ast_audit.py`、`skill_manager_guards.py`、`skill_usage.py`；DeerFlow：`skills/mutations/service.py`、`repository.py`、`guard.py`、`scan_budget.py`、`skills/projection.py`；WeKnora：`skills/shell_staging.go`、`loader.go`。
-- [ ] 0.2 读码确认：智能体绑定里「逐个关闭技能」的字段位置（`resource_bindings` 或智能体版本策略）；`session_index` / `read_for_run` 的现有过滤点；`paths.VIRTUAL_ROOTS` 与两个后端的挂载点。
+- [ ] 0.1 补读 Hermes：`skill_manager_tool.py` 各动作与 `skill_manager_guards.py`、`skills_guard.py` 规则表与放行逻辑、`skills_ast_audit.py`、`skills_index_delta.py`、`skill_usage.py`；Octop：`skill_packages.py`、`skill_package_store.py`、`skill_transfer.py`、`routers/skill_packages.py`；DeerFlow：`skills/mutations/service.py`、`projection.py`；WeKnora：`shell_staging.go`、`skill_frontmatter.go`。
+- [ ] 0.2 读码确认：
+  - 所有枚举租户的查询点（列表、成员、组织、平台汇总、注册、空间切换、登录），列出需要排除 `system` 的位置；
+  - `users` 表对保留用户的约束（身份、状态、非空字段）；
+  - Run 的主体与租户字段（`principal_id`、`tenant_id`）在 `read_for_run`、`session_index` 调用处是否可得；
+  - 会话中追加说明消息的注入点，确认不破坏提示缓存与冻结的工具块；
+  - 智能体绑定里「逐个关闭技能」的字段位置；
+  - `paths.VIRTUAL_ROOTS` 与两个沙箱后端的挂载点；
+  - 审批机制可用的风险等级与「每次需确认」的表达方式；
+  - `.codex/rules/backend.md` 的依赖条款（决定 4）。
 - [ ] 0.3 确认后先更新文档：`docs/architecture.md` 2.6、`docs/roadmap.md` 7.1、`packages/skills/docs/design.md` 与 README、`skills/general/README.md`。
 
-## 1. S1 来源、信任与导入
+## 1. S1 系统租户、内置技能与来源信任
 
-- [ ] 1.1 迁移：`skills.source` 取值迁移，`skill_versions` 增加 `trust`、`scan_version`、`scan`；升降级测试。
-- [ ] 1.2 `nexus_skills.guard` 规则扫描器与 `ScanResult`；规则表带测试样例；扫描器版本号。
-- [ ] 1.3 `nexus_skills.policy.decide` 与放行矩阵；逐格测试。
-- [ ] 1.4 名字规则与 frontmatter `model_invocable` / `user_invocable` 解析与校验；索引与 `read_for_run` 的过滤。
-- [ ] 1.5 `publish` 接入扫描与矩阵；`acknowledge_findings` 参数；审计；被阻止时的稳定错误码与发现列表。
-- [ ] 1.6 管理员接口：导入内置目录（`import_builtin`）、重扫、列表返回 `source` / `trust` / 扫描结论 / `rescan_needed`。
-- [ ] 1.7 智能体逐个关闭技能（产生新智能体版本）；会话快照行为测试。
-- [ ] 1.8 测试：既有技能、绑定、会话快照、脚本相关测试保持通过。
+- [ ] 1.1 迁移：`tenants.kind` 约束加 `system`；系统租户与保留用户；`skills.source` 迁移 `installed → admin`；`skill_versions` 增加 `trust`、`scan_version`、`scan`、`extra`；升降级测试。
+- [ ] 1.2 排除系统租户：按 0.2 的清单逐处过滤；一致性测试遍历这些查询，断言系统租户不出现、不可登录、不可切换进入。
+- [ ] 1.3 `authorize_resource` 增加系统租户技能分支；测试：任意租户的智能体可绑定并读取，普通租户不能向系统租户发布或撤销，其他资源种类不受影响。
+- [ ] 1.4 `nexus_skills.guard` 规则扫描器与 `ScanResult`；规则表带测试样例；扫描器版本号；建议性 linter。
+- [ ] 1.5 `nexus_skills.policy.decide` 与放行矩阵；逐格测试。
+- [ ] 1.6 名字规则与保留词；frontmatter `model_invocable` / `user_invocable` 解析与校验；索引与 `read_for_run` 的过滤。
+- [ ] 1.7 `publish` 接入扫描与矩阵；`acknowledge_findings`；审计；被阻止时稳定错误码与发现列表。
+- [ ] 1.8 平台管理员接口与部署命令：内置导入（发布到系统租户）；列表返回 `source` / `trust` / 扫描结论 / `rescan_needed`；重扫。
+- [ ] 1.9 编辑器可绑定内置技能；「有新版本」提示；智能体逐个关闭技能（产生新智能体版本）。
+- [ ] 1.10 测试：既有技能、绑定、会话快照、脚本相关测试保持通过。
 
-## 2. S2 投射到沙箱（工具扩展 4.8 完成后开始）
+## 2. S2 私有技能与对话式创建（先支持纯指令技能）
 
-- [ ] 2.1 投射器：按会话、按内容哈希原子写出，文件数与字节上限；失败降级为仅内联。
-- [ ] 2.2 虚拟根 `/skills`（只读）：`paths`、`HostFileStore` 拒绝写入；docker `:ro` 挂载；bwrap `--ro-bind`。
-- [ ] 2.3 `run_skill_script` 改用投射路径；失败恢复提示；原有脚本测试保持通过。
-- [ ] 2.4 测试：沙箱内无法修改 `/skills`；看不到未绑定技能与其他租户技能；无沙箱时保持开发门禁。
-- [ ] 2.5 在真实 Docker 与 bwrap 上验证挂载与执行（环境相关测试无环境时跳过并说明）。
+- [ ] 2.1 迁移：`skills.owner_user_id`，部分唯一索引替换 `uq_skills_tenant_name`；`skill_drafts`。
+- [ ] 2.2 私有技能服务：创建草稿、补丁、覆盖、写附属文件、删除附属文件、保存、删除；先读后写；数量与大小上限；名字撤重与「已被取代」标记。
+- [ ] 2.3 工具 `skill_manage`、`skill_save`（`skills` 组）；工具说明含写技能规范；`BUILTIN_TOOL_NAMES`、分组一致性测试同步；`skill_save` 与删除每次需用户确认。
+- [ ] 2.4 `session_index` 并入本人私有技能；`read_for_run` 读取私有技能；授权测试：他人、他租户不可读。
+- [ ] 2.5 会话中的差异说明消息；测试：不改系统提示、不改工具块、提示缓存前缀不变。
+- [ ] 2.6 保存时扫描：`dangerous` 拒绝；含脚本的草稿拒绝保存（`skill_scripts_need_sandbox`）。
+- [ ] 2.7 前端：「我的技能」页（列表、查看、启停、删除、扫描发现）；对话中的保存确认展示。
+- [ ] 2.8 测试：对话创建到保存到加载的端到端；会话中途创建后同会话可用；其他用户不可见；限额。
 
-## 3. S3 用户与模型提交及审核
+## 3. S3 共享到技能库与审核
 
-- [ ] 3.1 迁移：`skill_submissions`（含 `origin` 的 `user` 取值）。
-- [ ] 3.2 提交服务：新建、修改、基础哈希、限额、扫描、`superseded` 判定。
-- [ ] 3.3a 权限 `skills:submit`：权限目录、admin 基线、角色授予界面、五种语言文案；测试 owner / admin / 授予角色的成员 / 未授予成员。
-- [ ] 3.3b 成员接口：提交、查看自己的、撤回；他人的提交返回 404；提交时同步扫描并返回发现，`dangerous` 直接拒绝；每用户同时待审上限。
-- [ ] 3.3 工具 `skill_propose`（`skills` 组，风险 `write`）；注册、分组一致性测试；`BUILTIN_TOOL_NAMES` 同步。
-- [ ] 3.4 审核接口：列表、详情（差异与发现）、通过、拒绝（理由必填）；通过时重校验并走 `publish`；审计。
-- [ ] 3.5 前端：管理员的提交列表与审核界面（文本渲染，差异展示，提示审核通过后租户共享）；成员的「我的技能提交」页（编辑、扫描发现、状态、理由、撤回）；智能体编辑器的技能开关。
-- [ ] 3.6 测试：模型与成员提交都不改已发布版本；基础哈希变化被拒；`agent` / `user` + `dangerous` 直接拒绝；`user` 的 `safe` 仍进人工审核；限额；通过后版本 `trust='user'` 且可追溯提交人。
+- [ ] 3.1 迁移：`skill_submissions`。
+- [ ] 3.2 权限 `skills:submit`：权限目录、admin 基线、角色授予界面、五种语言文案；测试 owner / admin / 授予角色的成员 / 未授予成员。
+- [ ] 3.3 提交服务：来源 `user` / `agent` / `import`，基础哈希，限额，扫描，`superseded` 判定；管理员共享直接 `publish`。
+- [ ] 3.4 成员接口：提交（含 `from_private`）、查看自己的、撤回；他人的返回 404；提交时同步扫描并返回发现。
+- [ ] 3.5 管理员审核接口：列表、详情（差异与发现）、通过、拒绝（理由必填）；通过时重校验依赖与重扫，再走 `publish`；审计。
+- [ ] 3.6 前端：成员的「我的提交」页；管理员审核页（文本渲染、差异、提示通过后租户内所有智能体可用）；私有技能的「共享到技能库」按钮。
+- [ ] 3.7 测试：成员提交不改已发布版本；基础哈希变化被拒；`agent` / `user` + `dangerous` 拒绝；`user` 的 `safe` 仍进人工审核；限额；通过后版本可追溯提交人。
 
-## 4. S4 压缩包导入
+## 4. S4 上传下载与技能包
 
-- [ ] 4.1 压缩包解析：文件数、总字节、单文件上限，路径穿越与符号链接拒绝。
-- [ ] 4.2 导入接口：产生 `import` 提交，复用审核流程。
-- [ ] 4.3 AST 审计（Python 脚本）并入扫描器，扫描器版本递增。
-- [ ] 4.4 测试：恶意压缩包样例（穿越、炸弹、符号链接）。
+- [ ] 4.1 迁移：`skill_version_files` 二进制列；`skill_packs`、`skill_pack_items`。
+- [ ] 4.2 统一导入流水线：`resolve` → `ResolvedSkillPackage` → `normalize` → 目标协议；三个目标实现。
+- [ ] 4.3 压缩包检查：条目数、总字节、单文件、压缩比、路径穿越、符号链接、重复路径；恶意样例测试（穿越、炸弹、符号链接）。
+- [ ] 4.4 frontmatter 兼容：已知可选键、未知键保留与提示、保守修复；按决定 4 引入解析；第三方样例测试。
+- [ ] 4.5 二进制资源：存储、哈希、`read_skill_file` 只返回元信息、下载与往返一致。
+- [ ] 4.6 导出：单技能与技能包 zip；权限（私有仅所有者、库按读权限、内置所有人）。
+- [ ] 4.7 技能包：创建与编辑、应用到智能体（展开为逐个绑定）、导入清单还原、内置包随内置导入创建。
+- [ ] 4.8 前端：上传、下载、技能包管理、导入预览。
+- [ ] 4.9 测试：往返、越权、超限、内置包启用。
 
-## 5. S5 使用记录与生命周期
+## 5. S5 沙箱投射与脚本（工具扩展 4.8 完成后开始）
 
-- [ ] 5.1 迁移：`skill_usage`。
-- [ ] 5.2 `load_skill` 计数；worker 空闲评估 `stale`；归档、恢复、`pinned` 接口。
-- [ ] 5.3 索引排除已归档技能；绑定显示状态。
+- [ ] 5.1 投射器：按会话、按内容哈希原子写出，文件数与字节上限；失败降级为仅内联。
+- [ ] 5.2 虚拟根 `/skills`（只读）：`paths`、`HostFileStore` 拒绝写入；docker `:ro` 挂载；bwrap `--ro-bind`。
+- [ ] 5.3 `run_skill_script` 改用投射路径；失败恢复提示；原有脚本测试保持通过。
+- [ ] 5.4 脚本工具的可用性：沙箱不可用时生产不提供，开发门禁只对 `builtin` 来源开放；私有技能的脚本在此后允许保存。
+- [ ] 5.5 测试：沙箱内无法修改 `/skills`；看不到其他租户与未授权技能；开放网络强制审批。
+- [ ] 5.6 在真实 Docker 与 bwrap 上验证挂载与执行（环境相关测试无环境时跳过并说明）。
 
-## 6. 收尾
+## 6. S6 使用记录与生命周期
 
-- [ ] 6.1 同步 `docs/architecture.md`、`docs/roadmap.md`、`packages/skills` 与平台文档、`skills/general/README.md`，只记录当前结果与明确标注的计划。
-- [ ] 6.2 后端全量 pytest、迁移升降级、前端单测与构建通过。
-- [ ] 6.3 规格同步到 `openspec/specs/skill-evolution/` 并归档本变更。
+- [ ] 6.1 迁移：`skill_usage`。
+- [ ] 6.2 `load_skill` 计数；worker 空闲评估 `stale`；归档、恢复、`pinned` 接口。
+- [ ] 6.3 索引排除已归档技能；绑定显示状态。
+
+## 7. 收尾
+
+- [ ] 7.1 同步 `docs/architecture.md`、`docs/roadmap.md`、`packages/skills` 与平台文档、`skills/general/README.md`，只记录当前结果与明确标注的计划。
+- [ ] 7.2 后端全量 pytest、迁移升降级、前端单测与构建通过。
+- [ ] 7.3 规格同步到 `openspec/specs/skill-evolution/` 并归档本变更。
