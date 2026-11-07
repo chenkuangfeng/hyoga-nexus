@@ -142,6 +142,55 @@ def download_skill(tenant_id: UUID, name: str, version: int | None = Query(defau
                     headers={"Content-Disposition": f'attachment; filename="{skill}-v{number}.zip"'})
 
 
+class RollbackRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+@router.get("/tenants/{tenant_id}/my-skills")
+def my_skills(tenant_id: UUID, principal: Principal = Depends(get_principal),
+              db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """The caller's private skills and drafts in this space. Nobody else's are ever returned."""
+    from nexus_platform.skills import private
+    return private.run_as_member(db, principal, tenant_id, private.listing)
+
+
+@router.get("/tenants/{tenant_id}/my-skills/{name}/versions")
+def my_skill_versions(tenant_id: UUID, name: str, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)) -> list[dict[str, Any]]:
+    from nexus_platform.skills import private
+    return private.run_as_member(db, principal, tenant_id, private.versions, name)
+
+
+@router.post("/tenants/{tenant_id}/my-skills/{name}/rollback")
+def rollback_my_skill(tenant_id: UUID, name: str, body: RollbackRequest, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Make the skill use another saved version. Nothing is deleted."""
+    from nexus_platform.skills import private
+    return private.run_as_member(db, principal, tenant_id, private.rollback, name, body.version)
+
+
+@router.post("/tenants/{tenant_id}/my-skills/{name}/archive")
+def archive_my_skill(tenant_id: UUID, name: str, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Delete a private skill: it disappears from every Run but can be restored."""
+    from nexus_platform.skills import private
+    return private.run_as_member(db, principal, tenant_id, private.archive, name)
+
+
+@router.post("/tenants/{tenant_id}/my-skills/{name}/restore")
+def restore_my_skill(tenant_id: UUID, name: str, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.skills import private
+    return private.run_as_member(db, principal, tenant_id, private.restore, name)
+
+
+@router.delete("/tenants/{tenant_id}/my-skill-drafts/{name}")
+def delete_my_skill_draft(tenant_id: UUID, name: str, principal: Principal = Depends(get_principal),
+                          db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.skills import private
+    return private.run_as_member(db, principal, tenant_id, private.delete_draft, name)
+
+
 @router.post("/platform/skills/import-builtin")
 def import_builtin_skills(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Import the repository's builtin skills into the system space (platform administrators only).

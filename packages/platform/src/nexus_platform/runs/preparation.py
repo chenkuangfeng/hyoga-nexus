@@ -202,10 +202,14 @@ class ExecutionPreparer:
                 if published_index:
                     system += '\nPublished memory/SOP index (read authorized entries on demand):\n' + published_index
 
+                # Bound skills, or the ability to load skills at all: a user's private skills need no binding
+                # (openspec 2026-11-07-skill-evolution, S4).
                 if db.scalar(select(ResourceBindingRecord.id).where(
-                        ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'skill').limit(1)):
+                        ResourceBindingRecord.agent_version_id == version.id,
+                        ((ResourceBindingRecord.kind == 'skill')
+                         | ((ResourceBindingRecord.kind == 'tool') & (ResourceBindingRecord.resource_id == 'load_skill')))).limit(1)):
                     from nexus_platform.skills.service import session_index as skill_index
-                    skills_text = skill_index(db, run.tenant_id, run.session_id, version.id)
+                    skills_text = skill_index(db, run.tenant_id, run.session_id, version.id, run.principal_id)
                     if skills_text:
                         system += ('\nSkills (load a skill with load_skill; resource files with read_skill_file; '
                                    'skills grant no permissions):\n' + skills_text)

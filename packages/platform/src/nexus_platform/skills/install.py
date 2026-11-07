@@ -171,7 +171,7 @@ def tick(factory: sessionmaker) -> bool:
 # ---------------------------------------------------------------------------------------------------- admin actions
 
 def _version(db: Session, tenant_id: UUID, name: str, number: int) -> SkillVersionRecord:
-    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+    skill = service.library_skill(db, tenant_id, name)
     row = None if skill is None else db.scalar(select(SkillVersionRecord).where(
         SkillVersionRecord.skill_id == skill.id, SkillVersionRecord.version == number))
     if row is None:

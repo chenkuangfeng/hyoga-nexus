@@ -97,7 +97,7 @@ def check_update(db: Session, principal: Principal, tenant_id: UUID, name: str, 
     """Whether the remote source of the installed skill now holds different content (nothing is changed)."""
     user_id = _authorize(db, principal, tenant_id)
     with db.begin():
-        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+        skill = service.library_skill(db, tenant_id, name)
         current = None if skill is None else db.get(SkillVersionRecord, skill.current_version_id)
         if current is None:
             raise NotFound('skill_not_found')

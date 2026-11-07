@@ -52,3 +52,21 @@ def test_skill_bundle_migration_adds_install_state_and_one_install_per_skill(tmp
     command.downgrade(config, 'd2e3f4a5b6c7')
     assert 'build_state' not in {c['name'] for c in inspect(engine).get_columns('skill_versions')}
     command.upgrade(config, 'head')
+
+
+def test_private_skill_migration_splits_name_uniqueness_and_adds_drafts(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'private.db')
+    config = _config(url)
+    command.upgrade(config, 'e3f4a5b6c7d8')
+    engine = create_engine(url)
+    command.upgrade(config, 'head')
+    inspector = inspect(engine)
+    assert {'owner_user_id', 'archived_at'} <= {c['name'] for c in inspector.get_columns('skills')}
+    names = {i['name'] for i in inspector.get_indexes('skills')}
+    assert {'uq_skills_library_name', 'uq_skills_private_name'} <= names
+    assert 'skill_drafts' in inspector.get_table_names()
+    command.downgrade(config, 'e3f4a5b6c7d8')
+    inspector = inspect(engine)
+    assert 'skill_drafts' not in inspector.get_table_names()
+    assert 'owner_user_id' not in {c['name'] for c in inspector.get_columns('skills')}
+    command.upgrade(config, 'head')

@@ -96,7 +96,8 @@ def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, f
 def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str, files: dict[str, str],
                      source: str, *, acknowledged: bool = False,
                      binary: dict[str, bytes] | None = None,
-                     origin: dict[str, str] | None = None, profile: str | None = None) -> dict[str, Any]:
+                     origin: dict[str, str] | None = None, profile: str | None = None,
+                     owner_user_id: UUID | None = None) -> dict[str, Any]:
     """Publish inside the caller's transaction; the caller has already authorized the actor.
 
     ``binary`` holds the non-text files of a bundle; they live only in the version's zip and are projected into the
@@ -121,6 +122,10 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
     if tenant_id != SYSTEM_TENANT_ID and db.scalar(select(SkillRecord.id).where(
             SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == parsed.name).limit(1)) is not None:
         raise InvalidConfiguration('skill_name_taken_by_builtin')
+    if owner_user_id is not None and db.scalar(select(SkillRecord.id).where(
+            SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name,
+            SkillRecord.owner_user_id.is_(None)).limit(1)) is not None:
+        raise InvalidConfiguration('skill_name_taken_by_library')
     scan = scan_skill(skill_md, clean)
     decision = decide(source, scan.verdict, acknowledged=acknowledged)
     if decision != 'allow':
@@ -129,10 +134,12 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
     digest = content_hash(skill_md, clean, binary)
     packed = skill_bundle.pack(skill_md, clean, binary)
     now = utc_now()
-    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name))
+    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == parsed.name,
+                                                SkillRecord.owner_user_id.is_(owner_user_id) if owner_user_id is None
+                                                else SkillRecord.owner_user_id == owner_user_id))
     if skill is None:
         skill = SkillRecord(id=new_id(), tenant_id=tenant_id, name=parsed.name, source=source,
-                            created_by=user_id, created_at=now)
+                            owner_user_id=owner_user_id, created_by=user_id, created_at=now)
         db.add(skill)
         db.flush()
         number = 1
@@ -183,13 +190,21 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
             'binary_files': sorted(binary), 'build_state': version.build_state}
 
 
+def library_skill(db: Session, tenant_id: UUID, name: str) -> SkillRecord | None:
+    """The space-library (or builtin) skill of this name; private skills are never returned."""
+    return db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name,
+                                               SkillRecord.owner_user_id.is_(None)))
+
+
 def activate(db: Session, skill: SkillRecord, version: SkillVersionRecord, user_id: UUID, *, scan_hints: int = 0) -> None:
     """Make a version the one the skill serves: register it as a resource, move the pointer, record it.
 
     Runs at publish for a version without dependencies, and when the worker finishes building one that has them.
     """
-    db.add(PlatformResourceRecord(id=new_id(), tenant_id=version.tenant_id, kind=RESOURCE_KIND, resource_id=skill.name,
-                                  version_id=str(version.id), active=True, created_at=utc_now()))
+    if skill.owner_user_id is None:  # a private skill is not a platform resource: it cannot be bound or granted
+        db.add(PlatformResourceRecord(id=new_id(), tenant_id=version.tenant_id, kind=RESOURCE_KIND,
+                                      resource_id=skill.name, version_id=str(version.id), active=True,
+                                      created_at=utc_now()))
     skill.current_version_id = version.id
     version.build_state = 'ready'
     audit(db, version.tenant_id, user_id, 'skill.published', 'skill', str(skill.id),
@@ -240,9 +255,9 @@ def export_bundle(db: Session, principal: Principal, tenant_id: UUID, name: str,
     current version.
     """
     context(db, principal, tenant_id)
-    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+    skill = library_skill(db, tenant_id, name)
     if skill is None:
-        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == name))
+        skill = library_skill(db, SYSTEM_TENANT_ID, name)
     if skill is None:
         raise NotFound('skill_not_found')
     query = select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
@@ -279,7 +294,23 @@ def bound_versions(db: Session, agent_version_id: UUID) -> dict[str, SkillVersio
     return result
 
 
-def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_id: UUID) -> str:
+def usable_version(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str,
+                   user_id: UUID | None) -> tuple[SkillVersionRecord | None, bool]:
+    """(version, is_private) of a skill a Run may use: one the agent version binds, else one of the user's own private
+    skills. Private skills need no binding and no grant: being the owner is the authorization."""
+    bound = bound_versions(db, agent_version_id).get(name)
+    if bound is not None:
+        return bound, False
+    if user_id is not None:
+        from nexus_platform.skills import private
+        mine = private.visible_versions(db, tenant_id, user_id).get(name)
+        if mine is not None:
+            return mine, True
+    return None, False
+
+
+def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_id: UUID,
+                  user_id: UUID | None = None) -> str:
     """Name and description lines for the bound skills, frozen per session and agent version.
 
     The first Run stores the text; later Runs reuse it so the system prompt prefix does not change
@@ -288,7 +319,12 @@ def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_
     snapshot = db.get(SessionSkillSnapshotRecord, session_id)
     if snapshot is not None and snapshot.tenant_id == tenant_id and snapshot.agent_version_id == agent_version_id:
         return snapshot.index_text
-    lines = [f'{name} | {version.description}' for name, version in sorted(bound_versions(db, agent_version_id).items())
+    available = dict(bound_versions(db, agent_version_id))
+    if user_id is not None:  # the owner's private skills join the index without being bound
+        from nexus_platform.skills import private
+        available.update({name: v for name, v in private.visible_versions(db, tenant_id, user_id).items()
+                          if name not in available})
+    lines = [f'{name} | {version.description}' for name, version in sorted(available.items())
              if version.model_invocable]
     text = '\n'.join(lines)[:INDEX_LIMIT]
     if snapshot is None:
@@ -300,20 +336,22 @@ def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_
     return text
 
 
-def read_for_run(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, path: str | None = None) -> str:
+def read_for_run(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, path: str | None = None,
+                 user_id: UUID | None = None) -> str:
     """Serve SKILL.md body (``path`` is None) or one resource file, for a model call inside a Run.
 
     The skill must be bound to the Run's agent version, and the version's resource grant is checked
     again here. Output is fenced as data so the body cannot close the wrapper or pose as a new message.
     """
-    version = bound_versions(db, agent_version_id).get(name)
+    version, mine = usable_version(db, tenant_id, agent_version_id, name, user_id)
     if version is None or not version.model_invocable:
         raise NotFound('skill_unavailable')
-    try:
-        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
-                           resource_version_id=str(version.id), permission='use')
-    except PlatformError:
-        raise NotFound('skill_unavailable') from None
+    if not mine:
+        try:
+            authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
+                               resource_version_id=str(version.id), permission='use')
+        except PlatformError:
+            raise NotFound('skill_unavailable') from None
     if path is None:
         content = version.body
         label = 'instructions'
@@ -349,19 +387,21 @@ class PreparedExec:
     needs_env: bool = False
 
 
-def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, script: str) -> PreparedExec:
+def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, script: str,
+                 user_id: UUID | None = None) -> PreparedExec:
     """Resolve a script of a bound skill version. Unbound, hidden or unknown skills and scripts are NotFound.
 
     Only the version's own files are returned, so what runs is what was published and scanned.
     """
-    version = bound_versions(db, agent_version_id).get(name)
+    version, mine = usable_version(db, tenant_id, agent_version_id, name, user_id)
     if version is None or not version.model_invocable:
         raise NotFound('skill_unavailable')
-    try:
-        authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
-                           resource_version_id=str(version.id), permission='use')
-    except PlatformError:
-        raise NotFound('skill_unavailable') from None
+    if not mine:
+        try:
+            authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
+                               resource_version_id=str(version.id), permission='use')
+        except PlatformError:
+            raise NotFound('skill_unavailable') from None
     files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
         SkillVersionFileRecord.version_id == version.id))}
     files['SKILL.md'] = version.skill_md
@@ -375,10 +415,10 @@ def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
                         needs_env=has_manifest(files))
 
 
-def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID,
-                name: str) -> tuple[str, dict[str, str | bytes]] | None:
+def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str,
+                user_id: UUID | None = None) -> tuple[str, dict[str, str | bytes]] | None:
     """(content hash, every file incl. SKILL.md) of a bound skill the model may use, or None when there is none."""
-    version = bound_versions(db, agent_version_id).get(name)
+    version, _ = usable_version(db, tenant_id, agent_version_id, name, user_id)
     if version is None or not version.model_invocable:
         return None
     files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
@@ -396,6 +436,13 @@ def exec_skill_available(policy_flag: bool, profile: str | None) -> bool:
     """
     if not policy_flag:
         return False
+    from nexus_platform.runs.tool_gates import deployment_gate_facts
+    facts = deployment_gate_facts(profile)
+    return facts.sandbox_enabled and facts.sandbox_accepted
+
+
+def sandbox_can_build(profile: str | None) -> bool:
+    """Whether the chosen sandbox profile is usable, so a skill with scripts or dependencies can be made live."""
     from nexus_platform.runs.tool_gates import deployment_gate_facts
     facts = deployment_gate_facts(profile)
     return facts.sandbox_enabled and facts.sandbox_accepted
@@ -429,7 +476,8 @@ def list_skills(db: Session, principal: Principal, tenant_id: UUID,
     off = disabled_builtins(db, tenant_id)
     rows = db.execute(select(SkillRecord, SkillVersionRecord).outerjoin(
         SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
-        .where(SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID))).order_by(SkillRecord.name)).all()
+        .where(SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID)), SkillRecord.owner_user_id.is_(None))
+        .order_by(SkillRecord.name)).all()
     fit = _script_fit(db, [version for _, version in rows if version is not None], sandbox_profile) \
         if sandbox_profile is not None else {}
     return [{'name': skill.name, 'source': skill.source, 'version': version.version if version else None,
@@ -482,9 +530,9 @@ def _script_fit(db: Session, versions: list[SkillVersionRecord], profile: str) -
 def skill_versions(db: Session, principal: Principal, tenant_id: UUID, name: str) -> list[dict[str, Any]]:
     """Version history of one skill: metadata, hashes and advisory hints. Bodies and files are not returned."""
     context(db, principal, tenant_id)
-    skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+    skill = library_skill(db, tenant_id, name)
     if skill is None:
-        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == SYSTEM_TENANT_ID, SkillRecord.name == name))
+        skill = library_skill(db, SYSTEM_TENANT_ID, name)
     if skill is None:
         raise NotFound('skill_not_found')
     versions = db.scalars(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
@@ -508,7 +556,7 @@ def rescan(db: Session, principal: Principal, tenant_id: UUID, name: str, versio
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         require_api_permission(db, tenant_id, user.id, PUBLISH_PERMISSION)
-        skill = db.scalar(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id, SkillRecord.name == name))
+        skill = library_skill(db, tenant_id, name)
         row = None if skill is None else db.scalar(select(SkillVersionRecord).where(
             SkillVersionRecord.skill_id == skill.id, SkillVersionRecord.version == version))
         if row is None:

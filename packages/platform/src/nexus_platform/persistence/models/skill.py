@@ -22,7 +22,13 @@ class SkillRecord(Base):
     """A named skill inside one Tenant. ``current_version_id`` points at the newest published version."""
 
     __tablename__ = "skills"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_skills_tenant_name"),)
+    __table_args__ = (
+        # Library skills (no owner) are unique per space; private skills are unique per owner within the space.
+        Index("uq_skills_library_name", "tenant_id", "name", unique=True,
+              sqlite_where=text("owner_user_id IS NULL"), postgresql_where=text("owner_user_id IS NULL")),
+        Index("uq_skills_private_name", "tenant_id", "owner_user_id", "name", unique=True,
+              sqlite_where=text("owner_user_id IS NOT NULL"), postgresql_where=text("owner_user_id IS NOT NULL")),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
@@ -30,6 +36,10 @@ class SkillRecord(Base):
     #: ``builtin`` / ``admin`` / ``import`` / ``agent`` / ``user`` (openspec 2026-11-07-skill-evolution).
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="admin")
     current_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    #: Set for a private skill: only this user's Runs see it. Null for the space library and builtin skills.
+    owner_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    #: A private skill the owner deleted: hidden everywhere, restorable.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -105,3 +115,21 @@ class SessionSkillSnapshotRecord(Base):
     agent_version_id: Mapped[UUID] = mapped_column(ForeignKey("agent_versions.id", ondelete="CASCADE"), nullable=False)
     index_text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SkillDraftRecord(Base):
+    """A mutable draft a user (or the model for the user) edits before saving it as a private skill version.
+
+    Drafts are never read by ``load_skill``; saving packs one into a zip and installs it like any upload.
+    ``base_hash`` is the content hash of the version the draft was started from ('' for a new skill).
+    """
+
+    __tablename__ = "skill_drafts"
+
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    owner_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    skill_md: Mapped[str] = mapped_column(Text, nullable=False)
+    files: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    base_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
