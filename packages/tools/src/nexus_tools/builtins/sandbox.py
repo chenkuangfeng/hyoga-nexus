@@ -83,7 +83,24 @@ def _exec_settings() -> tuple[float, bool]:
     return float(number(values, 'exec_timeout_max_seconds', 120)) + 15, values.get('network', 'none') != 'none'
 
 
-def _render_exec(result: ExecResult) -> str:
+def skill_exec_settings() -> tuple[float, bool]:
+    """(gateway timeout for exec_skill, whether any isolating profile opens the network).
+
+    The gateway timeout covers the largest `skill_timeout_max_seconds` of any profile; the network answer is the one
+    `sandbox_exec` uses, so the two tools carry the same risk.
+    """
+    _, network_open = _exec_settings()
+    try:
+        values = section('sandbox')
+    except DeploymentConfigError:
+        return 620, network_open
+    tables = [t for t in (values.get('profiles') or {}).values() if isinstance(t, dict)] if isinstance(values.get('profiles'), dict) else [values]
+    maxima = [t.get('skill_timeout_max_seconds', 600) for t in tables]
+    maximum = max([m for m in maxima if isinstance(m, int) and not isinstance(m, bool)] or [600])
+    return float(maximum) + 20, network_open
+
+
+def render_exec(result: ExecResult) -> str:
     head = (f'timed out after {result.duration_ms / 1000:.0f}s (killed)' if result.timed_out
             else f'exit_code: {result.exit_code}  duration: {result.duration_ms} ms')
     parts = [head]
@@ -128,8 +145,9 @@ def sandbox_tools():
 
     async def execute(arguments, context):
         result = await sandbox_of(context).exec(arguments['command'], cwd=arguments.get('cwd', '/workspace'),
-                                                timeout_seconds=arguments.get('timeout_seconds', 0))
-        return ToolResult(_render_exec(result), error_code='sandbox_exec_timeout' if result.timed_out else None)
+                                                timeout_seconds=arguments.get('timeout_seconds', 0),
+                                                stdin=arguments.get('stdin'))
+        return ToolResult(render_exec(result), error_code='sandbox_exec_timeout' if result.timed_out else None)
 
     async def exec_async(arguments, context):
         job_id = await sandbox_of(context).exec_async(arguments['command'], cwd=arguments.get('cwd', '/workspace'),
@@ -184,8 +202,10 @@ def sandbox_tools():
     # Inside an isolated container without network the effect of a command stays in the workspace, so it is a
     # `write`; with the network open it can reach other systems and becomes `destructive` (every call asks).
     yield RegisteredTool(ToolDefinition('sandbox_exec',
-        'Run a shell command in the sandbox (default directory /workspace). Output is limited; long output keeps its start and end.',
+        'Run a shell command in the sandbox (default directory /workspace). Output is limited; long output keeps its start and end. '
+        '`stdin` is optional text for the command\'s standard input (up to 65536 bytes, kept exactly).',
         schema({'command': {'type': 'string', 'minLength': 1, 'maxLength': 20000}, 'cwd': _PATH,
+                'stdin': {'type': 'string', 'maxLength': 65536},
                 'timeout_seconds': {'type': 'integer', 'minimum': 1, 'maximum': 3600}}, ['command']),
         side_effects=True, risk='destructive' if network_open else 'write', timeout_seconds=exec_timeout), _guarded(execute), show)
     yield RegisteredTool(ToolDefinition('sandbox_exec_async',

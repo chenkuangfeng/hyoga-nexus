@@ -182,7 +182,10 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             raise RuntimeFault('runtime_budget_invalid') from None
         spill = OutputSpill(policy.tool_output_inline_limit, policy.tool_preview_chars, policy.tool_output_page_chars)
         hidden = hidden_groups(deployment_gate_facts(policy.sandbox_profile), policy.tool_groups_enabled)
-        sandbox = None if 'sandbox' in hidden else session_for(
+        # The session serves the sandbox tools and `exec_skill`, which is offered (see preparation) only when the
+        # agent's profile is usable even if the whole sandbox group is switched off.
+        needs_sandbox = 'sandbox' not in hidden or any(name == 'exec_skill' for name, _, _ in context.bindings)
+        sandbox = None if not needs_sandbox else session_for(
             str(context.tenant_id), str(context.session_id), default_timeout=policy.sandbox_exec_timeout_seconds,
             output_limit=policy.sandbox_output_limit, profile=policy.sandbox_profile)
         services = RunServices(store, context.progress.state, sandbox)

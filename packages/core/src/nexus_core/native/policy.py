@@ -3,11 +3,14 @@ import re
 from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
-                      'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'run_skill_script',
+                      'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'exec_skill',
                       'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph', 'grep_chunks',
                       'document_outline', 'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                       'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'sandbox_exec_async', 'sandbox_job_wait',
                       'sandbox_job_cancel', 'web_search', 'web_fetch', 'delegate_task', 'vision_analyze', 'cronjob_list', 'cronjob_manage')
+#: Tools that no longer exist. Saved settings and published agent versions may still name them: they are accepted,
+#: and ignored when a Run is prepared. `run_skill_script` was replaced by `exec_skill` (openspec 2026-11-07-skill-evolution).
+RETIRED_TOOL_NAMES = frozenset({'run_skill_script'})
 #: Tools of the `sandbox` group (openspec 2026-11-07-tool-expansion, section 4).
 SANDBOX_TOOL_NAMES = frozenset({'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                                 'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'sandbox_exec_async',
@@ -103,7 +106,7 @@ class NativePolicy:
     sandbox_profile: str = ''
 
     def __post_init__(self):
-        if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
+        if not isinstance(self.enabled_tools, list) or any(name not in BUILTIN_TOOL_NAMES and name not in RETIRED_TOOL_NAMES for name in self.enabled_tools) or len(set(self.enabled_tools)) != len(self.enabled_tools):
             raise ValueError('Invalid or duplicate builtin tool selection')
         from uuid import UUID
         if not isinstance(self.fallback_models, list) or len(self.fallback_models) > 5:

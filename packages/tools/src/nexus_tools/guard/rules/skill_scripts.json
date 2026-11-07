@@ -1,10 +1,10 @@
 {
-  "_source": "Nexus rules for run_skill_script arguments (tool-call-hardening F17), patterns adapted from octop-harness.",
+  "_source": "Nexus rules for exec_skill arguments (tool-call-hardening F17), patterns adapted from octop-harness.",
   "rules": [
     {
       "id": "SKILL_ARG_FS_DESTRUCTION",
       "tools": [
-        "run_skill_script"
+        "exec_skill"
       ],
       "params": [
         "*"
@@ -24,7 +24,7 @@
     {
       "id": "SKILL_ARG_PIPE_TO_SHELL",
       "tools": [
-        "run_skill_script"
+        "exec_skill"
       ],
       "params": [
         "*"
@@ -41,7 +41,7 @@
     {
       "id": "SKILL_ARG_REVERSE_SHELL",
       "tools": [
-        "run_skill_script"
+        "exec_skill"
       ],
       "params": [
         "*"
@@ -58,7 +58,7 @@
     {
       "id": "SKILL_ARG_PRIVILEGE",
       "tools": [
-        "run_skill_script"
+        "exec_skill"
       ],
       "params": [
         "*"
@@ -77,7 +77,7 @@
     {
       "id": "SKILL_ARG_SECRET_READ",
       "tools": [
-        "run_skill_script"
+        "exec_skill"
       ],
       "params": [
         "*"
@@ -96,7 +96,7 @@
     {
       "id": "SKILL_ARG_DELETE",
       "tools": [
-        "run_skill_script"
+        "exec_skill"
       ],
       "params": [
         "*"

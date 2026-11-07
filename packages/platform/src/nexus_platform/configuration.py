@@ -262,35 +262,12 @@ def watchdog_settings(path: Path | None = None):
     )
 
 
-def skill_scripts_allowed(path: Path | None = None) -> bool:
-    """Return ``[skills].allow_local_scripts``; absent means False.
-
-    Enabling this is one of three conditions for running skill scripts (proposal 2026-11-04-skill-scripts,
-    section 6). It never enables scripts by itself: the auth mode and the execution backend are checked
-    where scripts would run.
-    """
-    value = section("skills", path).get("allow_local_scripts", False)
-    if not isinstance(value, bool):
-        raise DatabaseConfigurationError(f"{_FILE} [skills].allow_local_scripts must be true or false")
-    return value
-
-
 def builtin_skills_dir(path: Path | None = None) -> Path:
     """Return ``[skills].builtin_dir``: the repository folder whose skills become builtin skills. Default ``skills``."""
     value = section("skills", path).get("builtin_dir", "skills")
     if not isinstance(value, str) or not value.strip():
         raise DatabaseConfigurationError(f"{_FILE} [skills].builtin_dir must be a non-empty path")
     return Path(value)
-
-
-def skill_scripts_gate(*, auth_mode: str | None, backend: str | None, config_enabled: bool) -> bool:
-    """Return True only when all proposal conditions hold: config flag, development auth mode, local backend.
-
-    The API bind address is not part of this check. Development-mode requests are refused unless they
-    arrive on loopback by the API middleware (``nexus_api.security``), which covers the same risk at the
-    entry point where it occurs.
-    """
-    return bool(config_enabled) and auth_mode == "development" and backend == "local"
 
 
 @dataclass(frozen=True)

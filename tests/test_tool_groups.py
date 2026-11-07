@@ -35,7 +35,7 @@ def test_existing_groups_keep_their_tools():
     groups = {entry.name: entry.group for entry in builtin_catalog()}
     assert groups['todo'] == 'base' and groups['read_tool_output'] == 'base'
     assert groups['search_memory'] == 'memory' and groups['read_conversation'] == 'memory'
-    assert groups['search_knowledge'] == 'knowledge' and groups['run_skill_script'] == 'skills'
+    assert groups['search_knowledge'] == 'knowledge' and groups['exec_skill'] == 'skills'
 
 
 def test_group_catalog_marks_groups_without_tools_as_planned():

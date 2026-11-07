@@ -33,6 +33,10 @@
 
 不适用于某类型的键直接报错（例如 bwrap 档位里的 `pids`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时只有隐式的 `local` 档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
 
+## 技能与标准输入
+
+技能脚本由 `exec_skill` 运行（见 `packages/skills`）。沙箱侧提供三样东西：**投射**（`nexus_sandbox/skills.py`）把技能文件按 `<技能>@<内容哈希前 12 位>` 写进会话的 `skills` 目录——先写到暂存目录再原子改名，同一哈希不会被覆盖，最多 1000 个文件、32 MB——docker 与 bwrap 把该目录只读挂载为 `/skills`，`local` 档位的命令看到宿主路径，所以直接用宿主上的目录；**命令环境**，调用方（不是模型参数）可以给一次命令追加环境变量，名字须是大写字母、数字与下划线，`exec_skill` 用它设置 `NEXUS_SKILL_DIR` 与 `NEXUS_SKILL_OUTPUT_DIR`；**标准输入**，`sandbox_exec` 与 `exec_skill` 可传最多 65536 字节的文本，三个执行器都支持（docker 用 `exec -i`），不传时仍然关闭。技能的超时有单独上限：`exec_skill` 用档位的 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（600），不受 `exec_timeout_max_seconds` 限制。已存在的 docker 容器（改动前创建）没有 `/skills` 挂载，空闲回收后重建即带上。
+
 ## 验收项
 
 connectivity、user、network、time_limit、output_limit、memory_limit、process_limit、tenant_isolation、path_escape、environment、cancellation、cleanup_and_residue。`local` 后端在任何探测运行前被拒绝，因为内存与进程数探测本身带有破坏性。

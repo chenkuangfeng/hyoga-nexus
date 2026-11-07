@@ -1,6 +1,6 @@
-"""Count characters, words and lines of the text passed as JSON on stdin.
+"""Count characters, words and lines of the text on stdin.
 
-Input:  {"text": "..."}   (stdin)
+Input:  the text, as it is   (stdin)
 Output: {"characters": int, "words": int, "lines": int}   (stdout)
 """
 import json
@@ -8,8 +8,7 @@ import sys
 
 
 def main() -> None:
-    args = json.load(sys.stdin)
-    text = args["text"]
+    text = sys.stdin.read()
     lines = text.count("\n") + 1 if text else 0
     if text.endswith("\n") and lines > 0:
         lines -= 1

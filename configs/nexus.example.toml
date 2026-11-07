@@ -158,8 +158,6 @@ type = "local"
 # Folder whose skill sub-folders become builtin skills (assignable in every space). Imported by a platform administrator
 # with `uv run python -m nexus_api.cli import-builtin-skills` or POST /api/v1/platform/skills/import-builtin.
 builtin_dir = "skills"
-# Development only: lets the local script runner offer run_skill_script. Ignored outside the development auth mode.
-allow_local_scripts = false
 
 [web]
 # Outbound web access for the "web" tool group (web_search, web_fetch). Off by default. Enabling it only makes the

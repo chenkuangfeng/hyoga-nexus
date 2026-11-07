@@ -28,9 +28,10 @@ from nexus_platform.persistence.models import (
     SkillVersionFileRecord, SkillVersionRecord,
 )
 from nexus_skills.guard import check_declared_scripts, static_hints
+from nexus_skills.exec import ResolvedScript, ScriptError, resolve_script
 from nexus_skills.guard.scan import SCANNER_VERSION, ScanResult, scan_skill
-from nexus_skills.policy import decide
-from nexus_skills.loader import ScriptSpec, parse_skill
+from nexus_skills.policy import decide, resolve_execution
+from nexus_skills.loader import parse_skill
 from nexus_skills.loader.frontmatter import SkillFormatError
 from nexus_skills.versions import SkillFileError, check_files, content_hash, normalize_path
 
@@ -236,28 +237,28 @@ def read_for_run(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
 
 
 @dataclass(frozen=True)
-class PreparedScript:
-    """Everything a script run needs, read inside the caller's transaction and then used outside it."""
+class PreparedExec:
+    """Everything `exec_skill` needs, read inside the caller's transaction and then used outside it."""
     skill: str
     version: int
     version_id: str
     content_hash: str
-    skill_md: str
+    #: Where the version came from (``builtin`` / ``admin`` / ``import`` ...) and where its author meant it to run.
+    source: str
+    declared: str
+    #: Every file of the version including SKILL.md, as projected into the sandbox.
     files: dict[str, str]
-    spec: ScriptSpec
+    script: ResolvedScript
 
 
-def prepare_script(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, script: str) -> PreparedScript:
-    """Resolve a declared script of a bound skill version. Unbound or unknown scripts are NotFound.
+def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, script: str) -> PreparedExec:
+    """Resolve a script of a bound skill version. Unbound, hidden or unknown skills and scripts are NotFound.
 
-    Only the version's own files are returned, so the working copy matches what was published.
+    Only the version's own files are returned, so what runs is what was published and scanned.
     """
     version = bound_versions(db, agent_version_id).get(name)
-    if version is None:
+    if version is None or not version.model_invocable:
         raise NotFound('skill_unavailable')
-    spec = next((item for item in parse_skill(version.skill_md).scripts if item.name == script), None)
-    if spec is None:
-        raise NotFound('skill_script_unavailable')
     try:
         authorize_resource(db, tenant_id, RESOURCE_KIND, name, source_tenant_id=version.tenant_id,
                            resource_version_id=str(version.id), permission='use')
@@ -265,23 +266,50 @@ def prepare_script(db: Session, tenant_id: UUID, agent_version_id: UUID, name: s
         raise NotFound('skill_unavailable') from None
     files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
         SkillVersionFileRecord.version_id == version.id))}
-    return PreparedScript(skill=name, version=version.version, version_id=str(version.id),
-                          content_hash=version.content_hash, skill_md=version.skill_md, files=files, spec=spec)
+    files['SKILL.md'] = version.skill_md
+    try:
+        resolved = resolve_script(script, files)
+    except ScriptError as exc:
+        raise NotFound(str(exc)) from None
+    return PreparedExec(skill=name, version=version.version, version_id=str(version.id), content_hash=version.content_hash,
+                        source=version.trust, declared=version.execution, files=files, script=resolved)
 
 
-def scripts_available(policy_flag: bool) -> bool:
-    """Whether ``run_skill_script`` may be offered now: agent setting on, and the platform gate open.
+def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str) -> tuple[str, dict[str, str]] | None:
+    """(content hash, every file incl. SKILL.md) of a bound skill the model may use, or None when there is none."""
+    version = bound_versions(db, agent_version_id).get(name)
+    if version is None or not version.model_invocable:
+        return None
+    files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
+        SkillVersionFileRecord.version_id == version.id))}
+    files['SKILL.md'] = version.skill_md
+    return version.content_hash, files
 
-    The gate is the configuration flag, the development auth mode and the local execution backend
-    (proposal 2026-11-04-skill-scripts, section 6). Failing any one hides the tool.
+
+def exec_skill_available(policy_flag: bool, profile: str | None) -> bool:
+    """Whether `exec_skill` may be offered to an agent: its setting is on and its sandbox profile is usable.
+
+    The tool is not an arbitrary shell (a script of a bound skill, arguments not interpreted), so it does not wait for
+    the agent to switch the whole `sandbox` group on; it does need a sandbox that passed acceptance, or a `local`
+    profile in development mode.
     """
-    from nexus_platform.configuration import auth_settings, skill_scripts_allowed, skill_scripts_gate
-    return bool(policy_flag) and skill_scripts_gate(
-        auth_mode=auth_settings().mode, backend=LOCAL_BACKEND, config_enabled=skill_scripts_allowed())
+    if not policy_flag:
+        return False
+    from nexus_platform.runs.tool_gates import deployment_gate_facts
+    facts = deployment_gate_facts(profile)
+    return facts.sandbox_enabled and facts.sandbox_accepted
 
 
-#: The only execution backend the scripts runner implements. Sandbox backends are not wired here.
-LOCAL_BACKEND = 'local'
+def execution_allowed(prepared: PreparedExec, profile: str | None) -> tuple[bool, str]:
+    """Whether this skill's declared place to run fits the agent's profile, and the reason when it does not."""
+    from nexus_platform.runs.tool_gates import deployment_gate_facts
+    from nexus_sandbox.settings import load_config
+    settings = load_config().get(profile)
+    if settings is None:
+        return False, 'sandbox_unavailable'
+    return resolve_execution(prepared.declared, prepared.source, profile_type=settings.backend,
+                             accepted=deployment_gate_facts(profile).sandbox_accepted,
+                             allow_local_scripts=settings.allow_local_scripts)
 
 
 def list_skills(db: Session, principal: Principal, tenant_id: UUID) -> list[dict[str, Any]]:

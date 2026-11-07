@@ -12,7 +12,9 @@ import time
 import uuid
 
 from nexus_core.sandbox import ExecResult, FileChunk, FileEntry, JobStatus, SandboxError, SearchHit
-from . import paths
+from pathlib import Path
+
+from . import paths, skills as projection
 from .contracts import CommandExecutorPort, FileStorePort
 
 
@@ -21,14 +23,18 @@ from .contracts import CommandExecutorPort, FileStorePort
 MAX_JOBS = 4
 _JOB_ID = re.compile(r'j[0-9a-f]{10}')
 JOBS_DIR = '/workspace/.jobs'
+#: Largest standard input of one command, in bytes (WeKnora's limit for `shell_exec`).
+MAX_STDIN_BYTES = 65_536
+_ENV_NAME = re.compile(r'^[A-Z_][A-Z0-9_]{0,63}$')
+_MAX_ENV_VALUE = 4096
 
 
 class SandboxSession:
     """Session surface for the tools. File operations validate before reaching the store."""
 
     def __init__(self, files: FileStorePort, executor: CommandExecutorPort, *, default_timeout: float,
-                 max_timeout: float, output_limit: int):
-        self.files, self.executor = files, executor
+                 max_timeout: float, output_limit: int, skills_dir: Path | None = None):
+        self.files, self.executor, self.skills_dir = files, executor, skills_dir
         self.default_timeout, self.max_timeout, self.output_limit = default_timeout, max_timeout, output_limit
 
     async def list_files(self, path: str, *, limit: int) -> list[FileEntry]:
@@ -49,12 +55,37 @@ class SandboxSession:
     async def search_files(self, query: str, path: str, *, glob: str, regex: bool, limit: int) -> list[SearchHit]:
         return await self.files.search_files(query, path, glob=glob, regex=regex, limit=limit)
 
-    async def exec(self, command: str, *, cwd: str, timeout_seconds: float) -> ExecResult:
+    async def exec(self, command: str, *, cwd: str, timeout_seconds: float,
+                   env: dict[str, str] | None = None, stdin: str | None = None,
+                   max_timeout: float | None = None) -> ExecResult:
+        """Run `command`. `stdin` (at most 65536 bytes) becomes its standard input; `env` adds variables and is for
+        trusted callers such as `exec_skill`, never taken from a model argument. `max_timeout` replaces the session's
+        ceiling for this call (skill scripts have their own, higher one)."""
         if not command.strip() or len(command) > 20_000:
             raise SandboxError('sandbox_command_invalid')
         paths.split(cwd)
-        timeout = min(timeout_seconds or self.default_timeout, self.max_timeout)
-        return await self.executor.run(command, cwd=cwd, timeout_seconds=timeout, output_limit=self.output_limit)
+        if stdin is not None and (not isinstance(stdin, str) or len(stdin.encode('utf-8')) > MAX_STDIN_BYTES):
+            raise SandboxError('sandbox_stdin_too_large', f'standard input is limited to {MAX_STDIN_BYTES} bytes')
+        for key, value in (env or {}).items():
+            if not _ENV_NAME.match(key) or not isinstance(value, str) or len(value) > _MAX_ENV_VALUE or '\x00' in value:
+                raise SandboxError('sandbox_env_invalid')
+        timeout = min(timeout_seconds or self.default_timeout, max_timeout or self.max_timeout)
+        return await self.executor.run(command, cwd=cwd, timeout_seconds=timeout, output_limit=self.output_limit,
+                                       env=env or None, stdin=stdin)
+
+    # ------------------------------------------------------------------ skills
+
+    def project_skill(self, name: str, content_hash: str, files: dict[str, str | bytes]) -> str:
+        """Make a skill's files readable (never writable) inside the sandbox; returns its directory as a command sees it."""
+        mount = getattr(self.executor, 'skills_mount', None)
+        if self.skills_dir is None or mount is None:
+            raise SandboxError('sandbox_skills_unavailable')
+        projection.project(self.skills_dir, name, content_hash, files)
+        return f"{mount.rstrip('/')}/{projection.directory_name(name, content_hash)}"
+
+    def skill_environment(self, skill_dir: str) -> dict[str, str]:
+        """Variables a skill script finds: its own directory and the directory for deliverables."""
+        return {'NEXUS_SKILL_DIR': skill_dir, 'NEXUS_SKILL_OUTPUT_DIR': getattr(self.executor, 'outputs_path', '/outputs')}
 
     def outputs(self) -> list[tuple[str, int]]:
         """Files under `/outputs` for artifact registration."""

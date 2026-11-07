@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from nexus_core.sandbox import ExecResult
-from ..output import Sink
+from ..output import Sink, feed_stdin
 
 CHILD_PATH = '/usr/local/bin:/usr/bin:/bin'
 
@@ -21,25 +21,34 @@ CHILD_PATH = '/usr/local/bin:/usr/bin:/bin'
 class LocalExecutor:
     """`CommandExecutorPort` on the host. The environment is built from scratch, never inherited."""
 
-    def __init__(self, roots: dict[str, Path], forward: tuple[str, ...] = ()):
+    def __init__(self, roots: dict[str, Path], forward: tuple[str, ...] = (), skills: Path | None = None):
         self.roots = roots
+        #: Host directory of projected skills. Commands on this backend see host paths, so this is also the path
+        #: they use to reach a skill; `outputs_path` is likewise the real directory behind `/outputs`.
+        self.skills = skills
+        self.skills_mount = str(skills.resolve()) if skills is not None else None
+        self.outputs_path = str(roots['/outputs'].resolve())
         #: Host variable names forwarded into the command environment (the profile's `env_passthrough`).
         self.forward = forward
 
-    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int) -> ExecResult:
+    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int,
+                  env: dict[str, str] | None = None, stdin: str | None = None) -> ExecResult:
         from ... import paths
         directory = paths.resolve(cwd, self.roots, must_exist=True)
-        env = {'PATH': CHILD_PATH, 'HOME': str(self.roots['/workspace']), 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8'}
-        env.update({key: os.environ[key] for key in self.forward if key in os.environ})
+        base = {'PATH': CHILD_PATH, 'HOME': str(self.roots['/workspace']), 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8'}
+        base.update({key: os.environ[key] for key in self.forward if key in os.environ})
+        base.update(env or {})
         started = time.monotonic()
         process = await asyncio.create_subprocess_exec(
-            '/bin/sh', '-c', command, cwd=str(directory), env=env, stdin=asyncio.subprocess.DEVNULL,
+            '/bin/sh', '-c', command, cwd=str(directory), env=base,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
         out, err = Sink(output_limit), Sink(output_limit)
         timed_out = False
 
         async def finish() -> None:
-            await asyncio.gather(out.drain(process.stdout), err.drain(process.stderr), process.wait())
+            await asyncio.gather(out.drain(process.stdout), err.drain(process.stderr), process.wait(),
+                                 feed_stdin(process, stdin))
 
         def kill() -> None:
             try:

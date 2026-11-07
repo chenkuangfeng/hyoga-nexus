@@ -26,7 +26,7 @@ def _tenant(factory):
         tenant = create_tenant(db, PRINCIPAL, 'Skills')
         _, model_version = create_model_profile(db, PRINCIPAL, tenant.id, name='M', provider='openai',
                                                 model_name='test', options={'base_url': 'https://model.example/v1'})
-        for name in ('load_skill', 'read_skill_file', 'read_memory', 'run_skill_script'):
+        for name in ('load_skill', 'read_skill_file', 'read_memory', 'exec_skill'):
             register_resource(db, tenant_id=tenant.id, kind='tool', resource_id=name, version_id='v1')
         db.commit()
     return tenant, model_version

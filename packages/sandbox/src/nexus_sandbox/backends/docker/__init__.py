@@ -19,7 +19,7 @@ from pathlib import Path
 
 from nexus_core.sandbox import ExecResult, SandboxError
 from ...settings import SandboxSettings
-from ..output import Sink
+from ..output import Sink, feed_stdin
 
 LABEL = 'nexus.sandbox'
 #: Label naming the profile that owns a container, so each profile's manager reclaims only its own.
@@ -61,7 +61,7 @@ class DockerBackend:
 
     # ------------------------------------------------------------------ lifecycle
 
-    def run_arguments(self, name: str, workspace: Path, outputs: Path) -> list[str]:
+    def run_arguments(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None) -> list[str]:
         """The `docker run` arguments of a session container. Pure, so the isolation flags are testable."""
         s = self.settings
         uid = os.getuid() if os.getuid() != 0 else 65534
@@ -74,10 +74,11 @@ class DockerBackend:
                 '--cpus', str(s.cpus), '--memory', f'{s.memory_mb}m', '--memory-swap', f'{s.memory_mb}m',
                 '--pids-limit', str(s.pids), '--user', f'{uid}:{gid}',
                 '-v', f'{workspace.resolve()}:/workspace', '-v', f'{outputs.resolve()}:/outputs',
+                *(['-v', f'{skills.resolve()}:/skills:ro'] if skills is not None else []),
                 '-e', 'HOME=/workspace', '-e', 'LANG=C.UTF-8', *passthrough, '-w', '/workspace',
                 s.image, 'sleep', '2147483647']
 
-    async def ensure(self, name: str, workspace: Path, outputs: Path) -> None:
+    async def ensure(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None) -> None:
         """Start the container when it is not running. Concurrent callers for one name share one start."""
         lock = self._locks.setdefault(name, asyncio.Lock())
         async with lock:
@@ -89,7 +90,7 @@ class DockerBackend:
             if os.getuid() == 0:
                 for directory in (workspace, outputs):
                     directory.chmod(0o777)  # the container runs as nobody; the server is root
-            code, _, err = await run_cli(self.binary, *self.run_arguments(name, workspace, outputs), timeout=120)
+            code, _, err = await run_cli(self.binary, *self.run_arguments(name, workspace, outputs, skills), timeout=120)
             if code != 0:
                 raise SandboxError('sandbox_backend_unavailable', err.strip()[:300])
 
@@ -104,10 +105,12 @@ class DockerBackend:
 
     # ------------------------------------------------------------------ commands
 
-    def exec_arguments(self, name: str, command: str, cwd: str, timeout_seconds: float, token: str) -> list[str]:
+    def exec_arguments(self, name: str, command: str, cwd: str, timeout_seconds: float, token: str,
+                       env: dict[str, str] | None = None, stdin: bool = False) -> list[str]:
         """`docker exec` arguments. `timeout` leads its own process group, so expiry ends the whole command tree;
         `token` becomes `$0` of the shell so a cancelled command can be found again by its command line."""
-        return ['exec', '-w', cwd, name, 'timeout', '-k', str(_GRACE_SECONDS), str(max(1, int(timeout_seconds))),
+        return ['exec', *(['-i'] if stdin else []), '-w', cwd, *[flag for key, value in (env or {}).items() for flag in ('-e', f'{key}={value}')],
+                name, 'timeout', '-k', str(_GRACE_SECONDS), str(max(1, int(timeout_seconds))),
                 'sh', '-c', command, token]
 
     async def kill_command(self, name: str, token: str) -> None:
@@ -123,18 +126,24 @@ class DockerBackend:
 class DockerExecutor:
     """`CommandExecutorPort` for one session container."""
 
-    def __init__(self, backend: DockerBackend, name: str, workspace: Path, outputs: Path):
-        self.backend, self.name, self.workspace, self.outputs = backend, name, workspace, outputs
+    #: Projected skills appear read-only at `/skills`; `/outputs` is the real container path.
+    skills_mount = '/skills'
+    outputs_path = '/outputs'
 
-    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int) -> ExecResult:
+    def __init__(self, backend: DockerBackend, name: str, workspace: Path, outputs: Path, skills: Path | None = None):
+        self.backend, self.name, self.workspace, self.outputs, self.skills = backend, name, workspace, outputs, skills
+
+    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int,
+                  env: dict[str, str] | None = None, stdin: str | None = None) -> ExecResult:
         from ... import paths
         paths.split(cwd)  # only /workspace and /outputs are valid working directories
-        await self.backend.ensure(self.name, self.workspace, self.outputs)
+        await self.backend.ensure(self.name, self.workspace, self.outputs, self.skills)
         started = time.monotonic()
         token = 'nexus-exec-' + uuid.uuid4().hex
         process = await asyncio.create_subprocess_exec(
-            self.backend.binary, *self.backend.exec_arguments(self.name, command, cwd, timeout_seconds, token),
-            stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            self.backend.binary, *self.backend.exec_arguments(self.name, command, cwd, timeout_seconds, token, env, stdin is not None),
+            stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             start_new_session=True)
         out, err = Sink(output_limit), Sink(output_limit)
 
@@ -146,8 +155,8 @@ class DockerExecutor:
 
         try:
             # In-container `timeout` ends the command; this outer bound only guards a hung docker client.
-            await asyncio.wait_for(asyncio.gather(out.drain(process.stdout), err.drain(process.stderr), process.wait()),
-                                   timeout_seconds + _GRACE_SECONDS + 5)
+            await asyncio.wait_for(asyncio.gather(out.drain(process.stdout), err.drain(process.stderr), process.wait(),
+                                                  feed_stdin(process, stdin)), timeout_seconds + _GRACE_SECONDS + 5)
         except asyncio.TimeoutError:
             kill_client()
             await process.wait()

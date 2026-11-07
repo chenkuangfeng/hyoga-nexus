@@ -71,6 +71,17 @@ def test_files_and_commands_roundtrip_without_host_paths(env):
         assert str(tmp_path) not in result.data
 
 
+def test_standard_input_reaches_the_command_exactly(env):
+    gateway, call, _ = env
+    gw, _ = gateway()
+    text = 'first "line"\nsecond $HOME `x`\n'
+    result = call(gw, 'sandbox_exec', command='cat', stdin=text)
+    assert 'exit_code: 0' in result.data and text in result.data
+    assert 'exit_code: 0' in call(gw, 'sandbox_exec', command='cat', stdin='').data
+    too_big = call(gw, 'sandbox_exec', command='cat', stdin='x' * 70_000)  # over the schema limit: refused before it runs
+    assert too_big.error_code is not None
+
+
 def test_errors_are_stable_codes_the_model_can_act_on(env):
     gateway, call, _ = env
     gw, _ = gateway()

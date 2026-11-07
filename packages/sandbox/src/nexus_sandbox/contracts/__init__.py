@@ -15,7 +15,8 @@ from nexus_core.sandbox import (ExecResult, FileChunk, FileEntry, SandboxError, 
 class CommandExecutorPort(Protocol):
     """Run one command for one (tenant, session) workspace. Implementations enforce the limits."""
 
-    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int) -> ExecResult: ...
+    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int,
+                  env: dict[str, str] | None = None, stdin: str | None = None) -> ExecResult: ...
     async def close(self) -> None: ...
 
 

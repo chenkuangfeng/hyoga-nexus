@@ -228,13 +228,15 @@ class ExecutionPreparer:
                 if version.runtime_type == 'native' and db.scalar(select(ResourceBindingRecord.id).where(
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind.not_in(('tool', 'skill', 'knowledge_base'))).limit(1)):
                     raise RuntimeFault('runtime_capability_unavailable')
-                from nexus_core.native import KNOWLEDGE_TOOL_NAMES, NativePolicy
-                from nexus_platform.skills.service import scripts_available
-                script_tool_on = scripts_available(NativePolicy(**(version.budgets.get('behavior') or {})).skill_scripts)
+                from nexus_core.native import KNOWLEDGE_TOOL_NAMES, RETIRED_TOOL_NAMES, NativePolicy
+                from nexus_platform.skills.service import exec_skill_available
+                behavior = NativePolicy(**(version.budgets.get('behavior') or {}))
+                script_tool_on = exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile)
                 bindings = tuple((binding.resource_id, binding.resource_version_id or 'v1', str(binding.id))
                     for binding in db.scalars(select(ResourceBindingRecord).where(
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'tool'))
-                    if (binding.resource_id != 'run_skill_script' or script_tool_on)
+                    if binding.resource_id not in RETIRED_TOOL_NAMES
+                    and (binding.resource_id != 'exec_skill' or script_tool_on)
                     and (memory_on or binding.resource_id not in MEMORY_TOOL_NAMES)
                     and (knowledge_bound or binding.resource_id not in KNOWLEDGE_TOOL_NAMES))
                 if len({name for name, _, _ in bindings}) != len(bindings):

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
 from nexus_core.run_events import EPHEMERAL_KINDS, BusEvent, BusUnavailable
+from nexus_core.sandbox import SkillRun
 from nexus_core.native.policy import NativePolicy, TOOL_OUTPUT_STORE_LIMIT
 from nexus_core.runtime import ModelMessage, RuntimeFault, RuntimeOutcome, RuntimeProgress, ToolCall
 from nexus_memory.switches import MEMORY_TOOL_NAMES
@@ -37,6 +38,27 @@ from .summaries import append_summary
 from .messages import add_message
 from .messages import histories_allowed
 from .completion import _finish
+
+
+_log = logging.getLogger("nexus_platform.run_events")
+
+
+def _recovery_hint(stderr: str, interpreter: str) -> str:
+    """A direction for the common ways a skill script fails to start, so the model does not guess at fixes.
+
+    The sandbox cannot reach the network by default and a skill's dependencies are installed with the skill, not by
+    the script, so the model is pointed at the administrator instead of at ``pip install``. No command is blocked
+    here: pattern lists around package installs were tried elsewhere and both refused the advised fix and missed
+    its variants.
+    """
+    lowered = stderr.lower()
+    if 'no module named' in lowered or "cannot find module" in lowered:
+        return ('A package this script imports is not installed for this skill. Dependencies are installed when the '
+                'skill is installed, not at run time; ask an administrator to reinstall the skill\'s dependencies.')
+    if f'{interpreter}: not found' in lowered or f'{interpreter}: command not found' in lowered:
+        return (f'The sandbox image has no {interpreter}. This skill does not fit the agent\'s sandbox profile; '
+                'ask an administrator to use an image that provides it.')
+    return ''
 
 
 def _behavior(context: ExecutionContext) -> NativePolicy:
@@ -124,7 +146,6 @@ class DurableRuntimeStore:
         except BusUnavailable:
             pass  # the viewer catches up from the stored message; ephemeral text is never worth failing a Run
         return True
-
 
     def _run(self, db: Session) -> RunRecord:
         task = db.get(OutboxRecord, self.task_id)
@@ -413,7 +434,7 @@ class DurableRuntimeStore:
             audit(db, run.tenant_id, run.principal_id, 'memory.index_read', 'run', str(run.id))
             return result
 
-    async def load_skill(self, name: str) -> str:
+    async def load_skill(self, name: str, sandbox=None) -> str:
         """Return the body of a skill this Run's agent version binds (Level 2, inline mode)."""
         from nexus_platform.skills.service import read_for_run as read_skill
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -423,46 +444,85 @@ class DurableRuntimeStore:
             result = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name)
             audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
         await self.emit('skill.loaded', {'skill': name[:64]})
-        return result
+        return await self._with_skill_dir(name, result, sandbox)
 
-    async def run_skill_script(self, name: str, script: str, args: dict) -> str:
-        """Run a declared script of a bound skill in a local working copy (proposal section 7).
+    async def _with_skill_dir(self, name: str, text: str, sandbox) -> str:
+        """Replace ``${NEXUS_SKILL_DIR}`` in skill text with the skill's directory as a command sees it.
 
-        The database is not held open while the script runs: the spec and files are read in one short
-        transaction, the process runs outside it, and the outcome is audited in another.
+        Skills written for other platforms name their directory with such a placeholder. The skill is projected
+        into the sandbox first so the path is real. Without a sandbox, or when projecting fails, the text is returned
+        unchanged: reading a skill never fails because of the sandbox.
         """
-        import hashlib
-        from nexus_platform.skills.service import prepare_script, scripts_available
-        from nexus_skills.runner import ScriptError, render_result, run_script
+        placeholder = '${NEXUS_SKILL_DIR}'
+        if sandbox is None or placeholder not in text:
+            return text
+        from nexus_core.sandbox import SandboxError
+        from nexus_platform.skills.service import skill_files
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            run = self._run(work.session)
+            found = skill_files(work.session, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name)
+        if found is None:
+            return text
+        try:
+            return text.replace(placeholder, sandbox.project_skill(name, *found))
+        except SandboxError:
+            return text
+
+    async def exec_skill(self, name: str, script: str, args: object, stdin: str | None, timeout_seconds: float,
+                         sandbox) -> SkillRun:
+        """Run one script of a bound skill in the Run's sandbox (openspec 2026-11-07-skill-evolution, S2).
+
+        The skill's files are projected read-only into the sandbox; the command line is the interpreter, the script
+        and the arguments, each quoted, so nothing in an argument is interpreted by the shell. The database is not
+        held open while the script runs: the version is read in one short transaction, the process runs outside
+        it, and the outcome is audited in another. A skill whose declared place to run does not fit the agent's
+        profile is refused, never moved to another place.
+        """
+        from nexus_platform.skills.service import execution_allowed, exec_skill_available, prepare_exec
+        from nexus_sandbox.settings import load_config
+        from nexus_skills.exec import ScriptError, build_command, check_args
+        behavior = _behavior(self.context)
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
             require_membership(db, run.tenant_id, run.principal_id)
-            if not scripts_available(_behavior(self.context).skill_scripts):
+            if not exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile):
                 raise NotFound('skill_script_unavailable')
-            prepared = prepare_script(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script)
-        script_hash = hashlib.sha256(prepared.files[prepared.spec.path].encode('utf-8')).hexdigest()
-        detail = {'skill': name, 'version': prepared.version, 'script': script, 'script_hash': script_hash}
-        await self.emit('skill.script.started', detail)
+            prepared = prepare_exec(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script)
+        detail = {'skill': name, 'version': prepared.version, 'script': prepared.script.path,
+                  'script_hash': prepared.script.content_hash}
+        refusal = ''
         try:
-            result = await run_script(prepared.spec, skill_md=prepared.skill_md, files=prepared.files,
-                                      expected_hash=prepared.content_hash, args=args)
+            arguments = check_args(args)
         except ScriptError as exc:
-            await self._audit_script(run.tenant_id, run.principal_id, run.id, detail | {'refused': str(exc)})
-            await self.emit('skill.script.completed', detail | {'refused': str(exc)})
-            return f'Script not run: {exc}'
+            arguments, refusal = [], str(exc)
+        if not refusal:
+            allowed, reason = execution_allowed(prepared, behavior.sandbox_profile)
+            refusal = '' if allowed else reason
+        if refusal:
+            await self._audit_script(run.tenant_id, run.principal_id, run.id, detail | {'refused': refusal})
+            await self.emit('skill.script.completed', detail | {'refused': refusal})
+            return SkillRun(name, prepared.version, prepared.script.path, refused=refusal)
+        settings = load_config().get(behavior.sandbox_profile)
+        skill_dir = sandbox.project_skill(name, prepared.content_hash, prepared.files)
+        command = build_command(prepared.script.interpreter, skill_dir, prepared.script.path, arguments)
+        await self.emit('skill.script.started', detail)
+        result = await sandbox.exec(command, cwd='/workspace', env=sandbox.skill_environment(skill_dir), stdin=stdin,
+                                    timeout_seconds=timeout_seconds or settings.skill_timeout_seconds,
+                                    max_timeout=settings.skill_timeout_max_seconds)
         summary = detail | {'exit_code': result.exit_code, 'timed_out': result.timed_out,
                             'duration_ms': result.duration_ms, 'stdout_truncated': result.stdout_truncated,
                             'stderr_truncated': result.stderr_truncated}
         await self._audit_script(run.tenant_id, run.principal_id, run.id, summary)
         await self.emit('skill.script.completed', summary)
-        return render_result(name, script, prepared.version, result)
+        return SkillRun(name, prepared.version, prepared.script.path, result=result,
+                        hint=_recovery_hint(result.stderr, prepared.script.interpreter) if result.exit_code else '')
 
     async def _audit_script(self, tenant_id, principal_id, run_id, detail) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             audit(work.session, tenant_id, principal_id, 'skill.script', 'run', str(run_id), detail)
 
-    async def read_skill_file(self, name: str, path: str) -> str:
+    async def read_skill_file(self, name: str, path: str, sandbox=None) -> str:
         """Return one resource file of a bound skill version (Level 3); the path is checked inside the version."""
         from nexus_platform.skills.service import read_for_run as read_skill
         with SqlAlchemyUnitOfWork(self.factory) as work:
@@ -472,7 +532,7 @@ class DurableRuntimeStore:
             result = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, path)
             audit(db, run.tenant_id, run.principal_id, 'skill.file_read', 'run', str(run.id),
                   {'skill': name[:64], 'path': path[:200]})
-            return result
+        return await self._with_skill_dir(name, result, sandbox)
 
     async def read_memory(self, entry_id: str) -> str:
         """Authorize each model memory read at execution time, independently of old indexes."""

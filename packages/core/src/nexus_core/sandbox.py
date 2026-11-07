@@ -61,6 +61,20 @@ class ExecResult:
 
 
 @dataclass(frozen=True)
+class SkillRun:
+    """Outcome of `exec_skill`: either a refusal (`refused` is a stable code) or the command's result.
+
+    `hint` is a short recovery direction for a failed run (a missing module or interpreter); it is empty otherwise.
+    """
+    skill: str
+    version: int
+    script: str
+    refused: str = ''
+    result: ExecResult | None = None
+    hint: str = ''
+
+
+@dataclass(frozen=True)
 class JobStatus:
     """State of a background command. `exit_code` is set once `state` is `finished` (None when killed)."""
     job_id: str
@@ -80,7 +94,11 @@ class SandboxSessionPort(Protocol):
     async def edit_file(self, path: str, old: str, new: str) -> int: ...
     async def search_files(self, query: str, path: str, *, glob: str, regex: bool, limit: int) -> list[SearchHit]: ...
     async def read_image(self, path: str) -> tuple[bytes, str]: ...
-    async def exec(self, command: str, *, cwd: str, timeout_seconds: float) -> ExecResult: ...
+    async def exec(self, command: str, *, cwd: str, timeout_seconds: float,
+                   env: dict[str, str] | None = None, stdin: str | None = None,
+                   max_timeout: float | None = None) -> ExecResult: ...
+    def project_skill(self, name: str, content_hash: str, files: dict[str, str | bytes]) -> str: ...
+    def skill_environment(self, skill_dir: str) -> dict[str, str]: ...
     async def exec_async(self, command: str, *, cwd: str, timeout_seconds: float) -> str: ...
     async def job_status(self, job_id: str, *, wait_seconds: float, tail_chars: int) -> JobStatus: ...
     async def job_cancel(self, job_id: str) -> JobStatus: ...

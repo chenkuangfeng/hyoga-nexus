@@ -6,6 +6,28 @@ import asyncio
 _CHUNK = 65_536
 
 
+async def feed_stdin(process: asyncio.subprocess.Process, text: str | None) -> None:
+    """Write `text` to the process's standard input and close it.
+
+    A command that exits without reading its input closes the pipe; that is not an error. Run this beside the output
+    readers (never before them), so a command that fills its output pipe while we are still writing cannot deadlock.
+    """
+    stream = process.stdin
+    if stream is None:
+        return
+    try:
+        if text:
+            stream.write(text.encode('utf-8'))
+            await stream.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        pass
+    finally:
+        try:
+            stream.close()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+
+
 class Sink:
     """Collects one stream up to `limit` bytes, split between its start and its end.
 

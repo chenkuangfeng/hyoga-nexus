@@ -36,14 +36,14 @@
 | `standard`（默认） | allow | allow | ask |
 | `strict` | allow | ask | ask |
 
-声明 `requires_approval` 的工具把 `allow` 提升为 `ask`。内置工具中 `run_skill_script` 为 `destructive`，`propose_memory_draft` 为 `write`，其余为 `read`。
+声明 `requires_approval` 的工具把 `allow` 提升为 `ask`。内置工具中 `exec_skill` 与 `sandbox_exec` 在沙箱档位全部断网时为 `write`、任一 docker / bwrap 档位开放网络时为 `destructive`（每次审批），`propose_memory_draft` 为 `write`，其余为 `read`。`run_skill_script` 已由 `exec_skill` 取代，保存的设置与已发布版本里的旧名字被接受并在准备 Run 时忽略。
 
 ## 参数守卫规则
 
 规则文件在 `guard/rules/`，字段沿用 octop-harness 的 YAML（`id`、`tools`、`params`、`severity`、`patterns`、`exclude_patterns`、`description`、`remediation`），以 JSON 存放以免引入 YAML 依赖。`params` 为顶层参数名，`*` 表示任意深度的全部字符串值。匹配前生成去掉拆词引号与反斜杠的变体。规则加载失败抛 `GuardRuleError`，网关不能启动。
 
 - `dangerous_shell_commands.json`：octop-harness 危险 shell 命令规则，作用于将来的 `shell` / `execute` / `bash` 工具。
-- `skill_scripts.json`：作用于 `run_skill_script` 参数，`CRITICAL` 包括格式化磁盘、写裸设备、删除根目录、下载后管道执行、反向 shell。
+- `skill_scripts.json`：作用于 `exec_skill` 的参数（参数列表与标准输入），`CRITICAL` 包括格式化磁盘、写裸设备、删除根目录、下载后管道执行、反向 shell。
 
 ## 端口
 

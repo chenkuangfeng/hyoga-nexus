@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端已完成（前端未做）；S2 的档位部分（2.1–2.5）已完成，技能投射、`exec_skill`、`run_skill_script` 退役与 `execution` 策略（2.6–2.10）进行中。已完成的任务才勾选。
+状态：已确认（第六版，2026-11-07，决定 1–14 全部采用推荐方案），实施中：S1 后端已完成（前端未做）；S2 已完成 2.1–2.9（档位、投射、`exec_skill`、`run_skill_script` 退役、`execution` 策略）；2.10（真实 Docker 与 bwrap 上验证）未做，需要你在有环境时验证。已完成的任务才勾选。
 
 ## 0. 准备
 
@@ -52,12 +52,17 @@
   - 管理接口的提示以 `/agent-tools` 的 `sandbox_profiles[].reason` 提供；启动日志的提示未单独加。
 - [x] 2.5 可用性与验收按档位：`tool_gates` 按智能体档位计算；`acceptance-<档位>.json`；指纹含档位参数；`--sandbox-check --profile`；迁移 `sandbox_acceptance`（若采用表存储）带档位列。
   - 报告是文件（`acceptance.json` 给旧的 `default` 档位，`acceptance-<档位>.json` 给其他档位），没有表，因此无需迁移。`--sandbox-check` 默认检查全部 docker 与 bwrap 档位。同时修正 `sandbox_exec` 的风险等级与网关超时：改为按全部档位计算（任一 docker / bwrap 档位开放网络即 `destructive`），否则档位化后会误读顶层键而降级风险。
-- [ ] 2.6 技能投射：`docker` / `bwrap` 只读挂载 `/skills`，`local` 宿主路径；`NEXUS_SKILL_DIR`、`NEXUS_SKILL_OUTPUT_DIR`；文件数与字节上限；其他会话 / 租户 / 未绑定技能不可见。
-- [ ] 2.7 执行器端口新增可选 `env` 与 `stdin`（docker `exec -i`，bwrap 与 local 写标准输入，默认仍 `DEVNULL`）；`sandbox_exec` 新增可选 `stdin`（≤ 65536 字节）。
-- [ ] 2.7a `exec_skill`：纯逻辑 `nexus_skills/exec.py`（脚本路径规范化、解释器选择、环境变量与 `PATH` 构造、argv 组装）；工具定义放 `nexus_tools/builtins/skills.py`（`skills` 组）；`RunStore.exec_skill`（取内容、授权、哈希校验、审计、恢复提示）；可用性按所选档位沙箱可用；`skill_timeout_seconds` / `skill_timeout_max_seconds`；`load_skill` 的 `${NEXUS_SKILL_DIR}` 替换。
-- [ ] 2.7b 退役 `run_skill_script`、`scripts` 声明与 `nexus_skills.runner`：注册表、分组、`BUILTIN_TOOL_NAMES`、网关与测试同步；`allow_local_scripts` 迁移；已发布版本中既有绑定的运行时忽略与事件；发布校验提示改绑 `exec_skill`。
-- [ ] 2.8 `execution` 属性与 `resolve_execution`：解析与校验、保存或发布时拒绝非内置的 `local`、运行时按策略、不回退、编辑器与详情展示声明值与有效位置；表驱动测试（声明 × 档位 × 来源 × 开关 × 开发模式）。
-- [ ] 2.9 测试：`exec_skill` 拒绝越界路径、不存在的脚本与白名单外的解释器，argv 不经 shell（含空格与元字符的参数原样到达），`stdin` 到达脚本，审计记录脚本哈希，多个脚本依次运行并通过 `/workspace` 交接；沙箱内无法修改技能目录；看不到其他租户技能；开放网络强制审批；三种档位下的参数断言（docker 参数列表、bwrap 参数列表）。
+- [x] 2.6 技能投射：`docker` / `bwrap` 只读挂载 `/skills`，`local` 宿主路径；`NEXUS_SKILL_DIR`、`NEXUS_SKILL_OUTPUT_DIR`；文件数与字节上限；其他会话 / 租户 / 未绑定技能不可见。
+  - `nexus_sandbox/skills.py`：内容哈希命名、暂存后原子改名、同哈希不覆盖、路径与大小校验（1000 个文件、32 MB）、支持二进制；`SandboxSession.project_skill` / `skill_environment`；docker `-v …:/skills:ro`、bwrap `--ro-bind`。只投射本次 Run 要运行的那个技能，不预投射；已存在的旧容器没有该挂载，空闲回收后重建即带上。
+- [x] 2.7 执行器端口新增可选 `env` 与 `stdin`（docker `exec -i`，bwrap 与 local 写标准输入，默认仍 `DEVNULL`）；`sandbox_exec` 新增可选 `stdin`（≤ 65536 字节）。
+  - 三个执行器与会话端口已支持，限制在会话层校验（字节数、变量名与值）；`sandbox_exec` 工具已暴露 `stdin`（≤ 65536 字节，超出由参数模式拒绝）。`sandbox_exec_async` 不带 `stdin`（后台命令没有可写的输入端）。
+- [x] 2.7a `exec_skill`：纯逻辑 `nexus_skills/exec.py`（脚本路径规范化、解释器选择、环境变量与 `PATH` 构造、argv 组装）；工具定义放 `nexus_tools/builtins/skills.py`（`skills` 组）；`RunStore.exec_skill`（取内容、授权、哈希校验、审计、恢复提示）；可用性按所选档位沙箱可用；`skill_timeout_seconds` / `skill_timeout_max_seconds`；`load_skill` 的 `${NEXUS_SKILL_DIR}` 替换。
+  - 已做：`exec.py`、工具与 `RunStore.exec_skill`（参数经 `shlex` 引用，不经 shell 解释）、可用性（智能体 `skill_scripts` 开关加所选档位可用）、worker 在 `sandbox` 组关闭但绑定了 `exec_skill` 时仍创建会话、技能超时、审计记录脚本路径与哈希、恢复提示（缺模块指向管理员而不是 `pip install`）。`load_skill` 与 `read_skill_file` 把 `${NEXUS_SKILL_DIR}` 替换为技能在沙箱里的真实目录（先投射，使路径真实存在；没有沙箱或投射失败时原样返回，读取技能不会因沙箱而失败）。**未做**：`PATH` 前置依赖环境（要等 S3 的依赖构建）。审批方面，`exec_skill` 在 `strict` 下与其他写类工具一样可以「本会话允许」（提案 2026-11-06-tool-call-hardening E 的会话授权，`destructive` 不可记住），多脚本技能不需要为此另做机制。
+- [x] 2.7b 退役 `run_skill_script`、`scripts` 声明与 `nexus_skills.runner`：注册表、分组、`BUILTIN_TOOL_NAMES`、网关与测试同步；`allow_local_scripts` 迁移；已发布版本中既有绑定的运行时忽略与事件；发布校验提示改绑 `exec_skill`。
+  - `RETIRED_TOOL_NAMES = {'run_skill_script'}`：保存的设置与已发布版本里的旧名字被接受，准备 Run 时忽略（未记事件）。`nexus_skills.runner`、`skill_scripts_allowed` / `skill_scripts_gate`、`[skills].allow_local_scripts` 已删除，开关移到 `[sandbox].allow_local_scripts`。`scripts` 声明仍可解析（旧技能不报错），但不再驱动任何行为。删除的旧测试：`test_skill_runner`、`test_skill_script_run`、`test_skill_config_gate`、`test_skill_approval_flow`，由 `test_exec_skill`、`test_skill_exec` 覆盖。**发布校验提示改绑未做**。
+- [x] 2.8 `execution` 属性与 `resolve_execution`：解析与校验、保存或发布时拒绝非内置的 `local`、运行时按策略、不回退、编辑器与详情展示声明值与有效位置；表驱动测试（声明 × 档位 × 来源 × 开关 × 开发模式）。
+  - `nexus_skills/policy.py::resolve_execution` 表驱动测试 12 格；运行时由 `RunStore.exec_skill` 查策略，不满足返回 `refused` 并写审计，集成测试覆盖「要宿主的内置技能：开关关闭被拒、打开后运行」。版本列表返回 `execution`；**编辑器展示未做**（前端）。
+- [x] 2.9 测试：`exec_skill` 拒绝越界路径、不存在的脚本与白名单外的解释器，argv 不经 shell（含空格与元字符的参数原样到达），`stdin` 到达脚本，审计记录脚本哈希，多个脚本依次运行并通过 `/workspace` 交接；沙箱内无法修改技能目录；看不到其他租户技能；开放网络强制审批；三种档位下的参数断言（docker 参数列表、bwrap 参数列表）。
 - [ ] 2.10 在真实 Docker 与 bwrap 上验证挂载与执行（环境相关测试无环境时跳过并说明）。
 
 ## 3. S3 存储与安装流水线（方案 C）

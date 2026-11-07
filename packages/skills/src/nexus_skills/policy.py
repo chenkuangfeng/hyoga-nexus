@@ -49,3 +49,31 @@ def decide(source: str, verdict: str, *, acknowledged: bool = False) -> Decision
     if acknowledged and outcome in ('need_ack', 'block'):
         return 'allow'
     return outcome
+
+
+def resolve_execution(declared: str, source: str, *, profile_type: str, accepted: bool,
+                      allow_local_scripts: bool) -> tuple[bool, str]:
+    """Whether a skill's scripts may run on an agent's sandbox profile, and why not.
+
+    `declared` is the skill's ``execution`` (``sandbox`` or ``local``): a statement about where its author meant the
+    scripts to run, never a permission. `accepted` is the profile's usability from the gates: an isolation report that
+    passed for ``docker`` / ``bwrap``, or development mode with ``allow_local`` for ``local``. There is no fallback in
+    either direction: a skill that wants a sandbox does not run on the host, and one that wants the host does not
+    run in a sandbox.
+
+    ====================  ==========================================  =================================
+    declared              runs when                                   otherwise
+    ====================  ==========================================  =================================
+    ``sandbox``           the profile is usable (a ``local`` profile  ``sandbox_unavailable``
+                          counts in development mode only)
+    ``local``             builtin source, a ``local`` profile that    ``skill_execution_not_permitted``
+                          is usable, and ``allow_local_scripts``      or ``local_not_allowed``
+    ====================  ==========================================  =================================
+    """
+    if declared == 'local':
+        if source != 'builtin':
+            return False, 'skill_execution_not_permitted'
+        if profile_type != 'local' or not accepted or not allow_local_scripts:
+            return False, 'local_not_allowed'
+        return True, ''
+    return (True, '') if accepted else (False, 'sandbox_unavailable')

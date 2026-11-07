@@ -33,7 +33,7 @@ from pathlib import Path
 
 from nexus_core.sandbox import ExecResult, SandboxError
 from ...settings import SandboxSettings
-from ..output import Sink
+from ..output import Sink, feed_stdin
 
 #: Directories of the host's system that are mounted read-only (or recreated as symlinks when they are links).
 _SYSTEM_DIRECTORIES = ('/usr', '/bin', '/sbin', '/lib', '/lib64', '/lib32')
@@ -57,7 +57,8 @@ class BwrapBackend:
         self.settings = settings
         self.binary = binary
 
-    def jail_arguments(self, workspace: Path, outputs: Path, cwd: str, command: str) -> list[str]:
+    def jail_arguments(self, workspace: Path, outputs: Path, cwd: str, command: str,
+                       env: dict[str, str] | None = None, skills: Path | None = None) -> list[str]:
         """The `bwrap` argument list. Pure, so every isolation flag is testable without running anything."""
         args = [self.binary, '--die-with-parent', '--new-session', '--unshare-all', '--cap-drop', 'ALL']
         if self.settings.network != 'none':
@@ -74,11 +75,13 @@ class BwrapBackend:
             args += ['--ro-bind-try', name, name]
         args += ['--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
                  '--bind', str(workspace.resolve()), '/workspace', '--bind', str(outputs.resolve()), '/outputs',
+                 *(['--ro-bind', str(skills.resolve()), '/skills'] if skills is not None else []),
                  '--remount-ro', '/',  # the root is a tmpfs: only /workspace, /outputs and /tmp stay writable
                  '--clearenv', '--setenv', 'PATH', _PATH, '--setenv', 'HOME', '/workspace',
                  '--setenv', 'LANG', 'C.UTF-8', '--setenv', 'LC_ALL', 'C.UTF-8', '--setenv', 'TMPDIR', '/tmp',
                  *[flag for key in self.settings.env_passthrough if key in os.environ
                    for flag in ('--setenv', key, os.environ[key])],
+                 *[flag for key, value in (env or {}).items() for flag in ('--setenv', key, value)],
                  '--chdir', cwd, '--', '/bin/sh', '-c', command]
         return args
 
@@ -99,19 +102,24 @@ class BwrapExecutor:
     #: The jail ends with the command, so `sandbox_exec_async` cannot work (see `SandboxSession.exec_async`).
     supports_background = False
 
-    def __init__(self, backend: BwrapBackend, workspace: Path, outputs: Path):
-        self.backend, self.workspace, self.outputs = backend, workspace, outputs
+    #: Projected skills appear read-only at `/skills`; `/outputs` is the real jail path.
+    skills_mount = '/skills'
+    outputs_path = '/outputs'
 
-    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int) -> ExecResult:
+    def __init__(self, backend: BwrapBackend, workspace: Path, outputs: Path, skills: Path | None = None):
+        self.backend, self.workspace, self.outputs, self.skills = backend, workspace, outputs, skills
+
+    async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int,
+                  env: dict[str, str] | None = None, stdin: str | None = None) -> ExecResult:
         from ... import paths
         paths.split(cwd)  # only /workspace and /outputs are valid working directories
         if find_binary(self.backend.binary) is None:
             raise SandboxError('sandbox_backend_unavailable', 'bwrap is not installed')
-        argv = self.backend.limited(self.backend.jail_arguments(self.workspace, self.outputs, cwd, command))
+        argv = self.backend.limited(self.backend.jail_arguments(self.workspace, self.outputs, cwd, command, env, self.skills))
         started = time.monotonic()
         process = await asyncio.create_subprocess_exec(
-            *argv, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            env={'PATH': _PATH}, start_new_session=True)
+            *argv, stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env={'PATH': _PATH}, start_new_session=True)
         out, err = Sink(output_limit), Sink(output_limit)
         timed_out = False
 
@@ -123,8 +131,8 @@ class BwrapExecutor:
                 pass
 
         try:
-            await asyncio.wait_for(asyncio.gather(out.drain(process.stdout), err.drain(process.stderr), process.wait()),
-                                   timeout_seconds)
+            await asyncio.wait_for(asyncio.gather(out.drain(process.stdout), err.drain(process.stderr), process.wait(),
+                                                  feed_stdin(process, stdin)), timeout_seconds)
         except asyncio.TimeoutError:
             timed_out = True
             kill()
