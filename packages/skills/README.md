@@ -18,11 +18,12 @@
 - 内联加载：`load_skill`、`read_skill_file`。
 - 脚本执行：`run_skill_script`，每次调用需要审批；仅当智能体设置开启、`[skills].allow_local_scripts = true`、认证模式为开发模式时可见。
 - 发布：管理员通过 `POST /api/v1/tenants/{tenant_id}/skills` 发布新版本（不可修改）。
+- 内置技能导入：`nexus_platform.skills.service.import_builtin(db, principal, tenant_id, root)` 以 `builtin` 来源发布目录下的技能；内容相同报告 `unchanged`，同名的已安装技能拒绝替换（`skill_source_conflict`）。目前只是服务层函数，没有 API 或命令行入口，需要管理员身份的调用方。
 
 ## 限制
 
 - 运行器不是隔离边界，脚本以服务进程用户身份运行。隔离验收见 `docs/architecture.md` 2.9 节。
-- 尚未实现：信任级别与来源检疫、模型草稿的审核发布、内置技能导入、MCP。
+- 尚未实现：信任级别与来源检疫、模型草稿的审核发布、内置技能导入的调用入口、MCP。
 
 ## 文档
 

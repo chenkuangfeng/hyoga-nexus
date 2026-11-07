@@ -141,8 +141,8 @@
 - **参考项目**：Hermes Agent（`skills_guard.py`、`skills_hub`）；DeerFlow（`skills/`）；WeKnora（`approval/mcp_risk.go`）；Octop（`infra/connectors/custom_mcp.py` 自定义 MCP 服务、`mcp_tool_cache.py` 按用户的工具缓存与指纹、`connectors/oauth/`、`infra/skills/` 安装与归档）；octop-harness（`mcp.py` 与 `middleware/mcp_tools.py` 按请求过滤 MCP 工具、`middleware/mcp_tool_error.py` MCP 错误转为失败的工具结果、`middleware/skill_filter.py` 技能禁用与过滤、`middleware/tool_search.py` 工具渐进加载、`plugins/` 插件清单与加载）。
 - **子计划**：
   - [ ] 7.1 技能：版本、`SKILL.md` 与资源、依赖声明、发布前依赖校验、来源检疫、草稿与审核发布。
-    - 已完成（提案 2026-11-04-skill-scripts）：解析与版本、内联加载、绑定与发布前依赖校验、脚本执行（子进程，仅开发门禁）、审批与审计、管理员发布与列表接口。
-    - 未完成：信任级别与来源检疫（当前只有静态提示）、模型草稿的审核发布、内置技能导入（3.4）、按用户 PostgreSQL 验证。
+    - 已完成（提案 2026-11-04-skill-scripts）：解析与版本、内联加载、绑定与发布前依赖校验、脚本执行（子进程，仅开发门禁）、审批与审计、管理员发布与列表接口、内置技能导入（`import_builtin`，以 `builtin` 来源发布 `skills/` 目录下的技能，重复导入报告 `unchanged`，同名已安装技能不能替换；仅服务层函数，尚无 API 或命令行入口）。
+    - 未完成：信任级别与来源检疫（当前只有静态提示）、模型草稿的审核发布、内置技能导入的调用入口（管理员接口或命令行）、按用户 PostgreSQL 验证。
   - [ ] 7.2 MCP 客户端：发现工具、按工具启用、凭据引用、高风险工具审批。
     - 接入约束（提案 2026-11-06-tool-call-hardening 决定 3，见 `docs/architecture.md` 2.7）：注册名哈希防撞名、风险只升不降、执行时复核目录、按用户缓存工具并用指纹失效、`McpError` 与输出 schema 错误分类、外部数据前缀、按供应商清洗 schema、`tool_search` 渐进加载。
   - [ ] 7.3 MCP 服务端：运行令牌，每次调用复核权限。
