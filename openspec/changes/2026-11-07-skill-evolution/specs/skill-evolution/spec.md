@@ -18,8 +18,10 @@
 ### R2 存储与运行
 - 技能版本保存 zip 包与行内的名字、简介、正文；资源按条目读取；二进制资源可保存，读取工具对二进制只返回元信息。
 - 技能目录采用 `skill://名字/SKILL.md` 路径格式并声明其为描述性数据；简介超过 600 字符被截断；总长超限时只列名字。
-- `sandbox_exec` 可带 `skill_name`：选中技能的依赖环境，设置 `NEXUS_SKILL_DIR` 与 `NEXUS_SKILL_OUTPUT_DIR`；技能不在本会话可用范围内时拒绝。技能不再声明脚本，`run_skill_script` 不再提供。
-- 脚本的审批沿用 `sandbox_exec` 的风险等级与 `tool_access`；`skill_name` 不改变风险等级。
+- `exec_skill(skill_name, script, args?, stdin?)` 运行技能目录内的一个脚本文件：`args` 作为 argv 传入、不经 shell；`stdin` 最多 65536 字节；解释器按扩展名或 shebang 在白名单内选择；设置 `NEXUS_SKILL_DIR` 与 `NEXUS_SKILL_OUTPUT_DIR`，使用技能的依赖环境；运行前校验脚本哈希，审计记录技能、版本、脚本路径与哈希。技能不在本会话可用范围内、脚本越出技能目录或不存在、解释器不在白名单时拒绝。
+- 技能不再声明脚本，`run_skill_script` 不再提供；`sandbox_exec` 保持通用，只新增可选 `stdin`。
+- `exec_skill` 的风险等级与 `sandbox_exec` 一致，审批沿用 `tool_access`；它只在所选档位的沙箱可用且智能体绑定了技能时出现，不要求打开 `sandbox` 组。
+- `load_skill` 返回的正文把 `${NEXUS_SKILL_DIR}` 替换为沙箱内技能目录的真实路径，无法解析的占位符原样保留。
 - 脚本失败时在结果里附恢复方向；不做命令黑名单。
 - 名字为小写字母、数字、连字符，1–64 字符，不含保留词；已发布的旧名字不受影响。frontmatter 接受已知可选键，未知键保留并提示，保守修复后标记。
 - `model_invocable` 为假的技能不出现在索引中，`load_skill` 与 `read_skill_file` 也拒绝；`user_invocable` 被保存与校验。
@@ -62,4 +64,4 @@
 
 ## 兼容
 - 既有技能、绑定、会话快照与智能体版本的行为不变；新增字段与新表有默认值；迁移可升可降。
-- `run_skill_script` 与 `scripts` 声明退役：已发布版本中的该绑定在运行时被忽略并记事件，新发布校验提示改为绑定 `sandbox_exec`。
+- `run_skill_script` 与 `scripts` 声明退役：已发布版本中的该绑定在运行时被忽略并记事件，新发布校验提示改为绑定 `exec_skill`。

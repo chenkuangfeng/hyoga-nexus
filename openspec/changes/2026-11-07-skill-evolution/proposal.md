@@ -43,7 +43,7 @@
 | 租户目录 + 安装行 + 沙箱配置 + 智能体选择 | 目录 = `skills` + 不可变 `skill_versions`；「安装」收敛为版本的构建状态；沙箱配置 = 部署级**档位**（见 D）；智能体选择 = 现有资源绑定 |
 | 行内存简介与正文，资源存 zip，按条目读取 | 版本保存 zip 包与行内简介正文；**顺带解决二进制资源**；条目 / 字节上限收紧到数据库可承受 |
 | 提示词目录、`skill://` 路径、「描述性数据」声明 | 照搬格式；读取仍用 `load_skill` / `read_skill_file` |
-| `shell_exec(skill_name=…)`，无脚本声明，解释器按路径推断 | 采用：`sandbox_exec` 增加 `skill_name`；取消 frontmatter 的 `scripts` 声明与 `run_skill_script`（决定 6） |
+| `shell_exec(skill_name=…)`，无脚本声明，解释器按路径推断，`stdin` 最多 64 KB | 采用其中的「无脚本声明、按路径推断解释器、`stdin`」，但入口拆成两个工具：结构化的 `exec_skill`（`skills` 组）跑技能自带脚本，`sandbox_exec` 保持通用并新增 `stdin`；取消 frontmatter 的 `scripts` 声明与 `run_skill_script`（决定 6） |
 | 安装智能体 + 验证关 + 快照镜像 + 回收器 + 补偿清理 | **改为确定性安装**（决定 8）：清单驱动的依赖构建 + 确定性验证关 + 隔离区暂存与原子换入 + 轻量清理；不做 LLM 安装智能体、不做快照镜像链 |
 | 远程来源安装（registry、skills.sh、GitHub、GitLab、直链） | **保留**，管理员专用、始终确认、出站校验、按 `import` 来源扫描 |
 | 技能环境变量与凭据（管理员层 + 用户层） | 后期 |
@@ -76,7 +76,11 @@
 **B. 存储与运行（复制 WeKnora 主线）**
 7. 版本保存 zip 包（`bundle`，含二进制）与行内的名字、简介、正文；资源按条目读取并按会话缓存（条目数 ≤ 2000、总解压 ≤ 64 MB、单文件 ≤ 8 MB，压缩比 ≤ 100，拒绝路径穿越、符号链接、重复路径，必须有根目录 `SKILL.md`）。旧版本的文件行保留可读。
 8. 系统提示的技能目录采用 WeKnora 格式：每技能一行（名字、`skill://名字/SKILL.md`、简介截断 600 字符），并声明「目录是描述性数据，应用前先读 SKILL.md」。
-9. `sandbox_exec` 增加可选 `skill_name`：选中技能的环境（依赖环境的 `PATH`）、设置 `NEXUS_SKILL_DIR`（技能目录）与 `NEXUS_SKILL_OUTPUT_DIR`（`/outputs`）。取消 frontmatter 的 `scripts` 声明与 `run_skill_script`；脚本的审批沿用 `sandbox_exec` 的风险等级与 `tool_access`。
+9. 新工具 `exec_skill(skill_name, script, args?, stdin?, timeout_seconds?)`（`skills` 组，定义在 `nexus_tools/builtins/skills.py`，与 `load_skill` 并列）：运行技能目录内的**一个脚本文件**（`script` 是技能内的相对路径，如 `scripts/extract.py`）。`args` 作为 argv 直接传入、**不经 shell**；`stdin` 最多 65536 字节；解释器按扩展名或 shebang 在白名单（`python3`、`bash` / `sh`、`node`）中选；设置 `NEXUS_SKILL_DIR`（技能目录）与 `NEXUS_SKILL_OUTPUT_DIR`（`/outputs`），`PATH` 前置技能的依赖环境；运行前校验脚本内容哈希，审计记录技能、版本、脚本路径与哈希。风险等级与 `sandbox_exec` 一致（网络隔离 `write`，开放网络 `destructive`），审批沿用 `tool_access`。
+9a. 取消 frontmatter 的 `scripts` 声明与 `run_skill_script`：脚本就是技能目录里的普通文件，由安装时的扫描和验证关覆盖。需要管道、串联或 `cd` 的场景，模型改用 `sandbox_exec`（`sandbox` 组）并通过 `$NEXUS_SKILL_DIR` 引用脚本；`sandbox_exec` 保持通用、**不加 `skill_name`**，只新增可选 `stdin`（≤ 65536 字节）。二者共用所选档位的执行器。
+9b. `exec_skill` 只在所选档位的沙箱可用且智能体绑定了技能时出现；它不是任意 shell，所以不要求打开 `sandbox` 组。
+9c. `load_skill` 返回的正文中，`${NEXUS_SKILL_DIR}` 被替换为该会话沙箱内技能目录的真实路径（Hermes 对 `${HERMES_SKILL_DIR}` 的做法），无法解析的占位符原样保留；`$NEXUS_SKILL_DIR` 环境变量仍然提供。
+9d. 技能运行的超时有独立档位参数 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（上限 600），对应 WeKnara 的 120 / 600；`sandbox_exec` 的超时参数不变。
 10. 脚本失败时附恢复提示（缺解释器、缺模块、依赖环境未构建），借鉴 `skill_runtime_guard`；不做命令黑名单（WeKnora 记录过其被绕过与误拦的教训）。
 11. 名字规则：小写字母、数字、连字符，1–64 字符，保留词 `anthropic`、`claude`；frontmatter 接受已知可选键，未知键保留并提示，缩进与冒号问题做保守修复并标记（决定 10）。新增 `model_invocable`（假则不进索引）与 `user_invocable`（本变更只保存）。
 12. 会话技能索引沿用首个 Run 冻结；中途变化追加差异说明，不重写系统提示、不改工具块。
@@ -132,7 +136,7 @@
 3. **私有技能立即生效、可撤销，不设审核队列；共享到空间库才审核**（依据 openclaw 废弃审核队列）。备选：私有也需审核。
 4. **沙箱档位由运维在部署配置里定义，智能体只选名字；默认档位 `default_profile = "local"`，但 `local` 在非开发模式下不可用**（决定 22）。备选：档位可由空间管理员创建（WeKnora 做法，但会让租户能选择无隔离的后端）；或默认档位仍为 `docker`。
 5. **技能 `execution` 属性保留**（规则见 25）。备选：取消，运行位置完全由所选档位决定。
-6. **取消 `scripts` 声明与 `run_skill_script`，统一 `sandbox_exec(skill_name)`**（WeKnora 做法）。备选：保留声明与独立脚本工具。
+6. **技能脚本入口**：新增结构化的 `exec_skill`（`skills` 组，不经 shell，脚本无需声明，支持 `stdin`），取代 `run_skill_script`；`sandbox_exec` 保持通用、不加 `skill_name`、仅新增 `stdin`。依据：四个参考项目都没有对技能脚本逐次强制审批，多脚本是常态，声明式入口不适用；不把 `exec_skill` 做成任意 shell，才不会绕开 `sandbox` 组的显式开关。备选：统一为 `sandbox_exec(skill_name)`（WeKnora 做法）；保留声明式 `run_skill_script`。
 7. **存储改为 zip 包 + 行内简介正文**，旧文件行保留可读。备选：保持文件表，二进制资源不支持。
 8. **安装采用方案 C**：确定性依赖构建 + 确定性验证关 + 隔离区暂存与原子换入 + 轻量清理，不做 LLM 安装智能体与快照镜像；文字里才有的依赖暂不支持，验证关报出。备选：A 完整复制；B 完全不做安装，依赖由运维预置镜像。
 9. **远程来源安装保留**：仅管理员、每次确认、出站校验、按 `import` 过扫描矩阵。
@@ -144,7 +148,7 @@
 
 ## 对其他提案的影响（确认后同步修改，不在本次改动）
 
-- 工具扩展提案 `2026-11-07-tool-expansion`：3.5 的 `[sandbox]` 配置形态扩为档位并兼容旧键；3.6 / 3.7 的验收按档位；4.5 的可用性按智能体所选档位；**4.8（`run_skill_script` 改走沙箱）被本变更第 9 条取代**。默认后端由 `docker` 改为 `local` 会改动 `tests/test_sandbox.py` 里「默认配置是禁用的 docker」的断言（沙箱仍默认 `enabled = false`）。
+- 工具扩展提案 `2026-11-07-tool-expansion`：3.5 的 `[sandbox]` 配置形态扩为档位并兼容旧键；3.6 / 3.7 的验收按档位；4.5 的可用性按智能体所选档位；**4.8（`run_skill_script` 改走沙箱）被本变更第 9 条（`exec_skill`）取代**。默认后端由 `docker` 改为 `local` 会改动 `tests/test_sandbox.py` 里「默认配置是禁用的 docker」的断言（沙箱仍默认 `enabled = false`）。
 - 归档提案 `2026-11-04-skill-scripts` 的 `runner`、`scripts` 声明、`run_skill_script` 随第 9 条退役。
 
 ## 验收
@@ -152,7 +156,7 @@
 - 内置技能与工具在企业空间和个人空间无需启用步骤即可绑定；高影响工具在分组不可用或智能体开关关闭时仍不出现；空间停用后目录不列出、发布拒绝、调用拒绝；系统租户不出现在任何列表。
 - 上传 zip 与远程来源安装的技能都经过隔离区、扫描、环境构建、验证关，通过后原子换入；任一步失败时旧版本继续服务，暂存目录与临时容器被清理；卡死的安装被周期任务标为失败。
 - 带二进制资源的技能往返导出导入内容一致；压缩比异常、路径穿越、符号链接的包被拒绝；远程来源的内网地址被拒绝。
-- `sandbox_exec(skill_name=…)` 在所选档位下运行技能脚本，能找到 `NEXUS_SKILL_DIR`，使用技能的依赖环境；失败时有恢复提示；沙箱内不能修改技能目录，也看不到其他租户或未绑定的技能。
+- `exec_skill` 在所选档位下运行技能自带的脚本（argv 不经 shell，可带 `stdin`），能找到 `NEXUS_SKILL_DIR`，使用技能的依赖环境，审计记录脚本路径与哈希；脚本路径越出技能目录、不存在或解释器不在白名单时被拒绝；失败时有恢复提示；沙箱内不能修改技能目录，也看不到其他租户或未绑定的技能；`sandbox_exec` 可带 `stdin`。
 - 智能体选择 `local` / `docker` / `bwrap` 档位后，工具可用性与验收结果按所选档位判定；生产模式下 `local` 档位不可用且给出原因；旧的扁平 `[sandbox]` 配置继续有效。
 - 在对话里让智能体创建技能，用户确认保存后立即可用（同会话经差异说明），可撤销回旧版本；其他用户与空间不可见；共享到空间库时，管理员直接发布，成员经审核。
 - 既有技能、绑定、会话快照行为不变；全量测试通过，迁移可升可降。

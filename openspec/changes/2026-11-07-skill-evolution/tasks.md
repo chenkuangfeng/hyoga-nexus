@@ -48,9 +48,11 @@
 - [ ] 2.4 `local` 档位门禁：非开发模式或 `allow_local` 关闭时可用性为 `sandbox_local_not_allowed`；启动日志与管理接口提示；默认 `default_profile = "local"` 对应的测试说明（沙箱仍默认关闭）。
 - [ ] 2.5 可用性与验收按档位：`tool_gates` 按智能体档位计算；`acceptance-<档位>.json`；指纹含档位参数；`--sandbox-check --profile`；迁移 `sandbox_acceptance`（若采用表存储）带档位列。
 - [ ] 2.6 技能投射：`docker` / `bwrap` 只读挂载 `/skills`，`local` 宿主路径；`NEXUS_SKILL_DIR`、`NEXUS_SKILL_OUTPUT_DIR`；文件数与字节上限；其他会话 / 租户 / 未绑定技能不可见。
-- [ ] 2.7 `sandbox_exec` 增加 `skill_name`：可用性检查、环境变量、`PATH` 前置、恢复提示；退役 `run_skill_script`、`scripts` 声明与 `nexus_skills.runner`；`allow_local_scripts` 迁移；已发布版本中既有绑定的运行时忽略与事件。
+- [ ] 2.7 执行器端口新增可选 `env` 与 `stdin`（docker `exec -i`，bwrap 与 local 写标准输入，默认仍 `DEVNULL`）；`sandbox_exec` 新增可选 `stdin`（≤ 65536 字节）。
+- [ ] 2.7a `exec_skill`：纯逻辑 `nexus_skills/exec.py`（脚本路径规范化、解释器选择、环境变量与 `PATH` 构造、argv 组装）；工具定义放 `nexus_tools/builtins/skills.py`（`skills` 组）；`RunStore.exec_skill`（取内容、授权、哈希校验、审计、恢复提示）；可用性按所选档位沙箱可用；`skill_timeout_seconds` / `skill_timeout_max_seconds`；`load_skill` 的 `${NEXUS_SKILL_DIR}` 替换。
+- [ ] 2.7b 退役 `run_skill_script`、`scripts` 声明与 `nexus_skills.runner`：注册表、分组、`BUILTIN_TOOL_NAMES`、网关与测试同步；`allow_local_scripts` 迁移；已发布版本中既有绑定的运行时忽略与事件；发布校验提示改绑 `exec_skill`。
 - [ ] 2.8 `execution` 属性与 `resolve_execution`：解析与校验、保存或发布时拒绝非内置的 `local`、运行时按策略、不回退、编辑器与详情展示声明值与有效位置；表驱动测试（声明 × 档位 × 来源 × 开关 × 开发模式）。
-- [ ] 2.9 测试：沙箱内无法修改技能目录；看不到其他租户技能；开放网络强制审批；三种档位下的参数断言（docker 参数列表、bwrap 参数列表）。
+- [ ] 2.9 测试：`exec_skill` 拒绝越界路径、不存在的脚本与白名单外的解释器，argv 不经 shell（含空格与元字符的参数原样到达），`stdin` 到达脚本，审计记录脚本哈希，多个脚本依次运行并通过 `/workspace` 交接；沙箱内无法修改技能目录；看不到其他租户技能；开放网络强制审批；三种档位下的参数断言（docker 参数列表、bwrap 参数列表）。
 - [ ] 2.10 在真实 Docker 与 bwrap 上验证挂载与执行（环境相关测试无环境时跳过并说明）。
 
 ## 3. S3 存储与安装流水线（方案 C）
@@ -60,7 +62,7 @@
 - [ ] 3.3 规范化与校验：条目、总字节、单文件、压缩比、路径穿越、符号链接、重复路径、根目录 `SKILL.md`；恶意样例测试（穿越、炸弹、符号链接、重复路径）。
 - [ ] 3.4 隔离区与原子换入：暂存目录、规范化、扫描、构建、验证、`rename` 换入、同事务移动 `current_version_id`；失败路径逐点测试（每一步失败旧版本仍服务、暂存清理）。
 - [ ] 3.5 环境构建器：docker 临时容器（标签、联网、可写暂存）、bwrap、local；超时、输出与目录大小上限；档位指纹命名；无对应环境时脚本不可用并提示。
-- [ ] 3.6 验证关 `nexus_skills.verify`：可读、`ast` 可解析、清单包已装；`note` 与 `problem` 分档；不推断 `import`。
+- [ ] 3.6 验证关 `nexus_skills.verify`：可读；`.py` 用 `ast` 解析，`.sh` 用 `sh -n`，`.js` 用 `node --check`（解释器不存在时只给 `note`）；清单包已装；`note` 与 `problem` 分档；不推断 `import`。
 - [ ] 3.7 状态机与清理：`installing → ready | failed`、`reinstall` 复用已存 zip、停止；心跳；周期任务清理超时 `installing`、残留暂存目录与带标签容器、过期环境目录。
 - [ ] 3.8 上传入口：管理员上传 zip 接口（大小限制）；构建状态与日志查询；前端上传、状态轮询、失败原因展示。
 - [ ] 3.9 远程来源：五类来源解析与归一；出站校验抽到 `nexus_core` 并复用；跳转、超时、字节上限；GitHub 子目录裁剪；仅管理员与始终确认；来源 URL 与摘要记录；更新检查；测试覆盖内网地址、重定向到内网、超大响应、非法输入。

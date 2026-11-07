@@ -47,11 +47,17 @@
 
 ### 4.3 运行
 
-- `sandbox_exec(command, skill_name?, cwd?, timeout?)`：`skill_name` 必须在本会话可用的技能中（绑定的 ∪ 本人私有，且 `ready`），否则 `skill_not_available`。
-- 选中技能后：`NEXUS_SKILL_DIR` 指向该技能目录；`NEXUS_SKILL_OUTPUT_DIR=/outputs`；`PATH` 前置技能环境的 `bin`；Node 的 `NODE_PATH` 指向环境内的 `node_modules`。**不注入 `PYTHONPATH`**（环境的 Python 通过自己的解释器找到依赖；WeKnora 的同样做法，且保留名单拒绝技能声明这些变量）。
+- **两个入口，共用所选档位的执行器**：
+  - `exec_skill(skill_name, script, args?, stdin?, timeout_seconds?)`（`skills` 组，定义在 `packages/tools/.../builtins/skills.py`；纯逻辑在 `packages/skills` 的 `nexus_skills/exec.py`；取内容、授权、审计在 `RunStore.exec_skill`）。`skill_name` 必须在本会话可用的技能中（绑定的 ∪ 本人私有，且 `ready`），否则 `skill_not_available`；`script` 经路径规范化后必须是该版本内的一个文件，越界或不存在为 `skill_script_unavailable`；解释器由扩展名（`.py` → `python3`，`.sh` / `.bash` → `bash`，`.js` / `.mjs` → `node`）或 `#!` 行在白名单里选，其余拒绝 `skill_script_interpreter_not_allowed`；命令行是 `[解释器, 脚本路径, *args]`，作为 argv 传给执行器，**不经 shell**；运行前用版本内容校验脚本哈希，审计记录技能、版本、脚本路径与哈希。
+  - `sandbox_exec(command, cwd?, timeout_seconds?, stdin?)`：保持通用，不带技能；新增可选 `stdin`（≤ 65536 字节，保留引号与换行）。
+  - 执行器端口新增可选的 `env` 与 `stdin` 参数；docker 用 `exec -i`，bwrap 与 local 写子进程的标准输入；没有传入时仍是 `DEVNULL`。
+- `exec_skill` 在运行时设置：`NEXUS_SKILL_DIR` 指向该技能目录；`NEXUS_SKILL_OUTPUT_DIR=/outputs`；`PATH` 前置技能环境的 `bin`；Node 的 `NODE_PATH` 指向环境内的 `node_modules`。**不注入 `PYTHONPATH`**（环境的 Python 通过自己的解释器找到依赖；WeKnora 的同样做法，且保留名单拒绝技能声明这些变量）。
 - 技能目录的位置由档位决定：`docker` 与 `bwrap` 为只读挂载的 `/skills/<名字>@<哈希前12位>/`；`local` 为宿主上的投射目录路径（`local` 档位的命令本来就看宿主路径）。因此技能脚本一律通过 `$NEXUS_SKILL_DIR` 引用自己的文件。
 - 投射：按会话、按内容哈希原子写出到 `<workspace_root>/<tenant>/<session>/skills/`；总文件数 ≤ 1000、总字节 ≤ 32 MB（WeKnora 上限），超限时该会话的技能脚本不可用而内联加载不受影响；其他会话、其他租户与未绑定的技能不在其中；宿主不执行投射目录里的任何内容，不自动安装依赖。
-- 审批：`sandbox_exec` 的风险等级与 `tool_access` 规则不变；`skill_name` 不改变风险等级。
+- 审批：`exec_skill` 的风险等级与 `sandbox_exec` 一致（隔离无网络为 `write`，开放网络为 `destructive`），审批沿用 `tool_access`；它不是任意 shell，所以不要求 `sandbox` 组打开，但必须所选档位的沙箱可用。需要管道、串联、`cd` 时模型改用 `sandbox_exec`，该工具仍受 `sandbox` 组开关约束。
+- 正文里的路径：`load_skill` 返回正文前，把 `${NEXUS_SKILL_DIR}` 替换为本会话沙箱内技能目录的真实路径，未能解析（沙箱不可用等）则原样保留。
+- 超时：`exec_skill` 用档位的 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（600）；`sandbox_exec` 沿用 `default_timeout_seconds` / `exec_timeout_max_seconds`。
+- 多个脚本：模型对每个脚本各调用一次 `exec_skill`，步骤之间用 `/workspace` 里的文件交接，成品放 `/outputs`；顺序由 `SKILL.md` 说明，平台不编排；有副作用的调用依次执行。
 - 恢复提示：命令失败且 stderr 命中「缺模块 / 缺解释器 / 环境未构建」时，在结果里附一句固定的恢复方向（管理员需要重装依赖，或该技能不适用于当前档位）。不做命令黑名单。
 
 ### 4.4 frontmatter
@@ -237,7 +243,7 @@ bwrap 的已知缺口：无进程数限制、无 CPU 配额、内存为地址空
 
 - 迁移：`tenants.kind` 约束；系统租户与保留用户；`tenant_builtin_disabled`；`skills.owner_user_id` 与部分唯一索引；`skill_versions` 增加 `bundle`、`bundle_sha256`、`build_state`（既有行置 `ready`）、`build_error`、`build_heartbeat_at`、`env_ref`、`trust`、`scan_version`、`scan`、`extra`；新表 `skill_drafts`、`skill_submissions`；`installed → admin`；既有版本的 zip 可在首次读取时由文件行惰性生成，也可迁移时批量生成。降级删除新表与新列、还原约束（存在私有技能或系统租户数据时先提示）。
 - 沙箱配置：旧键映射为 `default` 档位，见 7.3。
-- 退役：`run_skill_script` 从 `BUILTIN_TOOL_NAMES`、注册表、分组与网关中移除；`scripts` 声明不再必需；`nexus_skills.runner` 随之移除；`[skills].allow_local_scripts` 迁移为 `[sandbox].allow_local_scripts`。既有智能体版本若绑定了 `run_skill_script`，发布校验提示改为绑定 `sandbox_exec`，已发布版本的该绑定在运行时被忽略并记事件。
+- 退役：`run_skill_script` 由 `exec_skill` 取代，从 `BUILTIN_TOOL_NAMES`、注册表、分组与网关中移除；`scripts` 声明不再必需；`nexus_skills.runner` 随之移除；`[skills].allow_local_scripts` 迁移为 `[sandbox].allow_local_scripts`。既有智能体版本若绑定了 `run_skill_script`，发布校验提示改为绑定 `exec_skill`，已发布版本的该绑定在运行时被忽略并记事件。
 - 既有智能体版本、会话快照、其他绑定不变；`model_invocable` 默认真。
 
 ## 12. 风险
