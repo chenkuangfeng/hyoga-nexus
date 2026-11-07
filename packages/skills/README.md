@@ -25,12 +25,13 @@
 - 内置技能：平台管理员 `POST /api/v1/platform/skills/import-builtin` 或 `uv run python -m nexus_api.cli import-builtin-skills` 把仓库 `skills/`（`[skills].builtin_dir`）发布到系统租户，所有空间可见可分配；内容相同报告 `unchanged`，升级产生新版本；同名的空间技能拒绝（`skill_name_taken_by_builtin`）。
 - 上传与导出：`POST .../skills/upload`（原始 zip 请求体，≤32 MB，管理员）与 `GET .../skills/{name}/bundle?version=`；包内二进制文件只存于版本的 zip，运行时与文本文件一起投射进沙箱，内容哈希覆盖二进制。
 - 远程来源：`POST .../skills/install-remote`（管理员，必须带 `confirm`）经 `nexus_core.egress` 下载（只允许公网地址、逐跳校验、字节与时间上限），裁出技能目录后走与上传相同的检查；版本记录来源，`POST .../skills/{name}/check-update` 只比较内容、不自动更新。
+- 安装状态机：带依赖清单的版本先是 `installing`（不被使用，原版本继续服务），worker 在所选档位的临时环境里构建依赖，核对清单包已装后原子换入，再 `ready` 并移动当前版本指针；失败为 `failed` 并保留 zip，`.../versions/{n}/reinstall` 直接重试（也用于给另一档位补建环境），`.../stop-install` 停止，`.../install` 查状态与日志尾部；worker 每约 5 分钟清理失去心跳的构建、残留暂存目录与无人引用的旧环境。
 - 前置块：YAML（`safe_load`），未知键保留并提示，缩进与冒号问题保守修复；名字为小写字母、数字与连字符；`model_invocable: false` 不进索引；`execution: local` 仅限内置。
 
 ## 限制
 
 - 脚本只在沙箱档位里运行；`local` 档位没有隔离，仅限开发。隔离验收见 `docs/architecture.md` 2.9 节。
-- 尚未实现：`agent` / `user` 来源的审核发布、依赖环境构建与安装状态机、私有技能与对话式创建、技能包（分发单位）、MCP。远程来源的 ClawHub 下载地址与 GitHub、GitLab 真实服务未联网验证。
+- 尚未实现：`agent` / `user` 来源的审核发布、私有技能与对话式创建、技能包（分发单位）、MCP。远程来源的 ClawHub 下载地址与 GitHub、GitLab 真实服务未联网验证。
 
 ## 文档
 

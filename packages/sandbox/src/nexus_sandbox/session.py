@@ -33,8 +33,9 @@ class SandboxSession:
     """Session surface for the tools. File operations validate before reaching the store."""
 
     def __init__(self, files: FileStorePort, executor: CommandExecutorPort, *, default_timeout: float,
-                 max_timeout: float, output_limit: int, skills_dir: Path | None = None):
+                 max_timeout: float, output_limit: int, skills_dir: Path | None = None, envs_dir: Path | None = None):
         self.files, self.executor, self.skills_dir = files, executor, skills_dir
+        self.envs_dir = envs_dir
         self.default_timeout, self.max_timeout, self.output_limit = default_timeout, max_timeout, output_limit
 
     async def list_files(self, path: str, *, limit: int) -> list[FileEntry]:
@@ -83,9 +84,23 @@ class SandboxSession:
         projection.project(self.skills_dir, name, content_hash, files)
         return f"{mount.rstrip('/')}/{projection.directory_name(name, content_hash)}"
 
-    def skill_environment(self, skill_dir: str) -> dict[str, str]:
-        """Variables a skill script finds: its own directory and the directory for deliverables."""
-        return {'NEXUS_SKILL_DIR': skill_dir, 'NEXUS_SKILL_OUTPUT_DIR': getattr(self.executor, 'outputs_path', '/outputs')}
+    def skill_environment(self, skill_dir: str, env_name: str | None = None) -> dict[str, str]:
+        """Variables a skill script finds: its own directory and the directory for deliverables, and, when it has a
+        built dependency environment (`env_name`), where that environment's packages are (``NODE_PATH``)."""
+        variables = {'NEXUS_SKILL_DIR': skill_dir,
+                     'NEXUS_SKILL_OUTPUT_DIR': getattr(self.executor, 'outputs_path', '/outputs')}
+        base = self.env_path(env_name) if env_name else None
+        if base is not None:
+            variables['NODE_PATH'] = f'{base}/node/node_modules'
+            variables['VIRTUAL_ENV'] = f'{base}/venv'
+        return variables
+
+    def env_path(self, env_name: str) -> str | None:
+        """Where a built environment is visible to a command, or None when it was not built (or cannot be mounted)."""
+        mount = getattr(self.executor, 'envs_mount', None)
+        if self.envs_dir is None or mount is None or '/' in env_name or env_name.startswith('.'):
+            return None
+        return f"{mount.rstrip('/')}/{env_name}" if (self.envs_dir / env_name).is_dir() else None
 
     def outputs(self) -> list[tuple[str, int]]:
         """Files under `/outputs` for artifact registration."""

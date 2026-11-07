@@ -29,6 +29,7 @@ from nexus_platform.persistence.models import (
 )
 from nexus_skills import bundle as skill_bundle
 from nexus_skills.guard import check_declared_scripts, static_hints
+from nexus_sandbox.build import has_manifest
 from nexus_skills.verify import verify_files
 from nexus_skills.exec import ResolvedScript, ScriptError, resolve_script
 from nexus_skills.guard.scan import SCANNER_VERSION, ScanResult, scan_skill
@@ -95,7 +96,7 @@ def publish(db: Session, principal: Principal, tenant_id: UUID, skill_md: str, f
 def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str, files: dict[str, str],
                      source: str, *, acknowledged: bool = False,
                      binary: dict[str, bytes] | None = None,
-                     origin: dict[str, str] | None = None) -> dict[str, Any]:
+                     origin: dict[str, str] | None = None, profile: str | None = None) -> dict[str, Any]:
     """Publish inside the caller's transaction; the caller has already authorized the actor.
 
     ``binary`` holds the non-text files of a bundle; they live only in the version's zip and are projected into the
@@ -140,7 +141,10 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
             raise InvalidConfiguration('skill_source_conflict')
         latest = db.scalar(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
                            .order_by(SkillVersionRecord.version.desc()).limit(1))
-        if latest is not None and latest.content_hash == digest:
+        if db.scalar(select(SkillVersionRecord.id).where(SkillVersionRecord.skill_id == skill.id,
+                                                         SkillVersionRecord.build_state == 'installing').limit(1)):
+            raise Conflict('skill_install_in_progress')
+        if latest is not None and latest.content_hash == digest and latest.build_state != 'failed':
             raise Conflict('skill_version_unchanged')
         number = (latest.version if latest else 0) + 1
     hints = [{'category': h.category, 'path': h.path, 'line': h.line} for h in static_hints(clean)]
@@ -159,12 +163,16 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
     db.flush()
     for path, content in clean.items():
         db.add(SkillVersionFileRecord(version_id=version.id, path=path, content=content))
-    db.add(PlatformResourceRecord(id=new_id(), tenant_id=tenant_id, kind=RESOURCE_KIND, resource_id=parsed.name,
-                                  version_id=str(version.id), active=True, created_at=now))
-    skill.current_version_id = version.id
-    audit(db, tenant_id, user_id, 'skill.published', 'skill', str(skill.id),
-          {'name': parsed.name, 'version': number, 'content_hash': digest, 'scan_hint_count': len(hints),
-           'source': source, 'verdict': scan.verdict})
+    installing = has_manifest(clean)
+    if installing:
+        # A dependency manifest means an environment must be built first; the version is not served until the
+        # worker marks it ready (`nexus_platform.skills.install`). The pointer and the resource stay where they were.
+        version.build_state = 'installing'
+        version.extra = {**version.extra, 'install': {'profile': profile or ''}}
+        audit(db, tenant_id, user_id, 'skill.install_started', 'skill', str(skill.id),
+              {'name': parsed.name, 'version': number, 'content_hash': digest, 'source': source})
+    else:
+        activate(db, skill, version, user_id, scan_hints=len(hints))
     if released:
         # The administrator released findings the policy would have stopped: record who, and what was released.
         audit(db, tenant_id, user_id, 'skill.findings_acknowledged', 'skill', str(skill.id),
@@ -172,11 +180,25 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
                'rules': sorted({f.rule for f in scan.findings})})
     return {'skill': parsed.name, 'version': number, 'version_id': str(version.id), 'content_hash': digest,
             'scan_hints': hints, 'verdict': scan.verdict, 'findings': len(scan.findings), 'notes': list(parsed.notes),
-            'binary_files': sorted(binary)}
+            'binary_files': sorted(binary), 'build_state': version.build_state}
+
+
+def activate(db: Session, skill: SkillRecord, version: SkillVersionRecord, user_id: UUID, *, scan_hints: int = 0) -> None:
+    """Make a version the one the skill serves: register it as a resource, move the pointer, record it.
+
+    Runs at publish for a version without dependencies, and when the worker finishes building one that has them.
+    """
+    db.add(PlatformResourceRecord(id=new_id(), tenant_id=version.tenant_id, kind=RESOURCE_KIND, resource_id=skill.name,
+                                  version_id=str(version.id), active=True, created_at=utc_now()))
+    skill.current_version_id = version.id
+    version.build_state = 'ready'
+    audit(db, version.tenant_id, user_id, 'skill.published', 'skill', str(skill.id),
+          {'name': skill.name, 'version': version.version, 'content_hash': version.content_hash,
+           'scan_hint_count': scan_hints, 'source': version.trust, 'verdict': (version.scan or {}).get('verdict')})
 
 
 def install_bundle(db: Session, principal: Principal, tenant_id: UUID, data: bytes, *, source: str = 'import',
-                   acknowledge_findings: bool = False) -> dict[str, Any]:
+                   acknowledge_findings: bool = False, profile: str | None = None) -> dict[str, Any]:
     """Install a skill from an uploaded zip as a new version (administrators; source ``import`` by default).
 
     The archive is checked before anything is read (see `nexus_skills.bundle`), then goes through the same checks and
@@ -190,7 +212,7 @@ def install_bundle(db: Session, principal: Principal, tenant_id: UUID, data: byt
         user, _ = context(db, principal, tenant_id)
         require_api_permission(db, tenant_id, user.id, PUBLISH_PERMISSION)
         return _publish_version(db, tenant_id, user.id, unpacked.skill_md, unpacked.text, source,
-                                acknowledged=acknowledge_findings, binary=unpacked.binary)
+                                acknowledged=acknowledge_findings, binary=unpacked.binary, profile=profile)
 
 
 def version_bundle(db: Session, version: SkillVersionRecord) -> bytes:
@@ -323,6 +345,8 @@ class PreparedExec:
     #: Every file of the version including SKILL.md, as projected into the sandbox.
     files: dict[str, str | bytes]
     script: ResolvedScript
+    #: The version ships a dependency manifest, so its scripts need the environment built at install time.
+    needs_env: bool = False
 
 
 def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str, script: str) -> PreparedExec:
@@ -347,7 +371,8 @@ def prepare_exec(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str
         raise NotFound(str(exc)) from None
     files = {**files, **_binary_files(db, version, set(files))}
     return PreparedExec(skill=name, version=version.version, version_id=str(version.id), content_hash=version.content_hash,
-                        source=version.trust, declared=version.execution, files=files, script=resolved)
+                        source=version.trust, declared=version.execution, files=files, script=resolved,
+                        needs_env=has_manifest(files))
 
 
 def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID,

@@ -72,11 +72,14 @@
 - [ ] 3.2 （已完成：二进制文件只存于 zip，运行时与文本文件一起投射进沙箱，脚本解析只看文本文件，内容哈希覆盖二进制；**未做**：按条目读取与会话内缓存，`read_skill_file` 对二进制返回元信息。）`SkillFileSource`：zip 按条目读取与会话内缓存；回退到文件行；`read_skill_file` 对二进制只返回元信息。
 - [x] 3.3 规范化与校验：条目、总字节、单文件、压缩比、路径穿越、符号链接、重复路径、根目录 `SKILL.md`；恶意样例测试（穿越、炸弹、符号链接、重复路径）。
   - `nexus_skills.bundle`：先查条目表再按上限读取，拒绝穿越、符号链接/设备文件、重复路径、加密、条目过多、压缩比异常、超限；根目录或单一外层目录下的 `SKILL.md`；丢弃 `__MACOSX`、`.DS_Store` 与点文件；`pack` 输出规范 zip（排序、固定时间与权限，同内容同字节）。13 项测试。
-- [ ] 3.4 隔离区与原子换入：暂存目录、规范化、扫描、构建、验证、`rename` 换入、同事务移动 `current_version_id`；失败路径逐点测试（每一步失败旧版本仍服务、暂存清理）。
-- [ ] 3.5 环境构建器：docker 临时容器（标签、联网、可写暂存）、bwrap、local；超时、输出与目录大小上限；档位指纹命名；无对应环境时脚本不可用并提示。
-- [ ] 3.6 （已完成：`nexus_skills.verify` 的 `.py`/`.sh`/`.bash`/`.js` 语法检查、解释器缺失只给 `note`、`requirements.txt` 格式校验与 `missing_distributions`，并已接入发布与上传；**未做**：在构建环境内核对清单包是否已装，随 3.5 完成。）验证关 `nexus_skills.verify`：可读；`.py` 用 `ast` 解析，`.sh` 用 `sh -n`，`.js` 用 `node --check`（解释器不存在时只给 `note`）；清单包已装；`note` 与 `problem` 分档；不推断 `import`。
-- [ ] 3.7 状态机与清理：`installing → ready | failed`、`reinstall` 复用已存 zip、停止；心跳；周期任务清理超时 `installing`、残留暂存目录与带标签容器、过期环境目录。
-- [ ] 3.8 （已完成：`POST /tenants/{id}/skills/upload` 原始 zip 请求体，流式限长 32 MB，管理员，走同一发布检查与发布策略；**未做**：构建状态与日志查询、前端上传与轮询。）上传入口：管理员上传 zip 接口（大小限制）；构建状态与日志查询；前端上传、状态轮询、失败原因展示。
+- [x] 3.4 隔离区与原子换入：暂存目录、规范化、扫描、构建、验证、`rename` 换入、同事务移动 `current_version_id`；失败路径逐点测试（每一步失败旧版本仍服务、暂存清理）。
+  - 带依赖清单的版本以 `installing` 入库（指针与资源登记不动），worker `skill_install_tick` 认领（心跳置位，一行只有一个 worker 能赢）→ 暂存目录构建 → 清单包核对 → `rename` 换入环境根 → 同一事务 `ready`、移动指针、登记资源、写审计；每一步失败都标 `failed` 并清理暂存，旧版本继续服务；构建中途被停止则放弃（`cancelled`）。测试：成功、构建失败、清单包缺失、构建抛异常、并发安装冲突、停止、认领互斥。无依赖清单的版本仍同步发布。
+- [x] 3.5 环境构建器：docker 临时容器（标签、联网、可写暂存）、bwrap、local；超时、输出与目录大小上限；档位指纹命名；无对应环境时脚本不可用并提示。
+  - `nexus_sandbox.build`：docker 临时容器（标签、`install_network`、非 root、只读根）、bwrap 联网 jail、local 子进程；时间、日志、目录大小上限；环境名含内容哈希与环境指纹；运行时 docker/bwrap 只读挂载环境根、`exec_skill` 加 `PATH` 前缀与 `NODE_PATH`，缺环境返回 `skill_env_missing` 并提示。**真实验证只做了 local**（真实 venv + 本地 wheel，含改名后可用，以及经 `exec_skill` 的端到端）；docker 与 bwrap 只有命令行单元测试，待在有环境的机器上验证。
+- [ ] 3.6 （已完成：`nexus_skills.verify` 的 `.py`/`.sh`/`.bash`/`.js` 语法检查、解释器缺失只给 `note`、`requirements.txt` 格式校验与 `missing_distributions`，并已接入发布与上传；清单包核对已在安装流水线里完成（构建结束时 `pip list` 的结果与 `requirements.txt` 比对）；`package.json` 的包不核对；`.js` 的 `node --check` 在无 node 的主机上只给 `note`。**仍未做**：在构建环境内做「文件可读」检查。）验证关 `nexus_skills.verify`：可读；`.py` 用 `ast` 解析，`.sh` 用 `sh -n`，`.js` 用 `node --check`（解释器不存在时只给 `note`）；清单包已装；`note` 与 `problem` 分档；不推断 `import`。
+- [x] 3.7 状态机与清理：`installing → ready | failed`、`reinstall` 复用已存 zip、停止；心跳；周期任务清理超时 `installing`、残留暂存目录与带标签容器、过期环境目录。
+  - `installing → ready | failed`；`reinstall` 复用已存 zip（也用于补建另一档位的环境）；`stop-install`；心跳；`reap` 每约 5 分钟：失去心跳超 10 分钟的构建标 `failed`（`build_interrupted`）、清理不属于任何安装中版本的暂存目录、清理无 `ready` 版本引用且超过 7 天的环境目录。**未做**：清理带 `nexus.sandbox.build` 标签且无对应行的 docker 容器（构建超时路径已 `docker rm -f`，崩溃遗留靠 `--rm`）。
+- [ ] 3.8 （已完成：`POST /tenants/{id}/skills/upload` 原始 zip 请求体，流式限长 32 MB，管理员，走同一发布检查与发布策略；构建状态与日志查询 `GET .../versions/{n}/install`；**未做**：前端上传与轮询。）上传入口：管理员上传 zip 接口（大小限制）；构建状态与日志查询；前端上传、状态轮询、失败原因展示。
 - [x] 3.9 远程来源：五类来源解析与归一；出站校验抽到 `nexus_core` 并复用；跳转、超时、字节上限；GitHub 子目录裁剪；仅管理员与始终确认；来源 URL 与摘要记录；更新检查；测试覆盖内网地址、重定向到内网、超大响应、非法输入。
   - `nexus_core.egress`（出站校验与逐跳下载，`web_fetch` 改为复用，原 45 项测试不变）；`nexus_skills.source` 五类来源解析；`bundle.subtree` 从仓库压缩包裁出目录（条目计数在裁剪后进行）；`nexus_platform.skills.remote`：`install-remote`（管理员、必须 `confirm`、权限检查先于任何联网）与 `check-update`（按内容哈希比较，不自动更新）；来源（类型、URL、引用、压缩包摘要）记在版本的 `extra.origin`，未新增列。测试覆盖内网地址、元数据地址、重定向到内网、重定向过多、超大响应、非法输入。**未联网验证** ClawHub 下载地址与 GitHub / GitLab 实际压缩包格式；前端入口随 3.8 的前端一起做。
 - [x] 3.10 导出：单个技能 zip 下载（权限：库按读权限，内置所有人，私有仅所有者）。

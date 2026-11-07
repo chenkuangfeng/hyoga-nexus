@@ -21,12 +21,14 @@ CHILD_PATH = '/usr/local/bin:/usr/bin:/bin'
 class LocalExecutor:
     """`CommandExecutorPort` on the host. The environment is built from scratch, never inherited."""
 
-    def __init__(self, roots: dict[str, Path], forward: tuple[str, ...] = (), skills: Path | None = None):
+    def __init__(self, roots: dict[str, Path], forward: tuple[str, ...] = (), skills: Path | None = None,
+                 envs: Path | None = None):
         self.roots = roots
         #: Host directory of projected skills. Commands on this backend see host paths, so this is also the path
         #: they use to reach a skill; `outputs_path` is likewise the real directory behind `/outputs`.
         self.skills = skills
         self.skills_mount = str(skills.resolve()) if skills is not None else None
+        self.envs_mount = str(envs.resolve()) if envs is not None else None
         self.outputs_path = str(roots['/outputs'].resolve())
         #: Host variable names forwarded into the command environment (the profile's `env_passthrough`).
         self.forward = forward

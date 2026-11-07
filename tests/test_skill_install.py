@@ -108,3 +108,22 @@ def test_an_oversized_upload_is_refused_by_its_declared_length(database, monkeyp
     http = _client(database, PRINCIPAL)
     response = http.post(f'/api/v1/tenants/{tenant.id}/skills/upload', content=b'x' * 50)
     assert response.status_code == 422 and 'bundle_too_large' in response.json()['error']['message']
+
+
+def test_install_status_reinstall_and_stop_over_http(database, monkeypatch):
+    tenant, _ = _tenant(database)
+    http = _client(database, PRINCIPAL)
+    base = f'/api/v1/tenants/{tenant.id}/skills'
+    sent = http.post(base + '/upload', content=_zip([('SKILL.md', MD), ('requirements.txt', 'requests\n')]))
+    assert sent.status_code == 201 and sent.json()['build_state'] == 'installing'
+    status = http.get(base + '/packed/versions/1/install').json()
+    assert status['build_state'] == 'installing' and status['build_log'] == ''
+    assert http.post(base + '/packed/versions/1/reinstall').status_code == 409  # already installing
+    stopped = http.post(base + '/packed/versions/1/stop-install')
+    assert stopped.status_code == 200 and stopped.json()['build_state'] == 'failed'
+    assert http.get(base + '/packed/versions/1/install').json()['build_error'] == 'install_stopped'
+    again = http.post(base + '/packed/versions/1/reinstall')
+    assert again.status_code == 200 and again.json()['build_state'] == 'installing'
+    assert http.get(base + '/packed/versions/9/install').status_code == 404
+    listed = http.get(base).json()
+    assert listed[0]['version_id'] is None  # nothing is served until the build finishes

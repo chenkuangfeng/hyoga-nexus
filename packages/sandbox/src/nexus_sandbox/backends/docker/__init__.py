@@ -61,7 +61,8 @@ class DockerBackend:
 
     # ------------------------------------------------------------------ lifecycle
 
-    def run_arguments(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None) -> list[str]:
+    def run_arguments(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None,
+                      envs: Path | None = None) -> list[str]:
         """The `docker run` arguments of a session container. Pure, so the isolation flags are testable."""
         s = self.settings
         uid = os.getuid() if os.getuid() != 0 else 65534
@@ -75,10 +76,12 @@ class DockerBackend:
                 '--pids-limit', str(s.pids), '--user', f'{uid}:{gid}',
                 '-v', f'{workspace.resolve()}:/workspace', '-v', f'{outputs.resolve()}:/outputs',
                 *(['-v', f'{skills.resolve()}:/skills:ro'] if skills is not None else []),
+                *(['-v', f'{envs.resolve()}:/skill_envs:ro'] if envs is not None else []),
                 '-e', 'HOME=/workspace', '-e', 'LANG=C.UTF-8', *passthrough, '-w', '/workspace',
                 s.image, 'sleep', '2147483647']
 
-    async def ensure(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None) -> None:
+    async def ensure(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None,
+                     envs: Path | None = None) -> None:
         """Start the container when it is not running. Concurrent callers for one name share one start."""
         lock = self._locks.setdefault(name, asyncio.Lock())
         async with lock:
@@ -90,7 +93,7 @@ class DockerBackend:
             if os.getuid() == 0:
                 for directory in (workspace, outputs):
                     directory.chmod(0o777)  # the container runs as nobody; the server is root
-            code, _, err = await run_cli(self.binary, *self.run_arguments(name, workspace, outputs, skills), timeout=120)
+            code, _, err = await run_cli(self.binary, *self.run_arguments(name, workspace, outputs, skills, envs), timeout=120)
             if code != 0:
                 raise SandboxError('sandbox_backend_unavailable', err.strip()[:300])
 
@@ -128,16 +131,20 @@ class DockerExecutor:
 
     #: Projected skills appear read-only at `/skills`; `/outputs` is the real container path.
     skills_mount = '/skills'
+    #: Built dependency environments appear read-only at `/skill_envs/<name>`.
+    envs_mount = '/skill_envs'
     outputs_path = '/outputs'
 
-    def __init__(self, backend: DockerBackend, name: str, workspace: Path, outputs: Path, skills: Path | None = None):
+    def __init__(self, backend: DockerBackend, name: str, workspace: Path, outputs: Path, skills: Path | None = None,
+                 envs: Path | None = None):
         self.backend, self.name, self.workspace, self.outputs, self.skills = backend, name, workspace, outputs, skills
+        self.envs = envs
 
     async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int,
                   env: dict[str, str] | None = None, stdin: str | None = None) -> ExecResult:
         from ... import paths
         paths.split(cwd)  # only /workspace and /outputs are valid working directories
-        await self.backend.ensure(self.name, self.workspace, self.outputs, self.skills)
+        await self.backend.ensure(self.name, self.workspace, self.outputs, self.skills, self.envs)
         started = time.monotonic()
         token = 'nexus-exec-' + uuid.uuid4().hex
         process = await asyncio.create_subprocess_exec(

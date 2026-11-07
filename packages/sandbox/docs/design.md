@@ -46,3 +46,17 @@ connectivity、user、network、time_limit、output_limit、memory_limit、proce
 - 路径检查与打开之间存在符号链接替换的竞态；边界由容器提供，不由路径检查提供。
 - 验收报告保存在 `workspace_root/acceptance.json`，多机部署时各机各自验收。迁移到数据库表需要等仓库中迁移链稳定后进行。
 - 配额以目录总大小估算，每次写入遍历一次工作区。
+
+## 依赖环境构建（技能安装）
+
+带 `requirements.txt` 或 `package.json` 的技能在安装时构建依赖环境（`nexus_sandbox/build.py`），运行脚本时只读使用。构建是唯一需要联网的步骤，所以在所选档位的**临时构建环境**里进行，与运行时环境分开：
+
+- `docker`：一次性容器（标签 `nexus.sandbox.build`，`--rm`、非 root、`--cap-drop ALL`、只读根文件系统），网络取档位的 `install_network`（默认 `bridge`），只挂载清单（只读）与空的 `env` 目录（可写）；
+- `bwrap`：与运行时相同的 jail，开放网络，`env` 可写；
+- `local`：宿主子进程，仅开发。
+
+产物是 `env/venv` 与 `env/node/node_modules`，另有构建结束时 `pip list` 的 `installed.json`（供验证关核对清单包，核对后删除）。构建有墙钟上限（`build_timeout_seconds`，默认 600）、日志只留末尾 60 行、目录大小上限（`env_max_mb`，默认 512）。环境放在 `<workspace_root>/_skill_envs/<档位>/<内容哈希前 16 位>-<环境指纹>/`，环境指纹是 docker 的镜像标识或宿主 Python 版本的摘要，所以同一版本在不同档位各有一份。
+
+运行时 docker 与 bwrap 把 `_skill_envs/<档位>` 只读挂载为 `/skill_envs`（容器创建时挂载，旧容器空闲回收后重建即带上），`local` 用宿主路径；`exec_skill` 在命令前加 `PATH=<环境>/venv/bin:…:"$PATH"`，并设 `NODE_PATH`，`python3` 因而解析到环境里的解释器（`pyvenv.cfg` 在解释器旁边，目录改名后仍可用；入口脚本的 shebang 不可靠，所以不依赖它们）。本档位没有对应环境时脚本不运行，返回 `skill_env_missing` 并提示管理员对该档位重建。同一档位的所有会话能看到该档位全部环境目录（名字是哈希，内容是公开软件包）。
+
+命令行由纯函数生成并有单元测试；docker 与 bwrap 上的真实构建**尚未验证**，本机只验证了 `local` 档位（真实 venv + 本地 wheel，含目录改名后的可用性）。

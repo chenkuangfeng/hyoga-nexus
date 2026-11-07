@@ -128,6 +128,10 @@ def run_loop(factory, worker_id: str, stopped: threading.Event, *, epoch: int, w
                 from .schedule import schedule_tick
                 processed = schedule_tick(factory)
             if background and not processed:
+                # Dependency builds of skills being installed, and cleanup of interrupted ones (skill-evolution S3).
+                from .skill_install import skill_install_tick
+                processed = skill_install_tick(factory)
+            if background and not processed:
                 # Knowledge index and cleanup jobs (openspec 2026-11-06-knowledge-base K1.5).
                 processed = knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency)
             if background and not processed:

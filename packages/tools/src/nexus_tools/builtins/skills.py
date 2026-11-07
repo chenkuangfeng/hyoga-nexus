@@ -37,7 +37,10 @@ def skills_tools():
             code = error.code + (f': {error.detail}' if error.detail else '')
             return ToolResult(code, error_code=error.code)
         if run.refused:
-            return ToolResult(f'Script not run: {run.refused}', error_code=run.refused)
+            note = (' The skill\'s dependencies are not installed for this sandbox profile; an administrator must rebuild them.'
+                    if run.refused == 'skill_env_missing' else '')
+            return ToolResult(f'Script not run: {run.refused}.{note}' if note else f'Script not run: {run.refused}',
+                              error_code=run.refused)
         text = render_exec(run.result)
         if run.hint:
             text += f'\nHint: {run.hint}'

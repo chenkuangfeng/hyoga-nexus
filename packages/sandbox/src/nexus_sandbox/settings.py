@@ -46,7 +46,7 @@ _TOP_KEYS = frozenset({'enabled', 'default_profile', 'workspace_root', 'allow_lo
 _LEGACY_KEYS = frozenset({'backend', 'image', 'cpus', 'memory_mb', 'pids', 'network', 'idle_seconds',
                           'workspace_quota_mb', 'exec_timeout_max_seconds'})
 _COMMON_KEYS = frozenset({'type', 'workspace_quota_mb', 'exec_timeout_max_seconds', 'skill_timeout_seconds',
-                          'skill_timeout_max_seconds', 'env_passthrough'})
+                          'skill_timeout_max_seconds', 'env_passthrough', 'build_timeout_seconds', 'env_max_mb'})
 #: Keys each profile type accepts. A key that cannot take effect on a type is an error, not a silent no-op.
 _TYPE_KEYS = {
     'docker': _COMMON_KEYS | {'image', 'cpus', 'memory_mb', 'pids', 'network', 'install_network', 'tmpfs_mb', 'idle_seconds'},
@@ -75,6 +75,9 @@ class SandboxSettings:
     skill_timeout_seconds: int = 120
     skill_timeout_max_seconds: int = 600
     workspace_root: str = 'data/sandbox'
+    #: Wall-clock limit and size limit of building one skill's dependency environment.
+    build_timeout_seconds: int = 600
+    env_max_mb: int = 512
     #: Host variable names forwarded into the sandbox. Empty by default; credential-like names are refused.
     env_passthrough: tuple[str, ...] = ()
     #: The local type is not an isolation boundary: development only, and additionally requires this.
@@ -86,6 +89,16 @@ class SandboxSettings:
     @property
     def root(self) -> Path:
         return Path(self.workspace_root)
+
+    @property
+    def envs_root(self) -> Path:
+        """Built dependency environments of this profile (one directory per skill version and environment)."""
+        return self.root.resolve() / '_skill_envs' / self.profile
+
+    @property
+    def staging_root(self) -> Path:
+        """Where an install works before anything is swapped in; emptied by the cleanup task."""
+        return self.root.resolve() / '_staging'
 
 
 @dataclass(frozen=True)
@@ -149,6 +162,9 @@ def _profile(values: dict, where: str, name: str, top: dict, kind: str) -> Sandb
         exec_timeout_max_seconds=_pick(values, where, 'exec_timeout_max_seconds', int, defaults.exec_timeout_max_seconds,
                                        lambda v: 1 <= v <= 3600),
         skill_timeout_seconds=timeout, skill_timeout_max_seconds=timeout_max,
+        build_timeout_seconds=_pick(values, where, 'build_timeout_seconds', int, defaults.build_timeout_seconds,
+                                    lambda v: 10 <= v <= 7200),
+        env_max_mb=_pick(values, where, 'env_max_mb', int, defaults.env_max_mb, lambda v: 16 <= v <= 20480),
         workspace_root=top['workspace_root'], env_passthrough=_env_names(values, where),
         allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'], profile=name)
 

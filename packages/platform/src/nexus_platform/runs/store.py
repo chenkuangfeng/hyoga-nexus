@@ -504,10 +504,22 @@ class DurableRuntimeStore:
             await self.emit('skill.script.completed', detail | {'refused': refusal})
             return SkillRun(name, prepared.version, prepared.script.path, refused=refusal)
         settings = load_config().get(behavior.sandbox_profile)
+        env_name, path_prefix = None, ''
+        if prepared.needs_env:
+            # The dependencies were installed when the skill was; this profile needs its own copy (see `reinstall`).
+            from nexus_sandbox.build import environment_name
+            env_name = environment_name(prepared.content_hash, settings)
+            base = sandbox.env_path(env_name)
+            if base is None:
+                refused = detail | {'refused': 'skill_env_missing'}
+                await self._audit_script(run.tenant_id, run.principal_id, run.id, refused)
+                await self.emit('skill.script.completed', refused)
+                return SkillRun(name, prepared.version, prepared.script.path, refused='skill_env_missing')
+            path_prefix = f'{base}/venv/bin:{base}/node/node_modules/.bin'
         skill_dir = sandbox.project_skill(name, prepared.content_hash, prepared.files)
-        command = build_command(prepared.script.interpreter, skill_dir, prepared.script.path, arguments)
+        command = build_command(prepared.script.interpreter, skill_dir, prepared.script.path, arguments, path_prefix)
         await self.emit('skill.script.started', detail)
-        result = await sandbox.exec(command, cwd='/workspace', env=sandbox.skill_environment(skill_dir), stdin=stdin,
+        result = await sandbox.exec(command, cwd='/workspace', env=sandbox.skill_environment(skill_dir, env_name), stdin=stdin,
                                     timeout_seconds=timeout_seconds or settings.skill_timeout_seconds,
                                     max_timeout=settings.skill_timeout_max_seconds)
         summary = detail | {'exit_code': result.exit_code, 'timed_out': result.timed_out,

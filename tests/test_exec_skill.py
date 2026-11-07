@@ -324,3 +324,52 @@ def test_a_rejected_script_never_starts(database, gate):
     run_once(database, 'worker', model_factory=lambda _: FakeModel([[_text('ok')]]))
     assert run_row(database, run_id).status == 'completed'
     assert 'skill.script.started' not in _kinds(database, run_id)
+
+
+def test_a_script_uses_the_dependencies_built_at_install_time(database, gate, monkeypatch, tmp_path):
+    """The whole path: install builds the environment, exec_skill runs the script with it first on PATH."""
+    import io
+    import zipfile
+    from nexus_platform.skills import install
+    wheels = tmp_path / 'wheels'
+    wheels.mkdir()
+    with zipfile.ZipFile(wheels / 'nexusdemo-1.0-py3-none-any.whl', 'w') as wheel:
+        wheel.writestr('nexusdemo/__init__.py', 'VALUE = 42\n')
+        wheel.writestr('nexusdemo-1.0.dist-info/METADATA', 'Metadata-Version: 2.1\nName: nexusdemo\nVersion: 1.0\n')
+        wheel.writestr('nexusdemo-1.0.dist-info/WHEEL', 'Wheel-Version: 1.0\nGenerator: t\nRoot-Is-Purelib: true\nTag: py3-none-any\n')
+        wheel.writestr('nexusdemo-1.0.dist-info/RECORD', '')
+    monkeypatch.setenv('PIP_NO_INDEX', '1')
+    monkeypatch.setenv('PIP_FIND_LINKS', str(wheels))
+    tenant, model_version = _tenant(database)
+    from nexus_platform.skills.service import install_bundle
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        archive.writestr('SKILL.md', SKILL)
+        archive.writestr('requirements.txt', 'nexusdemo==1.0\n')
+        archive.writestr('scripts/use.py', 'import nexusdemo, sys\nprint(nexusdemo.VALUE, sys.executable)\n')
+    with database() as db:
+        assert install_bundle(db, PRINCIPAL, tenant.id, buffer.getvalue())['build_state'] == 'installing'
+    assert install.tick(database) is True
+    with database() as db:
+        row = db.scalar(select(SkillVersionRecord))
+        assert row.build_state == 'ready', row.build_error
+        published = {'skill': 'greeter', 'version_id': str(row.id)}
+    agent_id = _agent(database, tenant, model_version, [published], tools=TOOLS)
+    agent_version_id = _version_for(database, tenant, agent_id)
+    with database() as db:
+        session = create_session(db, PRINCIPAL, tenant.id, agent_version_id=agent_version_id, title='S')
+        run, _ = create_run(db, PRINCIPAL, tenant.id, session.id, message='Go', idempotency_key='dep-1')
+    with database() as db:
+        task = claim_next(db, 'script-worker')
+    context = prepare_execution(database, task, 'script-worker')
+    store = DurableRuntimeStore(database, context, 'script-worker', task)
+    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id))
+    done = asyncio.run(store.exec_skill('greeter', 'scripts/use.py', [], None, 0, session))
+    assert done.refused == '' and done.result.exit_code == 0, done
+    value, executable = done.result.stdout.split()
+    assert value == '42' and '_skill_envs' in executable  # the environment's interpreter, not the host's
+    # Another profile without a built copy is refused with a hint rather than failing at import time.
+    other = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id))
+    other.envs_dir = tmp_path / 'nowhere'
+    refused = asyncio.run(store.exec_skill('greeter', 'scripts/use.py', [], None, 0, other))
+    assert refused.refused == 'skill_env_missing'

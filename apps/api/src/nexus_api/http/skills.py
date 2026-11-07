@@ -57,6 +57,7 @@ def publish_skill(tenant_id: UUID, body: SkillPublishRequest, principal: Princip
 
 @router.post("/tenants/{tenant_id}/skills/upload", status_code=201)
 async def upload_skill(tenant_id: UUID, request: Request, acknowledge_findings: bool = False,
+                       sandbox_profile: str | None = Query(default=None, max_length=32),
                        principal: Principal = Depends(get_principal),
                        db: Session = Depends(get_database_session)) -> dict[str, Any]:
     """Install a skill from a zip sent as the raw request body (``application/zip``). Administrators only.
@@ -75,7 +76,8 @@ async def upload_skill(tenant_id: UUID, request: Request, acknowledge_findings: 
         if size > MAX_UPLOAD_BYTES:
             raise InvalidConfiguration("bundle_too_large")
         chunks.append(chunk)
-    return skills.install_bundle(db, principal, tenant_id, b"".join(chunks), acknowledge_findings=acknowledge_findings)
+    return skills.install_bundle(db, principal, tenant_id, b"".join(chunks), acknowledge_findings=acknowledge_findings,
+                                 profile=sandbox_profile)
 
 
 class RemoteInstallRequest(BaseModel):
@@ -102,6 +104,32 @@ def check_skill_update(tenant_id: UUID, name: str, principal: Principal = Depend
     """Look at the remote source an installed skill came from and say whether it changed. Applies nothing."""
     from nexus_platform.skills import remote
     return remote.check_update(db, principal, tenant_id, name)
+
+
+@router.get("/tenants/{tenant_id}/skills/{name}/versions/{version}/install")
+def skill_install_status(tenant_id: UUID, name: str, version: int, principal: Principal = Depends(get_principal),
+                         db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Build state, error code and the tail of the build log of one version (poll while ``installing``)."""
+    from nexus_platform.skills import install
+    return install.status(db, principal, tenant_id, name, version)
+
+
+@router.post("/tenants/{tenant_id}/skills/{name}/versions/{version}/reinstall")
+def reinstall_skill(tenant_id: UUID, name: str, version: int,
+                    sandbox_profile: str | None = Query(default=None, max_length=32),
+                    principal: Principal = Depends(get_principal),
+                    db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Build a version again from its stored zip (after a failure, or for another sandbox profile). Administrators."""
+    from nexus_platform.skills import install
+    return install.reinstall(db, principal, tenant_id, name, version, sandbox_profile)
+
+
+@router.post("/tenants/{tenant_id}/skills/{name}/versions/{version}/stop-install")
+def stop_skill_install(tenant_id: UUID, name: str, version: int, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Stop an install that is waiting or running. Administrators."""
+    from nexus_platform.skills import install
+    return install.stop(db, principal, tenant_id, name, version)
 
 
 @router.get("/tenants/{tenant_id}/skills/{name}/bundle")

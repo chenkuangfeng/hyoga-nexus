@@ -286,8 +286,9 @@ def test_container_is_started_with_every_isolation_flag(tmp_path, fake_docker):
     assert started[started.index('--name') + 1] == container_name('t1', 's1')
     assert all(not value.startswith(('/home', '/etc', '/root')) for value in started if ':' in value and value.startswith('/'))
     mounts = [started[i + 1] for i, value in enumerate(started) if value == '-v']
-    assert len(mounts) == 3 and mounts[0].endswith(':/workspace') and mounts[1].endswith(':/outputs')
+    assert len(mounts) == 4 and mounts[0].endswith(':/workspace') and mounts[1].endswith(':/outputs')
     assert mounts[2].endswith(':/skills:ro')  # projected skills can be read but not changed
+    assert mounts[3].endswith(':/skill_envs:ro')  # built dependency environments likewise
 
 
 def test_container_starts_once_for_concurrent_commands(tmp_path, fake_docker):

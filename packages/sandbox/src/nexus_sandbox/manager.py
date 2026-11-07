@@ -43,18 +43,21 @@ class SandboxManager:
         workspace, outputs = self._directories(tenant_id, session_id)
         skills = workspace.parent / 'skills'
         skills.mkdir(parents=True, exist_ok=True)  # the mount source must exist before a container starts
+        envs = self.settings.envs_root
+        envs.mkdir(parents=True, exist_ok=True)
         files = HostFileStore(workspace, outputs, quota_bytes=self.settings.workspace_quota_mb * 1024 * 1024)
         key = f'{tenant_id}/{session_id}'
         if self.settings.backend == 'docker':
-            executor = DockerExecutor(self.docker, container_name(str(tenant_id), str(session_id), self.settings.profile), workspace, outputs, skills)
+            executor = DockerExecutor(self.docker, container_name(str(tenant_id), str(session_id), self.settings.profile), workspace, outputs, skills, envs)
         elif self.settings.backend == 'bwrap':
-            executor = BwrapExecutor(self.bwrap, workspace, outputs, skills)
+            executor = BwrapExecutor(self.bwrap, workspace, outputs, skills, envs)
         else:
-            executor = LocalExecutor(files.roots, self.settings.env_passthrough, skills)
+            executor = LocalExecutor(files.roots, self.settings.env_passthrough, skills, envs)
         self._last_used[key] = time.monotonic()
         self._executors[key] = executor
         return SandboxSession(files, executor, default_timeout=default_timeout,
-                              max_timeout=self.settings.exec_timeout_max_seconds, output_limit=output_limit, skills_dir=skills)
+                              max_timeout=self.settings.exec_timeout_max_seconds, output_limit=output_limit, skills_dir=skills,
+                              envs_dir=envs)
 
     async def release(self, tenant_id: str, session_id: str) -> None:
         """Remove the session's container now (the workspace directory stays)."""

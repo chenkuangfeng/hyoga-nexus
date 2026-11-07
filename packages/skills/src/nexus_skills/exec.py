@@ -78,6 +78,11 @@ def check_args(args: object) -> list[str]:
     return list(args)
 
 
-def build_command(interpreter: str, skill_dir: str, script_path: str, args: list[str]) -> str:
-    """The command line: the interpreter, the script inside the skill directory, then each argument, all quoted."""
-    return shlex.join([interpreter, f"{skill_dir.rstrip('/')}/{script_path}", *args])
+def build_command(interpreter: str, skill_dir: str, script_path: str, args: list[str], path_prefix: str = '') -> str:
+    """The command line: the interpreter, the script inside the skill directory, then each argument, all quoted.
+
+    `path_prefix` (directories of the skill's dependency environment) is put in front of ``PATH`` for this one command,
+    so ``python3`` resolves to the environment's interpreter.
+    """
+    command = shlex.join([interpreter, f"{skill_dir.rstrip('/')}/{script_path}", *args])
+    return f'PATH={shlex.quote(path_prefix)}:"$PATH" {command}' if path_prefix else command
