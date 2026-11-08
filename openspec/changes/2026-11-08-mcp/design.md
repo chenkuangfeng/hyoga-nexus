@@ -20,7 +20,7 @@
 - `nexus_mcp/server.py`：FastMCP 服务端，把 Run 的授权工具暴露出来。
 - `nexus_mcp/gateway.py`：把缓存/策略解析出的工具定义与执行器接进 `AuthorizedToolGateway` 的注册表（桥接，不自行授权）。
 
-**技术选型**：统一使用官方 `mcp` Python SDK（锁 1.x，不自动升 2.x）。客户端直接基于 `mcp.ClientSession`（stdio / streamable HTTP）适配到 `ToolDefinition`，不引入 `langchain-mcp-adapters`（避免拖入 LangChain）；服务端用 SDK 内置的 `mcp.server.fastmcp`。`mcp` 2.x 破坏 1.x 的连接与类型 API，依赖锁定与 octop-harness 的 pin 注释一致（`mcp>=1.27.1,<3` 直到适配层兼容 2.x）。
+**技术选型**：统一使用官方 `mcp` Python SDK **2.x**（pin `mcp>=2.3,<3`），不引入 `langchain-mcp-adapters`（避免拖入 LangChain）。所有 `mcp` 导入收敛到 `nexus_mcp._sdk` 适配层：客户端用 `ClientSession`（stdio / streamable HTTP / SSE），服务端用 `mcp.server.MCPServer`（2.x 由 `fastmcp` 改名）。版本差异（`streamable_http_client` 别名、`httpx`→`httpx2`、`LATEST_HANDSHAKE_VERSION` 位置）在适配层用探测 + 回退吸收，参考 hermes `_import_sdk_names` / `sdk_httpx()`，升级 3.x 只改这一层与依赖上界。
 
 ## 2. 数据模型（`migrations/platform`）
 
@@ -49,6 +49,11 @@
 
 ## 3. 模块与接口
 
+### `nexus_mcp._sdk`（SDK 适配层）
+- 全仓库唯一允许 `import mcp.*` 的模块；探测当前 SDK 版本并导出稳定内部接口：`stdio_client` / `streamable_http_client` / `sse_client` / `ClientSession` / `StdioServerParameters` / `MCPServer` / `sdk_httpx`。
+- 别名回退：`streamablehttp_client`（1.24 前）→ `streamable_http_client`；`fastmcp` → `MCPServer`；`httpx` → `httpx2`。
+- 其余模块只从 `_sdk` 导入，不直接依赖 `mcp.*`；升级 3.x 时仅改本模块与依赖上界。
+
 ### `nexus_mcp.client`
 - `fingerprint(config: dict) -> str`：与 Octop 一致，仅取 `transport/url/headers/command/args/env`，`headers`/`env` 取「键 + 引用 ID」排序后哈希。
 - `discover(config, timeout=30) -> list[MCPToolSpec]`：建立会话、`list_tools`、读取 server instructions；HTTP 失败断开重连一次，stdio 不重试。
@@ -73,7 +78,7 @@
 - 外部工具名在加载边界按 `^[A-Za-z0-9_-]+$` 规范化后再进注册名与 `tool_search` 目录，防延迟加载绕过 provider 校验（deer-flow `tools.py`）。
 
 ### `nexus_mcp.server`
-- FastMCP 实例，`tools/list` 从 `visible_definitions` 取；`tools/call` 调用 `AuthorizedToolGateway.execute`（复用完整管线，含审批、守卫、审计）。
+- 由 `nexus_mcp._sdk` 导出 `MCPServer`（2.x，原 FastMCP）实例，`tools/list` 从 `visible_definitions` 取；`tools/call` 调用 `AuthorizedToolGateway.execute`（复用完整管线，含审批、守卫、审计）。
 - 挂载在 API 进程 `/mcp/runs/{token}`（或可配置前缀），Bearer 鉴权映射到 Run；不在全局 Auth 中间件之后，参照 WeKnora `routes_mcp_endpoint.go` 的提前挂载。
 
 ## 4. 关键流程

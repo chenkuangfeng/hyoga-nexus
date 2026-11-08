@@ -2,7 +2,7 @@
 
 ## 状态
 
-已确认（2026-11-08）。全部决定已确认：1 传输（stdio + streamable HTTP + SSE）、2 运行令牌、3 默认禁用、4 OAuth 一起做、5 前后端一起做、6 官方 mcp SDK（锁 1.x）。
+已确认（2026-11-08）。全部决定已确认：1 传输（stdio + streamable HTTP + SSE）、2 运行令牌、3 默认禁用、4 OAuth 一起做、5 前后端一起做、6 官方 mcp SDK（2.x + 适配层）。
 
 ## 原因
 
@@ -65,7 +65,7 @@
 3. **按工具启用的默认值**（已确认，2026-11-08）：连接后发现的工具默认**全部禁用**，管理员逐个启用（`enabled_tools` 白名单）。
 4. **OAuth**（已确认，2026-11-08）：本期实现 OAuth 授权码流（RFC 9728 动态客户端注册 + PKCE + 设备流按需），令牌按（租户、主体、服务）作用域存储与自动刷新；凭据优先级「请求级 > 用户级 > 服务级」；同时保留直接 header/env + `credential_references` 的静态凭据路径。
 5. **前端范围**（已确认，2026-11-08）：后端与前端一起做，工具箱 MCP 标签按 WeKnora 实现最小可用接入（列表 / 启停 / 发现）。
-6. **MCP SDK 选型**（已确认，2026-11-08）：使用官方 `mcp` Python SDK（`modelcontextprotocol/python-sdk`，锁 1.x；`mcp` 2.x 有破坏性变化，pin 住不自动升级）。不引入 `langchain-mcp-adapters`——它会拖进 LangChain 依赖；客户端自行把 `mcp.ClientSession` 适配到 `ToolDefinition` / `ToolRegistry`，服务端用 SDK 内置的 `mcp.server.fastmcp`。依据：Octop、deer-flow 同为 Python 栈且都用官方 SDK（分别锁 1.28.1 / 1.30.0），我们与其同源但不套 LangChain 适配层。
+6. **MCP SDK 选型**（已确认，2026-11-08；更新，2026-11-08）：使用官方 `mcp` Python SDK（`modelcontextprotocol/python-sdk`）**2.x**（pin `mcp>=2.3,<3`，后续升 3.x 只改适配层与依赖上界）。不引入 `langchain-mcp-adapters`。所有 `mcp` 导入收敛到 `nexus_mcp._sdk` 适配层：客户端用 `ClientSession` / `stdio_client` / `streamable_http_client` / `sse_client`，服务端用 `mcp.server.MCPServer`（2.x 由 `fastmcp` 改名）；`httpx` → `httpx2` 的跨界对象由适配层统一导出；版本探测与别名回退参考 hermes `_import_sdk_names` / `sdk_httpx()`，升级 3.x 只改这一层。
 
 ## 影响
 
@@ -74,4 +74,4 @@
 - `nexus_core`：`native/tool_groups.py` 增加 `mcp` 组（默认关闭）。
 - `apps/api`：MCP 服务管理路由与 MCP 服务端挂载（`/api/v1/tenants/{id}/mcp-services`、`/mcp/runs/{token}`）。
 - 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 模块文档。
-- 依赖：新增官方 `mcp` Python SDK（锁 1.x，见决定 6），不引入 `langchain-mcp-adapters`。
+- 依赖：新增官方 `mcp` Python SDK（2.x，见决定 6），不引入 `langchain-mcp-adapters`；所有 `mcp` 导入收敛到 `nexus_mcp._sdk` 适配层，便于升 3.x。

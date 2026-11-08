@@ -1,7 +1,7 @@
 # 任务：MCP
 
 - [ ] 0. 准备与补读
-  - [ ] 0.1 确认官方 `mcp` Python SDK 版本（锁 1.x，不引入 `langchain-mcp-adapters`）并加入 `packages/mcp` 依赖与 `uv.lock`；核对 `mcp.ClientSession` 与 `mcp.server.fastmcp` 的 1.x API 及 `mcp` 2.x 的破坏点。
+  - [ ] 0.1 加入官方 `mcp` Python SDK **2.x**（pin `mcp>=2.3,<3`，不引入 `langchain-mcp-adapters`）到 `packages/mcp` 依赖与 `uv.lock`；建立 `nexus_mcp._sdk` 适配层（唯一允许 `import mcp.*` 的模块）并核对 `ClientSession` / `stdio_client` / `streamable_http_client` / `sse_client` / `MCPServer`（2.x 改名）API 与 `httpx2` 边界。
   - [ ] 0.2 补读 WeKnora `mcp_catalog.go` / `mcp_schema.go` / `mcp_call_guard.go` / `client.go` / `sse_connection.go` / `mcp_oauth.go`、Octop `custom_mcp.py`、deer-flow `session_pool.py` / `lifecycle.py` / `headers.py` / `tools.py` / `cache.py` / `interceptors.py` / `oauth.py` / `oauth_store.py`、hermes `mcp_tool_transport.py`（stdio 进程卫生与 SSE/HTTP 连接工厂）与 `mcp_oauth_manager.py` / `mcp_oauth_provider.py`（OAuth PKCE/动态注册）的完整行为与测试。
 
 ## 1. 客户端与平台服务
