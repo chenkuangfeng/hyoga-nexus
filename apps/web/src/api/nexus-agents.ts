@@ -5,7 +5,7 @@
  * (openspec 2026-11-05-weknora-agent-tool-model-settings). Every function takes the space id
  * explicitly. Authorization is decided by the server on every call; the page never caches it.
  */
-import { del, get, post, put } from '@/utils/request'
+import { del, get, getDown, post, put } from '@/utils/request'
 
 /** One resource binding of an agent draft or version. Only `kind = tool` is edited here. */
 export interface AgentResourceBinding {
@@ -193,6 +193,10 @@ export interface TenantSkill {
   /** Uses by the whole space and the latest use; `null` for builtin skills, which are used in every space. */
   use_count?: number | null
   last_used_at?: string | null
+  /** Scan verdict of the current version (`safe` / `caution` / `dangerous`), who published it, and whether the scanner has moved on. */
+  verdict?: string | null
+  trust?: string | null
+  rescan_needed?: boolean
   /** Only when a sandbox profile was asked for: whether the skill's scripts can run there. `null` = it ships no scripts. */
   run?: { ok: boolean, reason: string } | null
 }
@@ -401,4 +405,40 @@ export async function approveSubmission(tenantId: string, id: string): Promise<v
 
 export async function rejectSubmission(tenantId: string, id: string, reason: string): Promise<void> {
   await post(`${submissionPath(tenantId, id)}/reject`, { reason })
+}
+
+
+// ---- Toolbox skill library (openspec 2026-11-08-toolbox) --------------------------------------------------------
+
+/** One version row of `GET /skills/{name}/versions`. */
+export interface SkillVersionInfo {
+  version: number
+  version_id: string
+  content_hash: string
+  description: string
+  tools: string[]
+  trust: string
+  verdict: string
+  findings: unknown[]
+  rescan_needed: boolean
+  build_state: string
+  has_bundle: boolean
+  origin: { kind?: string, label?: string } | null
+  created_at: string
+}
+
+export async function listSkillVersions(tenantId: string, name: string): Promise<SkillVersionInfo[]> {
+  const data: unknown = await get(`${skillPath(tenantId, name)}/versions`)
+  return Array.isArray(data) ? data as SkillVersionInfo[] : []
+}
+
+/** Scan one version again with the current scanner (needs `tools:manage`); the version itself does not change. */
+export async function rescanSkillVersion(tenantId: string, name: string, version: number): Promise<void> {
+  await post(`${skillPath(tenantId, name)}/versions/${version}/rescan`, {})
+}
+
+/** The zip of a skill (the current version by default). */
+export async function downloadSkillBundle(tenantId: string, name: string, version?: number): Promise<Blob> {
+  const query = version ? `?version=${version}` : ''
+  return await getDown(`${skillPath(tenantId, name)}/bundle${query}`)
 }

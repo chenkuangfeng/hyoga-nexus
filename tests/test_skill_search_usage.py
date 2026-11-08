@@ -104,6 +104,8 @@ def test_loading_counts_and_running_a_script_only_refreshes_the_time(database, r
         listed = {row['name']: row for row in list_skills(db, PRINCIPAL, run.tenant.id)}
         assert listed['report-writer']['use_count'] == 2 and listed['report-writer']['last_used_at']
         assert listed['data-cleaner']['use_count'] == 0 and listed['data-cleaner']['last_used_at'] is None
+        assert listed['report-writer']['verdict'] == 'safe' and listed['report-writer']['trust'] == 'admin'
+        assert listed['report-writer']['rescan_needed'] is False
 
 
 def test_private_skills_show_the_owners_own_numbers_and_loading_works_after_a_failed_note(database, run, monkeypatch):

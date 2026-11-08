@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { computed, ref } from 'vue'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
-import { TOOLBOX_ITEMS, canAccessToolboxSection, isToolboxSection, toolboxLocation } from './toolbox'
+import { TOOLBOX_ITEMS, canAccessToolboxSection, isToolboxSection, isToolboxSectionAvailable, toolboxLocation } from './toolbox'
 import zhCN from '../i18n/locales/zh-CN'
 
 const roles = ['viewer', 'contributor', 'admin', 'owner']
@@ -15,36 +15,30 @@ const access = (role: string | null, unsupported: string[] = [], superuser = fal
   isSupported: (capability?: string) => !capability || !unsupported.includes(capability),
 })
 
-test('toolbox contains only the agreed tools; infrastructure and secrets stay in settings', () => {
-  assert.deepEqual(TOOLBOX_ITEMS.map((item) => item.key), ['skills', 'mcp', 'browserconnection'])
+test('toolbox tabs: skills and tools are open, MCP and browser connection are planned; infrastructure stays in settings', () => {
+  assert.deepEqual(TOOLBOX_ITEMS.map((item) => [item.key, item.available]),
+    [['skills', true], ['tools', true], ['mcp', false], ['browserconnection', false]])
   const lookup = (key: string) => key.split('.').reduce<any>((node, part) => node?.[part], zhCN)
   for (const item of TOOLBOX_ITEMS) {
-    for (const key of [item.title, item.description, 'help' in item ? item.help : undefined,
-      'action' in item ? item.action : undefined]) {
-      if (key) assert.equal(typeof lookup(key), 'string', key)
-    }
+    for (const key of [item.title, item.description]) assert.equal(typeof lookup(key), 'string', key)
   }
+  assert.equal(isToolboxSectionAvailable('skills') && isToolboxSectionAvailable('tools'), true)
+  assert.equal(isToolboxSectionAvailable('mcp') || isToolboxSectionAvailable('browserconnection'), false)
   for (const key of ['sandbox', 'websearch', 'envvars', 'integration-api', undefined, 'unknown']) {
     assert.equal(isToolboxSection(key), false)
   }
 })
 
-test('toolbox preserves role and deployment gates, including workspace switches', () => {
-  for (const role of ['viewer', 'contributor']) {
-    assert.equal(canAccessToolboxSection('skills', access(role)), false)
-    assert.equal(canAccessToolboxSection('mcp', access(role)), false)
-    assert.equal(canAccessToolboxSection('browserconnection', access(role)), true)
+test('every active member sees the toolbox; the server decides what they may change', () => {
+  for (const role of ['viewer', 'contributor', 'admin', 'owner']) {
+    for (const item of TOOLBOX_ITEMS) assert.equal(canAccessToolboxSection(item.key, access(role)), true)
   }
-  assert.equal(canAccessToolboxSection('skills', access('admin')), true)
-  assert.equal(canAccessToolboxSection('skills', access('owner', ['settings.sandbox'])), false)
-  assert.equal(canAccessToolboxSection('mcp', access('owner', ['settings.mcp'])), false)
-  assert.equal(canAccessToolboxSection('mcp', access(null)), false)
-  assert.equal(canAccessToolboxSection('mcp', access(null, [], true)), true)
-  assert.equal(canAccessToolboxSection('mcp', access(null, ['settings.mcp'], true)), false)
+  assert.equal(canAccessToolboxSection('skills', access(null)), false)
+  assert.equal(canAccessToolboxSection('skills', access(null, [], true)), true)
   const role = ref('admin')
   const allowed = computed(() => canAccessToolboxSection('skills', access(role.value)))
   assert.equal(allowed.value, true)
-  role.value = 'viewer'
+  role.value = ''
   assert.equal(allowed.value, false)
 })
 
@@ -94,7 +88,8 @@ test('settings no longer render moved panels, and old bookmarks reach toolbox', 
   const router = readFileSync(new URL('../router/index.ts', import.meta.url), 'utf8')
   assert.match(router, /to\.path === '\/platform\/settings' && isToolboxSection\(to\.query\.section\)/)
   assert.match(router, /toolboxLocation\(to\.query\.section/)
-  const page = readFileSync(new URL('../views/toolbox/Toolbox.vue', import.meta.url), 'utf8')
+  assert.match(router, /name: "toolbox",\s+component: \(\) => import\("\.\.\/views\/toolbox\/NexusToolbox\.vue"\)/)
+  const page = readFileSync(new URL('../views/toolbox/NexusToolbox.vue', import.meta.url), 'utf8')
   assert.match(page, /if \(!selectedItem\.value && fallback\) void router\.replace\(toolboxLocation\(fallback\.key\)\)/)
-  assert.match(page, /:key="sandboxId"\s+:initial-sandbox-id="sandboxId"/)
+  assert.match(page, /:disabled="!item\.available"/)  // a planned tab cannot be opened
 })

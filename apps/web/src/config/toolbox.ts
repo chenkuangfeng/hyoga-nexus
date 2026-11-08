@@ -1,27 +1,39 @@
-import { SETTINGS_SECTION_MIN_ROLE, type SettingsRoleKey } from './settingsAccess'
-import { SETTINGS_SECTION_CAPABILITY, type DeploymentCapabilityKey } from './deploymentCapabilities'
+import type { SettingsRoleKey } from './settingsAccess'
+import type { DeploymentCapabilityKey } from './deploymentCapabilities'
 import { SKILL_ICON } from '../types/mention'
 
+/**
+ * Toolbox tabs (openspec 2026-11-08-toolbox). `available` marks the tabs Nexus has a backend for; the others stay in the
+ * bar, disabled and labelled "planned", and never issue a request.
+ */
 export const TOOLBOX_ITEMS = [
   {
     key: 'skills',
     icon: SKILL_ICON,
     title: 'settings.skills.title',
-    description: 'settings.skills.description',
-    help: 'settings.skills.helpTooltip',
-    action: 'settings.skills.addSkill',
+    description: 'toolbox.skills.description',
+    available: true,
+  },
+  {
+    key: 'tools',
+    icon: 'tools',
+    title: 'toolbox.tools.title',
+    description: 'toolbox.tools.description',
+    available: true,
   },
   {
     key: 'mcp',
     icon: 'tools',
     title: 'settings.mcpService',
     description: 'mcpSettings.description',
-    action: 'mcpSettings.addService',
+    available: false,
   },
   {
     key: 'browserconnection',
+    icon: 'browse',
     title: 'localBrowser.settingsTitle',
     description: 'localBrowser.settingsDescription',
+    available: false,
   },
 ] as const
 
@@ -38,17 +50,24 @@ export function toolboxLocation(section?: ToolboxSection, sandboxId?: string) {
   }
 }
 
-/** Use the same role and deployment gates as the original settings panels. */
+/** Whether the tab can be opened at all: the backend exists for it. */
+export function isToolboxSectionAvailable(section: ToolboxSection): boolean {
+  return TOOLBOX_ITEMS.some((item) => item.key === section && item.available)
+}
+
+/**
+ * Every active member sees the toolbox; what a member may change is decided by the server on each call (`tools:manage`,
+ * `skills:submit`), and the panels only hide the buttons a member cannot use.
+ */
 export function canAccessToolboxSection(
   section: ToolboxSection,
   access: {
     currentTenantRole: string | null | undefined
     canAccessAllTenants: boolean
-    hasRole: (role: SettingsRoleKey) => boolean
-    isSupported: (capability?: DeploymentCapabilityKey) => boolean
+    hasRole?: (role: SettingsRoleKey) => boolean
+    isSupported?: (capability?: DeploymentCapabilityKey) => boolean
   },
 ): boolean {
-  if (!access.currentTenantRole && !access.canAccessAllTenants) return false
-  return (access.canAccessAllTenants || access.hasRole(SETTINGS_SECTION_MIN_ROLE[section] ?? 'viewer'))
-    && access.isSupported(SETTINGS_SECTION_CAPABILITY[section])
+  void section
+  return !!access.currentTenantRole || access.canAccessAllTenants
 }

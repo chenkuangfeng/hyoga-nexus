@@ -151,7 +151,7 @@ const router = createRouter({
         {
           path: "toolbox/:section?",
           name: "toolbox",
-          component: PlannedPage,
+          component: () => import("../views/toolbox/NexusToolbox.vue"),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
