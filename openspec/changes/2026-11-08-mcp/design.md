@@ -35,6 +35,12 @@
 - 每（tenant、service、tool）一行：`explicit_risk`（可空，`read`/`write`/`destructive`，MCP 工具一般无 `probe`）、`observed_risk`（曾观察到的最高声明）、`require_approval` bool、`pending_downgrade` bool、`updated_at`。
 - 生效风险在服务层计算，不落库派生值。
 
+### `mcp_oauth_clients`
+- 每（tenant、service）一行：动态注册的 `client_id` / `client_secret`（加密存储）、`redirect_uri`、`auth_server_metadata_url`、`registration_access_token`（若颁发）、`updated_at`。
+
+### `mcp_oauth_tokens`
+- 每（tenant、principal、service）一行：`access_token` / `refresh_token`（加密）、`expires_at`、`scope`、`updated_at`；令牌按主体作用域隔离，不跨用户/会话共享。
+
 ### `mcp_run_tokens`
 - `token_hash`（SHA-256 前缀）主键；`run_id` FK runs；`tenant_id`；`expires_at`；`revoked_at`；`created_at`。
 - 明文令牌只在签发响应中出现一次；其余位置只存哈希。
@@ -48,6 +54,7 @@
 - `discover(config, timeout=30) -> list[MCPToolSpec]`：建立会话、`list_tools`、读取 server instructions；HTTP 失败断开重连一次，stdio 不重试。
 - `call(config, tool_name, arguments, timeout) -> ToolResult`：调用并捕获 `McpError` 与输出 schema 错误分类。
 - SSE（`transport='sse'`）：`sse_client`，`timeout` 只覆盖建连（headers + endpoint event），`sse_read_timeout`（300s）只覆盖事件间隔；连接建立后纳入会话池复用；TLS verify/cert 放在 `httpx_client_factory` 的内层 transport，响应体设上限，跨域重定向携带凭据时 fail-close（WeKnora `boundedSSEConnection` + hermes `_sse_transport`）。
+- OAuth（`auth_type='oauth'`）：RFC 9728 动态客户端注册 + PKCE 授权码流；`TokenStore` 按（租户、主体、服务）作用域读写与自动刷新；资源服务器 401 时恰好一次 refresh + 一次重试，其余错误不重试（WeKnora `oauthCall`）；元数据 401 未配置 OAuth 时提示切换策略（WeKnora `asOAuthRequired`）。
 - 会话池按（服务、作用域、事件循环、域）键控复用，LRU 回收；遵守 anyio 任务组所有权：会话的 enter/exit 必须同一任务，用专用 owner task 关闭（deer-flow `session_pool.py`）。
 - 连接生命周期账本：每服务一个不透明 epoch token，配置「删除后原样重加」也能感知变化并重建绑定；账本无效 fail-close（deer-flow `lifecycle.py`）。
 - 写入 HTTP header 前校验非法值（控制字符、非 ASCII、首尾空白），并按大小写不敏感替换既有同名 header，防止凭据经异常信息泄漏（deer-flow `headers.py`）。
@@ -57,6 +64,7 @@
 - `discover_tools` / `set_enabled_tools`：发现后以指纹写入缓存，白名单只接受已发现工具名。
 - `policy(tool) -> (risk, require_approval)`：实现风险只升不降（WeKnora `mcp_risk.go` 语义）；`observe_declared_risk` 在发现时写入 `observed_risk`。
 - `issue_run_token(run) -> token`、`resolve_run_token(token) -> Run`、`revoke_run_token(run)`。
+- `begin_oauth(service) -> authorization_url`、`complete_oauth(service, code) -> ()`：动态注册（或复用已注册 client）、生成 PKCE verifier、回填令牌到 token store；`oauth_token(service, principal)` 取当前主体令牌并自动 refresh。
 - `visible_definitions(run) -> list[ToolDefinition]`：绑定的服务 ∩ 启用白名单 ∩ 风险策略 → `ToolDefinition`。
 
 ### `nexus_mcp.gateway`
@@ -80,6 +88,11 @@
 - 注册的执行器在每次调用前：重读服务（存在、启用）→ 重读白名单（工具仍在）→ 重读风险策略（可升不可降）→ 通过后 `client.call`。
 - 任一步失败返回 `mcp_unavailable`，不直接调用外部服务。
 
+### OAuth 授权
+1. 管理员创建 OAuth 服务，触发授权 → `begin_oauth` 生成 authorization URL。
+2. 用户在授权服务器授权 → 回调 `complete_oauth` 换取令牌 → 写入 `mcp_oauth_tokens`。
+3. 后续连接注入该主体的令牌；过期自动 refresh；401 单次重试。
+
 ### 服务端调用
 - Codex/Claude 适配器（第 4/5 步）在 Run 启动时向平台请求运行令牌，令牌绑定 Run 与主体/空间。
 - 外部 Runtime 带令牌访问 `/mcp/runs/{token}`：`tools/list` 返回 `visible_definitions`；`tools/call` 经 `AuthorizedToolGateway.execute` 复核授权并审计。
@@ -87,6 +100,7 @@
 ## 5. 错误处理
 - 连接失败：`mcp_connection_failed`；发现超时：`mcp_discovery_timeout`；服务停用：`mcp_service_disabled`；工具未启用 / 已移除：`mcp_unavailable`。
 - `McpError` → 参数修正提示；输出 schema 失败 → 「不要改参数重试」（octop-harness `mcp_tool_error.py`）。
+- OAuth：元数据 401 未配置 OAuth → 提示切换策略；刷新失败 → `mcp_oauth_failed`，不重试工具调用。
 - 策略读取失败 fail-close（临时 `write` + 审批），不静默放行。
 - 运行令牌：过期/撤销/不存在 → 协议级 `unauthorized`，不泄漏资源存在性。
 

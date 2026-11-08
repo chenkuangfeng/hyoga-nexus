@@ -2,7 +2,7 @@
 
 ## 状态
 
-待确认（2026-11-08）。决定 1（传输）、2（服务端鉴权）、5（前端）、6（SDK）已确认；决定 3（默认禁用）、4（OAuth）待确认，确认前不编码。
+已确认（2026-11-08）。全部决定已确认：1 传输（stdio + streamable HTTP + SSE）、2 运行令牌、3 默认禁用、4 OAuth 一起做、5 前后端一起做、6 官方 mcp SDK（锁 1.x）。
 
 ## 原因
 
@@ -48,28 +48,29 @@
 
 ## 范围
 
-1. **MCP 客户端**（7.2）：连接外部 MCP 服务（stdio、streamable HTTP、SSE），发现工具，**按工具启用**（不默认开放整个服务），凭据引用，高风险工具审批，把启用的工具注册进 `AuthorizedToolGateway` 走完整管线。
+1. **MCP 客户端**（7.2）：连接外部 MCP 服务（stdio、streamable HTTP、SSE），发现工具，**按工具启用**（不默认开放整个服务），凭据引用与 OAuth，高风险工具审批，把启用的工具注册进 `AuthorizedToolGateway` 走完整管线。
 2. **MCP 服务端**（7.3）：把某次 Run 已授权的工具以 MCP 协议暴露，使用**运行令牌**（短时、单 Run、可撤销），每次 `tools/list` 与 `tools/call` 都复核权限。
 3. 前端：本期后端与前端一起做，工具箱 MCP 标签按 WeKnora 实现最小可用接入（见决定 5）。
 
-不做：OAuth 授权码流、本地浏览器连接、MCP 服务端长期 endpoint token（WeKnora 模型）、外部 Runtime 适配器本身（第 4/5 步）。
+不做：本地浏览器连接、MCP 服务端长期 endpoint token（WeKnora 模型）、外部 Runtime 适配器本身（第 4/5 步）。
 
 ## 待确认的决定
 
-3. **按工具启用的默认值**：连接后发现的工具默认**全部禁用**，管理员逐个启用（`enabled_tools` 白名单）。备选：默认全部启用、可禁用。**推荐：默认全部禁用**，与「不默认开放整个服务」一致。
-4. **OAuth**：第一期不做授权码流程，凭据只支持直接配置的 header / env，秘密以 `credential_references` 引用；OAuth 列 7.2 扩展。备选：本期连 OAuth 一起做。**推荐：OAuth 后续**。
+（无——全部决定已确认）
 
 ## 已确认的决定
 
 1. **传输支持范围**（已确认，2026-11-08）：客户端支持 `stdio`（子进程）、`streamable HTTP` 与 `SSE`（兼容旧 MCP 服务）。stdio 按 hermes 的进程卫生标准（命令解析、环境收敛、子进程/孤儿回收）实现；SSE 按 WeKnora `boundedSSEConnection` 的「建连预算 vs 常驻流」分离 + hermes `sse_client` 的 `sse_read_timeout` 调参实现，SSRF 安全与同源重定向沿用 WeKnora。
 2. **服务端鉴权模型**（已确认，2026-11-08）：只做运行令牌（短时、单 Run、可撤销，平台在 Run 启动时签发）；不做 WeKnora 的 endpoint 长期 token。
+3. **按工具启用的默认值**（已确认，2026-11-08）：连接后发现的工具默认**全部禁用**，管理员逐个启用（`enabled_tools` 白名单）。
+4. **OAuth**（已确认，2026-11-08）：本期实现 OAuth 授权码流（RFC 9728 动态客户端注册 + PKCE + 设备流按需），令牌按（租户、主体、服务）作用域存储与自动刷新；凭据优先级「请求级 > 用户级 > 服务级」；同时保留直接 header/env + `credential_references` 的静态凭据路径。
 5. **前端范围**（已确认，2026-11-08）：后端与前端一起做，工具箱 MCP 标签按 WeKnora 实现最小可用接入（列表 / 启停 / 发现）。
 6. **MCP SDK 选型**（已确认，2026-11-08）：使用官方 `mcp` Python SDK（`modelcontextprotocol/python-sdk`，锁 1.x；`mcp` 2.x 有破坏性变化，pin 住不自动升级）。不引入 `langchain-mcp-adapters`——它会拖进 LangChain 依赖；客户端自行把 `mcp.ClientSession` 适配到 `ToolDefinition` / `ToolRegistry`，服务端用 SDK 内置的 `mcp.server.fastmcp`。依据：Octop、deer-flow 同为 Python 栈且都用官方 SDK（分别锁 1.28.1 / 1.30.0），我们与其同源但不套 LangChain 适配层。
 
 ## 影响
 
 - `packages/mcp`：实现 `client`（连接、发现、缓存、指纹、风险解析）、`server`（FastMCP 暴露授权工具 + 运行令牌）、`gateway`（把 MCP 工具桥接进 `AuthorizedToolGateway`）。
-- `packages/platform`：新增 `nexus_platform/mcp/` 服务与持久化模型（`mcp_services`、`mcp_tool_approvals`、`mcp_run_tokens`），迁移 `migrations/platform`。
+- `packages/platform`：新增 `nexus_platform/mcp/` 服务与持久化模型（`mcp_services`、`mcp_service_tools`、`mcp_tool_approvals`、`mcp_oauth_*`、`mcp_run_tokens`），迁移 `migrations/platform`。
 - `nexus_core`：`native/tool_groups.py` 增加 `mcp` 组（默认关闭）。
 - `apps/api`：MCP 服务管理路由与 MCP 服务端挂载（`/api/v1/tenants/{id}/mcp-services`、`/mcp/runs/{token}`）。
 - 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 模块文档。
