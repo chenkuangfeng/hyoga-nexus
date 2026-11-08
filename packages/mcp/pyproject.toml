@@ -5,6 +5,6 @@ build-backend = "hatchling.build"
 name = "hyoga-nexus-mcp"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["hyoga-nexus-core"]
+dependencies = ["hyoga-nexus-core", "mcp>=2.3,<3"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/nexus_mcp"]
