@@ -26,7 +26,7 @@
 - `id` UUID 主键；`tenant_id` FK tenants；`name` 租户内唯一；`description`；`transport`（`stdio` / `streamable_http`）；`config` JSON（连接参数，秘密为引用）；`enabled` bool；`created_by`；`created_at` / `updated_at`。
 
 ### `mcp_service_tools`
-- 每（服务、工具名）一行：`service_id`、`tool_name`、`enabled` bool（白名单）、`input_schema` JSON（缓存）、`description`、`read_only_hint` bool、`catalog_status`（`loading` / `ready` / `error`）、`catalog_error`、`fingerprint`（连接参数指纹）、`updated_at`。
+- 每（服务、工具名）一行：`service_id`、`tool_name`、`enabled` bool（白名单）、`input_schema` JSON（缓存）、`description`、`read_only_hint` bool、`catalog_status`（`loading` / `ready` / `error`）、`catalog_error`、`fingerprint`（连接参数指纹）、`config_epoch`（配置代际，见生命周期账本）、`updated_at`。
 - 工具定义缓存与启用白名单合在一张表，避免另设缓存表。
 
 ### `mcp_tool_approvals`
@@ -45,7 +45,9 @@
 - `fingerprint(config: dict) -> str`：与 Octop 一致，仅取 `transport/url/headers/command/args/env`，`headers`/`env` 取「键 + 引用 ID」排序后哈希。
 - `discover(config, timeout=30) -> list[MCPToolSpec]`：建立会话、`list_tools`、读取 server instructions；HTTP 失败断开重连一次，stdio 不重试。
 - `call(config, tool_name, arguments, timeout) -> ToolResult`：调用并捕获 `McpError` 与输出 schema 错误分类。
-- 会话池按（租户、服务）复用，生命周期与回收参照 deer-flow `session_pool.py`。
+- 会话池按（服务、作用域、事件循环、域）键控复用，LRU 回收；遵守 anyio 任务组所有权：会话的 enter/exit 必须同一任务，用专用 owner task 关闭（deer-flow `session_pool.py`）。
+- 连接生命周期账本：每服务一个不透明 epoch token，配置「删除后原样重加」也能感知变化并重建绑定；账本无效 fail-close（deer-flow `lifecycle.py`）。
+- 写入 HTTP header 前校验非法值（控制字符、非 ASCII、首尾空白），并按大小写不敏感替换既有同名 header，防止凭据经异常信息泄漏（deer-flow `headers.py`）。
 
 ### `nexus_platform.mcp.service`
 - `create/update/delete/list/get`（权限 `tools:manage`，读为活跃成员）。
@@ -57,6 +59,7 @@
 ### `nexus_mcp.gateway`
 - `register_mcp_tools(registry, run, services)`：把 `visible_definitions` 注册为 `RegisteredTool`，`source='mcp'`、`group='mcp'`、`deferrable=True`；执行器在执行前重新走 `nexus_platform.mcp.service.policy` 与 `check_enabled`，再调 `client.call`。
 - 注册名哈希防撞与先注册者保留沿用 `ToolRegistry` 的重复名拒绝。
+- 外部工具名在加载边界按 `^[A-Za-z0-9_-]+$` 规范化后再进注册名与 `tool_search` 目录，防延迟加载绕过 provider 校验（deer-flow `tools.py`）。
 
 ### `nexus_mcp.server`
 - FastMCP 实例，`tools/list` 从 `visible_definitions` 取；`tools/call` 调用 `AuthorizedToolGateway.execute`（复用完整管线，含审批、守卫、审计）。
@@ -87,5 +90,5 @@
 ## 6. 边界情况
 - 同名工具（服务改名、哈希前缀碰撞）：注册名哈希防撞 + 先注册者保留。
 - 服务配置变更但工具缓存未刷新：执行前复核白名单与风险，发现工具列表以指纹失效重发现。
-- stdio 会话泄漏：会话池回收 + 发现后断开（list_tools 一次性连接）。
+- stdio 会话泄漏：会话池回收 + 发现后断开（list_tools 一次性连接）；配置变化经 epoch 账本重建绑定，避免旧会话带旧配置继续用。
 - 撤权后下一次调用拒绝：`visible_definitions` 与执行器都实时查库。

@@ -38,8 +38,13 @@
 | **octop-harness** | `middleware/mcp_tools.py` | 按请求过滤 MCP 工具（opt-in 才暴露） |
 | | `middleware/mcp_tool_error.py` | `McpError` 提示修正参数；输出 schema 失败提示「不要改参数重试」；异常组递归查找；控制流异常不软化 |
 | | `mcp.py` | 参数 schema 清洗、空值剔除、LLM 工具名清洗、按服务前缀过滤 |
-| **deer-flow** | `mcp/session_pool.py`、`mcp/lifecycle.py`、`mcp/cache.py` | stdio/HTTP 会话池、连接生命周期与回收、工具缓存发现与失效 |
-| | `mcp/oauth.py`、`mcp/oauth_store.py`、`mcp/user_scoped_auth.py` | OAuth 授权码流与令牌存储（第一期仅借鉴形状，OAuth 列后续） |
+| **deer-flow** | `mcp/session_pool.py` | 持久会话池（按服务/作用域/事件循环/域键控，LRU 回收）；anyio 任务组所有权：会话 enter/exit 必须同一任务，用专用 owner task 关闭 |
+| | `mcp/lifecycle.py` | 连接生命周期账本：每个服务一个不透明 epoch token，识别「删除后原样重加」；账本无效 fail-close |
+| | `mcp/headers.py`、`mcp/context_headers.py`、`mcp/user_scoped_auth.py` | HTTP header 非法值前置校验（控制字符/非 ASCII/首尾空白）与大小写不敏感替换，防止凭据经异常信息泄漏 |
+| | `mcp/tools.py` | 外部工具名在加载边界按 `^[A-Za-z0-9_-]+$` 规范化（延迟加载绕过 provider 校验的防御） |
+| | `mcp/cache.py` | 工具缓存对账：秘密安全摘要（指纹）与完整快照分离，选择性淘汰 vs 全量重置 |
+| | `mcp/interceptors.py` | 拦截器洋葱：凭据优先级「请求级 > 用户级 > 服务级」（本仓库简化为 `credential_references` 解析顺序） |
+| | `mcp/oauth.py`、`mcp/oauth_store.py` | OAuth 授权码流与令牌存储（第一期仅借鉴形状，OAuth 列后续） |
 
 ## 范围
 
