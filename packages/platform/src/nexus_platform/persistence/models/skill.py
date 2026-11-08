@@ -164,3 +164,18 @@ class SkillSubmissionRecord(Base):
     published_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SkillUsageRecord(Base):
+    """How often, and when last, a user's Runs used a skill (openspec 2026-11-07-skill-evolution, 6.2).
+
+    One row per (skill, user). ``use_count`` counts ``load_skill``; running a script only refreshes ``last_used_at``.
+    The library view adds the rows of a skill up and never shows who used it.
+    """
+
+    __tablename__ = "skill_usage"
+
+    skill_id: Mapped[UUID] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    use_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

@@ -333,8 +333,10 @@ def listing(db: Session, tenant_id: UUID, user_id: UUID) -> dict[str, Any]:
     taken = {name for name in db.scalars(select(SkillRecord.name).where(
         SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID)), SkillRecord.owner_user_id.is_(None)))}
     skills = []
-    for skill in db.scalars(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id,
-                                                      SkillRecord.owner_user_id == user_id).order_by(SkillRecord.name)):
+    owned = list(db.scalars(select(SkillRecord).where(SkillRecord.tenant_id == tenant_id,
+                                                      SkillRecord.owner_user_id == user_id).order_by(SkillRecord.name)))
+    usage = service.usage_totals(db, [skill.id for skill in owned], user_id)
+    for skill in owned:
         version = db.get(SkillVersionRecord, skill.current_version_id) if skill.current_version_id else None
         latest = db.scalar(select(SkillVersionRecord).where(SkillVersionRecord.skill_id == skill.id)
                            .order_by(SkillVersionRecord.version.desc()).limit(1))
@@ -346,6 +348,8 @@ def listing(db: Session, tenant_id: UUID, user_id: UUID) -> dict[str, Any]:
                        'latest_version': latest.version if latest else None,
                        'latest_state': latest.build_state if latest else None,
                        'latest_error': latest.build_error if latest else None,
+                       'use_count': usage.get(skill.id, {}).get('use_count', 0),
+                       'last_used_at': usage.get(skill.id, {}).get('last_used_at'),
                        'created_at': skill.created_at.isoformat()})
     drafts = [{'name': d.name, 'files': sorted(d.files), 'updated_at': d.updated_at.isoformat(),
                'editing': bool(d.base_hash)}

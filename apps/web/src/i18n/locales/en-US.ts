@@ -9260,6 +9260,10 @@ export default {
       approved: "Published",
       rejected: "Rejected",
     },
+    usage: {
+      never: "Not used yet",
+      line: "Used {count} times, last on {when}",
+    },
     mySkills: {
       title: "My skills",
       openButton: "My skills",

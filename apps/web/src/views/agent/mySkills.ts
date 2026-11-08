@@ -38,3 +38,11 @@ export function shareAction(apis: readonly string[]): 'share' | 'submit' | null 
   if (apis.includes('tools:manage')) return 'share'
   return apis.includes('skills:submit') ? 'submit' : null
 }
+
+/** "n times, last on …" for a skill, or null when there is nothing to say (builtin skills carry no numbers). */
+export function usageText(count: number | null | undefined, last: string | null | undefined):
+  { kind: 'never' } | { kind: 'used', count: number, when: string } | null {
+  if (count === null || count === undefined) return null
+  if (!last) return { kind: 'never' }
+  return { kind: 'used', count, when: last.slice(0, 16).replace('T', ' ') }
+}

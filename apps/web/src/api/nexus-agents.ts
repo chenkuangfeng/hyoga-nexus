@@ -190,6 +190,9 @@ export interface TenantSkill {
   model_invocable: boolean
   description: string
   disabled: boolean
+  /** Uses by the whole space and the latest use; `null` for builtin skills, which are used in every space. */
+  use_count?: number | null
+  last_used_at?: string | null
   /** Only when a sandbox profile was asked for: whether the skill's scripts can run there. `null` = it ships no scripts. */
   run?: { ok: boolean, reason: string } | null
 }
@@ -284,6 +287,9 @@ export interface MySkill {
   /** Build state of the newest version (`installing` / `ready` / `failed`). */
   latest_state: string | null
   latest_error: string | null
+  /** This user's own loads of the skill and the latest use. */
+  use_count: number
+  last_used_at: string | null
   created_at: string
 }
 

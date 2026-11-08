@@ -7,6 +7,7 @@ does not exist.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
@@ -25,7 +26,7 @@ from nexus_platform.errors import Conflict, Forbidden, InvalidConfiguration, Not
 from nexus_platform.models.provider_settings import context
 from nexus_platform.persistence.models import (
     PlatformResourceRecord, ResourceBindingRecord, SessionSkillSnapshotRecord, SkillRecord,
-    SkillVersionFileRecord, SkillVersionRecord,
+    SkillUsageRecord, SkillVersionFileRecord, SkillVersionRecord,
 )
 from nexus_skills import bundle as skill_bundle
 from nexus_skills.guard import check_declared_scripts, static_hints
@@ -317,6 +318,80 @@ def usable_version(db: Session, tenant_id: UUID, agent_version_id: UUID, name: s
     return None, False
 
 
+def record_use(db: Session, version: SkillVersionRecord, user_id: UUID, *, loaded: bool = True) -> None:
+    """Note that a user's Run used a skill: ``loaded`` counts a ``load_skill``, otherwise only the time is refreshed
+    (a script run). Never raises: a usage note must not break reading a skill."""
+    from sqlalchemy.exc import SQLAlchemyError
+    now = utc_now()
+    try:
+        with db.begin_nested():
+            row = db.get(SkillUsageRecord, (version.skill_id, user_id))
+            if row is None:
+                db.add(SkillUsageRecord(skill_id=version.skill_id, user_id=user_id, last_used_at=now,
+                                        use_count=1 if loaded else 0))
+                db.flush()
+            else:
+                row.last_used_at = now
+                if loaded:
+                    row.use_count += 1
+    except SQLAlchemyError:  # a concurrent first use of the same skill: the other writer's row is enough
+        pass
+
+
+def usage_totals(db: Session, skill_ids: list[UUID], user_id: UUID | None = None) -> dict[UUID, dict[str, Any]]:
+    """skill id -> ``{use_count, last_used_at}``: one user's own numbers, or the sum over everyone when `user_id` is None."""
+    if not skill_ids:
+        return {}
+    query = select(SkillUsageRecord.skill_id, func.sum(SkillUsageRecord.use_count), func.max(SkillUsageRecord.last_used_at)) \
+        .where(SkillUsageRecord.skill_id.in_(skill_ids)).group_by(SkillUsageRecord.skill_id)
+    if user_id is not None:
+        query = query.where(SkillUsageRecord.user_id == user_id)
+    return {skill_id: {'use_count': int(total or 0), 'last_used_at': last.isoformat() if last else None}
+            for skill_id, total, last in db.execute(query)}
+
+
+SEARCH_LIMIT = 10
+_CJK = re.compile(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+')
+
+
+def _terms(text: str) -> set[str]:
+    """Lower-case words, plus character pairs for CJK runs (which have no spaces to split on)."""
+    lowered = text.lower()
+    terms = {word for word in re.findall(r'\w+', _CJK.sub(' ', lowered)) if len(word) > 1}
+    for run in _CJK.findall(lowered):
+        terms.update(run[i:i + 2] for i in range(len(run) - 1))
+        if len(run) == 1:
+            terms.add(run)
+    return terms
+
+
+def search_usable(db: Session, tenant_id: UUID, agent_version_id: UUID, user_id: UUID | None, query: str,
+                  limit: int = SEARCH_LIMIT) -> list[tuple[str, str]]:
+    """(name, description) of the skills this Run may use that match `query`, best first.
+
+    Searches only skills the Run could load: the agent version's bound skills and the user's own private skills that are
+    visible to the model. A name hit counts 3, a description hit 2, a body hit 1.
+    """
+    wanted = _terms(query)
+    if not wanted:
+        return []
+    available = dict(bound_versions(db, agent_version_id))
+    if user_id is not None:
+        from nexus_platform.skills import private
+        available.update({n: v for n, v in private.visible_versions(db, tenant_id, user_id).items() if n not in available})
+    scored: list[tuple[int, str, str]] = []
+    for name, version in available.items():
+        if not version.model_invocable:
+            continue
+        name_terms, description_terms, body_terms = _terms(name.replace('-', ' ')), _terms(version.description), _terms(version.body)
+        score = sum(3 for term in wanted if term in name_terms) + sum(2 for term in wanted if term in description_terms) \
+            + sum(1 for term in wanted if term in body_terms)
+        if score:
+            scored.append((score, name, version.description))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [(name, description) for _, name, description in scored[:max(1, min(limit, SEARCH_LIMIT))]]
+
+
 def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_id: UUID,
                   user_id: UUID | None = None) -> str:
     """Name and description lines for the bound skills, frozen per session and agent version.
@@ -334,7 +409,9 @@ def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_
                           if name not in available})
     lines = [f'{name} | {version.description}' for name, version in sorted(available.items())
              if version.model_invocable]
-    text = '\n'.join(lines)[:INDEX_LIMIT]
+    text = '\n'.join(lines)
+    if len(text) > INDEX_LIMIT:
+        text = text[:INDEX_LIMIT].rsplit('\n', 1)[0] + '\n(more skills exist; find them with skill_search)'
     if snapshot is None:
         db.add(SessionSkillSnapshotRecord(session_id=session_id, tenant_id=tenant_id, agent_version_id=agent_version_id,
                                           index_text=text, created_at=utc_now()))
@@ -486,6 +563,8 @@ def list_skills(db: Session, principal: Principal, tenant_id: UUID,
         SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
         .where(SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID)), SkillRecord.owner_user_id.is_(None))
         .order_by(SkillRecord.name)).all()
+    # Usage is shown for the space's own skills only: a builtin skill is used in every space, and its total would mix them.
+    usage = usage_totals(db, [skill.id for skill, _ in rows if skill.tenant_id == tenant_id])
     fit = _script_fit(db, [version for _, version in rows if version is not None], sandbox_profile) \
         if sandbox_profile is not None else {}
     return [{'name': skill.name, 'source': skill.source, 'version': version.version if version else None,
@@ -496,6 +575,8 @@ def list_skills(db: Session, principal: Principal, tenant_id: UUID,
              # Whether the scripts can run on the asked-for profile; None for a skill without scripts.
              'run': fit.get(version.id) if version else None,
              'description': version.description if version else '',
+             'use_count': usage.get(skill.id, {}).get('use_count', 0) if skill.tenant_id == tenant_id else None,
+             'last_used_at': usage.get(skill.id, {}).get('last_used_at') if skill.tenant_id == tenant_id else None,
              'scope': 'builtin' if skill.tenant_id == SYSTEM_TENANT_ID else 'space',
              'source_tenant_id': str(skill.tenant_id),
              'disabled': skill.tenant_id == SYSTEM_TENANT_ID and ('skill', skill.name) in off}

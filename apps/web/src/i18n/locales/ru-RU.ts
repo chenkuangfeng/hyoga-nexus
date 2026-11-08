@@ -9271,6 +9271,10 @@ export default {
       approved: "Опубликовано",
       rejected: "Отклонено",
     },
+    usage: {
+      never: "Ещё не использовался",
+      line: "Использован {count} раз, последний раз {when}",
+    },
     mySkills: {
       title: "Мои навыки",
       openButton: "Мои навыки",

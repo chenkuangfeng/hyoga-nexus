@@ -28,6 +28,7 @@
 - 安装状态机：带依赖清单的版本先是 `installing`（不被使用，原版本继续服务），worker 在所选档位的临时环境里构建依赖，核对清单包已装后原子换入，再 `ready` 并移动当前版本指针；失败为 `failed` 并保留 zip，`.../versions/{n}/reinstall` 直接重试（也用于给另一档位补建环境），`.../stop-install` 停止，`.../install` 查状态与日志尾部；worker 每约 5 分钟清理失去心跳的构建、残留暂存目录与无人引用的旧环境。
 - 私有技能：属于某个用户，不登记为平台资源、不绑定，该用户的会话自动并入索引。对话里用 `skill_manage` 改草稿、`skill_save`（每次确认）保存为新版本、`skill_rollback` 回退；接口 `/tenants/{id}/my-skills*` 列表、版本、回退、归档、恢复。守卫取自 Hermes：先看后改、补丁须唯一匹配、附属文件限 `refs/ scripts/ assets/ templates/`、数量与大小有上限；`nexus_skills.lint` 给出不阻止的建议。
 - 共享到空间库：私有技能「复制」进库，两者此后互不影响。管理员（`tools:manage`）直接发布；持 `skills:submit` 的成员 `POST /skill-submissions` 提交，管理员在 `/skill-submissions/{id}/review` 读内容、扫描发现和与库版本的差异，`approve`（重扫并复核库未变化、走同一发布流水线、来源 `user`）或 `reject`（理由必填）。限额：待审总数 20、每人同时 5、每人每小时 10。
+- 检索与使用记录：`skill_search` 在本次 Run 能用的技能里搜（绑定的加本人私有的），索引放不下时用它找其余的；`load_skill` 计次、`exec_skill` 刷新最近使用时间，编辑器显示（只记录，不自动归档）。
 - 前置块：YAML（`safe_load`），未知键保留并提示，缩进与冒号问题保守修复；名字为小写字母、数字与连字符；`model_invocable: false` 不进索引；`execution: local` 仅限内置。
 
 ## 限制

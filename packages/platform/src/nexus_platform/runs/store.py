@@ -466,16 +466,19 @@ class DurableRuntimeStore:
 
     async def load_skill(self, name: str, sandbox=None) -> str:
         """Return the body of a skill this Run's agent version binds (Level 2, inline mode)."""
-        from nexus_platform.skills.service import read_for_run as read_skill
+        from nexus_platform.skills.service import read_for_run as read_skill, record_use, usable_version
 
         def read() -> str:
             with SqlAlchemyUnitOfWork(self.factory) as work:
                 db = work.session
                 run = self._run(db)
                 require_membership(db, run.tenant_id, run.principal_id)
-                text = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name,
-                                  user_id=run.principal_id)
+                agent_version_id = UUID(run.config_snapshot['agent_version_id'])
+                text = read_skill(db, run.tenant_id, agent_version_id, name, user_id=run.principal_id)
                 audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
+                used, _ = usable_version(db, run.tenant_id, agent_version_id, name, run.principal_id)
+                if used is not None:
+                    record_use(db, used, run.principal_id)
                 return text
         result = await run_db(read)
         await self.emit('skill.loaded', {'skill': name[:64]})
@@ -527,8 +530,12 @@ class DurableRuntimeStore:
                 require_membership(db, run.tenant_id, run.principal_id)
                 if not exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile):
                     raise NotFound('skill_script_unavailable')
-                return run, prepare_exec(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script,
-                                          user_id=run.principal_id)
+                prepared = prepare_exec(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script,
+                                        user_id=run.principal_id)
+                from nexus_platform.persistence.models import SkillVersionRecord
+                from nexus_platform.skills.service import record_use
+                record_use(db, db.get(SkillVersionRecord, UUID(prepared.version_id)), run.principal_id, loaded=False)
+                return run, prepared
         run, prepared = await run_db(prepare)
         detail = {'skill': name, 'version': prepared.version, 'script': prepared.script.path,
                   'script_hash': prepared.script.content_hash}
@@ -592,6 +599,19 @@ class DurableRuntimeStore:
                 return text
         result = await run_db(read)
         return await self._with_skill_dir(name, result, sandbox)
+
+    async def skill_search(self, query: str, limit: int = 10) -> list[tuple[str, str]]:
+        """Skills this Run could load whose name, description or body match `query` (openspec skill-evolution 6.4)."""
+        from nexus_platform.skills.service import search_usable
+
+        def find() -> list[tuple[str, str]]:
+            with SqlAlchemyUnitOfWork(self.factory) as work:
+                db = work.session
+                run = self._run(db)
+                require_membership(db, run.tenant_id, run.principal_id)
+                return search_usable(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), run.principal_id,
+                                     query, limit)
+        return await run_db(find)
 
     async def skill_manage(self, action: str, arguments: dict) -> dict:
         """Edit one of the user's skill drafts (openspec 2026-11-07-skill-evolution, S4). Drafts are the user's own and

@@ -36,6 +36,7 @@
           </t-popconfirm>
         </div>
         <p v-if="skill.description" class="my-desc">{{ skill.description }}</p>
+        <p v-if="skill.version" class="my-note">{{ usageLine(skill.use_count, skill.last_used_at) }}</p>
         <p v-if="skill.latest_state === 'failed' && skill.latest_error" class="my-note my-note--warn">
           <t-icon name="error-circle" /> {{ $t('nexusAgent.mySkills.buildFailed', { reason: skill.latest_error }) }}
         </p>
@@ -96,7 +97,7 @@ import {
   restoreMySkill, rollbackMySkill, shareMySkill, submitMySkill, withdrawSubmission,
   type MySkill, type MySkillDraft, type MySkillVersion, type SkillSubmission,
 } from '@/api/nexus-agents'
-import { isOffered, shareAction, skillBadges, submissionErrorKey } from './mySkills'
+import { isOffered, shareAction, skillBadges, submissionErrorKey, usageText } from './mySkills'
 import { parseInstallFailure } from './skillInstall'
 
 const props = defineProps<{ visible: boolean, tenantId: string }>()
@@ -111,6 +112,12 @@ const versions = ref<MySkillVersion[]>([])
 const open = ref('')
 const submissions = ref<SkillSubmission[]>([])
 const shareMode = ref<'share' | 'submit' | null>(null)
+
+function usageLine(count: number, last: string | null): string {
+  const usage = usageText(count, last)
+  if (!usage) return ''
+  return usage.kind === 'never' ? t('nexusAgent.usage.never') : t('nexusAgent.usage.line', { count: usage.count, when: usage.when })
+}
 
 function message(failure: unknown): string {
   const parsed = parseInstallFailure(failure)

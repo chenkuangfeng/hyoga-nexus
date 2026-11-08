@@ -9271,6 +9271,10 @@ export default {
       approved: "公開しました",
       rejected: "却下しました",
     },
+    usage: {
+      never: "未使用",
+      line: "{count} 回使用、最終使用 {when}",
+    },
     mySkills: {
       title: "マイスキル",
       openButton: "マイスキル",

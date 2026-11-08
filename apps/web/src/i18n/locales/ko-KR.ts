@@ -9271,6 +9271,10 @@ export default {
       approved: "게시했습니다",
       rejected: "거절했습니다",
     },
+    usage: {
+      never: "아직 사용하지 않음",
+      line: "{count}회 사용, 마지막 사용 {when}",
+    },
     mySkills: {
       title: "내 스킬",
       openButton: "내 스킬",

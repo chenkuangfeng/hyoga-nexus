@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 BUILTIN_TOOL_NAMES = ('ask_user', 'update_working_checkpoint', 'propose_memory_draft', 'start_long_term_update', 'read_memory', 'search_memory',
                       'search_conversations', 'read_conversation', 'read_tool_output', 'todo', 'load_skill', 'read_skill_file', 'exec_skill',
-                      'skill_manage', 'skill_save', 'skill_rollback',
+                      'skill_search', 'skill_manage', 'skill_save', 'skill_rollback',
                       'search_knowledge', 'read_document', 'list_documents', 'query_knowledge_graph', 'grep_chunks',
                       'document_outline', 'sandbox_list_files', 'sandbox_read_file', 'sandbox_search_files',
                       'sandbox_write_file', 'sandbox_edit_file', 'sandbox_exec', 'sandbox_exec_async', 'sandbox_job_wait',

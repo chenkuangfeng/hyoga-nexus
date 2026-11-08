@@ -234,6 +234,11 @@ bwrap 的已知缺口：无进程数限制、无 CPU 配额、内存为地址空
 
 审核辅助数据（确定性包分析器：资源引用图、内容摘要，供审核页展示）、上传前的浏览器端文件清单预览、技能包（分发单位，展开为逐个绑定；内置包对应仓库 `skills/` 子目录）、使用记录与生命周期（长期未用才归档，且检查 `cronjob` 的 payload 是否引用该技能）、技能凭据声明（管理员层加用户层、缺失时返回带类型的错误）、`skill_search`、LLM 安装智能体（在方案 C 之前插入一步，产出依赖清单）。
 
+### 10.1 `skill_search` 与使用记录（已确认实现，2026-11-08）
+
+- `skill_search(query, limit?)`（`skills` 组，只读）：在本次 Run **能用**的技能里按名字、简介、正文检索——智能体绑定的 ∪ 当前用户的私有技能，且 `model_invocable`。打分：名字命中 3、简介命中 2、正文命中 1，按分数再按名字排序，返回最多 10 条 `名字 | 简介`。中日韩文本没有空格，按字符二元组匹配。索引被 `INDEX_LIMIT` 截断时，索引末尾提示用 `skill_search` 找其余技能。它不授予任何权限，读取仍用 `load_skill`。
+- 使用记录：新表 `skill_usage(skill_id, user_id, last_used_at, use_count)`。`load_skill` 使 `use_count` 加一并更新时间，`exec_skill` 只更新时间。私有技能显示本人的次数与最近使用；库技能显示全空间的总次数与最近使用（不暴露谁用了）。**只记录与展示，不做自动归档**（生命周期与 `cronjob` 引用检查留待有需要时再设计）。记录失败不影响读取技能。
+
 ## 11. 迁移与兼容
 
 - 迁移：`tenants.kind` 约束；系统租户与保留用户；`tenant_builtin_disabled`；`skills.owner_user_id` 与部分唯一索引；`skill_versions` 增加 `bundle`、`bundle_sha256`、`build_state`（既有行置 `ready`）、`build_error`、`build_heartbeat_at`、`env_ref`、`trust`、`scan_version`、`scan`、`extra`；新表 `skill_drafts`、`skill_submissions`；`installed → admin`；既有版本的 zip 可在首次读取时由文件行惰性生成，也可迁移时批量生成。降级删除新表与新列、还原约束（存在私有技能或系统租户数据时先提示）。

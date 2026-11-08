@@ -160,3 +160,19 @@ def skills_tools():
         {'type': 'object', 'properties': {'name': _NAME, 'version': {'type': 'integer', 'minimum': 1}},
          'required': ['name', 'version'], 'additionalProperties': False},
         side_effects=True, risk='write'), rollback, lambda r: r.data)
+
+    async def search(arguments, context):
+        services = _store(context)
+        found = await services.skill_search(arguments['query'], arguments.get('limit', 10))
+        if not found:
+            return ToolResult('No skill you can use matches that. Try other words, or work without a skill.')
+        return ToolResult('\n'.join(f'{name} | {description}' for name, description in found)
+                          + '\nLoad one with load_skill.')
+    yield RegisteredTool(ToolDefinition('skill_search',
+        'Search the skills you can use (bound to this agent, or the user\'s own private skills) by what they do. Use it '
+        'when the skills list does not show one that fits, or says more exist. Returns names and descriptions; it does not '
+        'load anything.',
+        {'type': 'object', 'properties': {'query': {'type': 'string', 'minLength': 1, 'maxLength': 200},
+                                          'limit': {'type': 'integer', 'minimum': 1, 'maximum': 10}},
+         'required': ['query'], 'additionalProperties': False},
+        read_only=True, idempotent=True), search, lambda r: r.data)

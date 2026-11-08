@@ -3,7 +3,7 @@ import test from 'node:test'
 import type { MySkill } from '@/api/nexus-agents'
 import { isOffered, skillBadges } from './mySkills'
 
-const base: MySkill = { name: 'a', version: 1, description: '', verdict: 'safe', model_invocable: true, archived: false,
+const base: MySkill = { use_count: 0, last_used_at: null, name: 'a', version: 1, description: '', verdict: 'safe', model_invocable: true, archived: false,
   superseded: false, latest_version: 1, latest_state: 'ready', latest_error: null, created_at: '' }
 
 test('a healthy skill has no badges and is offered', () => {
@@ -37,4 +37,13 @@ test('sharing failures map to a message group, unknown ones fall back', () => {
   assert.equal(submissionErrorKey('skill_submission_rate_limit'), 'nexusAgent.share.error.limit')
   assert.equal(submissionErrorKey('skill_name_taken_by_library'), 'nexusAgent.share.error.nameTaken')
   assert.equal(submissionErrorKey('whatever'), 'nexusAgent.share.error.other')
+})
+
+import { usageText } from './mySkills'
+
+test('usage text: nothing for builtin skills, "never" before the first use, count and time after', () => {
+  assert.equal(usageText(null, null), null)
+  assert.equal(usageText(undefined, undefined), null)
+  assert.deepEqual(usageText(0, null), { kind: 'never' })
+  assert.deepEqual(usageText(3, '2026-11-08T10:30:12+00:00'), { kind: 'used', count: 3, when: '2026-11-08 10:30' })
 })

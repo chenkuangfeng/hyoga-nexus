@@ -83,3 +83,15 @@ def test_skill_submission_migration_round_trip(tmp_path):
     command.downgrade(config, 'f4a5b6c7d8e9')
     assert 'skill_submissions' not in inspect(engine).get_table_names()
     command.upgrade(config, 'head')
+
+
+def test_skill_usage_migration_round_trip(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'usage.db')
+    config = _config(url)
+    command.upgrade(config, 'a5b6c7d8e9f0')
+    engine = create_engine(url)
+    command.upgrade(config, 'head')
+    assert 'skill_usage' in inspect(engine).get_table_names()
+    command.downgrade(config, 'a5b6c7d8e9f0')
+    assert 'skill_usage' not in inspect(engine).get_table_names()
+    command.upgrade(config, 'head')

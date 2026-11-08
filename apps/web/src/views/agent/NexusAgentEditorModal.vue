@@ -254,6 +254,7 @@
                     </span>
                   </t-checkbox>
                   <p v-if="skill.description" class="skill-desc">{{ skill.description }}</p>
+                  <p v-if="usageOf(skill)" class="skill-note">{{ usageOf(skill) }}</p>
                   <p v-if="skill.run" :class="['skill-note', { 'skill-note--warn': !skill.run.ok }]">
                     <t-icon :name="skill.run.ok ? 'check-circle' : 'error-circle'" />
                     {{ skill.run.ok ? $t('nexusAgent.skillBinding.runOk')
@@ -472,6 +473,7 @@ import { copyWithToast } from '@/utils/clipboard'
 import { levelDescriptionKey, levelLabelKey } from '@/utils/reasoningEffort'
 import NexusSkillInstallDialog from './NexusSkillInstallDialog.vue'
 import NexusMySkillsDialog from './NexusMySkillsDialog.vue'
+import { usageText } from './mySkills'
 import NexusSkillReviewDialog from './NexusSkillReviewDialog.vue'
 import {
   createNexusAgent, disableBuiltinResource, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent,
@@ -562,6 +564,12 @@ const skillGroups = computed(() => [
   { key: 'space', label: t('nexusAgent.skillBinding.spaceGroup'), items: spaceSkills.value },
 ])
 const boundSkill = (name: string) => form.skills.find(skill => skill.name === name)
+/** Space skills show how often they were used and when last; builtin skills carry no numbers (they are used everywhere). */
+function usageOf(skill: TenantSkill): string {
+  const usage = usageText(skill.use_count, skill.last_used_at)
+  if (!usage) return ''
+  return usage.kind === 'never' ? t('nexusAgent.usage.never') : t('nexusAgent.usage.line', { count: usage.count, when: usage.when })
+}
 const skillSelectable = (skill: TenantSkill) => !!skill.version_id && (!skill.disabled || !!boundSkill(skill.name))
 const skillMissingTools = (skill: TenantSkill) => skillToolNeeds(skill.tools, offeredTools.value).missing
 const skillIsOutdated = (skill: TenantSkill) => skillHasNewerVersion(boundSkill(skill.name), skill.version_id)

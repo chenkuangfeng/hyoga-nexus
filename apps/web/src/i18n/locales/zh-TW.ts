@@ -9267,6 +9267,10 @@ export default {
       approved: "已發佈",
       rejected: "已拒絕",
     },
+    usage: {
+      never: "尚未使用",
+      line: "共使用 {count} 次，最近一次 {when}",
+    },
     mySkills: {
       title: "我的技能",
       openButton: "我的技能",
