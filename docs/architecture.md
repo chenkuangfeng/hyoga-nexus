@@ -220,7 +220,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **内置技能与工具**：登记在保留的系统租户（`tenants.kind = 'system'`，无成员、不可登录、不出现在任何列表）名下，对所有空间含个人空间**可见且可分配**（不是自动启用，智能体仍须绑定）；授权对系统租户来源的技能与工具放行，无需授权行；空间管理员可对本空间停用某个内置资源（`tenant_builtin_disabled`），不影响其他空间与已发布的智能体版本。内置技能由平台管理员接口或 `uv run python -m nexus_api.cli import-builtin-skills` 从仓库 `skills/` 导入，内置工具随 API 与 worker 启动同步。
 - **脚本执行**：技能脚本是技能目录里的普通文件，不在 frontmatter 声明。`exec_skill(name, script, args?, stdin?)`（`skills` 组）在智能体所选的沙箱档位里运行其中一个脚本：技能文件按内容哈希只读投射到沙箱，`args` 作为参数列表传入、不经 shell 解释，`stdin` 最多 65536 字节，解释器按扩展名或 `#!` 行在 `python3`、`bash` / `sh`、`node` 中选择；运行前校验脚本哈希，审计记录脚本路径与哈希；脚本从 `$NEXUS_SKILL_DIR` 找到自己的文件。需要管道或串联的场景用 `sandbox_exec`（`sandbox` 组）。技能的 `execution` 声明（`sandbox` 默认 / `local`）只是声明：`local` 仅限内置来源且部署开启 `allow_local_scripts`，不满足时不运行，不回退到另一个位置。沙箱档位见 2.9。
 - **frontmatter**：`SKILL.md` 的前置块按 YAML（`safe_load`）读取，已知键之外的键保留不拒绝，常见的缩进与冒号问题做保守修复并标记；名字为小写字母、数字与连字符（1–64 字符，不含 `anthropic`、`claude`）；`model_invocable` 为假的技能不进模型的技能索引；`execution` 声明脚本位置，`local` 仅限内置来源。
-- **自主修改**：模型可提交技能草稿，发布需审核（人工或规则），不得直接修改已发布版本。
+- **包与安装**：每个版本保存一份规范 zip（排序、固定时间，同内容同字节），二进制文件只存于 zip，运行时与文本文件一起投射进沙箱。zip 经 `nexus_skills.bundle` 先查条目表再按上限读取（拒绝穿越、符号链接、重复路径、加密、压缩炸弹），再做语法验证（`.py` / `.sh` / `.js`）、扫描与放行矩阵。带 `requirements.txt` 或 `package.json` 的版本先是 `installing`，由 worker 在所选档位的临时环境里联网构建依赖，核对清单包后原子换入，再 `ready` 并移动当前版本指针；失败保留 zip 可重试，旧版本继续服务。远程来源（GitHub、GitLab、skills.sh、ClawHub、直链）经 `nexus_core.egress` 受保护下载（只允许公网地址、逐跳校验），仅管理员且必须确认，只比较更新、不自动更新。
+- **私有技能与共享**：私有技能属于某个用户，不登记为平台资源、不绑定，该用户的会话自动并入索引。模型用 `skill_manage` 改草稿（先读后写、补丁须唯一匹配、固定子目录、数量与大小有上限），`skill_save` 每次需用户确认且不能「本会话允许」，保存走同一安装流水线，`dangerous` 拒绝；每次保存是新版本，可回退，删除是归档。共享到空间库是**复制**：管理员（`tools:manage`）直接发布，持 `skills:submit` 的成员提交，管理员审核（内容、扫描发现、与库版本的差异）后通过或拒绝（理由必填），通过时重扫并复核库未变化。不得直接修改已发布版本。
 - **与 Runtime 的关系**：Native 由平台加载指令与资源；Codex、Claude 将技能转换为指令，或在 SDK 支持时加载技能目录。转换方式在能力表中标明。
 
 ### 2.7 MCP
