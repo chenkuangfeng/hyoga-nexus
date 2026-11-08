@@ -267,3 +267,58 @@ export async function reinstallSkill(tenantId: string, name: string, version: nu
 export async function stopSkillInstall(tenantId: string, name: string, version: number): Promise<void> {
   await post(`${skillPath(tenantId, name)}/versions/${version}/stop-install`, {})
 }
+
+// ---- Private skills (openspec 2026-11-07-skill-evolution, S4) ------------------------------------------------
+
+/** One of the caller's private skills. Only the owner ever receives these. */
+export interface MySkill {
+  name: string
+  version: number | null
+  description: string
+  verdict: string | null
+  model_invocable: boolean
+  archived: boolean
+  /** The space library or a builtin skill now uses this name, so the private one is no longer offered. */
+  superseded: boolean
+  latest_version: number | null
+  /** Build state of the newest version (`installing` / `ready` / `failed`). */
+  latest_state: string | null
+  latest_error: string | null
+  created_at: string
+}
+
+export interface MySkillDraft { name: string, files: string[], updated_at: string, editing: boolean }
+export interface MySkillVersion {
+  version: number, version_id: string, content_hash: string, build_state: string, build_error: string | null,
+  verdict: string, current: boolean, created_at: string
+}
+
+function mySkillPath(tenantId: string, name: string): string {
+  return `${tenantPath(tenantId)}/my-skills/${encodeURIComponent(name)}`
+}
+
+export async function listMySkills(tenantId: string): Promise<{ skills: MySkill[], drafts: MySkillDraft[] }> {
+  const data: unknown = await get(`${tenantPath(tenantId)}/my-skills`)
+  return data as { skills: MySkill[], drafts: MySkillDraft[] }
+}
+
+export async function listMySkillVersions(tenantId: string, name: string): Promise<MySkillVersion[]> {
+  const data: unknown = await get(`${mySkillPath(tenantId, name)}/versions`)
+  return Array.isArray(data) ? data as MySkillVersion[] : []
+}
+
+export async function rollbackMySkill(tenantId: string, name: string, version: number): Promise<void> {
+  await post(`${mySkillPath(tenantId, name)}/rollback`, { version })
+}
+
+export async function archiveMySkill(tenantId: string, name: string): Promise<void> {
+  await post(`${mySkillPath(tenantId, name)}/archive`, {})
+}
+
+export async function restoreMySkill(tenantId: string, name: string): Promise<void> {
+  await post(`${mySkillPath(tenantId, name)}/restore`, {})
+}
+
+export async function deleteMySkillDraft(tenantId: string, name: string): Promise<void> {
+  await del(`${tenantPath(tenantId)}/my-skill-drafts/${encodeURIComponent(name)}`)
+}

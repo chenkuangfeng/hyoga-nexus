@@ -208,6 +208,10 @@
         <div class="section-header">
           <h2>{{ $t('nexusAgent.skillBinding.navLabel') }}</h2>
           <p class="section-description">{{ $t('nexusAgent.skillBinding.desc') }}</p>
+          <t-button size="small" variant="outline" class="skill-install-button" @click="mySkillsOpen = true">
+            <template #icon><t-icon name="user" /></template>
+            {{ $t('nexusAgent.mySkills.openButton') }}
+          </t-button>
           <t-button v-if="canManageSpace" size="small" variant="outline" class="skill-install-button"
             @click="installOpen = true">
             <template #icon><t-icon name="upload" /></template>
@@ -439,6 +443,7 @@
         {{ isEdit ? $t('agent.editor.buttons.saveAndClose') : $t('agent.editor.buttons.create') }}
       </t-button>
     </template>
+  <NexusMySkillsDialog v-model:visible="mySkillsOpen" :tenant-id="tenantId" />
   <NexusSkillInstallDialog v-model:visible="installOpen" :tenant-id="tenantId" :sandbox-profile="form.sandbox_profile"
       @installed="loadSkills" />
   </SettingsModalShell>
@@ -461,6 +466,7 @@ import AgentAvatar from '@/components/AgentAvatar.vue'
 import { copyWithToast } from '@/utils/clipboard'
 import { levelDescriptionKey, levelLabelKey } from '@/utils/reasoningEffort'
 import NexusSkillInstallDialog from './NexusSkillInstallDialog.vue'
+import NexusMySkillsDialog from './NexusMySkillsDialog.vue'
 import {
   createNexusAgent, disableBuiltinResource, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent,
   listTenantSkills, publishNexusAgent, restoreBuiltinResource, updateNexusAgent, type AgentSandboxProfile,
@@ -520,6 +526,7 @@ const skillsLoading = ref(false)
 const skillsError = ref('')
 const switching = ref('')
 const installOpen = ref(false)
+const mySkillsOpen = ref(false)
 let skillsRequest = 0
 
 async function loadSkills() {
@@ -1179,7 +1186,7 @@ async function save() {
 
 /* Skills (openspec 2026-11-07-skill-evolution). Status is always written out, never colour alone. */
 .skill-alert { margin-bottom: 12px; }
-.skill-install-button { margin-top: 8px; }
+.skill-install-button { margin-top: 8px; margin-right: 8px; }
 .skill-groups { display: flex; flex-direction: column; gap: 20px; width: 100%; }
 .skill-list { display: flex; flex-direction: column; gap: 8px; }
 .skill-row {
