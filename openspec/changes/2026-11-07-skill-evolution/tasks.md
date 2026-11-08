@@ -141,5 +141,5 @@
 - [x] 7.1 同步 `docs/architecture.md`、`docs/roadmap.md`、`packages/skills`、`packages/sandbox` 与平台文档、`skills/general/README.md`、`configs/*`，只记录当前结果与明确标注的计划。
   - 已同步 `docs/architecture.md` 2.6、`docs/roadmap.md` 7.1、`skills/general/README.md`；`packages/skills`、`packages/sandbox`、`configs` 已随各期更新。S6 各项未实现，只在路线图里标为计划。
 - [ ] 7.2 后端全量 pytest、迁移升降级、前端单测与构建通过。
-  - 后端全量 pytest 已通过（分两半：732 + 840，共 1572 项，1 项按条件跳过）；迁移升降级有往返测试；前端 `*.test.ts` 全量单测 1681 项（1680 通过、0 失败、1 项跳过）。**`pnpm build`（类型检查与生产构建）没跑**：这台机器内存只有约 1.8 GB，之前 `vue-tsc` 会耗尽内存，需要在内存足够的机器上做，所以 7.2 暂不勾选。
+  - 后端全量 pytest 已通过（分两半：732 + 840，共 1572 项，1 项按条件跳过）；迁移升降级有往返测试；前端 `*.test.ts` 全量单测 1681 项（1680 通过、0 失败、1 项跳过）。**`pnpm build`（类型检查与生产构建）没跑**：这台机器内存只有约 1.8 GB，之前 `vue-tsc` 会耗尽内存，需要在内存足够的机器上做，所以 7.2 暂不勾选。能做的部分已做：`nexus-agents.ts`、`mySkills.ts`、`skillInstall.ts` 用 `tsc --strict` 检查通过（请求层打桩，并用故意出错的探针文件确认检查有效）；四个新 `.vue` 的模板编译无错，但它们的 `<script>` 类型检查要等 `vue-tsc`。
 - [ ] 7.3 规格同步到 `openspec/specs/skill-evolution/` 并归档本变更。
