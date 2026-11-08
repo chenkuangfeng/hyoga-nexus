@@ -20,6 +20,8 @@
 - `nexus_mcp/server.py`：FastMCP 服务端，把 Run 的授权工具暴露出来。
 - `nexus_mcp/gateway.py`：把缓存/策略解析出的工具定义与执行器接进 `AuthorizedToolGateway` 的注册表（桥接，不自行授权）。
 
+**技术选型**：统一使用官方 `mcp` Python SDK（锁 1.x，不自动升 2.x）。客户端直接基于 `mcp.ClientSession`（stdio / streamable HTTP）适配到 `ToolDefinition`，不引入 `langchain-mcp-adapters`（避免拖入 LangChain）；服务端用 SDK 内置的 `mcp.server.fastmcp`。`mcp` 2.x 破坏 1.x 的连接与类型 API，依赖锁定与 octop-harness 的 pin 注释一致（`mcp>=1.27.1,<3` 直到适配层兼容 2.x）。
+
 ## 2. 数据模型（`migrations/platform`）
 
 ### `mcp_services`

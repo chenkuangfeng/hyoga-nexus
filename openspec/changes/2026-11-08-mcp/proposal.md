@@ -2,7 +2,7 @@
 
 ## 状态
 
-待确认（2026-11-08）。下文「待确认的决定」逐项给出推荐，确认前不编码。
+待确认（2026-11-08）。决定 6（SDK 选型）已确认，其余「待确认的决定」逐项给出推荐，确认前不编码。
 
 ## 原因
 
@@ -19,7 +19,7 @@
 | 风险与审批 | `nexus_tools.policy.decide`（风险 × 访问级别）、`ToolDefinition.risk`（read/probe/write/destructive）、`action_approvals` / `action_grants` 已就绪 |
 | 资源与绑定 | `platform_resources`、`agent_resource_bindings`（kind/资源 ID/版本）、`credential_references`（凭据引用）已就绪，技能就是按这套绑定的 |
 | 运行令牌 | 未实现；`runs`、`action_approvals`、`ToolAccessPort.authorize` 已具备复核所需的事实源 |
-| MCP SDK | 未引入官方 `mcp` Python SDK（`uv.lock` 无） |
+| MCP SDK | 未引入官方 `mcp` Python SDK（`uv.lock` 无）；本变更采用官方 `mcp`（见决定 6） |
 
 ## 参考源码
 
@@ -62,6 +62,10 @@
 4. **OAuth**：第一期不做授权码流程，凭据只支持直接配置的 header / env，秘密以 `credential_references` 引用；OAuth 列 7.2 扩展。备选：本期连 OAuth 一起做。**推荐：OAuth 后续**。
 5. **前端范围**：本期后端优先（API + 领域 + 工具集成 + MCP 服务端 + 测试），前端 MCP 标签继续标「计划中」，随后续变更接入。备选：本期顺带把工具箱 MCP 标签做成最小可用（列表 / 启停 / 发现）。**推荐：前端后续**。
 
+## 已确认的决定
+
+6. **MCP SDK 选型**（已确认，2026-11-08）：使用官方 `mcp` Python SDK（`modelcontextprotocol/python-sdk`，锁 1.x；`mcp` 2.x 有破坏性变化，pin 住不自动升级）。不引入 `langchain-mcp-adapters`——它会拖进 LangChain 依赖；客户端自行把 `mcp.ClientSession` 适配到 `ToolDefinition` / `ToolRegistry`，服务端用 SDK 内置的 `mcp.server.fastmcp`。依据：Octop、deer-flow 同为 Python 栈且都用官方 SDK（分别锁 1.28.1 / 1.30.0），我们与其同源但不套 LangChain 适配层。
+
 ## 影响
 
 - `packages/mcp`：实现 `client`（连接、发现、缓存、指纹、风险解析）、`server`（FastMCP 暴露授权工具 + 运行令牌）、`gateway`（把 MCP 工具桥接进 `AuthorizedToolGateway`）。
@@ -69,4 +73,4 @@
 - `nexus_core`：`native/tool_groups.py` 增加 `mcp` 组（默认关闭）。
 - `apps/api`：MCP 服务管理路由与 MCP 服务端挂载（`/api/v1/tenants/{id}/mcp-services`、`/mcp/runs/{token}`）。
 - 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 模块文档。
-- 依赖：新增官方 `mcp` Python SDK（版本随锁文件固定）。
+- 依赖：新增官方 `mcp` Python SDK（锁 1.x，见决定 6），不引入 `langchain-mcp-adapters`。

@@ -1,7 +1,7 @@
 # 任务：MCP
 
 - [ ] 0. 准备与补读
-  - [ ] 0.1 确认官方 `mcp` Python SDK 版本并加入 `packages/mcp` 依赖与 `uv.lock`。
+  - [ ] 0.1 确认官方 `mcp` Python SDK 版本（锁 1.x，不引入 `langchain-mcp-adapters`）并加入 `packages/mcp` 依赖与 `uv.lock`；核对 `mcp.ClientSession` 与 `mcp.server.fastmcp` 的 1.x API 及 `mcp` 2.x 的破坏点。
   - [ ] 0.2 补读 WeKnora `mcp_catalog.go` / `mcp_schema.go` / `mcp_call_guard.go`、Octop `custom_mcp.py`、deer-flow `session_pool.py` / `lifecycle.py` / `headers.py` / `tools.py` / `cache.py` / `interceptors.py` 的完整行为与测试。
 
 ## 1. 客户端与平台服务
