@@ -97,7 +97,7 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
                      source: str, *, acknowledged: bool = False,
                      binary: dict[str, bytes] | None = None,
                      origin: dict[str, str] | None = None, profile: str | None = None,
-                     owner_user_id: UUID | None = None) -> dict[str, Any]:
+                     owner_user_id: UUID | None = None, reviewed: bool = False) -> dict[str, Any]:
     """Publish inside the caller's transaction; the caller has already authorized the actor.
 
     ``binary`` holds the non-text files of a bundle; they live only in the version's zip and are projected into the
@@ -128,6 +128,8 @@ def _publish_version(db: Session, tenant_id: UUID, user_id: UUID, skill_md: str,
         raise InvalidConfiguration('skill_name_taken_by_library')
     scan = scan_skill(skill_md, clean)
     decision = decide(source, scan.verdict, acknowledged=acknowledged)
+    if decision == 'review' and reviewed:  # a person with tools:manage read it and approved it
+        decision = 'allow'
     if decision != 'allow':
         raise SkillScanBlocked(_SCAN_STOPS[decision], scan)
     released = acknowledged and decide(source, scan.verdict) in ('need_ack', 'block')
@@ -237,6 +239,12 @@ def version_bundle(db: Session, version: SkillVersionRecord) -> bytes:
     files = {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
         SkillVersionFileRecord.version_id == version.id))}
     return skill_bundle.pack(version.skill_md, files)
+
+
+def version_text_files(db: Session, version: SkillVersionRecord) -> dict[str, str]:
+    """The text files of a version (not SKILL.md), keyed by path."""
+    return {row.path: row.content for row in db.scalars(select(SkillVersionFileRecord).where(
+        SkillVersionFileRecord.version_id == version.id))}
 
 
 def _binary_files(db: Session, version: SkillVersionRecord, text_paths: set[str]) -> dict[str, bytes]:

@@ -70,3 +70,16 @@ def test_private_skill_migration_splits_name_uniqueness_and_adds_drafts(tmp_path
     assert 'skill_drafts' not in inspector.get_table_names()
     assert 'owner_user_id' not in {c['name'] for c in inspector.get_columns('skills')}
     command.upgrade(config, 'head')
+
+
+def test_skill_submission_migration_round_trip(tmp_path):
+    url = 'sqlite:///' + str(tmp_path / 'submissions.db')
+    config = _config(url)
+    command.upgrade(config, 'f4a5b6c7d8e9')
+    engine = create_engine(url)
+    assert 'skill_submissions' not in inspect(engine).get_table_names()
+    command.upgrade(config, 'head')
+    assert 'skill_submissions' in inspect(engine).get_table_names()
+    command.downgrade(config, 'f4a5b6c7d8e9')
+    assert 'skill_submissions' not in inspect(engine).get_table_names()
+    command.upgrade(config, 'head')

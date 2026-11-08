@@ -19,3 +19,22 @@ export function skillBadges(skill: MySkill): SkillBadge[] {
 export function isOffered(skill: MySkill): boolean {
   return !skill.archived && !skill.superseded && skill.version !== null && skill.model_invocable
 }
+
+const SUBMISSION_ERRORS: Record<string, string> = {
+  skill_name_taken_by_builtin: 'nameTaken', skill_name_taken_by_library: 'nameTaken',
+  skill_submission_queue_full: 'limit', skill_submission_user_limit: 'limit', skill_submission_rate_limit: 'limit',
+  skill_base_changed: 'stale', skill_submission_not_pending: 'notPending', skill_scan_refused: 'refused',
+  skill_submission_reason_required: 'reason', skill_not_found: 'gone', skill_submission_not_found: 'gone',
+}
+
+/** The i18n key (under `nexusAgent.share.error`) for a sharing failure code; `other` when it is not known. */
+export function submissionErrorKey(code: string): string {
+  return `nexusAgent.share.error.${SUBMISSION_ERRORS[code] ?? 'other'}`
+}
+
+/** What the "share" button on a private skill does for this caller: administrators publish at once, holders of
+ * `skills:submit` file a submission, everyone else cannot share. */
+export function shareAction(apis: readonly string[]): 'share' | 'submit' | null {
+  if (apis.includes('tools:manage')) return 'share'
+  return apis.includes('skills:submit') ? 'submit' : null
+}

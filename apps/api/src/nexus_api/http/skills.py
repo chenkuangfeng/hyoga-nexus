@@ -191,6 +191,83 @@ def delete_my_skill_draft(tenant_id: UUID, name: str, principal: Principal = Dep
     return private.run_as_member(db, principal, tenant_id, private.delete_draft, name)
 
 
+class SubmitRequest(BaseModel):
+    from_private: str = Field(min_length=1, max_length=64)
+
+
+class RejectRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+@router.post("/tenants/{tenant_id}/skill-submissions", status_code=201)
+def submit_skill(tenant_id: UUID, body: SubmitRequest, principal: Principal = Depends(get_principal),
+                 db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Offer one of the caller's private skills to the space library (needs ``skills:submit``)."""
+    from nexus_platform.skills import submissions
+    return submissions.submit(db, principal, tenant_id, body.from_private)
+
+
+@router.get("/tenants/{tenant_id}/skill-submissions")
+def list_skill_submissions(tenant_id: UUID, mine: bool = False, state: str | None = Query(default="pending", max_length=16),
+                           principal: Principal = Depends(get_principal),
+                           db: Session = Depends(get_database_session)) -> list[dict[str, Any]]:
+    """``mine=true``: the caller's own submissions. Otherwise the review queue (needs ``tools:manage``)."""
+    from nexus_platform.skills import submissions
+    if mine:
+        return submissions.mine(db, principal, tenant_id)
+    return submissions.queue(db, principal, tenant_id, state)
+
+
+@router.get("/tenants/{tenant_id}/skill-submissions/{submission_id}")
+def get_skill_submission(tenant_id: UUID, submission_id: UUID, principal: Principal = Depends(get_principal),
+                         db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """One of the caller's own submissions; someone else's answers 404."""
+    from nexus_platform.skills import submissions
+    return submissions.get_mine(db, principal, tenant_id, submission_id)
+
+
+@router.get("/tenants/{tenant_id}/skill-submissions/{submission_id}/review")
+def review_skill_submission(tenant_id: UUID, submission_id: UUID, principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Text, scan findings and the difference to the library version, for the reviewer (``tools:manage``)."""
+    from nexus_platform.skills import submissions
+    return submissions.detail(db, principal, tenant_id, submission_id)
+
+
+@router.post("/tenants/{tenant_id}/skill-submissions/{submission_id}/withdraw")
+def withdraw_skill_submission(tenant_id: UUID, submission_id: UUID, principal: Principal = Depends(get_principal),
+                              db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.skills import submissions
+    return submissions.withdraw(db, principal, tenant_id, submission_id)
+
+
+@router.post("/tenants/{tenant_id}/skill-submissions/{submission_id}/approve")
+def approve_skill_submission(tenant_id: UUID, submission_id: UUID,
+                             sandbox_profile: str | None = Query(default=None, max_length=32),
+                             principal: Principal = Depends(get_principal),
+                             db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Publish the submission to the library; every agent in the space can then be given the skill."""
+    from nexus_platform.skills import submissions
+    return submissions.approve(db, principal, tenant_id, submission_id, sandbox_profile)
+
+
+@router.post("/tenants/{tenant_id}/skill-submissions/{submission_id}/reject")
+def reject_skill_submission(tenant_id: UUID, submission_id: UUID, body: RejectRequest,
+                            principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    from nexus_platform.skills import submissions
+    return submissions.reject(db, principal, tenant_id, submission_id, body.reason)
+
+
+@router.post("/tenants/{tenant_id}/my-skills/{name}/share", status_code=201)
+def share_my_skill(tenant_id: UUID, name: str, sandbox_profile: str | None = Query(default=None, max_length=32),
+                   principal: Principal = Depends(get_principal),
+                   db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """An administrator copies one of their own private skills into the library directly."""
+    from nexus_platform.skills import submissions
+    return submissions.share(db, principal, tenant_id, name, sandbox_profile)
+
+
 @router.post("/platform/skills/import-builtin")
 def import_builtin_skills(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Import the repository's builtin skills into the system space (platform administrators only).

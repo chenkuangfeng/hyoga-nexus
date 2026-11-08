@@ -133,3 +133,34 @@ class SkillDraftRecord(Base):
     files: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
     base_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="", server_default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SkillSubmissionRecord(Base):
+    """A request to put a skill into the space library, waiting for an administrator (openspec 2026-11-07-skill-evolution, S5).
+
+    ``bundle`` is the zip as submitted, so what the reviewer reads is what gets published. ``base_hash`` is the content
+    hash of the library version the submission was made against ('' for a new name): approving a submission whose base has
+    moved is refused. ``published_version_id`` ties an approved submission to the library version it produced.
+    """
+
+    __tablename__ = "skill_submissions"
+    __table_args__ = (Index("ix_skill_submissions_state", "tenant_id", "state", "created_at"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    #: ``user`` / ``agent`` / ``import``: who made the content, which decides the release policy.
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    bundle: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    base_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="", server_default="")
+    scan: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    #: ``pending`` / ``approved`` / ``rejected`` / ``superseded`` / ``withdrawn``.
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    submitted_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    reviewed_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    review_reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    published_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

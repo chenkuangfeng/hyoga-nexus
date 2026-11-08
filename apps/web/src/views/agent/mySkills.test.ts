@@ -23,3 +23,18 @@ test('build state, hidden flag and caution verdict are reported', () => {
     ['buildFailed', 'hiddenFromModel', 'caution'])
   assert.equal(isOffered({ ...base, version: null }), false)
 })
+
+import { shareAction, submissionErrorKey } from './mySkills'
+
+test('administrators publish at once, submitters file a submission, others cannot share', () => {
+  assert.equal(shareAction(['tools:manage', 'skills:submit']), 'share')
+  assert.equal(shareAction(['skills:submit']), 'submit')
+  assert.equal(shareAction(['agents:read']), null)
+})
+
+test('sharing failures map to a message group, unknown ones fall back', () => {
+  assert.equal(submissionErrorKey('skill_base_changed'), 'nexusAgent.share.error.stale')
+  assert.equal(submissionErrorKey('skill_submission_rate_limit'), 'nexusAgent.share.error.limit')
+  assert.equal(submissionErrorKey('skill_name_taken_by_library'), 'nexusAgent.share.error.nameTaken')
+  assert.equal(submissionErrorKey('whatever'), 'nexusAgent.share.error.other')
+})

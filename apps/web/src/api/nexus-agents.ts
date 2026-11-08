@@ -322,3 +322,77 @@ export async function restoreMySkill(tenantId: string, name: string): Promise<vo
 export async function deleteMySkillDraft(tenantId: string, name: string): Promise<void> {
   await del(`${tenantPath(tenantId)}/my-skill-drafts/${encodeURIComponent(name)}`)
 }
+
+// ---- Sharing skills into the space library (openspec 2026-11-07-skill-evolution, S5) -----------------------------
+
+export interface SkillSubmission {
+  id: string
+  name: string
+  description: string
+  origin: string
+  state: 'pending' | 'approved' | 'rejected' | 'superseded' | 'withdrawn' | string
+  verdict: string
+  findings: number
+  submitted_by: string
+  review_reason: string
+  created_at: string
+  reviewed_at: string | null
+  published_version_id: string | null
+  /** The name already exists in the library (a submission against an earlier submission's skill). */
+  updates_existing: boolean
+}
+
+/** What a reviewer reads. All strings are plain text and must be rendered as text, never as markup. */
+export interface SkillSubmissionReview extends SkillSubmission {
+  skill_md: string
+  files: Record<string, string>
+  scan: { verdict: string, findings: Array<{ rule: string, severity: string, path: string, line: number | null, excerpt: string }> }
+  diff: string
+  library_moved: boolean
+  notice: string
+}
+
+function submissionPath(tenantId: string, id?: string): string {
+  return `${tenantPath(tenantId)}/skill-submissions${id ? `/${encodeURIComponent(id)}` : ''}`
+}
+
+/** The caller's API permission keys in this space (`tools:manage`, `skills:submit` ...). */
+export async function getMyApiPermissions(tenantId: string): Promise<string[]> {
+  const data = await get<{ apis?: string[] }>(`${tenantPath(tenantId)}/me/permissions`)
+  return Array.isArray(data?.apis) ? data.apis : []
+}
+
+export async function submitMySkill(tenantId: string, fromPrivate: string): Promise<SkillSubmission> {
+  return await post(submissionPath(tenantId), { from_private: fromPrivate }) as unknown as SkillSubmission
+}
+
+export async function shareMySkill(tenantId: string, name: string, sandboxProfile?: string): Promise<void> {
+  const query = sandboxProfile ? `?sandbox_profile=${encodeURIComponent(sandboxProfile)}` : ''
+  await post(`${tenantPath(tenantId)}/my-skills/${encodeURIComponent(name)}/share${query}`, {})
+}
+
+export async function listMySubmissions(tenantId: string): Promise<SkillSubmission[]> {
+  const data: unknown = await get(`${submissionPath(tenantId)}?mine=true`)
+  return Array.isArray(data) ? data as SkillSubmission[] : []
+}
+
+export async function withdrawSubmission(tenantId: string, id: string): Promise<void> {
+  await post(`${submissionPath(tenantId, id)}/withdraw`, {})
+}
+
+export async function listReviewQueue(tenantId: string): Promise<SkillSubmission[]> {
+  const data: unknown = await get(`${submissionPath(tenantId)}?state=pending`)
+  return Array.isArray(data) ? data as SkillSubmission[] : []
+}
+
+export async function getSubmissionReview(tenantId: string, id: string): Promise<SkillSubmissionReview> {
+  return await get(`${submissionPath(tenantId, id)}/review`) as unknown as SkillSubmissionReview
+}
+
+export async function approveSubmission(tenantId: string, id: string): Promise<void> {
+  await post(`${submissionPath(tenantId, id)}/approve`, {}, { timeout: 120_000 })
+}
+
+export async function rejectSubmission(tenantId: string, id: string, reason: string): Promise<void> {
+  await post(`${submissionPath(tenantId, id)}/reject`, { reason })
+}

@@ -212,6 +212,10 @@
             <template #icon><t-icon name="user" /></template>
             {{ $t('nexusAgent.mySkills.openButton') }}
           </t-button>
+          <t-button v-if="canManageSpace" size="small" variant="outline" class="skill-install-button" @click="reviewOpen = true">
+            <template #icon><t-icon name="check-circle" /></template>
+            {{ $t('nexusAgent.review.openButton') }}
+          </t-button>
           <t-button v-if="canManageSpace" size="small" variant="outline" class="skill-install-button"
             @click="installOpen = true">
             <template #icon><t-icon name="upload" /></template>
@@ -443,7 +447,8 @@
         {{ isEdit ? $t('agent.editor.buttons.saveAndClose') : $t('agent.editor.buttons.create') }}
       </t-button>
     </template>
-  <NexusMySkillsDialog v-model:visible="mySkillsOpen" :tenant-id="tenantId" />
+  <NexusMySkillsDialog v-model:visible="mySkillsOpen" :tenant-id="tenantId" @changed="loadSkills" />
+  <NexusSkillReviewDialog v-model:visible="reviewOpen" :tenant-id="tenantId" @changed="loadSkills" />
   <NexusSkillInstallDialog v-model:visible="installOpen" :tenant-id="tenantId" :sandbox-profile="form.sandbox_profile"
       @installed="loadSkills" />
   </SettingsModalShell>
@@ -467,6 +472,7 @@ import { copyWithToast } from '@/utils/clipboard'
 import { levelDescriptionKey, levelLabelKey } from '@/utils/reasoningEffort'
 import NexusSkillInstallDialog from './NexusSkillInstallDialog.vue'
 import NexusMySkillsDialog from './NexusMySkillsDialog.vue'
+import NexusSkillReviewDialog from './NexusSkillReviewDialog.vue'
 import {
   createNexusAgent, disableBuiltinResource, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent,
   listTenantSkills, publishNexusAgent, restoreBuiltinResource, updateNexusAgent, type AgentSandboxProfile,
@@ -527,6 +533,7 @@ const skillsError = ref('')
 const switching = ref('')
 const installOpen = ref(false)
 const mySkillsOpen = ref(false)
+const reviewOpen = ref(false)
 let skillsRequest = 0
 
 async function loadSkills() {

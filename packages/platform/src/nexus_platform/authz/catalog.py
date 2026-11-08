@@ -22,6 +22,7 @@ API_PERMISSIONS: frozenset[str] = frozenset({
     "roles:manage",
     "org:manage",
     "tools:manage",
+    "skills:submit",
 })
 
 

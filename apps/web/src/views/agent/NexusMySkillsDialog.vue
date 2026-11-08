@@ -20,6 +20,13 @@
           <t-link theme="primary" size="small" @click="toggleVersions(skill.name)">
             {{ $t(open === skill.name ? 'nexusAgent.mySkills.hideVersions' : 'nexusAgent.mySkills.versions') }}
           </t-link>
+          <t-popconfirm v-if="shareMode && isOffered(skill)"
+            :content="$t(shareMode === 'share' ? 'nexusAgent.share.shareConfirm' : 'nexusAgent.share.submitConfirm')"
+            @confirm="share(skill.name)">
+            <t-link theme="primary" size="small">
+              {{ $t(shareMode === 'share' ? 'nexusAgent.share.share' : 'nexusAgent.share.submit') }}
+            </t-link>
+          </t-popconfirm>
           <t-link v-if="skill.archived" theme="primary" size="small" @click="act(() => restoreMySkill(tenantId, skill.name))">
             {{ $t('nexusAgent.restore') }}
           </t-link>
@@ -62,6 +69,20 @@
         </div>
         <p class="my-note">{{ $t('nexusAgent.mySkills.draftNote') }}</p>
       </div>
+      <h4 v-if="submissions.length" class="my-heading">{{ $t('nexusAgent.share.mine') }}</h4>
+      <div v-for="item in submissions" :key="item.id" class="my-row">
+        <div class="my-line">
+          <span class="my-name">{{ item.name }}</span>
+          <span class="my-tag my-tag--muted">{{ $t(`nexusAgent.share.state.${item.state}`) }}</span>
+          <span class="my-time">{{ item.created_at.slice(0, 16).replace('T', ' ') }}</span>
+          <span class="my-spacer" />
+          <t-link v-if="item.state === 'pending'" theme="danger" size="small"
+            @click="act(() => withdrawSubmission(tenantId, item.id))">{{ $t('nexusAgent.share.withdraw') }}</t-link>
+        </div>
+        <p v-if="item.state === 'rejected' && item.review_reason" class="my-note my-note--warn">
+          <t-icon name="error-circle" /> {{ $t('nexusAgent.share.rejectedBecause', { reason: item.review_reason }) }}
+        </p>
+      </div>
     </t-loading>
   </t-dialog>
 </template>
@@ -69,11 +90,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { MessagePlugin } from 'tdesign-vue-next'
 import {
-  archiveMySkill, deleteMySkillDraft, listMySkills, listMySkillVersions, restoreMySkill, rollbackMySkill,
-  type MySkill, type MySkillDraft, type MySkillVersion,
+  archiveMySkill, deleteMySkillDraft, getMyApiPermissions, listMySkills, listMySkillVersions, listMySubmissions,
+  restoreMySkill, rollbackMySkill, shareMySkill, submitMySkill, withdrawSubmission,
+  type MySkill, type MySkillDraft, type MySkillVersion, type SkillSubmission,
 } from '@/api/nexus-agents'
-import { isOffered, skillBadges } from './mySkills'
+import { isOffered, shareAction, skillBadges, submissionErrorKey } from './mySkills'
+import { parseInstallFailure } from './skillInstall'
 
 const props = defineProps<{ visible: boolean, tenantId: string }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void, (event: 'changed'): void }>()
@@ -85,10 +109,27 @@ const skills = ref<MySkill[]>([])
 const drafts = ref<MySkillDraft[]>([])
 const versions = ref<MySkillVersion[]>([])
 const open = ref('')
+const submissions = ref<SkillSubmission[]>([])
+const shareMode = ref<'share' | 'submit' | null>(null)
 
 function message(failure: unknown): string {
-  const record = (failure && typeof failure === 'object' ? failure : {}) as Record<string, unknown>
-  return typeof record.message === 'string' && record.message ? record.message : t('nexusAgent.mySkills.failed')
+  const parsed = parseInstallFailure(failure)
+  if (parsed.code) {
+    const key = submissionErrorKey(parsed.code)
+    if (!key.endsWith('.other')) return t(key)
+  }
+  return parsed.message || t('nexusAgent.mySkills.failed')
+}
+
+/** Administrators publish a private skill straight into the library; members with `skills:submit` file a submission. */
+async function share(name: string) {
+  const mode = shareMode.value
+  if (!mode) return
+  await act(async () => {
+    if (mode === 'share') await shareMySkill(props.tenantId, name)
+    else await submitMySkill(props.tenantId, name)
+    MessagePlugin.success(t(mode === 'share' ? 'nexusAgent.share.shared' : 'nexusAgent.share.submitted'))
+  })
 }
 
 async function load() {
@@ -98,6 +139,8 @@ async function load() {
     const listed = await listMySkills(props.tenantId)
     skills.value = listed.skills
     drafts.value = listed.drafts
+    submissions.value = await listMySubmissions(props.tenantId).catch(() => [])
+    shareMode.value = shareAction(await getMyApiPermissions(props.tenantId).catch(() => []))
   } catch (failure) {
     error.value = message(failure)
   } finally {
