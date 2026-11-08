@@ -67,6 +67,12 @@ try:
 except ImportError:  # pragma: no cover - SDK absent
     LATEST_PROTOCOL_VERSION = None  # type: ignore[assignment]
 
+# --- shared exceptions --------------------------------------------------------
+try:
+    from mcp.shared.exceptions import MCPError
+except ImportError:  # pragma: no cover - SDK absent
+    MCPError = None  # type: ignore[assignment,misc]
+
 
 def sdk_httpx() -> Any:
     """Return the httpx module the installed MCP SDK is built against.
@@ -90,6 +96,7 @@ __all__ = [
     "streamable_http_client",
     "sse_client",
     "MCPServer",
+    "MCPError",
     "LATEST_HANDSHAKE_VERSION",
     "LATEST_PROTOCOL_VERSION",
     "sdk_httpx",

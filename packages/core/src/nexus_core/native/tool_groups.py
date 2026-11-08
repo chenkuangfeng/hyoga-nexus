@@ -36,6 +36,7 @@ TOOL_GROUPS: tuple[ToolGroup, ...] = (
     ToolGroup('collab', '协作', default_enabled=False, planned='工具扩展 G'),
     ToolGroup('schedule', '定时', default_enabled=False, planned='工具扩展 G'),
     ToolGroup('media', '多媒体', default_enabled=False, planned='工具扩展 G'),
+    ToolGroup('mcp', 'MCP 工具', default_enabled=False, planned='技能与 MCP 7.2'),
 )
 GROUP_IDS = tuple(group.id for group in TOOL_GROUPS)
 _BY_ID = {group.id: group for group in TOOL_GROUPS}
