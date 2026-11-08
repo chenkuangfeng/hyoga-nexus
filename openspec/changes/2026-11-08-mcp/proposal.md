@@ -1,0 +1,67 @@
+# MCP：按工具启用的客户端 + 以运行令牌暴露授权工具的服务端
+
+## 状态
+
+待确认（2026-11-08）。下文「待确认的决定」逐项给出推荐，确认前不编码。
+
+## 原因
+
+路线图第 7 步「技能与 MCP」中技能部分（7.1）已基本完成，MCP 部分（7.2 客户端、7.3 服务端）仍是占位：`packages/mcp` 的三个子模块（`client`、`server`、`gateway`）都是 `"""Planned module; implementation pending."""`。前端工具箱页（提案 `2026-11-08-toolbox`）里 MCP 标签也标了「计划中，等对应后端」。本变更补齐 MCP 两端，使外部 MCP 服务能被安全接入并按工具启用，同时让平台把已授权工具以 MCP 协议暴露给 Codex / Claude Code 等外部 Runtime。
+
+## 现状（读码所得）
+
+| 部分 | 现状 |
+| --- | --- |
+| `packages/mcp` | `client` / `server` / `gateway` 三个占位 `__init__.py`，`pyproject.toml` 只依赖 `hyoga-nexus-core` |
+| 工具网关 | `nexus_tools.gateway.AuthorizedToolGateway` 已具备完整管线：实时授权 → 参数预处理 → 守卫 → 审批 → 执行 → 注入扫描 → 外置 → 截断；`ToolDefinition.source` 已支持 `'mcp'` |
+| 渐进加载 | `nexus_tools.bridge` 已实现 `tool_search` / `tool_describe` / `tool_call`，且 `source == 'mcp'` 的工具默认 `deferrable`，schema 超阈值即渐进加载 |
+| schema 清洗 | `nexus_core.schema.sanitize` / `restore` 已实现供应商 schema 清洗与参数名还原 |
+| 风险与审批 | `nexus_tools.policy.decide`（风险 × 访问级别）、`ToolDefinition.risk`（read/probe/write/destructive）、`action_approvals` / `action_grants` 已就绪 |
+| 资源与绑定 | `platform_resources`、`agent_resource_bindings`（kind/资源 ID/版本）、`credential_references`（凭据引用）已就绪，技能就是按这套绑定的 |
+| 运行令牌 | 未实现；`runs`、`action_approvals`、`ToolAccessPort.authorize` 已具备复核所需的事实源 |
+| MCP SDK | 未引入官方 `mcp` Python SDK（`uv.lock` 无） |
+
+## 参考源码
+
+本地副本 `/project/opensource/agents/`。下表为已读到的部分；`tasks.md` 第 0 节要求实施前补读其余。
+
+| 项目 | 文件 | 采用什么 |
+| --- | --- | --- |
+| **WeKnora** | `agent/approval/mcp_risk.go` | MCP 工具风险只升不降：`显式设置 > 曾观察最高声明 > 当前声明`，服务端自行降级需工作区确认；`readOnlyHint` 才降为 `read`，否则 `write`；策略读取失败默认 fail-close |
+| | `agent/tools/mcp_exposure.go` | 注册名 `mcp_{sanitize(服务)}_{sanitize(工具)}_{sha256(server_id \0 tool_name)[:8]}`；同名先注册者保留；执行前重新 `snapshot` + `checkEnabled` 复核目录与开关；渐进披露 |
+| | `agent/tools/mcp_tool.go` | 描述带外部来源前缀；参数 schema 缺省为空对象；按服务配置超时；审批放行粒度 `mcp:{service_id}/{tool}#{schema_hash[:6]}` |
+| | `agent/tools/{mcp_catalog,mcp_schema,mcp_call_guard}.go` | 工具目录状态机（loading/ready/error）、发现超时与重试、按工具启用、参数与输出校验分类 |
+| | `router/routes_mcp_endpoint.go`、`middleware/mcp_endpoint_auth.go` | MCP 服务端挂载路径与 Bearer 鉴权、作用域化 principal（本仓库改为运行令牌） |
+| **Octop** | `infra/connectors/custom_mcp.py` | 自定义 MCP 服务模型与连接参数（transport/url/headers/command/args/env） |
+| | `infra/connectors/mcp_tool_cache.py` | 按用户缓存工具定义、连接参数指纹（transport/url/headers/command/args/env）失效 |
+| | `infra/agents/middleware/mcp_output_schema.py` | MCP 工具输出 schema 校验失败分类 |
+| **octop-harness** | `middleware/mcp_tools.py` | 按请求过滤 MCP 工具（opt-in 才暴露） |
+| | `middleware/mcp_tool_error.py` | `McpError` 提示修正参数；输出 schema 失败提示「不要改参数重试」；异常组递归查找；控制流异常不软化 |
+| | `mcp.py` | 参数 schema 清洗、空值剔除、LLM 工具名清洗、按服务前缀过滤 |
+| **deer-flow** | `mcp/session_pool.py`、`mcp/lifecycle.py`、`mcp/cache.py` | stdio/HTTP 会话池、连接生命周期与回收、工具缓存发现与失效 |
+| | `mcp/oauth.py`、`mcp/oauth_store.py`、`mcp/user_scoped_auth.py` | OAuth 授权码流与令牌存储（第一期仅借鉴形状，OAuth 列后续） |
+
+## 范围
+
+1. **MCP 客户端**（7.2）：连接外部 MCP 服务（stdio、streamable HTTP），发现工具，**按工具启用**（不默认开放整个服务），凭据引用，高风险工具审批，把启用的工具注册进 `AuthorizedToolGateway` 走完整管线。
+2. **MCP 服务端**（7.3）：把某次 Run 已授权的工具以 MCP 协议暴露，使用**运行令牌**（短时、单 Run、可撤销），每次 `tools/list` 与 `tools/call` 都复核权限。
+3. 前端：本期只做后端 API 与最小可用接入，工具箱 MCP 标签保持「计划中」（见决定 5）。
+
+不做：OAuth 授权码流、SSE 传输、本地浏览器连接、MCP 服务端长期 endpoint token（WeKnora 模型）、外部 Runtime 适配器本身（第 4/5 步）。
+
+## 待确认的决定
+
+1. **传输支持范围**：客户端支持 `stdio`（子进程）与 `streamable HTTP` 两种；SSE（旧 MCP 传输）不做。备选：连 SSE 一起做。**推荐：只做 stdio + streamable HTTP**，与主流 SDK 现状一致。
+2. **服务端鉴权模型**：采用运行令牌（架构 2.7：短时、与 Run 生命周期一致、单 Run 有效、撤销即失效），每个 Run 由平台签发；不做 WeKnora 的 endpoint 长期 token。备选：额外支持长期 endpoint token（WeKnora 模型）。**推荐：只做运行令牌**，长期 token 等第 9 步渠道治理按需再议。
+3. **按工具启用的默认值**：连接后发现的工具默认**全部禁用**，管理员逐个启用（`enabled_tools` 白名单）。备选：默认全部启用、可禁用。**推荐：默认全部禁用**，与「不默认开放整个服务」一致。
+4. **OAuth**：第一期不做授权码流程，凭据只支持直接配置的 header / env，秘密以 `credential_references` 引用；OAuth 列 7.2 扩展。备选：本期连 OAuth 一起做。**推荐：OAuth 后续**。
+5. **前端范围**：本期后端优先（API + 领域 + 工具集成 + MCP 服务端 + 测试），前端 MCP 标签继续标「计划中」，随后续变更接入。备选：本期顺带把工具箱 MCP 标签做成最小可用（列表 / 启停 / 发现）。**推荐：前端后续**。
+
+## 影响
+
+- `packages/mcp`：实现 `client`（连接、发现、缓存、指纹、风险解析）、`server`（FastMCP 暴露授权工具 + 运行令牌）、`gateway`（把 MCP 工具桥接进 `AuthorizedToolGateway`）。
+- `packages/platform`：新增 `nexus_platform/mcp/` 服务与持久化模型（`mcp_services`、`mcp_tool_approvals`、`mcp_run_tokens`），迁移 `migrations/platform`。
+- `nexus_core`：`native/tool_groups.py` 增加 `mcp` 组（默认关闭）。
+- `apps/api`：MCP 服务管理路由与 MCP 服务端挂载（`/api/v1/tenants/{id}/mcp-services`、`/mcp/runs/{token}`）。
+- 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 模块文档。
+- 依赖：新增官方 `mcp` Python SDK（版本随锁文件固定）。
