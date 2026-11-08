@@ -5,7 +5,7 @@
 沿用「平台管数据与授权，`packages/mcp` 管协议，`nexus_tools` 管执行管线」的分层：
 
 ```text
-外部 MCP 服务 ◀── mcp.client（stdio / streamable_http）──┐
+外部 MCP 服务 ◀── mcp.client（stdio / streamable_http / sse）──┐
                                                         │ 发现 / 缓存 / 指纹
       admin API ──▶ nexus_platform.mcp.service ── 持久化 ┘
                                                         │ 启用白名单 + 风险策略
@@ -25,7 +25,7 @@
 ## 2. 数据模型（`migrations/platform`）
 
 ### `mcp_services`
-- `id` UUID 主键；`tenant_id` FK tenants；`name` 租户内唯一；`description`；`transport`（`stdio` / `streamable_http`）；`config` JSON（连接参数，秘密为引用）；`enabled` bool；`created_by`；`created_at` / `updated_at`。
+- `id` UUID 主键；`tenant_id` FK tenants；`name` 租户内唯一；`description`；`transport`（`stdio` / `streamable_http` / `sse`）；`config` JSON（连接参数，秘密为引用）；`enabled` bool；`created_by`；`created_at` / `updated_at`。
 
 ### `mcp_service_tools`
 - 每（服务、工具名）一行：`service_id`、`tool_name`、`enabled` bool（白名单）、`input_schema` JSON（缓存）、`description`、`read_only_hint` bool、`catalog_status`（`loading` / `ready` / `error`）、`catalog_error`、`fingerprint`（连接参数指纹）、`config_epoch`（配置代际，见生命周期账本）、`updated_at`。
@@ -47,6 +47,7 @@
 - `fingerprint(config: dict) -> str`：与 Octop 一致，仅取 `transport/url/headers/command/args/env`，`headers`/`env` 取「键 + 引用 ID」排序后哈希。
 - `discover(config, timeout=30) -> list[MCPToolSpec]`：建立会话、`list_tools`、读取 server instructions；HTTP 失败断开重连一次，stdio 不重试。
 - `call(config, tool_name, arguments, timeout) -> ToolResult`：调用并捕获 `McpError` 与输出 schema 错误分类。
+- SSE（`transport='sse'`）：`sse_client`，`timeout` 只覆盖建连（headers + endpoint event），`sse_read_timeout`（300s）只覆盖事件间隔；连接建立后纳入会话池复用；TLS verify/cert 放在 `httpx_client_factory` 的内层 transport，响应体设上限，跨域重定向携带凭据时 fail-close（WeKnora `boundedSSEConnection` + hermes `_sse_transport`）。
 - 会话池按（服务、作用域、事件循环、域）键控复用，LRU 回收；遵守 anyio 任务组所有权：会话的 enter/exit 必须同一任务，用专用 owner task 关闭（deer-flow `session_pool.py`）。
 - 连接生命周期账本：每服务一个不透明 epoch token，配置「删除后原样重加」也能感知变化并重建绑定；账本无效 fail-close（deer-flow `lifecycle.py`）。
 - 写入 HTTP header 前校验非法值（控制字符、非 ASCII、首尾空白），并按大小写不敏感替换既有同名 header，防止凭据经异常信息泄漏（deer-flow `headers.py`）。
