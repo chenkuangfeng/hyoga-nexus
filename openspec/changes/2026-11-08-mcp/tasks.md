@@ -14,10 +14,14 @@
 - [x] 1.7 管理 API：`/api/v1/tenants/{id}/mcp-services` 的 CRUD、`discover`、`enabled-tools`；`/agent-tools` 能力目录补 MCP 分组（只读 + 管理员开关）。
 - [x] 1.8 OAuth 客户端：授权码流（RFC 9728 动态客户端注册 + PKCE），令牌按（租户、主体、服务）作用域存储与自动刷新；401 恰好一次 refresh + 一次重试；凭据优先级「请求级 > 用户级 > 服务级」；保留静态 header/env + `credential_references` 路径。（`nexus_mcp.oauth` 协议层；`nexus_platform.mcp.oauth` 加密令牌/客户端与 state；管理接口 authorize-url / status / token 与公开回调；worker 与发现路径 401 单次重试。）
 
-## 2. MCP 服务端
-- [x] 2.1 `mcp_run_tokens`：签发（单 Run、短时、可撤销）、哈希存储、解析与过期判定。
-- [ ] 2.2 `nexus_mcp.server`（FastMCP）：`tools/list` 返回 Run 当前授权定义，`tools/call` 走 `AuthorizedToolGateway.execute` 完整管线。（协议层 `RunMCPServer` / `streamable_http_app` 已写；`tools/call` 完整管线执行待 2.3 挂载与外部 Runtime 执行通道。）
-- [ ] 2.3 API 挂载 `/mcp/runs/{token}`，Bearer 鉴权映射到 Run，提前于全局 Auth；稳定协议级错误不泄漏资源存在性。（`tools/call` 的跨进程执行依赖路线图第 4/5 步外部 Runtime 适配器。）
+## 2. MCP 服务端（无状态 endpoint；2026-11-09 修订决定 2，废弃运行令牌）
+- [ ] 2.1 撤销运行令牌：删除 `mcp_run_tokens` 表与迁移、`issue_run_token` / `resolve_run_token` / `revoke_run_token`、`RunMCPServer` 绑 Run 协议层，并将 3.2 的运行令牌用例改为 endpoint 令牌用例。
+- [ ] 2.2 `mcp_endpoints` 持久化：endpoint 表（名称、工具白名单、KB 范围、`token_hash`、`enabled`、`last_used_at`）与迁移；空库 / 已有库 / 重复执行验证。
+- [ ] 2.3 endpoint 长期令牌：签发 / 轮换 / 撤销，SHA-256 哈希存储、解析与撤销判定。
+- [ ] 2.4 无状态工具面 + `EndpointMCPServer`：为知识检索 / web / skills / memory / conversations 只读工具提供平台服务的无状态入口（tenant + principal + KB 范围，不依赖 Run store）；`tools/list` 返回白名单内只读定义，`tools/call` 在 API 进程内直接调平台服务并复核作用域。
+- [ ] 2.5 API 挂载 `/mcp/{endpoint_id}` + 鉴权中间件：Bearer → endpoint 作用域化 principal，提前于全局 Auth；稳定协议级错误不泄漏资源存在性。
+- [ ] 2.6 管理 API `/api/v1/tenants/{id}/mcp-endpoints`：CRUD + 签发 / 轮换 / 撤销令牌。
+- [ ] 2.7 文档同步：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 模块文档，把「运行令牌 + `/mcp/runs/{token}`」改为「endpoint 长期令牌 + 无状态只读工具面」。
 
 ## 3. 测试与文档
 - [x] 3.1 单元测试：连接参数校验（含 header 非法值）与指纹失效、`config_epoch` 变更重建绑定、按工具启用、风险只升不降 + 降级确认、执行时复核、`McpError` / 输出 schema 分类、注册名哈希防撞、外部工具名清洗、OAuth 令牌作用域与刷新、401 单次重试。（`tests/test_mcp_client.py`、`tests/test_mcp_service.py`、`tests/test_mcp_oauth.py`：协议/元数据/令牌、加密 state 防篡改与过期、按主体隔离、惰性/强制刷新、授权被拒清理、回调重定向；401 的平台级单次刷新重试由 3.2 的端到端用例覆盖。）

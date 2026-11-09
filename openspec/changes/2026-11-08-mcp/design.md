@@ -12,12 +12,12 @@
                                                         ▼
       Run 准备 ──▶ 把已绑定、已启用的 MCP 工具注册进 AuthorizedToolGateway（source='mcp'）
                                                         │
-      Codex / Claude ◀── mcp.server（FastMCP，运行令牌）──▶ 同一套 ToolGatewayPort
+      Codex / Claude Desktop ◀── mcp.server（无状态 endpoint，长期令牌）──▶ 平台服务（API 进程内直接调用，不绑 Run）
 ```
 
-- `nexus_platform/mcp/`：领域服务（服务 CRUD、工具目录、启用白名单、风险策略、运行令牌）与持久化模型。
+- `nexus_platform/mcp/`：领域服务（服务 CRUD、工具目录、启用白名单、风险策略、endpoint 与长期令牌）与持久化模型。
 - `nexus_mcp/client.py`：连接外部服务、发现工具、按用户缓存（租户/服务粒度）、连接指纹。
-- `nexus_mcp/server.py`：FastMCP 服务端，把 Run 的授权工具暴露出来。
+- `nexus_mcp/server.py`：无状态 MCP 服务端，把 endpoint 白名单内的只读工具暴露出来（不绑 Run）。
 - `nexus_mcp/gateway.py`：把缓存/策略解析出的工具定义与执行器接进 `AuthorizedToolGateway` 的注册表（桥接，不自行授权）。
 
 **技术选型**：统一使用官方 `mcp` Python SDK **2.x**（pin `mcp>=2.3,<3`），不引入 `langchain-mcp-adapters`（避免拖入 LangChain）。所有 `mcp` 导入收敛到 `nexus_mcp._sdk` 适配层：客户端用 `ClientSession`（stdio / streamable HTTP / SSE），服务端用 `mcp.server.MCPServer`（2.x 由 `fastmcp` 改名）。版本差异（`streamable_http_client` 别名、`httpx`→`httpx2`、`LATEST_HANDSHAKE_VERSION` 位置）在适配层用探测 + 回退吸收，参考 hermes `_import_sdk_names` / `sdk_httpx()`，升级 3.x 只改这一层与依赖上界。
@@ -41,9 +41,9 @@
 ### `mcp_oauth_tokens`
 - 每（tenant、principal、service）一行：`access_token` / `refresh_token`（加密）、`expires_at`、`scope`、`updated_at`；令牌按主体作用域隔离，不跨用户/会话共享。
 
-### `mcp_run_tokens`
-- `token_hash`（SHA-256 前缀）主键；`run_id` FK runs；`tenant_id`；`expires_at`；`revoked_at`；`created_at`。
-- 明文令牌只在签发响应中出现一次；其余位置只存哈希。
+### `mcp_endpoints`
+- `id` UUID 主键；`tenant_id` FK tenants；`name` 租户内唯一；`description`；`enabled` bool；`tool_allowlist` JSON（暴露的只读工具名数组）；`kb_ids` JSON（可检索知识库范围，空 = 全部可见）；`token_hash`（endpoint 长期令牌 SHA-256）；`last_used_at`；`created_by`；`created_at` / `updated_at`。
+- 明文令牌只在创建 / 轮换响应中出现一次；其余位置只存哈希。
 
 迁移放 `migrations/platform`，按既有 Alembic 约定；空库升级、已有库升级、重复执行均需验证。
 
@@ -68,7 +68,7 @@
 - `create/update/delete/list/get`（权限 `tools:manage`，读为活跃成员）。
 - `discover_tools` / `set_enabled_tools`：发现后以指纹写入缓存，白名单只接受已发现工具名。
 - `policy(tool) -> (risk, require_approval)`：实现风险只升不降（WeKnora `mcp_risk.go` 语义）；`observe_declared_risk` 在发现时写入 `observed_risk`。
-- `issue_run_token(run) -> token`、`resolve_run_token(token) -> Run`、`revoke_run_token(run)`。
+- `create_endpoint` / `rotate_endpoint_token` / `revoke_endpoint_token` / `resolve_endpoint_token(token) -> (tenant, allowlist, kb_ids)`：签发 / 轮换 / 撤销 endpoint 长期令牌，哈希存储。
 - `begin_oauth(service) -> authorization_url`、`complete_oauth(service, code) -> ()`：动态注册（或复用已注册 client）、生成 PKCE verifier、回填令牌到 token store；`oauth_token(service, principal)` 取当前主体令牌并自动 refresh。
 - `visible_definitions(run) -> list[ToolDefinition]`：绑定的服务 ∩ 启用白名单 ∩ 风险策略 → `ToolDefinition`。
 
@@ -78,8 +78,8 @@
 - 外部工具名在加载边界按 `^[A-Za-z0-9_-]+$` 规范化后再进注册名与 `tool_search` 目录，防延迟加载绕过 provider 校验（deer-flow `tools.py`）。
 
 ### `nexus_mcp.server`
-- 由 `nexus_mcp._sdk` 导出 `MCPServer`（2.x，原 FastMCP）实例，`tools/list` 从 `visible_definitions` 取；`tools/call` 调用 `AuthorizedToolGateway.execute`（复用完整管线，含审批、守卫、审计）。
-- 挂载在 API 进程 `/mcp/runs/{token}`（或可配置前缀），Bearer 鉴权映射到 Run；不在全局 Auth 中间件之后，参照 WeKnora `routes_mcp_endpoint.go` 的提前挂载。
+- 由 `nexus_mcp._sdk` 导出 `MCPServer`（2.x，原 FastMCP）实例（`EndpointMCPServer`）：`tools/list` 返回 endpoint 白名单内的只读工具定义（从平台工具目录取，不绑 Run）；`tools/call` 在 API 进程内**直接调平台服务的无状态入口**（知识检索 / web / skills / memory / conversations 只读），传 `tenant + 作用域`，**不走 `AuthorizedToolGateway`、不走 worker**。
+- 挂载在 API 进程 `/mcp/{endpoint_id}`（或可配置前缀），Bearer 鉴权映射到 endpoint 作用域；不在全局 Auth 中间件之后，参照 WeKnora `routes_mcp_endpoint.go` 的提前挂载。
 
 ## 4. 关键流程
 
@@ -99,16 +99,18 @@
 3. 后续连接注入该主体的令牌；带 30 秒余量惰性 refresh；资源服务器 401 恰好一次 refresh + 一次重试；授权被拒（`invalid_grant`）删除令牌并返回 `mcp_oauth_required`，客户端注册被拒（`invalid_client`）同时丢弃动态注册。动态令牌优先于服务级静态 `Authorization` header。
 4. 401 以 HTTP 响应状态判定：streamable HTTP 的 SDK 会把非 2xx 响应变成通用 JSON-RPC 错误并丢掉状态码，客户端因此在 httpx 响应钩子上观测状态（SSE 仍靠 `raise_for_status` 的异常链）。刷新成功与授权被拒的删除都立即提交；发现工具时令牌解析与网络往返在目录事务之外，避免「提交关闭外层事务」或长时间占用连接。
 
-### 服务端调用
-- Codex/Claude 适配器（第 4/5 步）在 Run 启动时向平台请求运行令牌，令牌绑定 Run 与主体/空间。
-- 外部 Runtime 带令牌访问 `/mcp/runs/{token}`：`tools/list` 返回 `visible_definitions`；`tools/call` 经 `AuthorizedToolGateway.execute` 复核授权并审计。
+### 服务端调用（无状态 endpoint）
+1. 管理员创建 endpoint（命名 + 工具白名单 + 可选 KB 范围）→ 存 `mcp_endpoints`，签发长期令牌（明文只显示一次）。
+2. 外部 MCP 客户端（Codex / Claude Desktop / Cursor）用 `Authorization: Bearer <endpoint token>` 访问 `/mcp/{endpoint_id}`。
+3. 鉴权中间件哈希令牌 → 查 endpoint → 构造作用域化 principal（机器身份 + 工具白名单 + KB 范围）挂到请求上下文。
+4. `tools/list` 返回白名单内的只读工具定义；`tools/call` 在 API 进程内直接调平台服务的无状态入口，每次复核工具仍在白名单、endpoint 仍启用、KB 仍在范围。
 
 ## 5. 错误处理
 - 连接失败：`mcp_connection_failed`；发现超时：`mcp_discovery_timeout`；服务停用：`mcp_service_disabled`；工具未启用 / 已移除：`mcp_unavailable`。
 - `McpError` → 参数修正提示；输出 schema 失败 → 「不要改参数重试」（octop-harness `mcp_tool_error.py`）。
 - OAuth：元数据 401 未配置 OAuth → 提示切换策略；无令牌 / 刷新被拒 → `mcp_oauth_required`（提示重新授权）；令牌端点瞬时失败 → `mcp_oauth_unavailable`，不重试工具调用。
 - 策略读取失败 fail-close（临时 `write` + 审批），不静默放行。
-- 运行令牌：过期/撤销/不存在 → 协议级 `unauthorized`，不泄漏资源存在性。
+- endpoint 令牌：无效 / 已撤销 / endpoint 停用 → 协议级 `unauthorized`，不泄漏资源存在性；工具不在白名单 → `tool_not_allowed`。
 
 ## 6. 边界情况
 - 同名工具（服务改名、哈希前缀碰撞）：注册名哈希防撞 + 先注册者保留。

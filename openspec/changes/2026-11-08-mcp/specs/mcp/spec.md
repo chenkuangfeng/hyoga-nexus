@@ -52,15 +52,16 @@
 - `nexus_core.native.tool_groups` 新增 `mcp` 组，默认关闭；MCP 工具只有在该组可用且智能体开启时才出现在 Run 的工具块里，直接调用也返回 `tool_authorization_denied`。
 - MCP 服务经 `agent_resource_bindings`（kind `mcp_service`）绑定到智能体；绑定与服务启用、工具白名单共同决定可见工具。
 
-### R9 MCP 服务端与运行令牌
-- 平台以 MCP 协议暴露某次 Run 已授权的工具（`tools/list`、`tools/call`），供 Codex / Claude Code 等外部 Runtime 调用。
-- 运行令牌：短时、单 Run、与 Run 生命周期一致；Run 结束 / 取消 / 撤销即失效；令牌本身只作索引，不在日志、事件中记录明文。
-- 每次 `tools/list` 返回该 Run 当前授权可见的定义（过滤 `deny`）；每次 `tools/call` 走完整网关管线复核权限，不信任快照、模型参数或技能声明。
-- 鉴权失败、令牌过期、Run 不存在或非运行态分别返回稳定的协议级错误，不泄漏是否存在资源。
+### R9 MCP 服务端与 endpoint 长期令牌
+- 平台以 MCP 协议暴露**无状态只读工具**（知识检索、web、skills/memory/conversations 只读，`read_only=True` 且不依赖 Run 活状态），供 Codex / Claude Desktop 等外部 MCP 客户端调用；不暴露 sandbox、审批、agent 状态等有状态工具。
+- endpoint 长期令牌：每个 endpoint 一个可撤销令牌；明文只在创建 / 轮换响应中出现一次，其余位置只存 SHA-256 哈希，不落日志、事件、快照。
+- endpoint 有工具白名单（暴露哪些只读工具）与 KB 范围（可检索哪些知识库，空 = 全部可见）；`tools/list` 只返回白名单内定义，`tools/call` 只接受白名单内工具。
+- 每次 `tools/call` 在 API 进程内直接调平台服务的无状态入口，复核工具仍在白名单、endpoint 仍启用、KB 仍在范围；不走 `AuthorizedToolGateway`、不依赖 Run。
+- 鉴权失败、令牌无效 / 撤销、endpoint 停用分别返回稳定的协议级错误，不泄漏是否存在资源。
 
 ### R10 审计与测试
 - MCP 服务增删改、工具启用变更、风险策略变更写审计；每次 MCP 工具调用复用 `ToolAccessPort` 的调用与审计记录。
-- 测试覆盖：连接参数校验与指纹失效、按工具启用、风险只升不降与降级确认、执行时复核、`McpError` / 输出 schema 错误分类、注册名哈希防撞、渐进加载、服务端运行令牌生命周期与撤权后拒绝。
+- 测试覆盖：连接参数校验与指纹失效、按工具启用、风险只升不降与降级确认、执行时复核、`McpError` / 输出 schema 错误分类、注册名哈希防撞、渐进加载、服务端 endpoint 令牌生命周期（签发 / 调用 / 轮换 / 撤销）与白名单外拒绝。
 
 ### R11 OAuth 授权
 - `auth_type` 取 `none` / `oauth`；OAuth 只允许 HTTP 传输（stdio 拒绝）。OAuth 配置含 `scopes`、可选的 `client_id` + `client_secret`（字符串或 `credential_references`）、可选的 `auth_server_metadata_url`。
