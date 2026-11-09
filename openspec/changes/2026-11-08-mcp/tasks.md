@@ -22,8 +22,8 @@
 ## 3. 测试与文档
 - [ ] 3.1 单元测试：连接参数校验（含 header 非法值）与指纹失效、`config_epoch` 变更重建绑定、按工具启用、风险只升不降 + 降级确认、执行时复核、`McpError` / 输出 schema 分类、注册名哈希防撞、外部工具名清洗、OAuth 令牌作用域与刷新、401 单次重试。（已写 `tests/test_mcp_client.py`、`tests/test_mcp_service.py`、`tests/test_mcp_oauth.py`：协议/元数据/令牌、加密 state 防篡改与过期、按主体隔离、惰性/强制刷新、授权被拒清理、回调重定向。）
 - [ ] 3.2 集成测试：假 MCP 服务（stdio + HTTP + SSE）发现 / 调用 / 撤权后拒绝；服务端运行令牌生命周期（签发 / 调用 / 撤销 / 过期）；OAuth 授权码流端到端（动态注册 → 授权 → 令牌刷新）。
-- [ ] 3.3 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 的 `README.md` / `docs/{requirements,design}.md`。
-- [ ] 3.4 全量 `uv run --locked pytest` 与锁定前端类型检查 / 构建（若前端有改动）。
+- [x] 3.3 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 的 `README.md` / `docs/{requirements,design}.md`。
+- [x] 3.4 全量 `uv run --locked pytest` 与锁定前端类型检查 / 构建（若前端有改动）。（后端全量 1628 passed / 1 skipped；前端无改动。）
 
 ## 4. 前端（决定 5）
 - [ ] 4.1 工具箱 MCP 标签按 WeKnora 实现最小可用：服务列表 / 创建与编辑（transport、url、command/args/env、headers 引用）、发现工具、`enabled_tools` 启停。
