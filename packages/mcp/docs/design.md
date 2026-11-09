@@ -18,7 +18,7 @@
 ## 连接与发现
 
 1. `validate_config` 归一配置并拒绝非法参数；`assert_resolved` 拒绝未解析的凭据引用。
-2. `discover` 对 HTTP 传输在握手失败时重连一次；stdio 不重试。任何 401 / 授权挑战立即抛 `McpUnauthorized`，不再用同一令牌重试。
+2. `discover` 对 HTTP 传输在握手失败时重连一次；stdio 不重试。任何 401 / 授权挑战立即抛 `McpUnauthorized`，不再用同一令牌重试。streamable HTTP 的 SDK 会把非 2xx 响应变成通用 JSON-RPC 错误并丢掉状态码，因此 `ResponseProbe` 用 httpx 响应钩子记录 401，`is_unauthorized` 的异常链识别继续覆盖 SSE（其 `raise_for_status` 保留响应）。握手失败的分类同样覆盖会话建立阶段，而不只是工具调用。
 3. 发现结果由平台按指纹写入工具缓存；平台把「服务、工具、风险」投影为 `ToolDefinition`，注册名哈希避免不同服务同名工具相撞。
 4. `call` 只拿已解析的连接配置执行，不理解授权；语义错误（服务端拒绝、输出 schema 不符）转成稳定错误码。
 
@@ -37,7 +37,7 @@ stdio 会话池按（服务、作用域、事件循环）键控，enter/exit 必
 - 令牌按 `(tenant_id, principal_id, service_id)` 加密保存；动态注册的客户端按 `(tenant_id, service_id)` 保存，`client_secret` 同样加密。绑定字符串参与密文认证，行与行之间不能互换密文。
 - 使用前 30 秒余量判断是否刷新；刷新在支持行锁的数据库上 `SELECT ... FOR UPDATE` 并 `populate_existing` 重读，避免多进程同时消费同一个 refresh token。
 - 刷新成功立即提交：旋转后的 refresh token 可能已使旧值失效，调用方后续失败不应把轮换回滚。失效授权（`invalid_grant` / 过期）删除令牌并提交，再抛 `mcp_oauth_required`；`invalid_client` / `unauthorized_client` 同时删除动态注册。
-- 资源服务器 401：客户端抛 `McpUnauthorized`，平台强制刷新一次并重试一次；第二次失败按普通错误返回，不再循环。
+- 资源服务器 401：客户端按 HTTP 状态抛 `McpUnauthorized`，平台强制刷新一次并重试一次；第二次失败按普通错误返回（记录发现错误并转成稳定 `ServiceUnavailable`），不再循环。发现工具时令牌解析与网络往返在目录事务之外执行：刷新提交会关闭外层 `Session.begin()`，且不应让网络等待占住数据库连接。
 
 ## 服务端
 

@@ -74,7 +74,7 @@ def _tool_spec(tool) -> MCPToolSpec:
 
 
 @asynccontextmanager
-async def _stdio_transport(config: dict) -> AsyncIterator[tuple]:
+async def _stdio_transport(config: dict, probe: "ResponseProbe | None" = None) -> AsyncIterator[tuple]:
     params = StdioServerParameters(
         command=config["command"],
         args=list(config.get("args") or []),
@@ -84,11 +84,32 @@ async def _stdio_transport(config: dict) -> AsyncIterator[tuple]:
         yield streams
 
 
+class ResponseProbe:
+    """Records whether one connection saw an HTTP 401.
+
+    The streamable HTTP SDK turns a non-2xx response into a generic JSON-RPC error and drops the
+    status code, so the exception alone cannot tell a rejected bearer token from any other server
+    failure. Observing the response (httpx2 event hook) restores that distinction without parsing
+    the server's message text.
+    """
+
+    __slots__ = ("unauthorized",)
+
+    def __init__(self) -> None:
+        self.unauthorized = False
+
+    async def observe(self, response) -> None:
+        if getattr(response, "status_code", None) == 401:
+            self.unauthorized = True
+
+
 @asynccontextmanager
-async def _http_transport(config: dict) -> AsyncIterator[tuple]:
+async def _http_transport(config: dict, probe: "ResponseProbe | None" = None) -> AsyncIterator[tuple]:
     headers = {k: v for k, v in (config.get("headers") or {}).items()}
     httpx = sdk_httpx()
-    client = httpx.AsyncClient(headers=headers, timeout=config["timeout"], follow_redirects=False)
+    hooks = {"response": [probe.observe]} if probe is not None else None
+    client = httpx.AsyncClient(headers=headers, timeout=config["timeout"],
+                               follow_redirects=False, event_hooks=hooks)
     try:
         async with streamable_http_client(config["url"], http_client=client) as streams:
             yield streams
@@ -97,7 +118,7 @@ async def _http_transport(config: dict) -> AsyncIterator[tuple]:
 
 
 @asynccontextmanager
-async def _sse_transport(config: dict) -> AsyncIterator[tuple]:
+async def _sse_transport(config: dict, probe: "ResponseProbe | None" = None) -> AsyncIterator[tuple]:
     headers = {k: v for k, v in (config.get("headers") or {}).items()}
     async with sse_client(
         config["url"],
@@ -113,9 +134,9 @@ def _transport(config: dict):
 
 
 @asynccontextmanager
-async def _session(config: dict) -> AsyncIterator[ClientSession]:
+async def _session(config: dict, probe: "ResponseProbe | None" = None) -> AsyncIterator[ClientSession]:
     transport = _transport(config)
-    async with transport(config) as (read_stream, write_stream):
+    async with transport(config, probe) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream, read_timeout_seconds=config.get("timeout")) as session:
             await session.initialize()
             yield session
@@ -126,8 +147,18 @@ def _sanitize(reason: BaseException) -> str:
     return text.replace("\r", " ").replace("\n", " ")[:300]
 
 
-async def _discover_once(config: dict) -> list[MCPToolSpec]:
-    async with _session(config) as session:
+def _unauthorized(reason: BaseException, probe: "ResponseProbe | None") -> bool:
+    """True when this failure is an authorization challenge.
+
+    The HTTP transport's observed 401 is authoritative; `is_unauthorized` still covers the SSE
+    transport (whose `raise_for_status` keeps the status on the exception) and transports wrapped
+    by the SDK in exception groups.
+    """
+    return bool(probe is not None and probe.unauthorized) or is_unauthorized(reason)
+
+
+async def _discover_once(config: dict, probe: "ResponseProbe | None") -> list[MCPToolSpec]:
+    async with _session(config, probe) as session:
         result = await session.list_tools()
         return [_tool_spec(tool) for tool in (getattr(result, "tools", None) or [])]
 
@@ -136,20 +167,21 @@ async def discover(config: dict, *, timeout: float = DEFAULT_TIMEOUT) -> list[MC
     """List a server's tools. HTTP transports retry once after dropping the connection; stdio never retries."""
     config = validate_config(config)
     assert_resolved(config)
+    probe = ResponseProbe()
     retries = 0 if config["transport"] == "stdio" else 1
     for attempt in range(retries + 1):
         try:
-            return await asyncio.wait_for(_discover_once(config), timeout)
+            return await asyncio.wait_for(_discover_once(config, probe), timeout)
         except asyncio.TimeoutError as exc:
             raise McpDiscoveryTimeout(f"工具发现超时（{timeout:.0f}s）", code="mcp_discovery_timeout") from exc
         except McpError:
             raise
         except SdkMcpError as exc:
-            if is_unauthorized(exc):
+            if _unauthorized(exc, probe):
                 raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
             raise McpConnectionError(f"MCP 握手被拒绝：{_sanitize(exc)}", code="mcp_connection_failed") from exc
         except Exception as exc:
-            if is_unauthorized(exc):
+            if _unauthorized(exc, probe):
                 # Retrying with the same bearer token cannot help; the platform refreshes once.
                 raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
             if attempt < retries:
@@ -196,18 +228,29 @@ async def call(
     assert_resolved(config)
     if config["transport"] == "stdio" and pool is not None:
         async with pool.lease(config) as session:
-            return await _call_session(session, tool_name, arguments, timeout, output_schema)
-    async with _session(config) as session:
-        return await _call_session(session, tool_name, arguments, timeout, output_schema)
+            return await _call_session(session, tool_name, arguments, timeout, output_schema, None)
+    probe = ResponseProbe()
+    try:
+        async with _session(config, probe) as session:
+            return await _call_session(session, tool_name, arguments, timeout, output_schema, probe)
+    except McpError:
+        raise
+    except Exception as exc:
+        # The handshake itself can fail (e.g. the initial `initialize` POST was rejected), so the
+        # same classification has to cover session setup, not only the tool call.
+        if _unauthorized(exc, probe):
+            raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
+        raise McpConnectionError(f"MCP 调用失败：{_sanitize(exc)}", code="mcp_call_failed") from exc
 
 
-async def _call_session(session, tool_name, arguments, timeout, output_schema) -> ToolResult:
+async def _call_session(session, tool_name, arguments, timeout, output_schema,
+                        probe: "ResponseProbe | None") -> ToolResult:
     try:
         result = await asyncio.wait_for(session.call_tool(tool_name, arguments or {}), timeout)
     except asyncio.TimeoutError as exc:
         raise McpConnectionError("MCP 调用超时", code="mcp_call_timeout") from exc
     except SdkMcpError as exc:
-        if is_unauthorized(exc):
+        if _unauthorized(exc, probe):
             raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
         raise McpCallRejected(
             f"MCP 服务拒绝了调用。请修正参数类型、必填字段与嵌套后重试。（{_sanitize(exc)}）", code="mcp_call_rejected"
@@ -215,7 +258,7 @@ async def _call_session(session, tool_name, arguments, timeout, output_schema) -
     except McpError:
         raise
     except Exception as exc:
-        if is_unauthorized(exc):
+        if _unauthorized(exc, probe):
             raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
         raise McpConnectionError(f"MCP 调用失败：{_sanitize(exc)}", code="mcp_call_failed") from exc
     if getattr(result, "is_error", False):

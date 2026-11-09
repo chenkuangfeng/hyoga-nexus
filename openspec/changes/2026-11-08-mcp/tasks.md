@@ -20,8 +20,8 @@
 - [ ] 2.3 API 挂载 `/mcp/runs/{token}`，Bearer 鉴权映射到 Run，提前于全局 Auth；稳定协议级错误不泄漏资源存在性。（`tools/call` 的跨进程执行依赖路线图第 4/5 步外部 Runtime 适配器。）
 
 ## 3. 测试与文档
-- [ ] 3.1 单元测试：连接参数校验（含 header 非法值）与指纹失效、`config_epoch` 变更重建绑定、按工具启用、风险只升不降 + 降级确认、执行时复核、`McpError` / 输出 schema 分类、注册名哈希防撞、外部工具名清洗、OAuth 令牌作用域与刷新、401 单次重试。（已写 `tests/test_mcp_client.py`、`tests/test_mcp_service.py`、`tests/test_mcp_oauth.py`：协议/元数据/令牌、加密 state 防篡改与过期、按主体隔离、惰性/强制刷新、授权被拒清理、回调重定向。）
-- [ ] 3.2 集成测试：假 MCP 服务（stdio + HTTP + SSE）发现 / 调用 / 撤权后拒绝；服务端运行令牌生命周期（签发 / 调用 / 撤销 / 过期）；OAuth 授权码流端到端（动态注册 → 授权 → 令牌刷新）。
+- [x] 3.1 单元测试：连接参数校验（含 header 非法值）与指纹失效、`config_epoch` 变更重建绑定、按工具启用、风险只升不降 + 降级确认、执行时复核、`McpError` / 输出 schema 分类、注册名哈希防撞、外部工具名清洗、OAuth 令牌作用域与刷新、401 单次重试。（`tests/test_mcp_client.py`、`tests/test_mcp_service.py`、`tests/test_mcp_oauth.py`：协议/元数据/令牌、加密 state 防篡改与过期、按主体隔离、惰性/强制刷新、授权被拒清理、回调重定向；401 的平台级单次刷新重试由 3.2 的端到端用例覆盖。）
+- [x] 3.2 集成测试：假 MCP 服务（stdio + HTTP + SSE）发现 / 调用 / 撤权后拒绝；服务端运行令牌生命周期（签发 / 调用 / 撤销 / 过期）；OAuth 授权码流端到端（动态注册 → 授权 → 令牌刷新）。（`tests/test_mcp_integration.py`：真实 `MCPServer` 经 stdio 子进程 / streamable HTTP / SSE；停用服务后 `resolve_call` 拒绝；`RunMCPServer` 经协议 `tools/list` / `tools/call` 且运行令牌撤销后拒绝；假授权服务器 + 401 守卫完成注册、授权、换码、惰性刷新、401 强制刷新重试与 `invalid_grant` 撤权重授权。顺带修正：streamable HTTP 的 401 按响应状态观测（SDK 丢弃状态码）、发现工具的令牌解析移出目录事务。）
 - [x] 3.3 文档：`docs/architecture.md` 2.7、`docs/roadmap.md` 第 7 步、`packages/mcp` 的 `README.md` / `docs/{requirements,design}.md`。
 - [x] 3.4 全量 `uv run --locked pytest` 与锁定前端类型检查 / 构建（若前端有改动）。（后端全量 1628 passed / 1 skipped；前端无改动。）
 

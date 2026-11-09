@@ -22,7 +22,7 @@ MCP 客户端、服务端与工具桥。客户端连接外部 MCP 服务（stdio
 - 传输：stdio（子进程 + 进程卫生）、streamable HTTP、SSE（事件间隔与建连预算分离、TLS / 响应体上限 / 同源重定向收紧）。
 - 发现与启用：发现的工具默认全部禁用，管理员按工具开启；连接参数指纹与 `config_epoch` 决定缓存失效与会话重建。
 - 风险：`readOnlyHint` 为真才视为 `read`，否则 `write`；显式风险 > 曾观察最高声明 > 当前声明，服务端自行降级须工作区确认。
-- OAuth（`auth_type='oauth'`，仅 HTTP 传输）：授权码 + PKCE（S256）；未预置客户端时动态注册并按（租户、服务）复用；令牌按（租户、主体、服务）加密存储；30 秒余量惰性刷新；401 恰好一次 refresh + 一次重试；授权被拒删除令牌并返回 `mcp_oauth_required`。动态令牌优先于服务级静态 `Authorization` header，`headers` / `env` 的 `credential_references` 路径保留。
+- OAuth（`auth_type='oauth'`，仅 HTTP 传输）：授权码 + PKCE（S256）；未预置客户端时动态注册并按（租户、服务）复用；令牌按（租户、主体、服务）加密存储；30 秒余量惰性刷新；401 按 HTTP 状态识别并恰好一次 refresh + 一次重试；授权被拒删除令牌并返回 `mcp_oauth_required`。动态令牌优先于服务级静态 `Authorization` header，`headers` / `env` 的 `credential_references` 路径保留。
 - 服务端：`tools/list` 返回 Run 当前授权定义；运行令牌短时、单 Run、可撤销，每次调用复核权限。
 
 ## 使用

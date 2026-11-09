@@ -96,7 +96,8 @@
 ### OAuth 授权
 1. 管理员创建 OAuth 服务（`auth_type='oauth'`）；`POST .../oauth/authorize-url` 返回 authorization URL（授权码 + PKCE S256，`state` 为部署密钥加密的短时载荷，未预置客户端时先做 RFC 7591 动态注册并按（租户、服务）复用）。
 2. 浏览器在授权服务器授权后回到公开回调；API 解出 `state`（主体、PKCE verifier、回调、前端路径），换取令牌并按（租户、主体、服务）加密写入 `mcp_oauth_tokens`，再以 303 回前端，结果只放在 URL 片段。
-3. 后续连接注入该主体的令牌；带 30 秒余量惰性 refresh；401 恰好一次 refresh + 一次重试；授权被拒（`invalid_grant`）删除令牌并返回 `mcp_oauth_required`，客户端注册被拒（`invalid_client`）同时丢弃动态注册。动态令牌优先于服务级静态 `Authorization` header。
+3. 后续连接注入该主体的令牌；带 30 秒余量惰性 refresh；资源服务器 401 恰好一次 refresh + 一次重试；授权被拒（`invalid_grant`）删除令牌并返回 `mcp_oauth_required`，客户端注册被拒（`invalid_client`）同时丢弃动态注册。动态令牌优先于服务级静态 `Authorization` header。
+4. 401 以 HTTP 响应状态判定：streamable HTTP 的 SDK 会把非 2xx 响应变成通用 JSON-RPC 错误并丢掉状态码，客户端因此在 httpx 响应钩子上观测状态（SSE 仍靠 `raise_for_status` 的异常链）。刷新成功与授权被拒的删除都立即提交；发现工具时令牌解析与网络往返在目录事务之外，避免「提交关闭外层事务」或长时间占用连接。
 
 ### 服务端调用
 - Codex/Claude 适配器（第 4/5 步）在 Run 启动时向平台请求运行令牌，令牌绑定 Run 与主体/空间。

@@ -66,6 +66,6 @@
 - `auth_type` 取 `none` / `oauth`；OAuth 只允许 HTTP 传输（stdio 拒绝）。OAuth 配置含 `scopes`、可选的 `client_id` + `client_secret`（字符串或 `credential_references`）、可选的 `auth_server_metadata_url`。
 - 授权码 + PKCE（S256）：先读 RFC 9728 受保护资源元数据定位授权服务器，再读 RFC 8414 / OIDC 元数据；issuer 必须与文档来源同源，非 HTTPS（回环开发地址除外）一律拒绝。未预置客户端时按 RFC 7591 动态注册，注册结果按（租户、服务）复用。
 - `state` 是部署密钥加密、10 分钟有效的载荷（主体、服务、PKCE verifier、回调地址、前端返回路径）；回调不需要登录（浏览器来自授权服务器），只接受能解密且未过期的 state；前端返回路径必须是应用内相对路径。换到的令牌只属于发起授权的主体，其他成员各自授权。
-- 令牌按（租户、主体、服务）加密存储；使用前带 30 秒余量惰性刷新；资源服务器返回 401 时恰好一次 refresh + 一次重试，之后仍失败返回稳定错误。刷新被拒（`invalid_grant` / 过期）删除令牌并返回 `mcp_oauth_required`；客户端注册被拒（`invalid_client` / `unauthorized_client`）同时丢弃动态注册。删除即使在调用者事务回滚时也必须持久化，避免死令牌被反复重试。
+- 令牌按（租户、主体、服务）加密存储；使用前带 30 秒余量惰性刷新；资源服务器返回 401 时恰好一次 refresh + 一次重试，之后仍失败返回稳定错误。401 必须按 HTTP 响应状态识别，不依赖响应文本。刷新被拒（`invalid_grant` / 过期）删除令牌并返回 `mcp_oauth_required`；客户端注册被拒（`invalid_client` / `unauthorized_client`）同时丢弃动态注册。删除与刷新成功后的轮换即使在调用者事务回滚时也必须持久化，避免死令牌或已消费的 refresh token 被反复使用。
 - 用户级动态令牌优先于服务级静态 `Authorization` header；`headers` / `env` 的 `credential_references` 与服务级静态凭据路径保留。令牌、客户端密钥不落明文，不进入指纹、缓存、事件或日志。
 - 管理接口：`POST .../oauth/authorize-url`、`GET .../oauth/status`（`authorized` / `refreshable` / `reauth_required`）、`DELETE .../oauth/token`；公开回调 `GET /api/v1/mcp-services/oauth/callback` 以 303 回前端，结果只放在 URL 片段中，不反射授权服务器返回的任意文本。

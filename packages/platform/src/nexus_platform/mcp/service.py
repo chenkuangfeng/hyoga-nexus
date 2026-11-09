@@ -263,9 +263,34 @@ def _resolve_reference(ref: CredentialReferenceRecord) -> str:
     raise McpUnavailable(f"MCP credential backend {ref.backend!r} is not resolvable here")
 
 
+def _discover_with_oauth_retry(db: Session, service: McpServiceRecord, principal_id: UUID,
+                               resolved: dict, timeout: float
+                               ) -> tuple[list[mcp_client.MCPToolSpec], dict]:
+    """One discovery, then at most one forced token refresh and one retry.
+
+    Kept separate so a failure of the retried attempt is classified by `discover_tools` like any
+    other discovery failure instead of escaping the try block from inside its handler.
+    """
+    try:
+        return asyncio.run(mcp_client.discover(resolved, timeout=timeout)), resolved
+    except McpUnauthorized:
+        # An OAuth server may have revoked the token the connect used even though it had not
+        # locally expired yet; a non-OAuth service has no second credential to offer.
+        if service.config.get("auth_type") != "oauth":
+            raise
+        refreshed = resolve_config(db, service, principal_id, force_oauth_refresh=True)
+        return asyncio.run(mcp_client.discover(refreshed, timeout=timeout)), refreshed
+
+
 def discover_tools(db: Session, principal: Principal, tenant_id: UUID, service_id: UUID,
                    *, timeout: float = 30.0) -> dict[str, Any]:
-    """Connect to the service, list its tools and refresh the cached catalog (default: all disabled)."""
+    """Connect to the service, list its tools and refresh the cached catalog (default: all disabled).
+
+    Token resolution and the network round trip deliberately run outside the catalog transaction:
+    a refresh commits its rotated credential (see `nexus_platform.mcp.oauth.access_token`), which
+    would close an enclosing ``Session.begin()`` block, and a network call inside a transaction
+    would pin a database connection for the whole discovery budget.
+    """
     with db.begin():
         user = _context(db, principal, tenant_id)
         _require_admin(db, tenant_id, user.id)
@@ -273,26 +298,25 @@ def discover_tools(db: Session, principal: Principal, tenant_id: UUID, service_i
         if service is None or service.tenant_id != tenant_id:
             raise NotFound("MCP service not found")
         resolved = resolve_config(db, service, user.id)
-        try:
-            try:
-                specs = asyncio.run(mcp_client.discover(resolved, timeout=timeout))
-            except McpUnauthorized:
-                # Exactly one refresh + one retry: an OAuth server may have revoked the access
-                # token the connect used even though it has not locally expired yet.
-                if service.config.get("auth_type") != "oauth":
-                    raise
-                resolved = resolve_config(db, service, user.id, force_oauth_refresh=True)
-                specs = asyncio.run(mcp_client.discover(resolved, timeout=timeout))
-        except McpError as exc:
+    try:
+        specs, resolved = _discover_with_oauth_retry(db, service, user.id, resolved, timeout)
+    except McpError as exc:
+        with db.begin():
             _store_discovery_error(db, service, exc.code, str(exc))
             audit(db, tenant_id, user.id, "mcp_service.discover_failed", RESOURCE_KIND, str(service_id),
                   {"error": exc.code})
-            raise ServiceUnavailable(exc.code) from None
-        except Exception as exc:  # noqa: BLE001 - discovery must not leak transport details
+        raise ServiceUnavailable(exc.code) from None
+    except PlatformError:
+        # OAuth re-authorization or a token-endpoint outage already carries its own status; the
+        # caller (API / UI) needs that signal, not a generic connection failure.
+        raise
+    except Exception:  # noqa: BLE001 - discovery must not leak transport details
+        with db.begin():
             _store_discovery_error(db, service, "mcp_connection_failed", "connection failed")
             audit(db, tenant_id, user.id, "mcp_service.discover_failed", RESOURCE_KIND, str(service_id),
                   {"error": "mcp_connection_failed"})
-            raise ServiceUnavailable("mcp_connection_failed") from None
+        raise ServiceUnavailable("mcp_connection_failed") from None
+    with db.begin():
         fingerprint = mcp_client.fingerprint(resolved)
         now = utc_now()
         existing = {
