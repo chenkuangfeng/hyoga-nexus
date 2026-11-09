@@ -29,7 +29,15 @@ from nexus_mcp._sdk import (
 )
 
 from .config import assert_resolved, fingerprint, validate_config
-from .errors import McpCallRejected, McpConnectionError, McpDiscoveryTimeout, McpError, McpOutputSchemaError
+from .errors import (
+    McpCallRejected,
+    McpConnectionError,
+    McpDiscoveryTimeout,
+    McpError,
+    McpOutputSchemaError,
+    McpUnauthorized,
+    is_unauthorized,
+)
 
 DEFAULT_TIMEOUT = 30
 
@@ -137,8 +145,13 @@ async def discover(config: dict, *, timeout: float = DEFAULT_TIMEOUT) -> list[MC
         except McpError:
             raise
         except SdkMcpError as exc:
+            if is_unauthorized(exc):
+                raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
             raise McpConnectionError(f"MCP 握手被拒绝：{_sanitize(exc)}", code="mcp_connection_failed") from exc
         except Exception as exc:
+            if is_unauthorized(exc):
+                # Retrying with the same bearer token cannot help; the platform refreshes once.
+                raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
             if attempt < retries:
                 continue
             raise McpConnectionError(f"MCP 连接失败：{_sanitize(exc)}", code="mcp_connection_failed") from exc
@@ -194,12 +207,16 @@ async def _call_session(session, tool_name, arguments, timeout, output_schema) -
     except asyncio.TimeoutError as exc:
         raise McpConnectionError("MCP 调用超时", code="mcp_call_timeout") from exc
     except SdkMcpError as exc:
+        if is_unauthorized(exc):
+            raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
         raise McpCallRejected(
             f"MCP 服务拒绝了调用。请修正参数类型、必填字段与嵌套后重试。（{_sanitize(exc)}）", code="mcp_call_rejected"
         ) from exc
     except McpError:
         raise
     except Exception as exc:
+        if is_unauthorized(exc):
+            raise McpUnauthorized("MCP 服务要求 OAuth 授权或令牌已失效", code="mcp_unauthorized") from exc
         raise McpConnectionError(f"MCP 调用失败：{_sanitize(exc)}", code="mcp_call_failed") from exc
     if getattr(result, "is_error", False):
         raise McpCallRejected("MCP 服务拒绝了调用。请修正参数类型、必填字段与嵌套后重试。", code="mcp_call_rejected")

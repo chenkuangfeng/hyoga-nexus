@@ -6,14 +6,19 @@ resolved secrets.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal
+from nexus_platform.errors import PlatformError
+from nexus_platform.mcp import oauth as mcp_oauth
 from nexus_platform.mcp import service as mcp
 from nexus_api.dependencies.platform import get_database_session, get_principal
 
@@ -43,6 +48,13 @@ class ToolPolicyRequest(BaseModel):
     explicit_risk: str | None = Field(default=None, pattern="^(read|write|destructive)$")
     require_approval: bool = False
     confirm_downgrade: bool = False
+
+
+class OAuthAuthorizeRequest(BaseModel):
+    """The backend callback URL registered with the authorization server, plus the SPA path to return to."""
+
+    redirect_uri: str = Field(min_length=1, max_length=1024)
+    frontend_redirect: str | None = Field(default=None, max_length=2048)
 
 
 @router.get("/tenants/{tenant_id}/mcp-services")
@@ -112,3 +124,72 @@ def set_tool_policy(tenant_id: UUID, service_id: UUID, tool_name: str, body: Too
     return mcp.set_tool_policy(db, principal, tenant_id, service_id, tool_name,
                                explicit_risk=body.explicit_risk, require_approval=body.require_approval,
                                confirm_downgrade=body.confirm_downgrade)
+
+
+# --------------------------------------------------------------------------- OAuth (task 1.8)
+
+def _callback_target(state: str) -> str:
+    """The SPA path to return to after the callback; ``"/"`` when the state cannot be trusted."""
+    return mcp_oauth.frontend_redirect_for(state) if state else "/"
+
+
+def _redirect_with_result(target: str, *, error: str = "", service_id: str = "") -> RedirectResponse:
+    """Send the browser back to the SPA with the outcome in the fragment (never in server logs)."""
+    params = {"mcp_oauth_result": "error" if error else "success"}
+    if error:
+        params["mcp_oauth_error"] = error
+    if service_id:
+        params["mcp_oauth_service"] = service_id
+    return RedirectResponse(f"{target}#{urlencode(params)}", status_code=303)
+
+
+@router.post("/tenants/{tenant_id}/mcp-services/{service_id}/oauth/authorize-url")
+def mcp_oauth_authorize_url(tenant_id: UUID, service_id: UUID, body: OAuthAuthorizeRequest,
+                            principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Start the authorization-code + PKCE flow for the calling principal.
+
+    `redirect_uri` is this API's public callback; `frontend_redirect` is the application-relative
+    path the callback returns the browser to. Any active member authorizes their own token; a
+    dynamically registered client is stored per (tenant, service) and reused.
+    """
+    return mcp_oauth.begin_authorization(db, principal, tenant_id, service_id,
+                                         redirect_uri=body.redirect_uri,
+                                         frontend_redirect=body.frontend_redirect)
+
+
+@router.get("/tenants/{tenant_id}/mcp-services/{service_id}/oauth/status")
+def mcp_oauth_status(tenant_id: UUID, service_id: UUID, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Whether the caller's token is usable, merely refreshable, or must be re-authorized."""
+    return mcp_oauth.authorization_status(db, principal, tenant_id, service_id)
+
+
+@router.delete("/tenants/{tenant_id}/mcp-services/{service_id}/oauth/token", status_code=204)
+def mcp_oauth_revoke(tenant_id: UUID, service_id: UUID, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> None:
+    """Forget the caller's token; the next call asks for authorization again."""
+    mcp_oauth.revoke_authorization(db, principal, tenant_id, service_id)
+
+
+@router.get("/mcp-services/oauth/callback")
+def mcp_oauth_callback(state: str = Query(default="", max_length=8192),
+                       code: str = Query(default="", max_length=8192),
+                       error: str = Query(default="", max_length=128),
+                       db: Session = Depends(get_database_session)) -> RedirectResponse:
+    """Public authorization-server callback: exchange `code` and return to the SPA.
+
+    No session is required (the browser arrives from the authorization server); the encrypted,
+    expiring ``state`` carries the principal and PKCE verifier and is the only thing authorizing
+    the exchange. Failures still redirect so the workbench can explain them.
+    """
+    if error or not code or not state:
+        # Never reflect arbitrary provider text: only a plain OAuth error code is passed through.
+        reason = error if re.fullmatch(r"[a-z][a-z_]{0,63}", error) else "mcp_oauth_denied"
+        return _redirect_with_result(_callback_target(state), error=reason)
+    try:
+        result = mcp_oauth.complete_authorization(db, state, code)
+    except PlatformError as exc:
+        return _redirect_with_result(_callback_target(state), error=exc.code)
+    return _redirect_with_result(str(result["frontend_redirect"]),
+                                 service_id=str(result["service_id"]))

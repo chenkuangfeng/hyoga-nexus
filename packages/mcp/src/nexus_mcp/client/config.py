@@ -20,6 +20,9 @@ import secrets
 from .errors import McpError
 
 TRANSPORTS = ("stdio", "streamable_http", "sse")
+#: Authentication modes. Static header/env credentials remain the default; `oauth` adds a
+#: per-principal bearer token at execution time (openspec 2026-11-08-mcp, 1.8).
+AUTH_TYPES = ("none", "oauth")
 #: What h11 refuses inside a header field value: NUL and the vertical-whitespace
 #: characters. SP/HTAB are legal *between* visible characters but not at either end.
 _FORBIDDEN_HEADER_VALUE_CHARS = re.compile(r"[\x00\n\x0b\x0c\r]")
@@ -122,6 +125,47 @@ def _http_url(url: object) -> str:
     return url
 
 
+def _optional_string(value: object, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise McpError(f"{field} must be a non-empty string", code="invalid_configuration")
+    return value.strip()
+
+
+def _oauth_block(raw: object) -> dict[str, object]:
+    """Normalize the optional OAuth settings of an HTTP/SSE connection.
+
+    Only references, endpoints and scopes live here: access tokens are stored per principal
+    by the platform, never in a service's config. A client secret may still be a plain string
+    (pre-registered client) or a credential reference, matching the static-header path.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise McpError("oauth must be an object", code="invalid_configuration")
+    scopes = raw.get("scopes")
+    if scopes is None:
+        scopes = []
+    if not isinstance(scopes, list) or not all(isinstance(item, str) and item for item in scopes):
+        raise McpError("oauth.scopes must be a list of non-empty strings", code="invalid_configuration")
+    client_secret = raw.get("client_secret")
+    if isinstance(client_secret, str):
+        client_secret = validate_header_value("client_secret", client_secret)
+    elif client_secret is not None and not is_secret_reference(client_secret):
+        raise McpError("oauth.client_secret must be a string or credential reference",
+                       code="invalid_configuration")
+    metadata_url = raw.get("auth_server_metadata_url")
+    if metadata_url is not None:
+        metadata_url = _http_url(metadata_url)
+    return {
+        "scopes": list(scopes),
+        "client_id": _optional_string(raw.get("client_id"), "oauth.client_id"),
+        "client_secret": client_secret,
+        "auth_server_metadata_url": metadata_url,
+    }
+
+
 def validate_config(config: dict | None) -> dict:
     """Normalize a stored config dict and reject unknown or malformed connection parameters.
 
@@ -138,7 +182,12 @@ def validate_config(config: dict | None) -> dict:
     if not isinstance(timeout, (int, float)) or timeout <= 0:
         raise McpError("timeout must be a positive number", code="invalid_configuration")
     result["timeout"] = float(timeout)
+    auth_type = config.get("auth_type", "none")
+    if auth_type not in AUTH_TYPES:
+        raise McpError(f"Unknown auth_type {auth_type!r}", code="invalid_configuration")
     if transport == "stdio":
+        if auth_type != "none":
+            raise McpError("OAuth is only available for HTTP transports", code="invalid_configuration")
         command = config.get("command")
         if not isinstance(command, str) or not command.strip():
             raise McpError("command is required for stdio", code="invalid_configuration")
@@ -153,6 +202,9 @@ def validate_config(config: dict | None) -> dict:
             if not isinstance(sse_read_timeout, (int, float)) or sse_read_timeout <= 0:
                 raise McpError("sse_read_timeout must be a positive number", code="invalid_configuration")
             result["sse_read_timeout"] = float(sse_read_timeout)
+    result["auth_type"] = auth_type
+    if auth_type == "oauth":
+        result["oauth"] = _oauth_block(config.get("oauth"))
     return result
 
 
@@ -164,6 +216,30 @@ def assert_resolved(config: dict) -> None:
             for key, value in mapping.items():
                 if is_secret_reference(value):
                     raise McpError(f"Credential {key!r} is unresolved", code="mcp_unresolved_reference")
+    oauth = config.get("oauth")
+    if isinstance(oauth, dict) and is_secret_reference(oauth.get("client_secret")):
+        raise McpError("OAuth client secret is unresolved", code="mcp_unresolved_reference")
+
+
+def replace_authorization(headers: dict, value: str) -> dict:
+    """Return a copy of `headers` with one `Authorization` entry (case-insensitive replacement).
+
+    The dynamic OAuth token takes precedence over any static header; keeping a single spelling
+    avoids the duplicate-header failure that could echo the credential in an exception.
+    """
+    validate_header_value("Authorization", value)
+    merged: dict[str, str] = {}
+    replaced = False
+    for key, existing in (headers or {}).items():
+        if key.casefold() == "authorization":
+            if not replaced:
+                merged[key] = value
+                replaced = True
+            continue
+        merged[key] = existing
+    if not replaced:
+        merged["Authorization"] = value
+    return merged
 
 
 def _reference_id(value: object) -> str | None:
@@ -184,6 +260,17 @@ def fingerprint(config: dict) -> str:
         parts["args"] = list(normalized.get("args") or [])
     else:
         parts["url"] = normalized.get("url")
+        # OAuth changes which tools are visible and which token is presented; the client secret
+        # and any access token never enter the digest (rotating them must not invalidate the cache).
+        parts["auth_type"] = normalized.get("auth_type", "none")
+        oauth = normalized.get("oauth")
+        if isinstance(oauth, dict):
+            parts["oauth"] = {
+                "scopes": list(oauth.get("scopes") or []),
+                "client_id": oauth.get("client_id"),
+                "auth_server_metadata_url": oauth.get("auth_server_metadata_url"),
+                "client_secret_reference": _reference_id(oauth.get("client_secret")),
+            }
     for section in ("headers", "env"):
         mapping = normalized.get(section)
         if not isinstance(mapping, dict):

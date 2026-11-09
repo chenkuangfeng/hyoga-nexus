@@ -94,9 +94,9 @@
 - 任一步失败返回 `mcp_unavailable`，不直接调用外部服务。
 
 ### OAuth 授权
-1. 管理员创建 OAuth 服务，触发授权 → `begin_oauth` 生成 authorization URL。
-2. 用户在授权服务器授权 → 回调 `complete_oauth` 换取令牌 → 写入 `mcp_oauth_tokens`。
-3. 后续连接注入该主体的令牌；过期自动 refresh；401 单次重试。
+1. 管理员创建 OAuth 服务（`auth_type='oauth'`）；`POST .../oauth/authorize-url` 返回 authorization URL（授权码 + PKCE S256，`state` 为部署密钥加密的短时载荷，未预置客户端时先做 RFC 7591 动态注册并按（租户、服务）复用）。
+2. 浏览器在授权服务器授权后回到公开回调；API 解出 `state`（主体、PKCE verifier、回调、前端路径），换取令牌并按（租户、主体、服务）加密写入 `mcp_oauth_tokens`，再以 303 回前端，结果只放在 URL 片段。
+3. 后续连接注入该主体的令牌；带 30 秒余量惰性 refresh；401 恰好一次 refresh + 一次重试；授权被拒（`invalid_grant`）删除令牌并返回 `mcp_oauth_required`，客户端注册被拒（`invalid_client`）同时丢弃动态注册。动态令牌优先于服务级静态 `Authorization` header。
 
 ### 服务端调用
 - Codex/Claude 适配器（第 4/5 步）在 Run 启动时向平台请求运行令牌，令牌绑定 Run 与主体/空间。
@@ -105,7 +105,7 @@
 ## 5. 错误处理
 - 连接失败：`mcp_connection_failed`；发现超时：`mcp_discovery_timeout`；服务停用：`mcp_service_disabled`；工具未启用 / 已移除：`mcp_unavailable`。
 - `McpError` → 参数修正提示；输出 schema 失败 → 「不要改参数重试」（octop-harness `mcp_tool_error.py`）。
-- OAuth：元数据 401 未配置 OAuth → 提示切换策略；刷新失败 → `mcp_oauth_failed`，不重试工具调用。
+- OAuth：元数据 401 未配置 OAuth → 提示切换策略；无令牌 / 刷新被拒 → `mcp_oauth_required`（提示重新授权）；令牌端点瞬时失败 → `mcp_oauth_unavailable`，不重试工具调用。
 - 策略读取失败 fail-close（临时 `write` + 审批），不静默放行。
 - 运行令牌：过期/撤销/不存在 → 协议级 `unauthorized`，不泄漏资源存在性。
 

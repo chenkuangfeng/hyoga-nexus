@@ -229,6 +229,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 借鉴：WeKnora `approval/mcp_risk.go`（高风险 MCP 工具审批）；Octop `connectors/custom_mcp.py`（自定义 MCP 服务）、`mcp_tool_cache.py`（按用户缓存工具定义与指纹）、`connectors/oauth/`（连接器 OAuth）；octop-harness `middleware/mcp_tools.py`（按请求过滤 MCP 工具）、`middleware/mcp_tool_error.py`（MCP 错误转为失败的工具结果）。
 
 - **客户端**：连接外部 MCP 服务，发现工具，按工具启用，不默认开放整个服务；凭据以引用保存。
+- **OAuth**（`auth_type='oauth'`，只用于 HTTP 传输）：授权码 + PKCE（S256），未预置客户端时按 RFC 7591 动态注册并按（租户、服务）复用；令牌按（租户、主体、服务）加密保存，使用前带 30 秒余量惰性刷新。资源服务器 401 恰好一次 refresh + 一次重试；刷新被拒删除令牌并返回 `mcp_oauth_required`，客户端注册被拒同时丢弃动态注册。动态令牌优先于服务级静态 `Authorization` header，`headers` / `env` 的 `credential_references` 路径保留。授权 `state` 为部署密钥加密的短时载荷；回调为公开接口，结果只经 URL 片段回前端。
 - **服务端**：平台对外暴露已授权工具，供 Codex、Claude 等 Runtime 调用。
 - **运行令牌**：短时令牌，与 Run 生命周期一致，单 Run 有效，撤销即失效；服务端每次调用复核权限。
 - **客户端接入约束**（提案 `2026-11-06-tool-call-hardening` 决定 3，随第 7.2 步实现）：

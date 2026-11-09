@@ -12,7 +12,7 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -35,13 +35,13 @@ from nexus_platform.persistence.models import (
     RunRecord,
 )
 from nexus_mcp import client as mcp_client
-from nexus_mcp.client.errors import McpError
+from nexus_mcp.client.errors import McpError, McpUnauthorized
 from . import policy as risk
+from .oauth import McpOAuthRequired
 
 #: Mutating the tool catalog (services, enablement, risk) is an administrator capability.
 MANAGE_PERMISSION = "tools:manage"
-#: Resource kind used in ``platform_resources`` / ``agent_resource_bindings`` for MCP services.
-RESOURCE_KIND = "mcp_service"
+from .common import RESOURCE_KIND, aware  # noqa: E402
 #: Name charset for services (spec R1: 1-64, lowercase letters, digits, hyphen).
 SERVICE_NAME_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 #: Default run-token lifetime.
@@ -202,11 +202,15 @@ def delete_service(db: Session, principal: Principal, tenant_id: UUID, service_i
         audit(db, tenant_id, user.id, "mcp_service.deleted", RESOURCE_KIND, str(service_id), {})
 
 
-def resolve_config(db: Session, service: McpServiceRecord) -> dict:
-    """Resolve credential-reference markers in a service's config into plain strings.
+def resolve_config(db: Session, service: McpServiceRecord, principal_id: UUID | None = None, *,
+                   force_oauth_refresh: bool = False) -> dict:
+    """Resolve a service's connection config for one call, including its dynamic credential.
 
-    ``environment`` references resolve from the process environment; other backends need an injected
-    resolver and fail closed here with a stable code. Resolved values are never persisted.
+    Credential-reference markers in ``headers`` / ``env`` resolve from their backend; other
+    backends need an injected resolver and fail closed here. For an OAuth service the token of
+    `principal_id` is fetched (refreshing first when needed) and replaces any static
+    ``Authorization`` header: the user-level credential outranks the service-level one.
+    Resolved values are never persisted.
     """
     resolved: dict[str, object] = {}
     for section in ("headers", "env"):
@@ -216,15 +220,35 @@ def resolve_config(db: Session, service: McpServiceRecord) -> dict:
         out: dict[str, str] = {}
         for key, value in mapping.items():
             if mcp_client.is_secret_reference(value):
-                reference_id = UUID(value["$credential_ref"])
-                ref = db.get(CredentialReferenceRecord, reference_id)
-                if ref is None or str(ref.tenant_id) != str(service.tenant_id) or ref.status != "active":
-                    raise McpUnavailable("MCP credential reference is unavailable")
-                out[key] = _resolve_reference(ref)
+                out[key] = _resolve_secret(db, service, value)
             else:
                 out[key] = value
         resolved[section] = out
-    return {**service.config, **resolved}
+    result = {**service.config, **resolved}
+    if service.config.get("auth_type") == "oauth":
+        settings = dict(service.config.get("oauth") or {})
+        secret = settings.get("client_secret")
+        if mcp_client.is_secret_reference(secret):
+            settings["client_secret"] = _resolve_secret(db, service, secret)
+        result["oauth"] = settings
+        if principal_id is None:
+            raise McpOAuthRequired("MCP service requires OAuth authorization")
+        from . import oauth as mcp_oauth
+        value = mcp_oauth.authorization_value(db, service.tenant_id, principal_id, service,
+                                              force_refresh=force_oauth_refresh)
+        headers = result.get("headers")
+        result["headers"] = mcp_client.replace_authorization(
+            headers if isinstance(headers, dict) else {}, value)
+    return result
+
+
+def _resolve_secret(db: Session, service: McpServiceRecord, value: dict) -> str:
+    """Resolve one credential reference after checking it belongs to this Tenant and is active."""
+    reference_id = UUID(value["$credential_ref"])
+    ref = db.get(CredentialReferenceRecord, reference_id)
+    if ref is None or ref.tenant_id != service.tenant_id or ref.status != "active":
+        raise McpUnavailable("MCP credential reference is unavailable")
+    return _resolve_reference(ref)
 
 
 def _resolve_reference(ref: CredentialReferenceRecord) -> str:
@@ -248,9 +272,17 @@ def discover_tools(db: Session, principal: Principal, tenant_id: UUID, service_i
         service = db.get(McpServiceRecord, service_id)
         if service is None or service.tenant_id != tenant_id:
             raise NotFound("MCP service not found")
-        resolved = resolve_config(db, service)
+        resolved = resolve_config(db, service, user.id)
         try:
-            specs = asyncio.run(mcp_client.discover(resolved, timeout=timeout))
+            try:
+                specs = asyncio.run(mcp_client.discover(resolved, timeout=timeout))
+            except McpUnauthorized:
+                # Exactly one refresh + one retry: an OAuth server may have revoked the access
+                # token the connect used even though it has not locally expired yet.
+                if service.config.get("auth_type") != "oauth":
+                    raise
+                resolved = resolve_config(db, service, user.id, force_oauth_refresh=True)
+                specs = asyncio.run(mcp_client.discover(resolved, timeout=timeout))
         except McpError as exc:
             _store_discovery_error(db, service, exc.code, str(exc))
             audit(db, tenant_id, user.id, "mcp_service.discover_failed", RESOURCE_KIND, str(service_id),
@@ -435,11 +467,6 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def aware(value: datetime) -> datetime:
-    """Treat stored timestamps as UTC: SQLite returns naive datetimes for timezone-aware columns."""
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
 def issue_run_token(db: Session, run_id: UUID, *, ttl: timedelta = RUN_TOKEN_TTL) -> str:
     """Issue a short-lived, single-Run token. The plaintext appears only in this return value."""
     run = db.get(RunRecord, run_id)
@@ -518,7 +545,9 @@ def visible_tools(db: Session, tenant_id: UUID, service_ids) -> list[VisibleTool
     return visible
 
 
-def resolve_call(db: Session, tenant_id: UUID, service_id: UUID, tool_name: str) -> tuple[dict, dict | None, float]:
+def resolve_call(db: Session, tenant_id: UUID, service_id: UUID, tool_name: str, *,
+                 principal_id: UUID | None = None,
+                 force_oauth_refresh: bool = False) -> tuple[dict, dict | None, float]:
     """Re-validate a service and tool right before a call, returning the resolved connection config.
 
     This is the execution-time recheck (WeKnora ``checkEnabled``): the service and tool must still be
@@ -533,6 +562,6 @@ def resolve_call(db: Session, tenant_id: UUID, service_id: UUID, tool_name: str)
         McpServiceToolRecord.enabled.is_(True), McpServiceToolRecord.catalog_status == "ready"))
     if tool is None:
         raise McpServiceDisabled("MCP tool is disabled or not available")
-    resolved = resolve_config(db, service)
+    resolved = resolve_config(db, service, principal_id, force_oauth_refresh=force_oauth_refresh)
     timeout = float(service.config.get("timeout", 30)) if isinstance(service.config, dict) else 30.0
     return resolved, tool.output_schema, timeout

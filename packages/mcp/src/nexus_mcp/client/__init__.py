@@ -1,5 +1,6 @@
 """MCP client: connection validation, fingerprints, discovery, invocation and a stdio session pool."""
 from .config import (
+    AUTH_TYPES,
     TRANSPORTS,
     assert_resolved,
     fingerprint,
@@ -7,6 +8,7 @@ from .config import (
     is_secret_reference,
     new_epoch,
     normalize_headers,
+    replace_authorization,
     validate_config,
     validate_header_value,
 )
@@ -18,11 +20,14 @@ from .errors import (
     McpError,
     McpOutputSchemaError,
     McpServiceDisabled,
+    McpUnauthorized,
     McpUnavailable,
+    is_unauthorized,
 )
 from .names import external_description, registered_name, sanitize_name, tool_ref, valid_external_tool_name
 
 __all__ = [
+    "AUTH_TYPES",
     "TRANSPORTS",
     "assert_resolved",
     "fingerprint",
@@ -30,6 +35,7 @@ __all__ = [
     "is_secret_reference",
     "new_epoch",
     "normalize_headers",
+    "replace_authorization",
     "validate_config",
     "validate_header_value",
     "MCPToolSpec",
@@ -43,7 +49,9 @@ __all__ = [
     "McpError",
     "McpOutputSchemaError",
     "McpServiceDisabled",
+    "McpUnauthorized",
     "McpUnavailable",
+    "is_unauthorized",
     "external_description",
     "registered_name",
     "sanitize_name",
