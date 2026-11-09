@@ -208,6 +208,12 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             turn_budget=policy.tool_turn_budget_chars, injection_scan=policy.tool_injection_scan,
             tool_access=policy.tool_access,
             hidden_groups=hidden, defer_min_tokens=policy.tool_search_min_tokens)
+        if context.mcp_service_ids:
+            # MCP tools bound to the agent (openspec 2026-11-08-mcp, 1.6): projected from live service/tool/policy
+            # state and registered so they flow through the same authorized gateway as builtins. Every call rechecks.
+            from .mcp_tools import register_mcp_tools
+            await register_mcp_tools(run_db, factory, registry, bound,
+                                     tenant_id=context.tenant_id, service_ids=context.mcp_service_ids)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):

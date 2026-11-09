@@ -471,26 +471,37 @@ def revoke_run_token(db: Session, run_id: UUID) -> None:
             row.revoked_at = utc_now()
 
 
-def visible_tools(db: Session, run: RunRecord) -> list[VisibleTool]:
+def _service_ids(service_ids) -> set[UUID]:
+    """Coerce bound service resource ids (strings) to UUIDs, dropping malformed values."""
+    ids: set[UUID] = set()
+    for value in service_ids or []:
+        try:
+            ids.add(UUID(str(value)))
+        except (ValueError, AttributeError, TypeError):
+            continue
+    return ids
+
+
+def visible_tools(db: Session, tenant_id: UUID, service_ids) -> list[VisibleTool]:
     """Tools of services bound to the Run's agent, enabled at both service and tool level, with policy.
 
     Binding is resolved by the caller (Run preparation); this reads live service/tool/policy state and
     never trusts a cached snapshot. A policy read failure is fail-close (write + approval).
     """
-    service_ids = set(run.config_snapshot.get("mcp_service_ids") or [])
-    if not service_ids:
+    ids = _service_ids(service_ids)
+    if not ids:
         return []
-    services = db.scalars(select(McpServiceRecord).where(McpServiceRecord.id.in_(service_ids)))
+    services = db.scalars(select(McpServiceRecord).where(McpServiceRecord.id.in_(ids)))
     visible: list[VisibleTool] = []
     for service in services:
-        if str(service.tenant_id) != str(run.tenant_id) or not service.enabled:
+        if service.tenant_id != tenant_id or not service.enabled:
             continue
         tool_rows = db.scalars(select(McpServiceToolRecord).where(
             McpServiceToolRecord.service_id == service.id,
             McpServiceToolRecord.enabled.is_(True), McpServiceToolRecord.catalog_status == "ready"))
         for tool in tool_rows:
             approval = db.scalar(select(McpToolApprovalRecord).where(
-                McpToolApprovalRecord.tenant_id == run.tenant_id, McpToolApprovalRecord.service_id == service.id,
+                McpToolApprovalRecord.tenant_id == tenant_id, McpToolApprovalRecord.service_id == service.id,
                 McpToolApprovalRecord.tool_name == tool.tool_name))
             declared = risk.declared_risk(tool.read_only_hint)
             effective, requires = risk.risk_action(
@@ -505,3 +516,23 @@ def visible_tools(db: Session, run: RunRecord) -> list[VisibleTool]:
                                        output_schema=tool.output_schema, risk=effective,
                                        requires_approval=requires, timeout=timeout))
     return visible
+
+
+def resolve_call(db: Session, tenant_id: UUID, service_id: UUID, tool_name: str) -> tuple[dict, dict | None, float]:
+    """Re-validate a service and tool right before a call, returning the resolved connection config.
+
+    This is the execution-time recheck (WeKnora ``checkEnabled``): the service and tool must still be
+    enabled, the tool catalog must still be ready, and credential references must resolve. Fails closed on
+    any mismatch so a definition advertised earlier never bypasses a later disable or revocation.
+    """
+    service = db.get(McpServiceRecord, service_id)
+    if service is None or service.tenant_id != tenant_id or not service.enabled:
+        raise McpServiceDisabled("MCP service is disabled or not available")
+    tool = db.scalar(select(McpServiceToolRecord).where(
+        McpServiceToolRecord.service_id == service_id, McpServiceToolRecord.tool_name == tool_name,
+        McpServiceToolRecord.enabled.is_(True), McpServiceToolRecord.catalog_status == "ready"))
+    if tool is None:
+        raise McpServiceDisabled("MCP tool is disabled or not available")
+    resolved = resolve_config(db, service)
+    timeout = float(service.config.get("timeout", 30)) if isinstance(service.config, dict) else 30.0
+    return resolved, tool.output_schema, timeout

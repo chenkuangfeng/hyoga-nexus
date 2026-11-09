@@ -136,6 +136,8 @@ from nexus_api.http.knowledge import router as knowledge_router
 app.include_router(knowledge_router)
 from nexus_api.http.knowledge_wiki import router as knowledge_wiki_router
 app.include_router(knowledge_wiki_router)
+from nexus_api.http.mcp import router as mcp_router
+app.include_router(mcp_router)
 
 
 @app.middleware("http")

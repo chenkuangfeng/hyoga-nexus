@@ -1,1 +1,51 @@
-"""Planned module; implementation pending."""
+"""MCP server exposing one Run's authorized tools over streamable HTTP (openspec 2026-11-08-mcp, R9).
+
+The server is a thin projection over two injected ports (list definitions, execute a tool); the
+platform resolves the run token and supplies the ports, so this package never touches the database.
+Every ``tools/list`` returns the Run's current authorized definitions and every ``tools/call`` goes
+through the full authorized-tool gateway, rechecking authority instead of trusting the list.
+"""
+from __future__ import annotations
+
+from typing import Awaitable, Callable
+
+from nexus_core.runtime import ToolDefinition, ToolResult
+from nexus_mcp._sdk import CallToolResult, MCPServer, TextContent, ToolAnnotations, ToolError, ToolType
+
+ListDefinitions = Callable[[], Awaitable[list[ToolDefinition]]]
+ExecuteTool = Callable[[str, dict], Awaitable[ToolResult]]
+
+
+class RunMCPServer(MCPServer):
+    """An `MCPServer` whose tools are the Run's live authorized definitions."""
+
+    def __init__(self, list_definitions: ListDefinitions, execute_tool: ExecuteTool, *,
+                 name: str = "hyoga-nexus", version: str = "0.1.0"):
+        super().__init__(name=name, version=version)
+        self._list_definitions = list_definitions
+        self._execute_tool = execute_tool
+
+    async def list_tools(self) -> list[ToolType]:
+        definitions = await self._list_definitions()
+        tools: list[ToolType] = []
+        for definition in definitions:
+            tools.append(ToolType(
+                name=definition.name,
+                description=definition.description,
+                input_schema=definition.parameters,
+                annotations=ToolAnnotations(read_only_hint=definition.read_only),
+            ))
+        return tools
+
+    async def call_tool(self, name: str, arguments: dict, context=None) -> CallToolResult:
+        result = await self._execute_tool(name, arguments or {})
+        text = result.data or (result.error_code or "tool finished")
+        return CallToolResult(content=[TextContent(type="text", text=text)], is_error=result.error_code is not None)
+
+
+def streamable_http_app(server: MCPServer, *, stateless: bool = True):
+    """A Starlette ASGI app for `server`, stateless by default (each request resolves the token)."""
+    return server.streamable_http_app(stateless_http=stateless)
+
+
+__all__ = ["RunMCPServer", "streamable_http_app", "ListDefinitions", "ExecuteTool"]

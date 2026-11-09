@@ -23,3 +23,5 @@ class ExecutionContext:
     budgets: dict
     progress: RuntimeProgress
     history_run_ids: tuple[UUID, ...]
+    #: MCP service ids bound to the agent version (from the frozen config snapshot). Resolved live at execution.
+    mcp_service_ids: tuple[str, ...] = ()

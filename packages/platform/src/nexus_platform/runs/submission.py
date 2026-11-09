@@ -75,6 +75,9 @@ class RunSubmissionService:
                 if model.credential_reference_id else None,
                 "budgets": agent.budgets,
                 "resources": [binding.snapshot() for binding in bindings],
+                # MCP services bound to the agent (kind `mcp_service`); resolved live at execution, never trusted
+                # as an authorization grant (openspec 2026-11-08-mcp, 1.6). Stored as resource ids for the worker.
+                "mcp_service_ids": [binding.resource_id for binding in bindings if binding.kind == "mcp_service"],
                 "principal_id": str(member.user_id),
                 "membership_role": member.role,
                 "authorized_at": now.isoformat(),

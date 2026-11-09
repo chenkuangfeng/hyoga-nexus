@@ -260,7 +260,8 @@ class ExecutionPreparer:
                 return ExecutionContext(run.id, run.session_id, run.tenant_id, run.principal_id,
                     principal_for_user(db, user.id), version.runtime_type, profile.provider, model.model_name,
                     merged_model_options(model.options, version.budgets), credential, (ModelMessage('system', system), *history), bindings,
-                    version.budgets, RuntimeProgress(**state.progress), tuple(allowed_runs))
+                    version.budgets, RuntimeProgress(**state.progress), tuple(allowed_runs),
+                    mcp_service_ids=tuple(run.config_snapshot.get("mcp_service_ids") or []))
             except (PlatformError, RuntimeFault) as exc:
                 code = exc.code if isinstance(exc, RuntimeFault) else 'run_authorization_denied'
                 _finish(db, run, RuntimeOutcome('failed', code))

@@ -73,6 +73,13 @@ try:
 except ImportError:  # pragma: no cover - SDK absent
     MCPError = None  # type: ignore[assignment,misc]
 
+# --- server-facing types and exceptions ---------------------------------------
+try:
+    from mcp_types import CallToolResult, TextContent, Tool as ToolType, ToolAnnotations
+    from mcp.server.mcpserver.exceptions import ToolError
+except ImportError:  # pragma: no cover - SDK absent
+    CallToolResult = TextContent = ToolType = ToolAnnotations = ToolError = None  # type: ignore[assignment,misc]
+
 
 def sdk_httpx() -> Any:
     """Return the httpx module the installed MCP SDK is built against.
@@ -97,6 +104,11 @@ __all__ = [
     "sse_client",
     "MCPServer",
     "MCPError",
+    "CallToolResult",
+    "TextContent",
+    "ToolType",
+    "ToolAnnotations",
+    "ToolError",
     "LATEST_HANDSHAKE_VERSION",
     "LATEST_PROTOCOL_VERSION",
     "sdk_httpx",
