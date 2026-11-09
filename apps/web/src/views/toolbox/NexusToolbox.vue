@@ -34,6 +34,7 @@
         <div class="toolbox-panel">
           <NexusToolboxSkills v-if="selectedItem.key === 'skills'" :tenant-id="tenantId" @count="counts.skills = $event" />
           <NexusToolboxTools v-else-if="selectedItem.key === 'tools'" :tenant-id="tenantId" @count="counts.tools = $event" />
+          <NexusToolboxMcp v-else-if="selectedItem.key === 'mcp'" :tenant-id="tenantId" @count="counts.mcp = $event" />
         </div>
       </section>
     </template>
@@ -56,6 +57,7 @@ import {
 } from '@/config/toolbox'
 import ResourceIcon from '@/components/icons/ResourceIcon.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import NexusToolboxMcp from './NexusToolboxMcp.vue'
 import NexusToolboxSkills from './NexusToolboxSkills.vue'
 import NexusToolboxTools from './NexusToolboxTools.vue'
 

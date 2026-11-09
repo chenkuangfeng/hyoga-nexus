@@ -23,10 +23,10 @@ export const TOOLBOX_ITEMS = [
   },
   {
     key: 'mcp',
-    icon: 'tools',
+    icon: 'link',
     title: 'settings.mcpService',
     description: 'mcpSettings.description',
-    available: false,
+    available: true,
   },
   {
     key: 'browserconnection',

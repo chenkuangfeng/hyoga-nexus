@@ -15,15 +15,16 @@ const access = (role: string | null, unsupported: string[] = [], superuser = fal
   isSupported: (capability?: string) => !capability || !unsupported.includes(capability),
 })
 
-test('toolbox tabs: skills and tools are open, MCP and browser connection are planned; infrastructure stays in settings', () => {
+test('toolbox tabs: skills, tools and MCP are open, browser connection is planned; infrastructure stays in settings', () => {
   assert.deepEqual(TOOLBOX_ITEMS.map((item) => [item.key, item.available]),
-    [['skills', true], ['tools', true], ['mcp', false], ['browserconnection', false]])
+    [['skills', true], ['tools', true], ['mcp', true], ['browserconnection', false]])
   const lookup = (key: string) => key.split('.').reduce<any>((node, part) => node?.[part], zhCN)
   for (const item of TOOLBOX_ITEMS) {
     for (const key of [item.title, item.description]) assert.equal(typeof lookup(key), 'string', key)
   }
   assert.equal(isToolboxSectionAvailable('skills') && isToolboxSectionAvailable('tools'), true)
-  assert.equal(isToolboxSectionAvailable('mcp') || isToolboxSectionAvailable('browserconnection'), false)
+  assert.equal(isToolboxSectionAvailable('mcp'), true)
+  assert.equal(isToolboxSectionAvailable('browserconnection'), false)
   for (const key of ['sandbox', 'websearch', 'envvars', 'integration-api', undefined, 'unknown']) {
     assert.equal(isToolboxSection(key), false)
   }

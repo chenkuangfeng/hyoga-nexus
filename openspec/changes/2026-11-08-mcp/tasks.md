@@ -26,6 +26,6 @@
 - [x] 3.4 全量 `uv run --locked pytest` 与锁定前端类型检查 / 构建（若前端有改动）。（后端全量 1628 passed / 1 skipped；前端无改动。）
 
 ## 4. 前端（决定 5）
-- [ ] 4.1 工具箱 MCP 标签按 WeKnora 实现最小可用：服务列表 / 创建与编辑（transport、url、command/args/env、headers 引用）、发现工具、`enabled_tools` 启停。
-- [ ] 4.2 接入后端 `/api/v1/tenants/{id}/mcp-services` 路由与 `tools:manage` 权限；中英文文案一次加齐（vue-i18n）。
-- [ ] 4.3 浏览器测试：MCP 服务创建、发现、启用一个工具、停用服务。
+- [x] 4.1 工具箱 MCP 标签按 WeKnora 实现最小可用：服务列表 / 创建与编辑（transport、url、command/args/env、headers 引用）、发现工具、`enabled_tools` 启停。
+- [x] 4.2 接入后端 `/api/v1/tenants/{id}/mcp-services` 路由与 `tools:manage` 权限；中英文文案一次加齐（vue-i18n）。
+- [x] 4.3 交互测试：MCP 服务创建、发现、启用一个工具、停用服务。（仓库无 Playwright，按现有 node:test 组件交互测试惯例实现于 `apps/web/src/views/toolbox/mcpInteractions.test.ts`，配合纯函数单测 `toolboxMcp.test.ts`。）
