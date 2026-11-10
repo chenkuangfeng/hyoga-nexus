@@ -42,7 +42,7 @@ from .skill import SkillRecord, SkillVersionRecord, SkillVersionFileRecord, Sess
 from .schedule import CronJobRecord
 from .approval import InputRequestRecord, ActionApprovalRecord, ActionGrantRecord
 from .mcp import (McpServiceRecord, McpServiceToolRecord, McpToolApprovalRecord, McpOAuthClientRecord,
-                  McpOAuthTokenRecord, McpRunTokenRecord)
+                  McpOAuthTokenRecord, McpEndpointRecord)
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
 from .space import AgentShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
@@ -142,7 +142,7 @@ __all__ = [
     'McpToolApprovalRecord',
     'McpOAuthClientRecord',
     'McpOAuthTokenRecord',
-    'McpRunTokenRecord',
+    'McpEndpointRecord',
     'VectorStoreRecord',
     'StorageBackendRecord',
     'KnowledgeBaseRecord',

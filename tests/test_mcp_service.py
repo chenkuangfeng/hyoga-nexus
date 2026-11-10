@@ -1,6 +1,4 @@
-"""MCP domain service: CRUD, discovery/enablement, risk policy and run tokens (openspec 2026-11-08-mcp)."""
-import asyncio
-
+"""MCP domain service: CRUD, discovery/enablement, risk policy and stateless endpoints (openspec 2026-11-08-mcp)."""
 import pytest
 
 from nexus_core.platform import Principal, new_id, utc_now
@@ -9,8 +7,7 @@ from nexus_platform.errors import Conflict, Forbidden, InvalidConfiguration, Not
 from nexus_platform.identity.service import resolve_user
 from nexus_platform.mcp import service as mcp
 from nexus_platform.persistence.models import CredentialReferenceRecord, McpServiceRecord
-from nexus_platform.runs.service import create_run
-from test_platform import create_agent_stack, database  # noqa: F401
+from test_platform import database  # noqa: F401
 from sqlalchemy import update
 
 PRINCIPAL = Principal(id="alice", issuer="test")
@@ -181,13 +178,51 @@ def test_environment_credential_reference_resolution(database, monkeypatch):
             mcp.discover_tools(db, PRINCIPAL, tenant.id, UUID(created["id"]))
 
 
-def test_run_token_lifecycle(database):
-    principal = Principal(id="alice", issuer="test")
-    tenant, _profile, _model, _agent, _version, session = create_agent_stack(database, principal)
+def test_endpoint_token_lifecycle(database):
+    tenant = _tenant(database)
     with database() as db:
-        run, _ = create_run(db, principal, tenant.id, session.id, message="hi", idempotency_key="k1")
-        token = mcp.issue_run_token(db, run.id)
-        assert mcp.resolve_run_token(db, token).id == run.id
-        mcp.revoke_run_token(db, run.id)
+        created = mcp.create_endpoint(db, PRINCIPAL, tenant.id, name="readonly",
+                                      description="read face", tool_allowlist=["search_knowledge"], kb_ids=[])
+    token = created["token"]
+    endpoint_id = UUID(created["id"])
+    with database() as db:
+        resolved = mcp.resolve_endpoint_token(db, token)
+        assert resolved.id == endpoint_id
+        assert resolved.token_hash != token  # only the hash is stored
+
+    with database() as db:
+        rotated = mcp.rotate_endpoint_token(db, PRINCIPAL, tenant.id, endpoint_id)
+    assert rotated["token"] != token
+    # the old token is dead, the new one authenticates
+    with database() as db:
         with pytest.raises(Forbidden):
-            mcp.resolve_run_token(db, token)
+            mcp.resolve_endpoint_token(db, token)
+        assert mcp.resolve_endpoint_token(db, rotated["token"]).id == endpoint_id
+
+    with database() as db:
+        mcp.revoke_endpoint_token(db, PRINCIPAL, tenant.id, endpoint_id)
+    with database() as db:
+        with pytest.raises(Forbidden):
+            mcp.resolve_endpoint_token(db, rotated["token"])
+
+
+def test_endpoint_crud_validates_allowlist_and_names(database):
+    tenant = _tenant(database)
+    with database() as db:
+        with pytest.raises(InvalidConfiguration):
+            mcp.create_endpoint(db, PRINCIPAL, tenant.id, name="readonly", description="",
+                                tool_allowlist=["delete_all_the_things"], kb_ids=[])
+    with database() as db:
+        created = mcp.create_endpoint(db, PRINCIPAL, tenant.id, name="readonly", description="read face",
+                                      tool_allowlist=["search_knowledge", "web_search"], kb_ids=[])
+    endpoint_id = UUID(created["id"])
+    with database() as db:
+        with pytest.raises(Conflict):
+            mcp.create_endpoint(db, PRINCIPAL, tenant.id, name="readonly", description="",
+                                tool_allowlist=["search_knowledge"], kb_ids=[])
+        updated = mcp.update_endpoint(db, PRINCIPAL, tenant.id, endpoint_id, name=None, description="narrower",
+                                      tool_allowlist=["web_search"], kb_ids=None, enabled=None)
+        assert updated["tool_allowlist"] == ["web_search"]
+        mcp.delete_endpoint(db, PRINCIPAL, tenant.id, endpoint_id)
+        with pytest.raises(NotFound):
+            mcp.get_endpoint(db, PRINCIPAL, tenant.id, endpoint_id)

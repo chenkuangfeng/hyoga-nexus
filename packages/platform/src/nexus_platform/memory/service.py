@@ -89,6 +89,12 @@ def read_for_run(db, tenant_id: UUID, owner_id: UUID, entry_id: UUID, run_id: UU
 
 
 @_translate
+def read_for_principal(db, tenant_id: UUID, owner_id: UUID, entry_id: UUID) -> str:
+    """Read one owned published entry for an outbound MCP endpoint (stateless; no Run)."""
+    return rules.read_for_principal(SqlMemoryRepository(db), tenant_id, owner_id, entry_id)
+
+
+@_translate
 def review(db, principal: Principal, tenant_id: UUID, draft_id: UUID, *, approve: bool, title: str,
            entry_id: UUID | None = None, expected_version: int = 0, project: str = '',
            importance: int | None = None) -> dict[str, Any]:

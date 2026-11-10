@@ -1,9 +1,9 @@
-"""MCP server exposing one Run's authorized tools over streamable HTTP (openspec 2026-11-08-mcp, R9).
+"""MCP server exposing one endpoint's read-only tools over streamable HTTP (openspec 2026-11-08-mcp, 2.4).
 
 The server is a thin projection over two injected ports (list definitions, execute a tool); the
-platform resolves the run token and supplies the ports, so this package never touches the database.
-Every ``tools/list`` returns the Run's current authorized definitions and every ``tools/call`` goes
-through the full authorized-tool gateway, rechecking authority instead of trusting the list.
+platform resolves the endpoint token and supplies the ports, so this package never touches the database.
+Every ``tools/list`` returns the endpoint's whitelisted read-only definitions and every ``tools/call``
+re-checks the tool is still in the whitelist instead of trusting the earlier list.
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ ListDefinitions = Callable[[], Awaitable[list[ToolDefinition]]]
 ExecuteTool = Callable[[str, dict], Awaitable[ToolResult]]
 
 
-class RunMCPServer(MCPServer):
-    """An `MCPServer` whose tools are the Run's live authorized definitions."""
+class EndpointMCPServer(MCPServer):
+    """An `MCPServer` whose tools are an endpoint's whitelisted read-only definitions."""
 
     def __init__(self, list_definitions: ListDefinitions, execute_tool: ExecuteTool, *,
                  name: str = "hyoga-nexus", version: str = "0.1.0"):
@@ -48,4 +48,4 @@ def streamable_http_app(server: MCPServer, *, stateless: bool = True):
     return server.streamable_http_app(stateless_http=stateless)
 
 
-__all__ = ["RunMCPServer", "streamable_http_app", "ListDefinitions", "ExecuteTool"]
+__all__ = ["EndpointMCPServer", "streamable_http_app", "ListDefinitions", "ExecuteTool"]

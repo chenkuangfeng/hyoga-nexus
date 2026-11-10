@@ -1,4 +1,4 @@
-"""MCP services, tool cache/whitelist, risk policy, OAuth and run tokens (openspec 2026-11-08-mcp, task 1.1).
+"""MCP services, tool cache/whitelist, risk policy, OAuth and stateless endpoints (openspec 2026-11-08-mcp, task 1.1 + 2.2).
 
 Additive only: no existing table changes. Column defaults live on the ORM mappings (Python side), so
 no server defaults are emitted here; the migration must compare clean against the metadata.
@@ -71,19 +71,26 @@ def upgrade():
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('scope', sa.Text(), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False))
-    op.create_table('mcp_run_tokens',
-        sa.Column('token_hash', sa.String(64), primary_key=True),
-        sa.Column('run_id', sa.Uuid(), sa.ForeignKey('runs.id', ondelete='CASCADE'), nullable=False),
+    op.create_table('mcp_endpoints',
+        sa.Column('id', sa.Uuid(), primary_key=True),
         sa.Column('tenant_id', sa.Uuid(), sa.ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('revoked_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False))
-    op.create_index('ix_mcp_run_tokens_run', 'mcp_run_tokens', ['run_id'])
+        sa.Column('name', sa.String(64), nullable=False),
+        sa.Column('description', sa.Text(), nullable=False),
+        sa.Column('enabled', sa.Boolean(), nullable=False),
+        sa.Column('tool_allowlist', sa.JSON(), nullable=False),
+        sa.Column('kb_ids', sa.JSON(), nullable=False),
+        sa.Column('token_hash', sa.String(64), nullable=False),
+        sa.Column('last_used_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('created_by', sa.Uuid(), sa.ForeignKey('users.id', ondelete='RESTRICT'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint('tenant_id', 'name', name='uq_mcp_endpoints_tenant_name'))
+    op.create_index('ix_mcp_endpoints_tenant', 'mcp_endpoints', ['tenant_id', 'enabled'])
 
 
 def downgrade():
-    op.drop_index('ix_mcp_run_tokens_run', table_name='mcp_run_tokens')
-    op.drop_table('mcp_run_tokens')
+    op.drop_index('ix_mcp_endpoints_tenant', table_name='mcp_endpoints')
+    op.drop_table('mcp_endpoints')
     op.drop_table('mcp_oauth_tokens')
     op.drop_table('mcp_oauth_clients')
     op.drop_table('mcp_tool_approvals')

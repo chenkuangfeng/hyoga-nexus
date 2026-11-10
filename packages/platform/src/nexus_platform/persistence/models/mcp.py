@@ -121,17 +121,32 @@ class McpOAuthTokenRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class McpRunTokenRecord(Base):
-    """Hashed short-lived run tokens; the plaintext token appears only in the issue response."""
+class McpEndpointRecord(Base):
+    """One outbound MCP endpoint exposing a read-only tool face to external MCP clients.
 
-    __tablename__ = "mcp_run_tokens"
+    The plaintext long-lived token appears only in the create/rotate response; ``token_hash`` is a
+    SHA-256 digest. ``tool_allowlist`` names the read-only tools this endpoint exposes; ``kb_ids``
+    bounds knowledge search (empty = every readable base).
+    """
+
+    __tablename__ = "mcp_endpoints"
     __table_args__ = (
-        Index("ix_mcp_run_tokens_run", "run_id"),
+        UniqueConstraint("tenant_id", "name", name="uq_mcp_endpoints_tenant_name"),
+        Index("ix_mcp_endpoints_tenant", "tenant_id", "enabled"),
     )
 
-    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    run_id: Mapped[UUID] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Names of the read-only tools this endpoint exposes (whitelist).
+    tool_allowlist: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    #: Knowledge-base ids searchable through this endpoint (empty = every readable base).
+    kb_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    #: SHA-256 of the long-lived endpoint token; empty after revocation.
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

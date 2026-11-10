@@ -33,14 +33,14 @@ from nexus_core.platform import Principal, utc_now
 from nexus_core.runtime import ToolDefinition, ToolResult
 from nexus_mcp import client as mcp_client
 from nexus_mcp._sdk import MCPServer, ToolAnnotations
-from nexus_mcp.server import RunMCPServer, streamable_http_app
+from nexus_mcp.server import EndpointMCPServer, streamable_http_app
 from nexus_platform.errors import Forbidden
 from nexus_platform.identity.service import resolve_user
 from nexus_platform.mcp import oauth as lifecycle
 from nexus_platform.mcp import service as mcp
+from nexus_platform.mcp import stateless
 from nexus_platform.persistence.models import McpOAuthTokenRecord
-from nexus_platform.runs.service import create_run
-from test_platform import create_agent_stack, database  # noqa: F401  (fixture)
+from test_platform import database  # noqa: F401  (fixture)
 
 PRINCIPAL = Principal(id="alice", issuer="test")
 
@@ -146,58 +146,50 @@ def test_disabled_service_is_rechecked_before_each_call(database):
                 mcp.resolve_call(db, tenant.id, service_id, "echo")
 
 
-# --------------------------------------------------------------------------- run tokens + server
+# --------------------------------------------------------------------------- endpoint tokens + server
 
-def test_run_token_lifecycle_and_server_protocol(database):
-    """A run token authorizes the server's tools/list and tools/call until revoked or expired."""
-    tenant, _profile, _model, _agent, _version, session = create_agent_stack(database, PRINCIPAL)
+def test_endpoint_token_lifecycle_and_server_protocol(database):
+    """An endpoint token authorizes the server's tools/list and tools/call until revoked."""
+    tenant = _tenant(database)
     with database() as db:
-        run, _ = create_run(db, PRINCIPAL, tenant.id, session.id, message="hi", idempotency_key="mcp-run")
-        token = mcp.issue_run_token(db, run.id)
-        expired = mcp.issue_run_token(db, run.id, ttl=timedelta(seconds=-1))
-        db.commit()
+        created = mcp.create_endpoint(db, PRINCIPAL, tenant.id, name="readonly", description="",
+                                      tool_allowlist=["list_documents", "search_memory"], kb_ids=[])
+        endpoint_id = UUID(created["id"])
+        token = created["token"]
 
     with database() as db:
-        assert mcp.resolve_run_token(db, token).id == run.id
-        with pytest.raises(Forbidden):
-            mcp.resolve_run_token(db, expired)
+        assert mcp.resolve_endpoint_token(db, token).id == endpoint_id
 
-    external = _fake_mcp_server()
-    with _serve(external.streamable_http_app()) as external_base:
-        external_config = {"transport": "streamable_http", "url": external_base + "/mcp"}
-        definitions = [ToolDefinition(
-            name="echo", description="Echo the text back.",
-            parameters={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
-            read_only=True, source="mcp", group="mcp", deferrable=True)]
+    definitions = [stateless.TOOL_DEFINITIONS["list_documents"], stateless.TOOL_DEFINITIONS["search_memory"]]
 
-        def _authorize() -> None:
-            with database() as db:
-                mcp.resolve_run_token(db, token)
+    def _authorize() -> None:
+        with database() as db:
+            mcp.resolve_endpoint_token(db, token)
 
-        async def list_definitions() -> list[ToolDefinition]:
-            _authorize()
-            return definitions
+    async def list_definitions() -> list[ToolDefinition]:
+        _authorize()
+        return definitions
 
-        async def execute(name: str, arguments: dict) -> ToolResult:
-            _authorize()
-            return await mcp_client.call(external_config, name, arguments, timeout=15)
+    async def execute(name: str, arguments: dict) -> ToolResult:
+        _authorize()
+        return ToolResult("ok")
 
-        app = streamable_http_app(RunMCPServer(list_definitions, execute))
-        with _serve(app) as nexus_base:
-            nexus_config = {"transport": "streamable_http", "url": nexus_base + "/mcp"}
-            specs = _run(mcp_client.discover(nexus_config, timeout=15))
-            assert [spec.name for spec in specs] == ["echo"]
-            assert _run(mcp_client.call(nexus_config, "echo", {"text": "run"}, timeout=15)).data == "echo:run"
+    app = streamable_http_app(EndpointMCPServer(list_definitions, execute))
+    with _serve(app) as nexus_base:
+        nexus_config = {"transport": "streamable_http", "url": nexus_base + "/mcp"}
+        specs = _run(mcp_client.discover(nexus_config, timeout=15))
+        assert [spec.name for spec in specs] == ["list_documents", "search_memory"]
+        assert specs[0].read_only_hint is True
+        assert _run(mcp_client.call(nexus_config, "list_documents", {}, timeout=15)).data == "ok"
 
-            with database() as db:
-                mcp.revoke_run_token(db, run.id)
-                db.commit()
-                with pytest.raises(Forbidden):
-                    mcp.resolve_run_token(db, token)
-            with pytest.raises(mcp_client.McpError):
-                _run(mcp_client.discover(nexus_config, timeout=15))
-            with pytest.raises(mcp_client.McpError):
-                _run(mcp_client.call(nexus_config, "echo", {"text": "revoked"}, timeout=15))
+        with database() as db:
+            mcp.revoke_endpoint_token(db, PRINCIPAL, tenant.id, endpoint_id)
+            with pytest.raises(Forbidden):
+                mcp.resolve_endpoint_token(db, token)
+        with pytest.raises(mcp_client.McpError):
+            _run(mcp_client.discover(nexus_config, timeout=15))
+        with pytest.raises(mcp_client.McpError):
+            _run(mcp_client.call(nexus_config, "list_documents", {}, timeout=15))
 
 
 # --------------------------------------------------------------------------- OAuth end to end

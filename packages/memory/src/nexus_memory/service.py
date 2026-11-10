@@ -239,6 +239,21 @@ def read_for_run(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, entry_
     return fence(entry, selected)
 
 
+def read_for_principal(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, entry_id: UUID,
+                       now: datetime | None = None) -> str:
+    """Return the current published content for a non-Run principal (an outbound MCP endpoint), fenced as data.
+
+    Same authorization and use counting as :func:`read_for_run`, but audited against the endpoint's owner
+    instead of a Run (openspec 2026-11-08-mcp, 2.4).
+    """
+    entry = _owned(repo, tenant_id, owner_id, entry_id)
+    selected = _version(repo, entry.id, entry.current_version)
+    repo.audit(tenant_id, owner_id, 'memory.read', 'memory', str(entry_id),
+               {'resource': 'endpoint', 'version': selected.version})
+    repo.touch([entry.id], utc(now or datetime.now(timezone.utc)))
+    return fence(entry, selected)
+
+
 def fence(entry: EntryView, selected: VersionView) -> str:
     """Wrap stored memory as data. Angle brackets are escaped so content cannot close the wrapper
     or open a reserved tag; the header states that the body is user material, not instructions."""

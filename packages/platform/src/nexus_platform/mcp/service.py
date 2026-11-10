@@ -1,4 +1,4 @@
-"""MCP domain service: service CRUD, tool discovery/cache, per-tool enablement, risk policy and run tokens.
+"""MCP domain service: service CRUD, tool discovery/cache, per-tool enablement, risk policy and stateless endpoints.
 
 Writes open their own transaction (matching the skill service); reads run inside the caller's
 transaction after membership is verified. Administrators (``tools:manage``) mutate services, tools
@@ -12,14 +12,13 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from nexus_core.platform import Principal, RunStatus, new_id, utc_now
+from nexus_core.platform import Principal, new_id, utc_now
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.authz.resources import deactivate_resource, register_resource
@@ -27,12 +26,11 @@ from nexus_platform.errors import Conflict, Forbidden, InvalidConfiguration, Not
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import (
     CredentialReferenceRecord,
+    McpEndpointRecord,
     McpOAuthTokenRecord,
-    McpRunTokenRecord,
     McpServiceRecord,
     McpServiceToolRecord,
     McpToolApprovalRecord,
-    RunRecord,
 )
 from nexus_mcp import client as mcp_client
 from nexus_mcp.client.errors import McpError, McpUnauthorized
@@ -41,11 +39,9 @@ from .oauth import McpOAuthRequired
 
 #: Mutating the tool catalog (services, enablement, risk) is an administrator capability.
 MANAGE_PERMISSION = "tools:manage"
-from .common import RESOURCE_KIND, aware  # noqa: E402
+from .common import RESOURCE_KIND, READ_ONLY_TOOL_NAMES  # noqa: E402
 #: Name charset for services (spec R1: 1-64, lowercase letters, digits, hyphen).
 SERVICE_NAME_RE = re.compile(r"^[a-z0-9-]{1,64}$")
-#: Default run-token lifetime.
-RUN_TOKEN_TTL = timedelta(hours=12)
 
 
 class McpServiceDisabled(PlatformError):
@@ -485,41 +481,180 @@ def set_tool_policy(db: Session, principal: Principal, tenant_id: UUID, service_
             "require_approval": require_approval, "pending_downgrade": row.pending_downgrade}
 
 
-# --------------------------------------------------------------------------- run tokens
+# --------------------------------------------------------------------------- endpoints
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def issue_run_token(db: Session, run_id: UUID, *, ttl: timedelta = RUN_TOKEN_TTL) -> str:
-    """Issue a short-lived, single-Run token. The plaintext appears only in this return value."""
-    run = db.get(RunRecord, run_id)
-    if run is None:
-        raise NotFound("Run not found")
-    token = secrets.token_urlsafe(32)
-    db.add(McpRunTokenRecord(token_hash=_hash_token(token), run_id=run_id, tenant_id=run.tenant_id,
-                             expires_at=utc_now() + ttl, created_at=utc_now()))
-    db.flush()
-    return token
+def _clean_endpoint_name(name: str) -> str:
+    name = (name or "").strip()
+    if not SERVICE_NAME_RE.fullmatch(name):
+        raise InvalidConfiguration("mcp_endpoint_name_invalid")
+    return name
 
 
-def resolve_run_token(db: Session, token: str) -> RunRecord:
-    """Resolve a run token to a live, non-terminal Run; fail closed on expiry, revocation or bad status."""
-    row = db.get(McpRunTokenRecord, _hash_token(token))
-    now = utc_now()
-    if row is None or row.revoked_at is not None or aware(row.expires_at) <= now:
+def _clean_allowlist(names: list[str]) -> list[str]:
+    """Normalize the tool allowlist: only known read-only tools, de-duplicated, original order kept."""
+    out: list[str] = []
+    for value in names or []:
+        name = (value or "").strip()
+        if name not in READ_ONLY_TOOL_NAMES:
+            raise InvalidConfiguration(f"mcp_endpoint_tool_unknown:{name}")
+        if name not in out:
+            out.append(name)
+    return out
+
+
+def _clean_kb_ids(kb_ids: list[str]) -> list[str]:
+    """Normalize the knowledge-base scope: every value must be a UUID (empty means every readable base)."""
+    out: list[str] = []
+    for value in kb_ids or []:
+        try:
+            out.append(str(UUID(str(value))))
+        except (ValueError, AttributeError, TypeError):
+            raise InvalidConfiguration("mcp_endpoint_kb_invalid") from None
+    return list(dict.fromkeys(out))
+
+
+def _endpoint_dict(endpoint: McpEndpointRecord) -> dict[str, Any]:
+    return {
+        "id": str(endpoint.id),
+        "tenant_id": str(endpoint.tenant_id),
+        "name": endpoint.name,
+        "description": endpoint.description,
+        "enabled": endpoint.enabled,
+        "tool_allowlist": list(endpoint.tool_allowlist or []),
+        "kb_ids": list(endpoint.kb_ids or []),
+        "last_used_at": endpoint.last_used_at.isoformat() if endpoint.last_used_at else None,
+        "created_by": str(endpoint.created_by),
+        "created_at": endpoint.created_at.isoformat(),
+        "updated_at": endpoint.updated_at.isoformat(),
+    }
+
+
+def _get_endpoint(db: Session, tenant_id: UUID, endpoint_id: UUID) -> McpEndpointRecord:
+    row = db.get(McpEndpointRecord, endpoint_id)
+    if row is None or row.tenant_id != tenant_id:
+        raise NotFound("MCP endpoint not found")
+    return row
+
+
+def list_endpoints(db: Session, principal: Principal, tenant_id: UUID) -> list[dict[str, Any]]:
+    """Every endpoint in this Tenant, newest first. Active membership required."""
+    _context(db, principal, tenant_id)
+    rows = db.scalars(select(McpEndpointRecord).where(McpEndpointRecord.tenant_id == tenant_id)
+                      .order_by(McpEndpointRecord.created_at.desc()))
+    return [_endpoint_dict(row) for row in rows]
+
+
+def get_endpoint(db: Session, principal: Principal, tenant_id: UUID, endpoint_id: UUID) -> dict[str, Any]:
+    _context(db, principal, tenant_id)
+    return _endpoint_dict(_get_endpoint(db, tenant_id, endpoint_id))
+
+
+def create_endpoint(db: Session, principal: Principal, tenant_id: UUID, *, name: str, description: str,
+                    tool_allowlist: list[str], kb_ids: list[str]) -> dict[str, Any]:
+    """Create an endpoint and issue its long-lived token (plaintext appears only in this response)."""
+    with db.begin():
+        user = _context(db, principal, tenant_id)
+        _require_admin(db, tenant_id, user.id)
+        name = _clean_endpoint_name(name)
+        if db.scalar(select(McpEndpointRecord.id).where(
+                McpEndpointRecord.tenant_id == tenant_id, McpEndpointRecord.name == name).limit(1)):
+            raise Conflict("MCP endpoint name is already in use")
+        allowlist = _clean_allowlist(tool_allowlist)
+        kb_scope = _clean_kb_ids(kb_ids)
+        token = secrets.token_urlsafe(32)
+        now = utc_now()
+        row = McpEndpointRecord(
+            id=new_id(), tenant_id=tenant_id, name=name, description=description or "", enabled=True,
+            tool_allowlist=allowlist, kb_ids=kb_scope, token_hash=_hash_token(token),
+            created_by=user.id, created_at=now, updated_at=now,
+        )
+        db.add(row)
+        db.flush()
+        audit(db, tenant_id, user.id, "mcp_endpoint.created", "mcp_endpoint", str(row.id),
+              {"name": name, "tools": allowlist, "kb_ids": kb_scope})
+    result = _endpoint_dict(row)
+    result["token"] = token
+    return result
+
+
+def update_endpoint(db: Session, principal: Principal, tenant_id: UUID, endpoint_id: UUID, *, name: str | None,
+                    description: str | None, tool_allowlist: list[str] | None, kb_ids: list[str] | None,
+                    enabled: bool | None) -> dict[str, Any]:
+    with db.begin():
+        user = _context(db, principal, tenant_id)
+        _require_admin(db, tenant_id, user.id)
+        row = _get_endpoint(db, tenant_id, endpoint_id)
+        if name is not None:
+            name = _clean_endpoint_name(name)
+            if db.scalar(select(McpEndpointRecord.id).where(
+                    McpEndpointRecord.tenant_id == tenant_id, McpEndpointRecord.name == name,
+                    McpEndpointRecord.id != endpoint_id).limit(1)):
+                raise Conflict("MCP endpoint name is already in use")
+            row.name = name
+        if description is not None:
+            row.description = description
+        if tool_allowlist is not None:
+            row.tool_allowlist = _clean_allowlist(tool_allowlist)
+        if kb_ids is not None:
+            row.kb_ids = _clean_kb_ids(kb_ids)
+        if enabled is not None:
+            row.enabled = enabled
+        row.updated_at = utc_now()
+        audit(db, tenant_id, user.id, "mcp_endpoint.updated", "mcp_endpoint", str(endpoint_id), {})
+    return _endpoint_dict(row)
+
+
+def delete_endpoint(db: Session, principal: Principal, tenant_id: UUID, endpoint_id: UUID) -> None:
+    with db.begin():
+        user = _context(db, principal, tenant_id)
+        _require_admin(db, tenant_id, user.id)
+        row = _get_endpoint(db, tenant_id, endpoint_id)
+        db.delete(row)
+        audit(db, tenant_id, user.id, "mcp_endpoint.deleted", "mcp_endpoint", str(endpoint_id), {})
+
+
+def rotate_endpoint_token(db: Session, principal: Principal, tenant_id: UUID, endpoint_id: UUID) -> dict[str, Any]:
+    """Issue a new token; the old one stops working. Plaintext appears only in this response."""
+    with db.begin():
+        user = _context(db, principal, tenant_id)
+        _require_admin(db, tenant_id, user.id)
+        row = _get_endpoint(db, tenant_id, endpoint_id)
+        token = secrets.token_urlsafe(32)
+        row.token_hash = _hash_token(token)
+        row.updated_at = utc_now()
+        audit(db, tenant_id, user.id, "mcp_endpoint.token_rotated", "mcp_endpoint", str(endpoint_id), {})
+    result = _endpoint_dict(row)
+    result["token"] = token
+    return result
+
+
+def revoke_endpoint_token(db: Session, principal: Principal, tenant_id: UUID, endpoint_id: UUID) -> dict[str, Any]:
+    """Clear the token hash so no token authenticates until the next rotate."""
+    with db.begin():
+        user = _context(db, principal, tenant_id)
+        _require_admin(db, tenant_id, user.id)
+        row = _get_endpoint(db, tenant_id, endpoint_id)
+        row.token_hash = ""
+        row.updated_at = utc_now()
+        audit(db, tenant_id, user.id, "mcp_endpoint.token_revoked", "mcp_endpoint", str(endpoint_id), {})
+    return _endpoint_dict(row)
+
+
+def resolve_endpoint_token(db: Session, token: str) -> McpEndpointRecord:
+    """Resolve a long-lived endpoint token to a live, enabled endpoint.
+
+    Fails closed with a single ``Forbidden("unauthorized")`` for every failure (unknown token, revoked,
+    disabled) so the protocol never reveals whether a resource exists.
+    """
+    row = db.scalar(select(McpEndpointRecord).where(
+        McpEndpointRecord.token_hash == _hash_token(token)).limit(1))
+    if row is None or not row.enabled:
         raise Forbidden("unauthorized")
-    run = db.get(RunRecord, row.run_id)
-    if run is None or str(run.tenant_id) != str(row.tenant_id) or RunStatus(run.status).terminal:
-        raise Forbidden("unauthorized")
-    return run
-
-
-def revoke_run_token(db: Session, run_id: UUID) -> None:
-    """Revoke every token issued for a Run (Run end / cancel)."""
-    for row in db.scalars(select(McpRunTokenRecord).where(McpRunTokenRecord.run_id == run_id)):
-        if row.revoked_at is None:
-            row.revoked_at = utc_now()
+    return row
 
 
 def _service_ids(service_ids) -> set[UUID]:

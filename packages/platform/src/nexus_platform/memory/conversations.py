@@ -55,19 +55,23 @@ def _visible(db: Session, messages: list[MessageRecord]) -> list[MessageRecord]:
     return [m for m in messages if (_source_run(m) is None) or allowed.get(_source_run(m), False)]
 
 
-def search(db: Session, *, tenant_id: UUID, owner_id: UUID, current_session_id: UUID, query: str,
+def search(db: Session, *, tenant_id: UUID, owner_id: UUID, current_session_id: UUID | None, query: str,
            limit: int = 5) -> list[dict[str, Any]]:
-    """Messages from the owner's other sessions that contain every query token, best first."""
+    """Messages from the owner's other sessions that contain every query token, best first.
+
+    ``current_session_id`` is ``None`` for a stateless endpoint (no Run, so no current session is excluded).
+    """
     tokens = memtext.query_tokens(query)
     if not tokens:
         return []
     limit = max(1, min(limit, 10))
-    rows = db.execute(
-        select(MessageRecord, SessionRecord.title)
-        .join(SessionRecord, SessionRecord.id == MessageRecord.session_id)
-        .where(SessionRecord.tenant_id == tenant_id, SessionRecord.owner_user_id == owner_id,
-               SessionRecord.id != current_session_id, MessageRecord.role.in_(ROLES))
-        .order_by(MessageRecord.created_at.desc()).limit(SCAN_LIMIT)).all()
+    stmt = (select(MessageRecord, SessionRecord.title)
+            .join(SessionRecord, SessionRecord.id == MessageRecord.session_id)
+            .where(SessionRecord.tenant_id == tenant_id, SessionRecord.owner_user_id == owner_id,
+                   MessageRecord.role.in_(ROLES)))
+    if current_session_id is not None:
+        stmt = stmt.where(SessionRecord.id != current_session_id)
+    rows = db.execute(stmt.order_by(MessageRecord.created_at.desc()).limit(SCAN_LIMIT)).all()
     titles = {message.id: title for message, title in rows}
     scored = []
     for order, (message, _) in enumerate(rows):
@@ -77,19 +81,20 @@ def search(db: Session, *, tenant_id: UUID, owner_id: UUID, current_session_id: 
             scored.append((sum(counts), order, message))
     scored.sort(key=lambda row: (-row[0], row[1]))
     kept = _visible(db, [message for _, _, message in scored[:limit * 3]])[:limit]
-    audit(db, tenant_id, owner_id, 'conversation.search', 'session', str(current_session_id),
-          {'hits': len(kept), 'sessions': len({str(m.session_id) for m in kept})})
+    audit_target = 'endpoint' if current_session_id is None else str(current_session_id)
+    audit(db, tenant_id, owner_id, 'conversation.search', 'endpoint' if current_session_id is None else 'session',
+          audit_target, {'hits': len(kept), 'sessions': len({str(m.session_id) for m in kept})})
     return [{'session_id': str(m.session_id), 'session_title': titles[m.id], 'sequence': m.sequence,
              'role': m.role, 'snippet': _snippet(m.content, tokens), 'created_at': m.created_at.isoformat()}
             for m in kept]
 
 
-def read_page(db: Session, *, tenant_id: UUID, owner_id: UUID, current_session_id: UUID, session_id: UUID,
+def read_page(db: Session, *, tenant_id: UUID, owner_id: UUID, current_session_id: UUID | None, session_id: UUID,
               around: int, before: int = 5, after: int = 5) -> dict[str, Any] | None:
     """Messages around `around` in one of the owner's other sessions; None when not readable."""
     session = db.get(SessionRecord, session_id)
     if (session is None or session.tenant_id != tenant_id or session.owner_user_id != owner_id
-            or session.id == current_session_id):
+            or (current_session_id is not None and session.id == current_session_id)):
         return None
     before, after = max(0, min(before, MAX_SIDE)), max(0, min(after, MAX_SIDE))
     rows = list(db.scalars(select(MessageRecord).where(
