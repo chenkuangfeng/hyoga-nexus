@@ -13,7 +13,7 @@
 | `client/names.py` | 外部工具名清洗、注册名、`tool_ref`、外部来源描述 |
 | `oauth.py` | OAuth 2.1 协议：`AuthorizationServer` / `OAuthClient` / `TokenSet`、发现、动态注册、PKCE URL、换码、刷新 |
 | `gateway/` | `tool_definition`（`source='mcp'`、`group='mcp'`、`deferrable=True`）、`make_registered_tool`、执行器协议 |
-| `server/` | `RunMCPServer`（`tools/list`）与 `streamable_http_app` |
+| `server/` | `EndpointMCPServer`（`tools/list` / `tools/call`）与 `streamable_http_app` |
 
 ## 连接与发现
 
@@ -41,7 +41,7 @@ stdio 会话池按（服务、作用域、事件循环）键控，enter/exit 必
 
 ## 服务端
 
-`RunMCPServer` 以 SDK 的 `MCPServer` 为基类，`tools/list` 由注入的 `definitions()` 提供（平台已过滤 `deny` 与未授权项）。`streamable_http_app` 默认无状态，供 API 以 `/mcp/runs/{token}` 挂载；`tools/call` 的完整网关执行依赖外部 Runtime 适配器（路线图第 4/5 步），当前只保留协议骨架与稳定的鉴权错误。
+`EndpointMCPServer` 以 SDK 的 `MCPServer` 为基类，`tools/list` 由注入的 `definitions()` 提供（平台已按 endpoint 白名单过滤），`tools/call` 由注入的 `execute_tool()` 分派。`streamable_http_app` 以 `stateless_http=True` 提供无状态工具面，供 API 以 `/mcp/{endpoint_id}` 挂载；Bearer 鉴权中间件把 endpoint 长期令牌映射为作用域化主体（机器身份 + 工具白名单 + KB 范围），解析失败统一返回协议级 `unauthorized`。工具执行在 API 进程内直接调用平台服务的无状态入口，不走 `AuthorizedToolGateway`；更完整的网关执行依赖外部 Runtime 适配器（路线图第 4/5 步）。
 
 ## 错误码
 

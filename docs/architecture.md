@@ -175,7 +175,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **事件映射**：`item/agentMessage/delta` → `message.delta`；`item/started` / `item/completed`（命令、文件变更、动态工具）→ `tool.started` / `tool.completed`；审批请求 → `approval.requested`，平台决定后回复 `accept` / `acceptForSession` / `decline` / `cancel`；`acceptForSession` 必须先经 `action_grants` 批准；`thread/tokenUsage/updated` → `usage.updated`；`turn/completed` → 终态映射表。
 - **取消**：`turn/interrupt`，收到 `interrupted` 终态后才结束 Run。`turn/steer` 默认 `unsupported`。
 - **原生能力约束**：文件与 shell 通过 `Sandbox` 参数限制为 `workspace_write`，工作目录为平台分配的隔离工作区；多用户场景禁止 `full_access`。无法验证网络控制时能力标记 `unverified`，禁止绑定需要网络控制的技能。
-- **平台工具**：经平台 MCP 服务暴露，每次调用携带短时运行令牌；平台复核权限，不信任模型传入的 tenant 或 user 标识。
+- **平台工具**：经平台 MCP endpoint 暴露，外部客户端以 endpoint 长期令牌鉴权、只读白名单工具面；平台复核权限，不信任模型传入的 tenant 或 user 标识。
 - **传输**：只使用 stdio。WebSocket 为实验性，启用前必须配置鉴权。`-32001` 过载错误使用指数退避与抖动，并计入预算。
 
 ### 2.4 Claude Code 适配器
@@ -230,8 +230,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 - **客户端**：连接外部 MCP 服务，发现工具，按工具启用，不默认开放整个服务；凭据以引用保存。
 - **OAuth**（`auth_type='oauth'`，只用于 HTTP 传输）：授权码 + PKCE（S256），未预置客户端时按 RFC 7591 动态注册并按（租户、服务）复用；令牌按（租户、主体、服务）加密保存，使用前带 30 秒余量惰性刷新。资源服务器 401 恰好一次 refresh + 一次重试；刷新被拒删除令牌并返回 `mcp_oauth_required`，客户端注册被拒同时丢弃动态注册。动态令牌优先于服务级静态 `Authorization` header，`headers` / `env` 的 `credential_references` 路径保留。授权 `state` 为部署密钥加密的短时载荷；回调为公开接口，结果只经 URL 片段回前端。
-- **服务端**：平台对外暴露已授权工具，供 Codex、Claude 等 Runtime 调用。
-- **运行令牌**：短时令牌，与 Run 生命周期一致，单 Run 有效，撤销即失效；服务端每次调用复核权限。
+- **服务端**：无状态 endpoint 把白名单内的只读工具暴露给外部 MCP 客户端（Codex / Claude Desktop / Cursor），不绑定 Run。`tools/list` 返回白名单内的只读定义；`tools/call` 在 API 进程内直接调用平台服务的无状态入口（知识检索 / web / skills / memory / conversations），每次复核工具仍在白名单、endpoint 仍启用、KB 仍在范围，不走 `AuthorizedToolGateway` 与 worker。
+- **endpoint 长期令牌**：创建 / 轮换时签发，SHA-256 哈希存储，明文只在签发响应出现一次；撤销即失效。挂载于 `/mcp/{endpoint_id}`，Bearer 鉴权提前于全局会话 Auth，把令牌映射为作用域化主体（机器身份 + 工具白名单 + KB 范围）；解析失败统一返回协议级 `unauthorized`，不泄漏资源存在性。
 - **客户端接入约束**（提案 `2026-11-06-tool-call-hardening` 决定 3，随第 7.2 步实现）：
   - 注册名用 `sha256(server_id \0 tool_name)` 加可读前缀，同名先注册者保留（WeKnora `mcp_exposure.go`）。
   - 风险取「工作区显式设置 > 曾观察到的最高声明 > 当前声明」，服务端自行降级需工作区确认（WeKnora `approval/mcp_risk.go`）。

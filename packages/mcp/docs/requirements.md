@@ -32,5 +32,5 @@
 
 ## 服务端
 
-- `tools/list` 返回该 Run 当前授权可见的定义；运行令牌短时、单 Run、可撤销。
-- `tools/call` 须走完整网关管线（授权、审批、守卫、审计），不信任快照或传入参数；协议层错误稳定且不泄漏资源存在性。执行通道依赖外部 Runtime 适配器（路线图第 4/5 步）。
+- `tools/list` 返回 endpoint 白名单内的只读定义；endpoint 长期令牌创建 / 轮换时签发、SHA-256 哈希存储、撤销即失效，每次调用复核白名单、启用状态与 KB 范围。
+- `tools/call` 在 API 进程内直接调用平台服务的无状态入口（知识检索 / web / skills / memory / conversations），不走 `AuthorizedToolGateway`；协议层错误稳定且不泄漏资源存在性。更完整的网关执行依赖外部 Runtime 适配器（路线图第 4/5 步）。

@@ -27,7 +27,7 @@ from sqlalchemy import select
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
-from starlette.routing import Route
+from starlette.routing import Mount, Route
 
 from nexus_core.platform import Principal, utc_now
 from nexus_core.runtime import ToolDefinition, ToolResult
@@ -190,6 +190,41 @@ def test_endpoint_token_lifecycle_and_server_protocol(database):
             _run(mcp_client.discover(nexus_config, timeout=15))
         with pytest.raises(mcp_client.McpError):
             _run(mcp_client.call(nexus_config, "list_documents", {}, timeout=15))
+
+
+def test_endpoint_mount_serves_read_only_tools_with_bearer_token(database):
+    """The mounted /mcp/{endpoint_id} authenticates the bearer token and dispatches whitelisted tools."""
+    tenant = _tenant(database)
+    with database() as db:
+        created = mcp.create_endpoint(db, PRINCIPAL, tenant.id, name="readonly", description="",
+                                      tool_allowlist=["list_documents"], kb_ids=[])
+    endpoint_id = created["id"]
+    token = created["token"]
+
+    from nexus_platform.mcp.http import endpoint_app
+    mcp_endpoint_app = endpoint_app(lambda: database)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        async with mcp_endpoint_app.router.lifespan_context(mcp_endpoint_app):
+            yield
+
+    outer = Starlette(routes=[Mount("/mcp", mcp_endpoint_app)], lifespan=lifespan)
+
+    with _serve(outer) as base:
+        good = {"transport": "streamable_http", "url": f"{base}/mcp/{endpoint_id}",
+                "headers": {"Authorization": f"Bearer {token}"}}
+        specs = _run(mcp_client.discover(good, timeout=15))
+        assert [spec.name for spec in specs] == ["list_documents"]
+        # the real stateless dispatch runs (empty KB scope, not the protocol's placeholder)
+        result = _run(mcp_client.call(good, "list_documents", {}, timeout=15))
+        assert "No readable knowledge base" in result.data
+
+        # a wrong token is a uniform 401; it never reveals whether the endpoint exists
+        bad = {"transport": "streamable_http", "url": f"{base}/mcp/{endpoint_id}",
+               "headers": {"Authorization": "Bearer wrong"}}
+        with pytest.raises(mcp_client.McpUnauthorized):
+            _run(mcp_client.discover(bad, timeout=15))
 
 
 # --------------------------------------------------------------------------- OAuth end to end

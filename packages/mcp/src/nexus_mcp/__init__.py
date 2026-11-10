@@ -3,5 +3,5 @@
 `nexus_mcp.client` connects external MCP servers (stdio / streamable HTTP / SSE), discovers tools,
 and calls them. `nexus_mcp.oauth` implements the authorization-code + PKCE protocol for servers
 that require OAuth. `nexus_mcp.gateway` bridges enabled tools into the authorized tool gateway;
-`nexus_mcp.server` exposes a Run's authorized tools over MCP with a run token.
+`nexus_mcp.server` exposes an endpoint's whitelisted read-only tools over stateless MCP.
 """

@@ -102,7 +102,7 @@
   - [ ] 4.3 事件映射与终态映射。
   - [ ] 4.4 审批桥：命令与文件变更审批转为 `approval.requested`；`acceptForSession` 先经 `action_grants` 批准。
   - [ ] 4.5 取消（`turn/interrupt`）与 `interrupted` 终态。
-  - [ ] 4.6 平台 MCP 服务的运行令牌（与第 7 步共用）。
+  - [ ] 4.6 平台 MCP 服务 endpoint 长期令牌（与第 7 步共用）。
   - [ ] 4.7 测试：假 app-server 协议测试；真实 Codex CLI 集成测试（账号可用时）。
 - **验收**：第 3 步的契约测试集在 Native 与 Codex 上终态一致；审批可拒绝；取消生效；原生文件与 shell 限制在工作区内；无法约束的能力标记 unverified 且不可绑定。
 - **依赖**：3；Codex 账号与 CLI 版本。
@@ -157,9 +157,9 @@
     - 接入约束（提案 2026-11-06-tool-call-hardening 决定 3，见 `docs/architecture.md` 2.7）：注册名哈希防撞名、风险只升不降、执行时复核目录、按用户缓存工具并用指纹失效、`McpError` 与输出 schema 错误分类、外部数据前缀、按供应商清洗 schema、`tool_search` 渐进加载。
     - 已完成（提案 2026-11-08-mcp，1.1–1.8）：持久化与领域服务、三种传输的发现 / 调用、按工具启用、风险只升不降与审批、指纹缓存与 `config_epoch`、Run 快照绑定与执行前复核、OAuth 授权码流（动态注册 + PKCE，令牌按主体加密存储与刷新，401 恰好一次重试）、管理 API 与公开回调。
     - 未完成：前端工具箱 MCP 标签；集成测试（假 MCP 服务、OAuth 端到端）。
-  - [ ] 7.3 MCP 服务端：运行令牌，每次调用复核权限。
-    - 已完成（同提案，2.1）：`mcp_run_tokens` 签发 / 解析 / 撤销与 `RunMCPServer` 协议层骨架。
-    - 未完成：`tools/call` 完整网关执行与 `/mcp/runs/{token}` 挂载（依赖第 4/5 步外部 Runtime 适配器）。
+  - [ ] 7.3 MCP 服务端：无状态 endpoint，每次调用复核权限。
+    - 已完成（同提案，2.1–2.6）：`mcp_endpoints` 表、endpoint 长期令牌签发 / 解析 / 撤销（SHA-256 哈希存储）、`EndpointMCPServer` 无状态只读工具面、`/mcp/{endpoint_id}` 挂载与 Bearer 鉴权、管理 API。
+    - 未完成：前端工具箱 endpoint 管理界面（依赖第 4/5 步外部 Runtime 适配器接入只读工具面）。
 - **验收**：两个技能与授权 MCP 工具协同执行；缺失权限或依赖时明确报错并阻止发布；撤权后下一次调用拒绝；产物可按授权下载。
 - **依赖**：3、6。
 

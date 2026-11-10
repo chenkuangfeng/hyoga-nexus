@@ -103,13 +103,14 @@ async def lifespan(_app: FastAPI):
             runs = worker.effective_runs(str(worker_engine.url))
             workers = EmbeddedWorkers(session_factory(worker_engine), deployment, worker, max_runs=runs)
             workers.start()
-    try:
-        yield
-    finally:
-        if workers is not None:
-            await asyncio.to_thread(workers.stop)
-            worker_engine.dispose()
-        reset_channels()
+    async with mcp_endpoint_app.router.lifespan_context(mcp_endpoint_app):
+        try:
+            yield
+        finally:
+            if workers is not None:
+                await asyncio.to_thread(workers.stop)
+                worker_engine.dispose()
+            reset_channels()
 
 
 app = FastAPI(title="Hyoga Nexus", version="0.1.0", lifespan=lifespan)
@@ -138,6 +139,26 @@ from nexus_api.http.knowledge_wiki import router as knowledge_wiki_router
 app.include_router(knowledge_wiki_router)
 from nexus_api.http.mcp import router as mcp_router
 app.include_router(mcp_router)
+# Stateless outbound MCP endpoint: bearer-token auth (endpoint long-lived token) runs ahead of the
+# global session Auth, so external MCP clients reach the read-only tool face without a user session.
+from nexus_platform.mcp.http import endpoint_app  # noqa: E402
+
+
+def mcp_session_factory():
+    """The API's session factory for the endpoint middleware, created lazily like `get_database_session`."""
+    factory = getattr(app.state, "session_factory", None)
+    if factory is None:
+        from nexus_platform.persistence.database import create_database_engine, session_factory
+        from nexus_platform.runs.worker_settings import api_settings
+        engine = create_database_engine(pool_size=api_settings().pool_size)
+        factory = session_factory(engine)
+        app.state.database_engine = engine
+        app.state.session_factory = factory
+    return factory
+
+
+mcp_endpoint_app = endpoint_app(mcp_session_factory)
+app.mount("/mcp", mcp_endpoint_app)
 
 
 @app.middleware("http")

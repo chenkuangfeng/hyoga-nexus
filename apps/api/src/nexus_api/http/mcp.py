@@ -193,3 +193,71 @@ def mcp_oauth_callback(state: str = Query(default="", max_length=8192),
         return _redirect_with_result(_callback_target(state), error=exc.code)
     return _redirect_with_result(str(result["frontend_redirect"]),
                                  service_id=str(result["service_id"]))
+
+
+# --------------------------------------------------------------------------- endpoints (task 2.6)
+
+class McpEndpointCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str = Field(default="", max_length=4000)
+    tool_allowlist: list[str] = Field(default_factory=list, max_length=100)
+    kb_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class McpEndpointUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = Field(default=None, max_length=4000)
+    tool_allowlist: list[str] | None = Field(default=None, max_length=100)
+    kb_ids: list[str] | None = Field(default=None, max_length=100)
+    enabled: bool | None = None
+
+
+@router.get("/tenants/{tenant_id}/mcp-endpoints")
+def list_mcp_endpoints(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                       db: Session = Depends(get_database_session)) -> list[dict[str, Any]]:
+    """Every MCP endpoint in this Tenant. Requires active membership."""
+    return mcp.list_endpoints(db, principal, tenant_id)
+
+
+@router.post("/tenants/{tenant_id}/mcp-endpoints", status_code=201)
+def create_mcp_endpoint(tenant_id: UUID, body: McpEndpointCreate, principal: Principal = Depends(get_principal),
+                        db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Create an endpoint and issue its long-lived token (shown once in this response). Administrators."""
+    return mcp.create_endpoint(db, principal, tenant_id, name=body.name, description=body.description,
+                               tool_allowlist=body.tool_allowlist, kb_ids=body.kb_ids)
+
+
+@router.get("/tenants/{tenant_id}/mcp-endpoints/{endpoint_id}")
+def get_mcp_endpoint(tenant_id: UUID, endpoint_id: UUID, principal: Principal = Depends(get_principal),
+                     db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    return mcp.get_endpoint(db, principal, tenant_id, endpoint_id)
+
+
+@router.patch("/tenants/{tenant_id}/mcp-endpoints/{endpoint_id}")
+def update_mcp_endpoint(tenant_id: UUID, endpoint_id: UUID, body: McpEndpointUpdate,
+                        principal: Principal = Depends(get_principal),
+                        db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Update name, description, tool whitelist, KB scope or enabled. Administrators."""
+    return mcp.update_endpoint(db, principal, tenant_id, endpoint_id, name=body.name,
+                               description=body.description, tool_allowlist=body.tool_allowlist,
+                               kb_ids=body.kb_ids, enabled=body.enabled)
+
+
+@router.delete("/tenants/{tenant_id}/mcp-endpoints/{endpoint_id}", status_code=204)
+def delete_mcp_endpoint(tenant_id: UUID, endpoint_id: UUID, principal: Principal = Depends(get_principal),
+                        db: Session = Depends(get_database_session)) -> None:
+    mcp.delete_endpoint(db, principal, tenant_id, endpoint_id)
+
+
+@router.post("/tenants/{tenant_id}/mcp-endpoints/{endpoint_id}/rotate-token")
+def rotate_mcp_endpoint_token(tenant_id: UUID, endpoint_id: UUID, principal: Principal = Depends(get_principal),
+                              db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Issue a new token (shown once in this response); the old one stops working. Administrators."""
+    return mcp.rotate_endpoint_token(db, principal, tenant_id, endpoint_id)
+
+
+@router.post("/tenants/{tenant_id}/mcp-endpoints/{endpoint_id}/revoke-token")
+def revoke_mcp_endpoint_token(tenant_id: UUID, endpoint_id: UUID, principal: Principal = Depends(get_principal),
+                              db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Clear the token hash so no token authenticates until the next rotate. Administrators."""
+    return mcp.revoke_endpoint_token(db, principal, tenant_id, endpoint_id)
