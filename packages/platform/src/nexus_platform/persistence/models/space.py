@@ -162,3 +162,26 @@ class AgentShareRecord(Base):
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class KnowledgeBaseShareRecord(Base):
+    """A knowledge base of an enterprise shared into a shared space (openspec 2026-11-06-knowledge-base K1.9a).
+
+    Same shape as :class:`AgentShareRecord`. Any effective level lets members of a member space read and search the
+    base; changing it stays with the owning space (see `shared_spaces.kb_shares`)."""
+
+    __tablename__ = "knowledge_base_shares"
+    __table_args__ = (
+        UniqueConstraint("kb_id", "shared_space_id", name="uq_kb_shares_kb_space"),
+        CheckConstraint("level IN ('viewer', 'editor', 'admin')", name="ck_kb_shares_level"),
+        Index("ix_kb_shares_space", "shared_space_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False)
+    shared_space_id: Mapped[UUID] = mapped_column(ForeignKey("shared_spaces.id", ondelete="CASCADE"), nullable=False)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

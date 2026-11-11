@@ -21,13 +21,13 @@ from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_core.platform import Principal
 from nexus_knowledge import capabilities
 from nexus_knowledge import index as _engines  # noqa: F401  (registers the vector engines in the catalog)
-from nexus_platform.authz.resources import grant_resource, revoke_resource_grant
 from nexus_platform.configuration import knowledge_settings
 from nexus_platform.errors import NotFound
 from nexus_platform.identity.service import require_membership, resolve_user
 from nexus_platform.knowledge import access, faq as faq_service, organize, search as knowledge_search, service, stores
 from nexus_platform.persistence.models import (AuditRecord, KnowledgeBaseRecord, KnowledgeDocumentRecord,
-                                               ResourceGrantRecord, TenantRecord)
+                                               TenantRecord)
+from nexus_platform.shared_spaces import kb_shares
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/knowledge', tags=['Knowledge'])
 
@@ -713,48 +713,45 @@ async def search(tenant_id: UUID, body: SearchInput, request: Request, principal
 # ---------------------------------------------------------------- sharing and activity
 
 class ShareInput(BaseModel):
-    target_tenant_id: UUID
-    permissions: list[Literal['read', 'use']] = Field(default_factory=lambda: ['read', 'use'])
+    shared_space_id: UUID
+    level: Literal['viewer', 'editor', 'admin'] = 'viewer'
 
 
 @router.get('/bases/{kb_id}/shares')
 def list_shares(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
                 db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    user = _user(db, principal, tenant_id)
-    kb = access.readable_base(db, kb_id, tenant_id, user.id)
-    rows = db.execute(select(ResourceGrantRecord, TenantRecord).join(
-        TenantRecord, TenantRecord.id == ResourceGrantRecord.target_tenant_id).where(
-        ResourceGrantRecord.source_tenant_id == kb.tenant_id, ResourceGrantRecord.kind == access.KIND,
-        ResourceGrantRecord.resource_id == str(kb.id), ResourceGrantRecord.revoked_at.is_(None))).all()
-    return {'items': [{'id': str(grant.id), 'target_tenant_id': str(tenant.id), 'target_tenant_name': tenant.name,
-                       'permissions': grant.permissions, 'created_at': grant.created_at.isoformat()}
-                      for grant, tenant in rows]}
+    """Shared spaces the base is shared into (owning space's owner or admin)."""
+    return {'items': kb_shares.list_base_shares(db, principal, tenant_id, kb_id)}
 
 
 @router.post('/bases/{kb_id}/shares', status_code=201)
 def share_base(tenant_id: UUID, kb_id: UUID, body: ShareInput, principal: Principal = Depends(get_principal),
                db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    """Share a base of this space into another space (read-only there). Space owners and admins only."""
-    user = _user(db, principal, tenant_id)
-    kb = access.readable_base(db, kb_id, tenant_id, user.id)
-    if kb.tenant_id != tenant_id:
-        raise NotFound('Knowledge base not found')
-    db.rollback()
-    grant = grant_resource(db, principal, source_tenant_id=tenant_id, target_tenant_id=body.target_tenant_id,
-                           kind=access.KIND, resource_id=str(kb_id), permissions=list(body.permissions))
-    return {'id': str(grant.id), 'target_tenant_id': str(grant.target_tenant_id), 'permissions': grant.permissions}
+    """Share a base of this space into a shared space; sharing again changes the level."""
+    return kb_shares.share_base(db, principal, tenant_id, kb_id, body.shared_space_id, body.level)
 
 
-@router.delete('/shares/{grant_id}', status_code=204)
-def revoke_share(tenant_id: UUID, grant_id: UUID, principal: Principal = Depends(get_principal),
+@router.delete('/bases/{kb_id}/shares/{shared_space_id}', status_code=204)
+def unshare_base(tenant_id: UUID, kb_id: UUID, shared_space_id: UUID, principal: Principal = Depends(get_principal),
                  db: Session = Depends(get_database_session)) -> Response:
-    _user(db, principal, tenant_id)
-    grant = db.get(ResourceGrantRecord, grant_id)
-    if grant is None or grant.kind != access.KIND or grant.source_tenant_id != tenant_id:
-        raise NotFound('Share not found')
-    db.rollback()
-    revoke_resource_grant(db, principal, grant_id)
+    kb_shares.unshare_base(db, principal, tenant_id, kb_id, shared_space_id)
     return Response(status_code=204)
+
+
+@router.get('/shared-bases')
+def list_shared_bases(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                      db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Bases of other spaces readable here through a shared space, with the effective level."""
+    user = _user(db, principal, tenant_id)
+    levels = kb_shares.shared_levels(db, tenant_id, user.id)
+    items = []
+    for kb in access.readable_bases(db, tenant_id, user.id, list(levels) or None) if levels else []:
+        if kb.tenant_id == tenant_id or kb.id not in levels:
+            continue
+        owner = db.get(TenantRecord, kb.tenant_id)
+        items.append({**service.base_view(db, kb, tenant_id, user.id), 'level': levels[kb.id],
+                      'owner_tenant_id': str(kb.tenant_id), 'owner_tenant_name': owner.name if owner else ''})
+    return {'items': items}
 
 
 @router.get('/bases/{kb_id}/activity')

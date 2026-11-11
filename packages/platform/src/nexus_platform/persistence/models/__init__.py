@@ -45,7 +45,7 @@ from .mcp import (McpServiceRecord, McpServiceToolRecord, McpToolApprovalRecord,
                   McpOAuthTokenRecord, McpEndpointRecord)
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
-from .space import AgentShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
+from .space import AgentShareRecord, KnowledgeBaseShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
 
 from .knowledge import (
     VectorStoreRecord,
@@ -83,6 +83,7 @@ __all__ = [
     'UserIdentityRecord',
     'SpaceInviteLinkRecord',
     'AgentShareRecord',
+    'KnowledgeBaseShareRecord',
     'TenantRecord',
     'SpaceJoinRequestRecord',
     'SharedSpaceRecord',
