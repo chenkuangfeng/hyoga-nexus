@@ -145,7 +145,8 @@ const router = createRouter({
         {
           path: "artifacts",
           name: "artifactLibrary",
-          component: PlannedPage,
+          // Files Runs left under /outputs, on the Nexus artifacts API (openspec 2026-11-07-tool-expansion 4.6).
+          component: () => import("../views/artifacts/ArtifactLibrary.vue"),
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'settings.sandbox' }
         },
         {

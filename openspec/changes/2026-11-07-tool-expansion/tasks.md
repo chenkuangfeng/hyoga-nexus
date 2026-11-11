@@ -68,6 +68,7 @@
   - [x] 4.6.3 worker 收尾接入登记。
   - [x] 4.6.4 REST `/artifacts` 与测试。
   - [x] 4.6.5 文档同步。
+  - [x] 4.6.6 前端产物库（2026-11-11，用户要求）：接口增加名称与扩展名筛选、总数、`latest` 与 `version_count`、会话标题、`all_versions` 删除；`api/nexusArtifactAdapter.ts`（纯函数，单测 4 项）与 `api/artifacts.ts` 改调 `/artifacts`；`ArtifactLibrary.vue` 按产物 id 定位，预览先取字节再交给预览组件并忽略过期响应；路由 `artifacts` 指向该页；交互测试 5 项。`file_type` 取文件扩展名而不是 MIME，否则预览会把所有文件判成不支持。**未在浏览器里验证**，也未跑 `vue-tsc` / `pnpm build`；对适配器与 `artifacts.ts` 做了 `tsc --strict` 检查并用故意出错探针确认有效，模板编译无错。聊天页里按 `artifacts.registered` 事件展示产物卡片未做。
   - 实施说明（2026-11-11）：表 `artifacts` 与迁移 `c2d3e4f5a6b7`；`HostFileStore.output_files()`；`nexus_platform/artifacts/service.py`；`nexus_worker/artifacts.py` 接入 `native.py` 收尾；`apps/api/.../http/artifacts.py`。测试 `tests/test_artifacts.py`（9 项）、`tests/test_artifacts_api.py`（4 项）；相关 232 项后端测试通过。判断顺序上「单文件过大」先于数量与配额，以便如实报告。**未做**：前端界面、保留期自动清理、会话删除时清理副本文件（行随会话级联删除，副本留在磁盘，需要单独的清理任务）。顺带修正 `tests/test_run_transactions.py` 的表数量断言（`knowledge_base_shares` 之后一直是 102，现为 103）。
 - [x] 4.7 `sandbox_exec_async`、`sandbox_job_wait`、`sandbox_job_cancel`；Run 终态回收作业；与路线图 3.24 的关系写入文档。
   - 状态放在 `/workspace/.jobs/<id>/`（`out`、`rc`、`pid`、`started`），任何 worker 都能读；作业在独立会话里运行，看门狗负责超时（rc 124），取消与结束都杀整个进程组；每会话最多 4 个；Run 结束时 `close_jobs` 取消仍在跑的作业。后台命令只能在 `/workspace` 下。没有做跨 Run 的结果回投（路线图 3.24 单独评估）。

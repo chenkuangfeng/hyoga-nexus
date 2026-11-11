@@ -1,12 +1,15 @@
-import { del, get } from '@/utils/request'
+import { del, get, getDown } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+import { toLibraryPage, toListQuery } from './nexusArtifactAdapter'
 
 /**
- * One file in the artifact library: the latest version of a file a skill
- * generated in one of the caller's sessions. Download it through
- * downloadArtifact(session_id, message_id, index) from '@/api/chat', which
- * re-checks session ownership server side.
+ * One file in the artifact library: the latest version of a file a Run left under `/outputs` in one of the sessions
+ * the caller may see. Download it with {@link downloadArtifactFile}, which re-checks session access server side.
+ * `message_id` and `index` are WeKnora leftovers and stay empty in Nexus.
  */
 export interface ArtifactLibraryItem {
+  /** The Nexus artifact id; downloads and deletes address the file by it. */
+  id: string
   session_id: string
   session_title: string
   message_id: string
@@ -38,14 +41,21 @@ export interface ArtifactLibraryPage {
   page_size: number
 }
 
-export function listArtifactLibrary(params: ArtifactLibraryParams = {}) {
-  const query: Record<string, string | number> = {}
-  const keyword = params.keyword?.trim()
-  if (keyword) query.keyword = keyword
-  if (params.fileTypes?.length) query.file_types = params.fileTypes.join(',')
-  if (params.page) query.page = params.page
-  if (params.pageSize) query.page_size = params.pageSize
-  return get<ArtifactLibraryPage>('/api/v1/artifacts', { params: query })
+/** `/api/v1/tenants/{effective tenant}/artifacts`: files Runs left under `/outputs` (openspec 2026-11-07-tool-expansion 4.6). */
+function artifactsPath(): string {
+  const tenantId = useAuthStore().effectiveTenantId || ''
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/artifacts`
+}
+
+/** The newest version of each file the caller may see, with the server's total (rows carry `version_count`). */
+export async function listArtifactLibrary(params: ArtifactLibraryParams = {}): Promise<ArtifactLibraryPage> {
+  const res = await get(`${artifactsPath()}?${toListQuery(params)}`)
+  return toLibraryPage(res as any, params.page || 1, params.pageSize || 30)
+}
+
+/** The stored copy's bytes. The server audits the download and re-checks that the caller may see the session. */
+export function downloadArtifactFile(item: Pick<ArtifactLibraryItem, 'id'>): Promise<Blob> {
+  return getDown(`${artifactsPath()}/${encodeURIComponent(item.id)}/download`)
 }
 
 export interface ArtifactDeleteResult {
@@ -54,18 +64,11 @@ export interface ArtifactDeleteResult {
 }
 
 /**
- * Deletes a file from the artifact library, along with every earlier version of
- * it in the same session — a library row is the file, not one regeneration of
- * it, so leaving the older versions behind would leave the row in place.
- *
- * The stored bytes are reclaimed unless something else still references them,
- * so this is not reversible. Callers confirm with the user first.
+ * Deletes a file from the artifact library, along with every earlier version of it in the same session — a library
+ * row is the file, not one regeneration of it. The stored copies are deleted, so this is not reversible. Callers
+ * confirm with the user first.
  */
-export function deleteArtifactLibraryItem(item: ArtifactLibraryItem) {
-  const query = new URLSearchParams({
-    session_id: item.session_id,
-    message_id: item.message_id,
-    index: String(item.index),
-  })
-  return del<ArtifactDeleteResult>(`/api/v1/artifacts?${query.toString()}`)
+export async function deleteArtifactLibraryItem(item: ArtifactLibraryItem): Promise<ArtifactDeleteResult> {
+  await del(`${artifactsPath()}/${encodeURIComponent(item.id)}?all_versions=true`)
+  return { success: true, data: { file_name: item.file_name, deleted: item.version_count } }
 }

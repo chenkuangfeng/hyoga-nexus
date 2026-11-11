@@ -73,7 +73,7 @@
           <ul class="artifact-rows">
             <li
               v-for="item in section.items"
-              :key="`${item.message_id}:${item.index}`"
+              :key="item.id"
               class="artifact-row"
               @click="openPreview(item)"
             >
@@ -149,7 +149,7 @@
       :footer="false"
       :close-on-overlay-click="true"
       :close-on-esc-keydown="true"
-      @closed="previewItem = null"
+      @closed="previewItem = null; previewBlob = null"
     >
       <template #header>
         <div v-if="previewItem" class="preview-header">
@@ -201,16 +201,19 @@
       </template>
       <div v-if="previewItem" class="preview-body">
         <DocumentPreview
-          :key="`${previewItem.message_id}:${previewItem.index}`"
+          v-if="previewBlob"
+          :key="previewItem.id"
           :toolbar-target="previewActions"
-          :session-id="previewItem.session_id"
-          :message-id="previewItem.message_id"
-          :artifact-index="previewItem.index"
+          :source-blob="previewBlob"
           :file-type="previewFileType"
           :file-name="previewItem.file_name"
           :active="previewVisible"
           fill-height
         />
+        <div v-else-if="previewFailed" class="preview-state" role="alert">
+          {{ $t('artifactLibrary.downloadFailed') }}
+        </div>
+        <div v-else class="preview-state"><t-loading size="small" /></div>
       </div>
     </t-drawer>
   </div>
@@ -221,8 +224,12 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { downloadArtifact } from '@/api/chat'
-import { deleteArtifactLibraryItem, listArtifactLibrary, type ArtifactLibraryItem } from '@/api/artifacts'
+import {
+  deleteArtifactLibraryItem,
+  downloadArtifactFile,
+  listArtifactLibrary,
+  type ArtifactLibraryItem,
+} from '@/api/artifacts'
 import {
   ARTIFACT_CATEGORIES,
   artifactCategoryExtensions,
@@ -257,6 +264,9 @@ const downloading = reactive<Record<string, boolean>>({})
 const deleting = reactive<Record<string, boolean>>({})
 const previewItem = ref<ArtifactLibraryItem | null>(null)
 const previewVisible = ref(false)
+// The preview component renders bytes, so the file is fetched when a row opens (the server audits that download).
+const previewBlob = ref<Blob | null>(null)
+const previewFailed = ref(false)
 const previewActions = ref<HTMLElement | null>(null)
 const scrollRoot = ref<HTMLElement | null>(null)
 const sentinel = ref<HTMLElement | null>(null)
@@ -355,9 +365,19 @@ watch(category, () => {
   reload()
 })
 
-function openPreview(item: ArtifactLibraryItem) {
+async function openPreview(item: ArtifactLibraryItem) {
   previewItem.value = item
+  previewBlob.value = null
+  previewFailed.value = false
   previewVisible.value = true
+  try {
+    const blob = await downloadArtifactFile(item)
+    // The user may have closed the drawer or opened another file while this was in flight.
+    if (previewItem.value?.id === item.id) previewBlob.value = blob
+  } catch (err) {
+    console.error('[ArtifactLibrary] preview failed:', err)
+    if (previewItem.value?.id === item.id) previewFailed.value = true
+  }
 }
 
 function openSession(item: ArtifactLibraryItem) {
@@ -366,7 +386,7 @@ function openSession(item: ArtifactLibraryItem) {
 }
 
 function itemKey(item: ArtifactLibraryItem) {
-  return `${item.message_id}:${item.index}`
+  return item.id
 }
 
 function isDownloading(item: ArtifactLibraryItem) {
@@ -378,7 +398,7 @@ async function handleDownload(item: ArtifactLibraryItem) {
   if (downloading[key]) return
   downloading[key] = true
   try {
-    const blob = await downloadArtifact(item.session_id, item.message_id, item.index)
+    const blob = await downloadArtifactFile(item)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -470,6 +490,14 @@ onBeforeUnmount(() => {
 @import (reference) '@/components/css/resource-card.less';
 
 .artifact-library { .resource-list-content(); }
+
+.preview-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  color: var(--td-text-color-secondary);
+}
 
 .header {
   display: flex;
