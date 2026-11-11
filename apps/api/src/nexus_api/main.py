@@ -15,6 +15,7 @@ from nexus_api.http.memberships import router as memberships_router
 from nexus_api.http.shared_spaces import router as shared_spaces_router
 from nexus_api.http.agent_shares import router as agent_shares_router
 from nexus_platform.errors import PlatformError
+from nexus_platform.schedule.rules import ScheduleError
 from nexus_knowledge.capabilities import CapabilityPlanned
 from nexus_platform.configuration import DatabaseConfigurationError
 from nexus_platform.bootstrap import ensure_default_enterprise
@@ -139,6 +140,8 @@ from nexus_api.http.knowledge_wiki import router as knowledge_wiki_router
 app.include_router(knowledge_wiki_router)
 from nexus_api.http.mcp import router as mcp_router
 app.include_router(mcp_router)
+from nexus_api.http.schedules import router as schedules_router
+app.include_router(schedules_router)
 # Stateless outbound MCP endpoint: bearer-token auth (endpoint long-lived token) runs ahead of the
 # global session Auth, so external MCP clients reach the read-only tool face without a user session.
 from nexus_platform.mcp.http import endpoint_app  # noqa: E402
@@ -186,6 +189,17 @@ async def capability_planned_handler(request: Request, exc: CapabilityPlanned):
                             "details": {"group": exc.item.group, "key": exc.item.key, "stage": exc.item.stage},
                             "request_id": request.state.request_id}},
     )
+
+
+_SCHEDULE_STATUS = {'schedule_not_found': 404, 'schedule_forbidden': 403, 'schedule_limit_reached': 409,
+                    'schedule_run_too_soon': 429, 'schedule_agent_not_found': 404}
+
+
+@app.exception_handler(ScheduleError)
+async def schedule_error_handler(request: Request, exc: ScheduleError):
+    # Scheduled-task rules (openspec 2026-11-07-tool-expansion 8.2a): stable codes, 4xx by kind, 422 for bad input.
+    error = {"code": exc.code, "message": exc.detail or exc.code, "request_id": request.state.request_id}
+    return JSONResponse(status_code=_SCHEDULE_STATUS.get(exc.code, 422), content={"error": error})
 
 
 @app.exception_handler(ValueError)
