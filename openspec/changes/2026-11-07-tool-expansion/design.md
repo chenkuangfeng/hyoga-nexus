@@ -119,53 +119,54 @@ class ConcurrencyHint(NamedTuple):
 - `delegate_task`：子 Run 的 `NativePolicy` = 父级策略收紧后的副本（`tool_access` 不低于父级，工具集 ⊆ 父级绑定，`collab` 组本身不继承以禁止递归）；子 Run 的审批请求冒泡为父会话的审批；预算从父预算扣除；结果以单条工具结果返回父级，过长走外置。
 - `cronjob`：任务保存（所有者、智能体版本、提示、计划、时区、状态）；worker 的调度器按计划创建 Run；无人值守 Run 的 `tool_access` 强制 `read_only` 或「不允许需要审批的工具」，拒绝时记录审计而不是挂起；创建与修改需要审批（`write`）；每用户任务数、最小间隔与每日运行数有上限；提示入库前扫描。
 
-### 8.2a 定时任务的 REST 与界面（待确认，2026-11-11 补充）
+### 8.2a 定时任务的 REST 与界面（用户 2026-11-11 确认 C1–C6）
 
-**现状**：`cron_jobs`、规则（interval / daily / weekly）、服务（创建、列表、暂停 / 恢复 / 删除、到点触发）和 `cronjob_*` 工具已实现，但只有模型能创建和管理任务，用户看不到、改不了。前端 `/platform/automations` 仍是占位页；仓库里复制了 WeKnora 的 `views/automation/*`（约 2300 行）与 `api/automation.ts`，它们面向 WeKnora 的完整自动化模型（cron 表达式、一次性触发、漏触发与重叠策略、每次运行记录、审批授权、通知），与 Nexus 刻意收窄的任务模型差距很大。
+**现状**：`cron_jobs`、规则（interval / daily / weekly）、服务（创建、列表、暂停 / 恢复 / 删除、到点触发）和 `cronjob_*` 工具已实现，但只有模型能创建和管理任务，用户看不到、改不了。前端 `/platform/automations` 仍是占位页；仓库里复制了 WeKnora 的 `views/automation/*` 与 `api/automation.ts`，面向 WeKnora 的完整自动化模型。
 
-**决定点**（括号内为推荐）：
+**已确认的决定**：
 
-| 编号 | 问题 | 选项 |
-| --- | --- | --- |
-| C1 | 界面形态 | 新建精简的 Nexus「定时任务」页（推荐）；或把 WeKnora 自动化页适配到 Nexus，不支持的控件标「待实现」 |
-| C2 | 创建时如何指定智能体 | 选一个已发布智能体，任务固定在其**当前已发布版本**；创建后不能换智能体（推荐，因为会话绑定智能体版本）；或允许换并新建会话 |
-| C3 | 可见范围 | 只管理本人的任务（推荐）；或管理员可查看 / 暂停他人任务 |
-| C4 | 「立即运行」 | 纳入（推荐，不改变下次触发时间，1 分钟内只能点一次）；或不做 |
-| C5 | 运行记录 | 取任务会话里的 Run 列表，点击进入该会话（推荐，不新建表）；或新建任务运行表 |
-| C6 | 触发规则 | 沿用三种规则，界面提供「预览接下来 3 次触发」（推荐）；或加入 cron 表达式 |
+| 编号 | 决定 |
+| --- | --- |
+| C1 | 适配 WeKnora 自动化页到 Nexus（不新建精简页）；不支持的控件保留并标「待实现」，不隐藏 |
+| C2 | 创建时选一个已发布智能体，任务固定在其当前已发布版本；创建后不能换智能体（会话绑定智能体版本） |
+| C3 | 本人管理自己的任务；空间 owner / admin 另可**查看**本空间所有人的任务并**暂停**它们，不能改内容、立即运行、恢复或删除 |
+| C4 | 纳入「立即运行」：不改变下次触发时间，距上次运行不足 60 秒拒绝 |
+| C5 | 运行记录取任务会话里的 Run 列表，点击进入该会话，不新建表 |
+| C6 | 触发规则沿用 interval / daily / weekly，提供预览接下来的触发时间；不加 cron 表达式 |
 
-**接口**（`/api/v1/tenants/{tenant_id}/schedules`，仅空间成员，只能操作自己的任务，他人的任务一律按不存在处理）：
+**后端接口**（`/api/v1/tenants/{tenant_id}/schedules`，空间成员；他人的任务对非管理员一律按不存在处理）：
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| `GET /` | 本人任务列表，含状态（`active` / `paused` / `suspended`）、规则描述、下次与上次运行时间、次数、`last_error` |
-| `POST /` | 创建：`name`、`prompt`、`agent_id`、`schedule`（规则）、`timezone`；服务端取该智能体当前已发布版本，没有则 `schedule_agent_unpublished` |
-| `GET /{id}` | 详情，额外返回完整 `prompt`、规则对象、智能体名称与固定的版本号、任务会话 id |
-| `PATCH /{id}` | 改 `name`、`prompt`、`schedule`、`timezone`；改规则或时区会按当前时间重算 `next_run_at`；改 `prompt` 重新扫描注入措辞；`suspended` 的任务编辑后仍需 `resume` |
-| `POST /{id}/pause`、`/resume`、`DELETE /{id}` | 沿用 `change_state`，规则与限额不变 |
-| `POST /{id}/run` | 立即以任务会话发起一次运行（幂等键 `cron-now:{id}:{随机}`），更新 `last_run_at`、`last_run_id`、`run_count`，不改 `next_run_at`；`paused` 与 `suspended` 也允许；距上次运行不足 60 秒返回 `schedule_run_too_soon` |
-| `GET /{id}/runs?limit=` | 任务会话里的 Run（状态、创建与结束时间、错误码），新的在前，最多 50 条 |
-| `POST /preview` | 校验 `schedule` + `timezone` 并返回接下来最多 5 次触发时间（UTC 与本地），不写库 |
+| `GET /?scope=mine\|all` | `mine`（默认）本人任务；`all` 仅 owner / admin，返回全空间任务并带 `owner_user_id` 与 `owner_name` |
+| `POST /` | 创建：`name`、`prompt`、`agent_id`、`schedule`、`timezone`；取该智能体当前已发布版本，没有则 `schedule_agent_unpublished` |
+| `GET /{id}` | 详情：完整 `prompt`、规则对象、智能体名称与固定版本号、任务会话 id；管理员可看他人 |
+| `PATCH /{id}` | 仅所有者：改 `name`、`prompt`、`schedule`、`timezone`；改规则或时区按当前时间重算 `next_run_at`；改 `prompt` 重新扫描；`suspended` 的任务编辑后仍需 `resume` |
+| `POST /{id}/pause` | 所有者或管理员 |
+| `POST /{id}/resume`、`DELETE /{id}` | 仅所有者 |
+| `POST /{id}/run` | 仅所有者：立即以任务会话发起一次运行（幂等键 `cron-now:{id}:{随机}`），更新 `last_run_at`、`last_run_id`、`run_count`，不改 `next_run_at`；不足 60 秒拒绝 `schedule_run_too_soon` |
+| `GET /{id}/runs?limit=` | 任务会话里的 Run（状态、创建与结束时间、错误码），新的在前，最多 50 条；所有者或管理员 |
+| `POST /preview` | 校验 `schedule` + `timezone`，返回接下来最多 5 次触发（UTC），不写库 |
 
-- 错误码沿用 `ScheduleError.code`：`schedule_not_found` → 404，`schedule_limit_reached` → 409，`schedule_run_too_soon` → 429，其余 `schedule_*` → 422，响应带 `code` 与 `detail`。
-- 服务层新增 `get_job`、`update_job`、`run_now`、`list_runs`、`preview`，创建仍走 `create_job`；REST 与工具共用同一套规则、限额（每人 10 个活跃）、提示扫描与审计（新增 `schedule.updated`、`schedule.run_now`）。
-- 不要求智能体开启 `schedule` 工具组：该开关管的是**模型**能否创建任务，用户自己管理不受影响。
-- 无人值守不变：任务运行拿不到审批和提问机会，界面在创建与详情处固定提示。
+- 错误码沿用 `ScheduleError.code`：`schedule_not_found` → 404，`schedule_forbidden` → 403，`schedule_limit_reached` → 409，`schedule_run_too_soon` → 429，其余 `schedule_*` → 422。
+- 服务层新增 `get_job`、`update_job`、`run_now`、`list_runs`、`preview`，列表增加 `all` 范围；管理员暂停写审计 `schedule.paused`（记录操作者与所有者）。REST 与工具共用规则、限额（每人 10 个活跃）、提示扫描。
+- 不要求智能体开启 `schedule` 工具组：该开关只管模型能否创建任务。
+- 无人值守不变：任务运行拿不到审批与提问机会，界面固定提示。
 
-**前端**（`/platform/automations` 由占位页改为新页，路由名 `automationList` 不变）：
+**前端：适配 WeKnora 自动化页**（路由 `automations/:automationId?` 由占位页改为 `AutomationList.vue`；沿用知识库的做法：`api/automation.ts` 保留 WeKnora 形状的函数，内部改调 Nexus 并经纯函数适配器转换）：
 
-- `api/nexus-schedules.ts`（请求）与 `views/schedule/scheduleModel.ts`（纯函数：规则表单 ↔ 规则对象、状态到标签与可用操作、错误码到文案），不依赖 Vue 以便 `tsx --test`。
-- `NexusScheduleList.vue`：列表（名称、智能体、规则描述、状态标签、下次运行、上次运行与次数）与行内操作（暂停 / 恢复、立即运行、编辑、删除，删除有确认）；`suspended` 行显示原因；空状态引导创建。
-- `NexusScheduleDialog.vue`：创建 / 编辑；字段为名称、智能体（只列已发布的，编辑时只读）、提示词（字数上限 4000，显示无人值守说明）、规则（间隔 / 每天 / 每周三种单选加对应输入）、时区（默认浏览器时区）；规则变化时请求 `preview` 显示接下来 3 次触发。
-- `NexusScheduleRuns.vue`（抽屉）：最近运行列表，行内链接到 `/platform/chat/{session_id}`。
-- 复制来的 WeKnora `views/automation/*` 与 `api/automation.ts` 保持不动、不接路由，文档中注明未启用，需要时再单独适配（C1 选另一方案则相反）。
-- 文案六种语言一次加齐；表格与操作按钮带可访问名称；状态不只靠颜色。
+- 适配器 `api/nexusAutomationAdapter.ts`（纯函数，单测）：Nexus 任务 ↔ WeKnora `Automation`。`name`、`instruction` ↔ `prompt`（上限 4000）、`enabled` ↔ `state === 'active'`、`paused_reason` ↔ `last_error`、`next_run_at`、`last_run_at`、`session_id`；`trigger` ↔ 规则；`model_id` 位置改为智能体（`agent_id`）。
+- 触发器映射：WeKnora 表达式只接受能无损对应 Nexus 规则的形态——`daily`、`weekly`（仅选一天）；新增 Nexus 独有的「每 N 分钟」类型。其余类型（每小时、工作日、多选星期、每月、一次性、自定义 cron）在编辑器里保留为不可选项并标「待实现」；已存在的无法表达的触发器不会出现（后端只存三种）。
+- 编辑器：模型选择器换成智能体选择器（只列已发布，编辑时只读）；指令框上限改为 4000；会话方式、携带上次结果、重叠与漏触发策略、最长时长、审批超时、成功通知等控件保留，显示「待实现」并禁用，值不提交。
+- 列表与详情：列表、暂停 / 恢复、删除、立即运行、编辑接 Nexus；详情的运行记录来自 `GET /{id}/runs`（行内进入会话），「取消运行」接现有运行取消；授权（grants）与通知（notifications）相关调用不发请求，返回空并标「待实现」；管理员在列表顶部有「我的 / 全部」切换，他人的任务只显示暂停。
+- 触发预览接 `POST /preview`；时区沿用页面已有的时区工具。
+- 文案：复制页已有 `automation.*` 文案；新增键（智能体、每 N 分钟、待实现说明、管理员视图、错误码）六种语言一次加齐。
 
-**不做**：cron 表达式、一次性触发、漏触发与重叠策略配置、通知中心、管理员代管、任务运行专用表、多会话模式（每次新会话）。这些都留给路线图 9.4 外部事件触发一起评估。
+**不做**：cron 表达式、一次性触发、每小时 / 每月 / 工作日 / 多日 weekly（待实现标记）、漏触发与重叠策略、授权、通知中心、每次新会话、管理员改内容 / 恢复 / 删除他人任务。留给路线图 9.4 一并评估。
 
-**测试**：服务层（更新重算下次时间、更新触发扫描、`run_now` 不改 `next_run_at` 且 60 秒节流、`list_runs` 只见本任务会话、他人任务 404）；接口（权限、错误码映射、`preview` 不写库、未发布智能体）；前端纯函数与对话框交互（沿用 `node:test` 组件测试惯例）。
+**测试**：服务层（更新重算下次时间、更新触发扫描、`run_now` 不改 `next_run_at` 且节流、`list_runs` 只见本任务会话、非所有者非管理员 404、管理员只能暂停）；接口（权限、错误码映射、`preview` 不写库、未发布智能体、`scope=all` 的权限）；前端适配器与规则映射的纯函数单测、列表与编辑器交互测试（沿用 `automationInteractions.test.ts` 惯例）。
 
-**风险**：`run_now` 在会话忙时会排队（沿用忙会话队列），文案需说明；任务固定版本，智能体后来更新不影响它，界面显示固定的版本号并提示新建任务以使用新版本。
+**风险**：立即运行在会话忙时排队（沿用忙会话队列），文案需说明；任务固定版本，智能体后来更新不影响它，界面显示固定版本号并提示新建任务以使用新版本；复制页体量大（约 2300 行），只改数据层与受影响控件，其余保持原样以便对照 WeKnora。
 
 ## 9. 迁移与兼容
 

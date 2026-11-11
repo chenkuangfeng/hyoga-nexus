@@ -109,12 +109,13 @@
 - [x] 8.3 `vision_analyze`（可选）：补设计、确认、实现。
   - `builtins/media.py`、`nexus_worker/vision.py`、`NativePolicy.vision_model_profile_version_id`；沙箱端口新增 `read_image`。调整：图片只能来自沙箱工作区，所以 `media` 组可用性要求沙箱可用（`sandbox_required`）。未对真实视觉模型验证。`tests/test_vision_tool.py`。
 
-## 10. cron 的 REST 与界面（8.2 追加，待确认；设计见 design.md 8.2a，确认前不编码）
+## 10. cron 的 REST 与界面（8.2 追加；设计见 design.md 8.2a，用户 2026-11-11 确认 C1–C6）
 
-- [ ] 10.1 服务层：`get_job`、`update_job`、`run_now`、`list_runs`、`preview` 与审计动作，单元测试。
+- [ ] 10.1 服务层：`get_job`、`update_job`、`run_now`、`list_runs`、`preview`、`all` 范围与管理员暂停，审计动作，单元测试。
 - [ ] 10.2 REST：`/api/v1/tenants/{tenant_id}/schedules` 全部接口、错误码映射、权限与越权测试。
-- [ ] 10.3 前端：`api/nexus-schedules.ts`、`scheduleModel.ts`（含单测）、`NexusScheduleList.vue`、`NexusScheduleDialog.vue`、`NexusScheduleRuns.vue`，路由 `automations` 指向新页，六种语言文案，对话框交互测试。
-- [ ] 10.4 文档：`docs/architecture.md` 定时部分、`docs/roadmap.md` 3.27、`packages/platform` 文档、`apps/web` 说明（标注 WeKnora 自动化页未启用）。
+- [ ] 10.3 前端数据层：`nexusAutomationAdapter.ts`（含单测）与 `api/automation.ts` 接 Nexus；授权、通知调用短路为待实现。
+- [ ] 10.4 前端页面：路由 `automations` 指向 `AutomationList.vue`；编辑器的智能体选择、触发器类型限制与待实现标记；列表的我的 / 全部切换；详情运行记录；六种语言文案；交互测试。
+- [ ] 10.5 文档：`docs/architecture.md` 定时部分、`docs/roadmap.md` 3.27、`packages/platform` 文档、`apps/web` 说明。
 
 ## 9. 收尾
 
