@@ -36,7 +36,7 @@ class MembershipRecord(Base):
     __table_args__ = (
         CheckConstraint("role IN ('owner', 'admin', 'contributor', 'viewer')", name="ck_membership_role"),
         CheckConstraint("status IN ('active', 'revoked')", name="ck_membership_status"),
-        CheckConstraint("source IN ('manual', 'invitation', 'application')", name="ck_membership_source"),
+        CheckConstraint("source IN ('manual', 'invitation', 'application', 'wecom')", name="ck_membership_source"),
         Index("ix_memberships_user_status", "user_id", "status"),
     )
 

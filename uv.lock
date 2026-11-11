@@ -453,11 +453,15 @@ name = "hyoga-nexus-connectors"
 version = "0.1.0"
 source = { editable = "packages/connectors" }
 dependencies = [
+    { name = "httpx" },
     { name = "hyoga-nexus-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "hyoga-nexus-core", editable = "packages/core" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "hyoga-nexus-core", editable = "packages/core" },
+]
 
 [[package]]
 name = "hyoga-nexus-core"

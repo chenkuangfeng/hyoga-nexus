@@ -31,6 +31,7 @@ class OrgUnitRecord(Base):
         Index("ix_org_units_tenant", "tenant_id"),
         CheckConstraint("status IN ('active', 'disabled')", name="ck_org_units_status"),
         CheckConstraint("source IN ('manual', 'wecom')", name="ck_org_units_source"),
+        UniqueConstraint("tenant_id", "external_id", name="uq_org_units_external"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
@@ -39,8 +40,10 @@ class OrgUnitRecord(Base):
     parent_id: Mapped[UUID | None] = mapped_column(ForeignKey("org_units.id", ondelete="RESTRICT"))
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
-    # "manual": maintained by the enterprise. "wecom": reserved for a later directory sync.
+    # "manual": maintained by the enterprise. "wecom": read from the WeCom directory (openspec 2026-11-11 E3).
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual", server_default="manual")
+    # The WeCom department id of a "wecom" node, unique within the enterprise; NULL for manual nodes.
+    external_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

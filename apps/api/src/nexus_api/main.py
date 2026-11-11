@@ -140,6 +140,9 @@ from nexus_api.http.knowledge_wiki import router as knowledge_wiki_router
 app.include_router(knowledge_wiki_router)
 from nexus_api.http.admin_resources import router as admin_resources_router
 app.include_router(admin_resources_router)
+from nexus_api.http.wecom_apps import admin_router as wecom_admin_router, public_router as wecom_public_router
+app.include_router(wecom_admin_router)
+app.include_router(wecom_public_router)
 from nexus_api.http.mcp import router as mcp_router
 app.include_router(mcp_router)
 from nexus_api.http.schedules import router as schedules_router

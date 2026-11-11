@@ -228,6 +228,9 @@ def _background_pass(factory, worker_id: str, knowledge_concurrency: int) -> boo
     from .schedule import schedule_tick
     if schedule_tick(factory):
         return True
+    from .wecom_sync import wecom_tick
+    if wecom_tick(factory):
+        return True
     if knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency):
         return True
     if capture_tick(factory, worker_id):

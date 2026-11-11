@@ -289,6 +289,7 @@ tenant_wecom_apps(id PK, tenant_id, wecom_agentid, secret_ciphertext, name,
 - 离职：成员被删除或移出同步范围时，把 `tenant_memberships.status` 设为 `revoked` 并写入审计；资产不动。
 - `WeComDirectory` 协议按企业、按应用构造实例（凭据来自上述两表），HTTP 实现放在 `connectors/wecom`，platform 只依赖协议。
 - 实施前（E3.0）核对企微官方文档：自建应用网页授权与扫码登录的参数、通讯录读取所需的密钥与可读范围（通讯录同步密钥与应用密钥各自能读到哪些字段，是否只限应用可见范围）、成员姓名等敏感字段的获取条件、回调验签方式。结果记入本节；字段缺失时降级为“只用 userid，姓名由员工首次登录时补全”。
+- 核对结果（2026-11-12，官方文档 90200、90208、90968）：`/cgi-bin/user/simplelist` 与 `/cgi-bin/department/list` 只返回调用应用可见范围内的数据，名称字段须管理员授权才返回；2022-08-15 起通讯录同步助手配置的新 IP 不能再调用这两个读取接口，因此同步改用自建应用自己的密钥；回调签名为 `sha1(sort(token, timestamp, nonce, msg_encrypt))`，`AESKey = base64(EncodingAESKey + "=")`、AES-256-CBC、IV 取密钥前 16 字节、PKCS#7 补齐到 32 字节，明文为 16 字节随机串、4 字节网络序长度、消息与 corpid。
 
 ## 7. E4 IM 渠道
 
