@@ -109,7 +109,7 @@ def bwrap_arguments(settings: SandboxSettings, env_dir: Path, inputs: Path, scri
     for name in _ETC_FILES:
         args += ['--ro-bind-try', name, name]
     return [*args, '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--bind', str(env_dir.resolve()), '/env',
-            '--ro-bind', str(inputs.resolve()), '/in', '--remount-ro', '/', '--clearenv',
+            '--ro-bind', str(inputs.resolve()), '/in', '--remount-ro', '/',
             '--setenv', 'PATH', '/usr/local/bin:/usr/bin:/bin', '--setenv', 'HOME', '/tmp', '--setenv', 'TMPDIR', '/tmp',
             '--setenv', 'PIP_CACHE_DIR', '/tmp/pip', '--setenv', 'npm_config_cache', '/tmp/npm',
             '--chdir', '/in', '--', '/bin/sh', '-c', script]

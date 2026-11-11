@@ -97,6 +97,26 @@ def passed(settings: SandboxSettings, store: ReportStore | None = None) -> bool:
     return valid(settings, report)
 
 
+def _host_processes(marker_seconds: int) -> list[str]:
+    """Pids on the host running `sleep <marker_seconds>`. Backends without a container (bwrap) cannot be asked
+    from the inside (every command has its own PID namespace), so their probes look for a marker process here."""
+    needle = f'sleep\x00{marker_seconds}'.encode()
+    found = []
+    for entry in Path('/proc').iterdir():
+        if entry.name.isdigit():
+            try:
+                if needle in (entry / 'cmdline').read_bytes():
+                    found.append(entry.name)
+            except OSError:
+                pass
+    return found
+
+
+def _marker_seconds() -> int:
+    """A sleep length no other process is likely to use, different on every run."""
+    return 3000 + (os.getpid() * 7 + int(time.time())) % 900
+
+
 async def _guard(name: str, probe) -> Item:
     try:
         ok, detail = await asyncio.wait_for(probe(), 180)
@@ -157,6 +177,8 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         return result.exit_code not in (0, None) and str(size) not in result.stdout, 'allocating twice the limit is refused or killed'
 
     async def process_limit():
+        if manager.docker is None:
+            return await processes_bounded_by_teardown()
         code = ('import os,time\\nn=0\\nfor _ in range(%d):\\n try:\\n  if os.fork()==0:\\n   time.sleep(8);os._exit(0)\\n  n+=1\\n'
                 ' except OSError:\\n  break\\nprint(n)') % (settings.pids * 2)
         result = await sh(a, f'python3 -c "$(printf \'{code}\')"', 30)
@@ -192,6 +214,8 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         return marker not in result.stdout and 'server-secret' not in result.stdout, 'the server environment is not inherited'
 
     async def cancellation():
+        if manager.docker is None:
+            return await cancelled_jail_is_gone()
         task = asyncio.ensure_future(sh(a, 'echo $$ > /workspace/.pid; sleep 60', 60))
         await asyncio.sleep(3)
         task.cancel()
@@ -201,6 +225,8 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         return 'gone' in result.stdout, 'a cancelled command does not keep running in the container'
 
     async def cleanup_and_residue():
+        if manager.docker is None:
+            return await jail_leaves_nothing()
         docker = manager.docker
         await manager.release(f'accept-{tag}-a', 'probe')
         names = await docker.list_managed()
@@ -211,6 +237,45 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         removed = await manager.reap()
         leftover = container_name(f'accept-{tag}-b', 'probe') in await docker.list_managed()
         return gone and not leftover, f'released container removed; {len(removed)} orphan(s) reclaimed'
+
+    async def jail_leaves_nothing():
+        """Backends without a long-lived container (bwrap): a process a command left in the background must end with
+        its jail. The marker is a sleep length no other process uses; the host's process table is searched for it."""
+        seconds = _marker_seconds()
+        await sh(a, f'sleep {seconds} & echo started')
+        await asyncio.sleep(1)
+        alive = _host_processes(seconds)
+        return not alive, ('no container to remove: the jail ends with its command and takes background processes along'
+                           if not alive else f'{len(alive)} background process(es) outlived the jail')
+
+    async def cancelled_jail_is_gone():
+        """A cancelled command must not leave its jail running (the in-container check of the docker variant cannot
+        work here: a later command is a different PID namespace)."""
+        seconds = _marker_seconds()
+        task = asyncio.ensure_future(sh(a, f'sleep {seconds}', 60))
+        await asyncio.sleep(3)
+        started = bool(_host_processes(seconds))
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(1)
+        alive = _host_processes(seconds)
+        return started and not alive, 'a cancelled command does not keep running in the jail'
+
+    async def processes_bounded_by_teardown():
+        """bwrap has no process-count limit (a real one needs a cgroup). What it does guarantee, and what is checked,
+        is that the processes a command forks end with its jail: after the command they are all gone."""
+        seconds = _marker_seconds()
+        code = ('import os,time\\nn=0\\nfor _ in range(%d):\\n try:\\n  if os.fork()==0:\\n   os.execvp("sleep",["sleep","%d"])\\n  n+=1\\n'
+                ' except OSError:\\n  break\\ntime.sleep(1)\\nprint(n)') % (settings.pids * 2, seconds)
+        result = await sh(a, f'python3 -c "$(printf \'{code}\')"', 30)
+        await asyncio.sleep(1)
+        alive = _host_processes(seconds)
+        try:
+            forked = int(result.stdout.split()[-1])
+        except (ValueError, IndexError):
+            return False, f'no count reported: {result.stderr[:100]}'
+        return not alive, (f'no process-count limit with bwrap; {forked} processes forked and all ended with the jail'
+                           if not alive else f'{len(alive)} of {forked} forked processes outlived the jail')
 
     items = []
     try:

@@ -79,7 +79,9 @@ class BwrapBackend:
                  *(['--ro-bind', str(skills.resolve()), '/skills'] if skills is not None else []),
                  *(['--ro-bind', str(envs.resolve()), '/skill_envs'] if envs is not None else []),
                  '--remount-ro', '/',  # the root is a tmpfs: only /workspace, /outputs and /tmp stay writable
-                 '--clearenv', '--setenv', 'PATH', _PATH, '--setenv', 'HOME', '/workspace',
+                 # No `--clearenv`: bwrap before 0.4.1 does not know it. The environment is rebuilt anyway, because
+                 # the executor starts bwrap with only PATH (`run`), so the host's variables never reach the jail.
+                 '--setenv', 'PATH', _PATH, '--setenv', 'HOME', '/workspace',
                  '--setenv', 'LANG', 'C.UTF-8', '--setenv', 'LC_ALL', 'C.UTF-8', '--setenv', 'TMPDIR', '/tmp',
                  *[flag for key in self.settings.env_passthrough if key in os.environ
                    for flag in ('--setenv', key, os.environ[key])],

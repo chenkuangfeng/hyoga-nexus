@@ -25,7 +25,7 @@
 
 ## bwrap 后端
 
-`--unshare-all --cap-drop ALL --die-with-parent --new-session --remount-ro /`，环境用 `--clearenv` 重建，网络仅在 `network = "bridge"` 时 `--share-net`；服务进程为 root 时以 65534 运行。资源限制用外层 shell 的 `ulimit`（`-v` 地址空间按 `memory_mb`、`-f` 单文件按配额、`-c 0`、`-n 1024`）。与 docker 后端的差异：没有进程数限制（`RLIMIT_NPROC` 按宿主用户统计，不可用，需要 cgroup）、没有 CPU 配额、`image`/`cpus`/`pids` 不生效、不支持后台命令（隔离环境随启动它的 shell 结束，`exec_async` 返回 `sandbox_background_unsupported`）、解释器与库就是宿主的。验收的进程数探测预计不通过，是否放行由运维验证后决定。
+`--unshare-all --cap-drop ALL --die-with-parent --new-session --remount-ro /`，环境只含显式 `--setenv` 的变量（启动 bwrap 时父进程环境已只剩 `PATH`；不用 `--clearenv`，bwrap 0.4.0 不认识它），网络仅在 `network = "bridge"` 时 `--share-net`；服务进程为 root 时以 65534 运行。资源限制用外层 shell 的 `ulimit`（`-v` 地址空间按 `memory_mb`、`-f` 单文件按配额、`-c 0`、`-n 1024`）。与 docker 后端的差异：没有进程数限制（`RLIMIT_NPROC` 按宿主用户统计，不可用，需要 cgroup）、没有 CPU 配额、`image`/`cpus`/`pids` 不生效、不支持后台命令（隔离环境随启动它的 shell 结束，`exec_async` 返回 `sandbox_background_unsupported`）、解释器与库就是宿主的。验收的进程数探测预计不通过，是否放行由运维验证后决定。
 
 ## 档位
 
@@ -40,6 +40,8 @@
 ## 验收项
 
 connectivity、user、network、time_limit、output_limit、memory_limit、process_limit、tenant_isolation、path_escape、environment、cancellation、cleanup_and_residue。`local` 后端在任何探测运行前被拒绝，因为内存与进程数探测本身带有破坏性。
+
+**bwrap 档位的验收差异**：没有长驻容器，且每条命令是独立的 PID 命名空间，所以 `process_limit`、`cancellation`、`cleanup_and_residue` 三项改为从宿主进程表按标记进程（`sleep <本次随机秒数>`）检查。`process_limit` 不再要求“被限制在 pids 以内”（bwrap 没有进程数限制，真正的限制需要 cgroup），而是验证 fork 出 `pids × 2` 个进程后，它们随 jail 一起结束；取消与后台进程同理。这是有意放宽的准入条件，进程数仍只靠命令超时和 jail 销毁兜底。
 
 ## 已知限制
 

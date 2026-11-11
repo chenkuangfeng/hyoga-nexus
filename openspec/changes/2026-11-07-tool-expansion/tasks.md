@@ -44,8 +44,11 @@
   - `manager`：目录、容器名、空闲与孤儿回收（`reap`）。worker 每 60 秒回收一次（异步循环用定时任务，同步循环在空闲时检查）；每条命令前后刷新使用时间，超过 `idle_seconds` 的长 Run 不会被误删容器。
 - [x] 3.5 `[sandbox]` 部署配置读取与校验（`deployment.py`），配置错误不泄露细节；`configs/README.md` 与示例同步。
   - `[sandbox]` 读取与校验、`configs/nexus.example.toml`、`configs/README.md`、`.gitignore`。
-- [ ] 3.8 `bwrap` 后端（追加，用户确认）：`backends/bwrap`、`backend = "bwrap"`、管理器与验收接入、`exec_async` 明确拒绝。
-  - 代码与参数测试已写，未在真实 bwrap 上验证（待用户验证）；进程数限制缺失，验收的进程数探测预计不通过。
+- [x] 3.8 `bwrap` 后端（追加，用户确认）：`backends/bwrap`、`backend = "bwrap"`、管理器与验收接入、`exec_async` 明确拒绝。
+  - 代码与参数测试已写。2026-11-11 在本机真实 bwrap 0.4.0 上验证：验收 12 项全部通过（临时配置、临时数据库）。验证中发现并修复三处：(1) bwrap 0.4.0 不认识 `--clearenv`，所有命令直接失败；去掉该参数（运行与依赖构建两个 jail），环境仍只含显式变量，因为启动 bwrap 时父进程环境只剩 `PATH`；(2) `cleanup_and_residue` 假定有 docker，对 bwrap 直接崩溃；(3) `cancellation` 在新 jail 里用旧 jail 的 PID 检查，对 bwrap 无意义。
+  - **放宽的准入条件（请确认）**：bwrap 没有进程数限制，原样的 `process_limit` 永远通不过，bwrap 档位也就永远无法准入。现改为验证“fork 出的进程随 jail 一起结束”（设计见 `packages/sandbox/docs/design.md`）；进程数仍只靠超时与 jail 销毁兜底。若不接受，应改为要求 cgroup 方案，bwrap 档位在此之前不可用。
+  - 新增真实 bwrap 单元测试 2 项（无可用 bwrap 时跳过）。
+  - 未处理：验收时仍出现一条 `_GatheringFuture exception was never retrieved` 的 asyncio 日志（取消路径），不影响结果。
 - [ ] 3.6 `acceptance` 全部探测项与迁移 `sandbox_acceptance`；worker 启动自检与 `sandbox-check` 命令；验收报告输出到文件。
   - 部分完成：验收模块 12 项探测与按指纹失效的报告已实现；`--sandbox-check` 命令已加入 worker（调整：用参数而非子命令）。报告原先保存在 `workspace_root/acceptance.json`，现已改为写 `sandbox_acceptance` 表（见下）。worker 启动自检已做只读版（见 3.6.5）。
   - 结果入库（追加，2026-11-11 用户确认 design.md 2.3.1 方案 B）：

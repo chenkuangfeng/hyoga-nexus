@@ -392,7 +392,7 @@ def bwrap_settings(tmp_path, **overrides):
 def test_bwrap_jail_has_every_isolation_flag(tmp_path):
     backend = BwrapBackend(bwrap_settings(tmp_path))
     args = backend.jail_arguments(tmp_path / 'w', tmp_path / 'o', '/workspace', 'echo hi')
-    for flag in ('--die-with-parent', '--new-session', '--unshare-all', '--clearenv', '--proc', '--dev'):
+    for flag in ('--die-with-parent', '--new-session', '--unshare-all', '--proc', '--dev'):
         assert flag in args, flag
     assert args[args.index('--cap-drop') + 1] == 'ALL'
     assert '--share-net' not in args  # network = none keeps the network namespace unshared
@@ -431,3 +431,45 @@ def test_bwrap_reports_a_missing_binary(tmp_path):
     with pytest.raises(SandboxError) as caught:
         run(executor.run('true', cwd='/workspace', timeout_seconds=5, output_limit=100))
     assert caught.value.code == 'sandbox_backend_unavailable'
+
+
+# ------------------------------------------------------------------ real bwrap (skipped where unprivileged namespaces are unavailable)
+
+def _bwrap_works() -> bool:
+    import shutil
+    import subprocess
+    binary = shutil.which('bwrap')
+    if binary is None:
+        return False
+    try:
+        return subprocess.run([binary, '--ro-bind', '/', '/', '--unshare-all', '--die-with-parent', 'true'],
+                              capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+real_bwrap = pytest.mark.skipif(not _bwrap_works(), reason='bwrap is missing or unprivileged user namespaces are disabled')
+
+
+@real_bwrap
+def test_a_real_jail_runs_commands_with_a_clean_environment_and_a_read_only_root(tmp_path, monkeypatch):
+    monkeypatch.setenv('NEXUS_REAL_BWRAP_SECRET', 'server-secret')
+    session = SandboxManager(bwrap_settings(tmp_path)).session('t1', 's1')
+    ok = run(session.exec('echo hi; env', cwd='/workspace', timeout_seconds=20))
+    assert ok.exit_code == 0 and ok.stdout.startswith('hi') and 'server-secret' not in ok.stdout
+    root = run(session.exec('touch /etc/nexus-probe; echo $?', cwd='/workspace', timeout_seconds=20))
+    assert root.stdout.split()[-1] != '0'
+    run(session.exec('echo kept > /workspace/f.txt', cwd='/workspace', timeout_seconds=20))
+    assert run(session.read_file('/workspace/f.txt', start_line=1, max_lines=5)).text.strip() == 'kept'
+
+
+@real_bwrap
+def test_a_real_jail_takes_background_processes_with_it_and_a_timeout_ends_the_command(tmp_path):
+    from nexus_sandbox.acceptance import _host_processes, _marker_seconds
+    session = SandboxManager(bwrap_settings(tmp_path)).session('t1', 's1')
+    seconds = _marker_seconds()
+    run(session.exec(f'sleep {seconds} & echo started', cwd='/workspace', timeout_seconds=20))
+    run(asyncio.sleep(0.5))
+    assert _host_processes(seconds) == []
+    slow = run(session.exec('sleep 60', cwd='/workspace', timeout_seconds=1))
+    assert slow.timed_out
