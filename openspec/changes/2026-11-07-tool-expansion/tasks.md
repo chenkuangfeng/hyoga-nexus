@@ -109,6 +109,13 @@
 - [x] 8.3 `vision_analyze`（可选）：补设计、确认、实现。
   - `builtins/media.py`、`nexus_worker/vision.py`、`NativePolicy.vision_model_profile_version_id`；沙箱端口新增 `read_image`。调整：图片只能来自沙箱工作区，所以 `media` 组可用性要求沙箱可用（`sandbox_required`）。未对真实视觉模型验证。`tests/test_vision_tool.py`。
 
+## 10. cron 的 REST 与界面（8.2 追加，待确认；设计见 design.md 8.2a，确认前不编码）
+
+- [ ] 10.1 服务层：`get_job`、`update_job`、`run_now`、`list_runs`、`preview` 与审计动作，单元测试。
+- [ ] 10.2 REST：`/api/v1/tenants/{tenant_id}/schedules` 全部接口、错误码映射、权限与越权测试。
+- [ ] 10.3 前端：`api/nexus-schedules.ts`、`scheduleModel.ts`（含单测）、`NexusScheduleList.vue`、`NexusScheduleDialog.vue`、`NexusScheduleRuns.vue`，路由 `automations` 指向新页，六种语言文案，对话框交互测试。
+- [ ] 10.4 文档：`docs/architecture.md` 定时部分、`docs/roadmap.md` 3.27、`packages/platform` 文档、`apps/web` 说明（标注 WeKnora 自动化页未启用）。
+
 ## 9. 收尾
 
 - [ ] 9.1 同步 `docs/architecture.md`、`docs/roadmap.md`、各包 `docs/design.md` 与 README，只记录当前结果与明确标注的计划。
