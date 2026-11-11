@@ -10,7 +10,9 @@ from nexus_platform.configuration import resolve_database_url
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep the loggers that already exist: the default (True) silences every one of them, which hides the worker's and
+    # the API's logs whenever a migration runs in the same process (tests, embedded start-up).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 database_url = resolve_database_url(config.attributes.get("database_url"))
 config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))

@@ -15,6 +15,7 @@ from nexus_skills import bundle
 from nexus_skills.source import SourceError, parse_source
 from test_platform import database  # noqa: F401  (pytest fixture)
 from test_skills_platform import PRINCIPAL, _tenant
+from test_skills_api import _client, teardown_function  # noqa: F401  (module level: pytest only runs teardown_function found here)
 
 MD = '---\nname: remote-skill\ndescription: From far away\ntools: []\n---\nBody\n'
 
@@ -207,7 +208,6 @@ def test_a_skill_without_an_origin_has_nothing_to_check(database):
 
 def test_install_remote_over_http(database, monkeypatch):
     tenant, _ = _tenant(database)
-    from test_skills_api import _client
     monkeypatch.setattr(remote, '_fetch', lambda source, **kw: _zip([('SKILL.md', MD)]))
     http = _client(database, PRINCIPAL)
     base = f'/api/v1/tenants/{tenant.id}/skills'

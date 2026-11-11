@@ -17,6 +17,7 @@ from nexus_platform.skills.service import (
 )
 from test_platform import database  # noqa: F401  (pytest fixture)
 from test_skills_platform import PRINCIPAL, _agent, _tenant, _version_for
+from test_skills_api import _client, teardown_function  # noqa: F401  (module level: pytest only runs teardown_function found here)
 
 MD = '---\nname: my-notes\ndescription: Keeps my notes tidy\ntools: []\n---\n# Steps\nWrite short notes.\n'
 
@@ -247,7 +248,6 @@ def test_the_same_private_name_may_belong_to_two_users(database, ids):
 
 
 def test_my_skills_over_http_are_only_the_callers(database, ids):
-    from test_skills_api import _client, teardown_function  # noqa: F401
     tenant, _, alice = ids
     _save(database, tenant, alice)
     base = f'/api/v1/tenants/{tenant.id}'

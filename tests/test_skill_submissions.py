@@ -13,6 +13,7 @@ from nexus_platform.tenants.roles import assign_role, create_role
 from nexus_platform.tenants.service import add_member
 from test_platform import database  # noqa: F401  (pytest fixture)
 from test_skills_platform import PRINCIPAL, _tenant
+from test_skills_api import _client, teardown_function  # noqa: F401  (module level: pytest only runs teardown_function found here)
 
 BOB = Principal(id='bob', issuer='test')
 CARA = Principal(id='cara', issuer='test')
@@ -232,7 +233,6 @@ def test_an_administrator_shares_a_private_skill_straight_into_the_library(datab
 
 
 def test_submissions_over_http(database, world):
-    from test_skills_api import _client, teardown_function  # noqa: F401
     _private(database, world, BOB)
     base = f'/api/v1/tenants/{world.id}'
     member = _client(database, BOB)
