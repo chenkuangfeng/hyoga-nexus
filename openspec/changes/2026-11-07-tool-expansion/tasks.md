@@ -21,8 +21,8 @@
   - 调整：记忆、知识库、技能脚本三处沿用 `preparation.py` 的按名过滤（行为不变，原测试保持通过）；新组经 `nexus_platform.runs.tool_gates` 与网关的 `hidden_groups` 两层门控。原因：平台包不依赖 `nexus_tools`，读不到注册表里的分组。
 - [x] 1.5 一致性测试：注册表、`BUILTIN_TOOL_NAMES`、分组声明三者互相检查。
   - `tests/test_tool_groups.py`：注册表与 `BUILTIN_TOOL_NAMES` 一致、分组合法、门控与网关隐藏。
-- [ ] 1.6 目录接口返回 `availability` 与 `reason`（接口已完成：`/agent-tools` 的 `group_info`）；智能体编辑器按组显示整组开关、逐工具勾选、风险徽标与不可用原因。
-  - 未做前端：已在 `src/api/nexus-agents.ts` 补了 `group_info` 的类型。智能体编辑器是 6800 行的移植文件，本机内存只有约 1.8 GB，无法运行 `vue-tsc` / `pnpm build` 验证，不盲改。
+- [x] 1.6 目录接口返回 `availability` 与 `reason`（接口已完成：`/agent-tools` 的 `group_info`）；智能体编辑器按组显示整组开关、逐工具勾选、风险徽标与不可用原因。
+  - 前端（2026-11-11）：实际使用的编辑器是 `views/agent/NexusAgentEditorModal.vue`（不是 6800 行的移植文件）。新增 `nexusToolGroups.ts`（开关状态、只存与默认值不同的选择、不可用原因码映射，单测 5 项）；`nexusAgentForm.ts` 增加 `tool_groups_enabled`（读写 `budgets.behavior.tool_groups_enabled`，单测 1 项）；编辑器新增「工具分组」块：每组一个开关，`base` 锁定，待实现组显示阶段，部署不可用时显示原因；逐工具勾选与风险徽标原本已有。六种语言文案已加齐。**未在浏览器里验证**，也未跑 `vue-tsc` / `pnpm build`（本机内存不足）；仅对两个纯 TS 文件做了 `tsc --strict` 检查并用故意出错探针确认有效，模板编译无错。
 
 ## 2. 调度增强（阶段 C，沙箱依赖它）
 
@@ -60,8 +60,8 @@
   - 风险随 `[sandbox].network`；`public_result` 不含宿主路径（测试断言）。
 - [x] 4.4 守卫规则：`dangerous_shell_commands.json` 的 `tools` 增加沙箱命令工具；新增路径越界与敏感位置规则及测试。
   - `dangerous_shell_commands.json` 的 shell 类规则加入 `sandbox_exec`。路径越界与敏感位置的专门规则未加：路径越界已由 `paths` 拒绝。
-- [ ] 4.5 `sandbox` 组 `availability`（部署启用且验收通过）与默认关闭；编辑器的沙箱分区、不可用原因展示。
-  - 部分完成：`sandbox` 组 `availability`（部署启用且验收通过；`local` 需 `allow_local` 与开发认证模式）与默认关闭已完成；编辑器的沙箱分区待前端。
+- [x] 4.5 `sandbox` 组 `availability`（部署启用且验收通过）与默认关闭；编辑器的沙箱分区、不可用原因展示。
+  - 部分完成：`sandbox` 组 `availability`（部署启用且验收通过；`local` 需 `allow_local` 与开发认证模式）与默认关闭已完成；编辑器：沙箱档位选择与不可用原因已有（`sandboxProfile`），沙箱组的开关与不可用原因随 1.6 的「工具分组」块完成。
 - [ ] 4.6 `/outputs` 产物登记（新表）、下载授权检查、审计。
   - 未做：产物登记需要新表和迁移，而迁移链上有另一项未提交的迁移（见 8.2），等链稳定后再做。目前 `/outputs` 下的文件在工作区目录里，没有登记与下载接口。
   - 未做。

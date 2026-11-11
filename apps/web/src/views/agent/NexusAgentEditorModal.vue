@@ -361,6 +361,35 @@
             </div>
           </div>
 
+          <!-- Tool groups (openspec 2026-11-07-tool-expansion R1): a group reaches a Run only when the deployment makes
+               it available and this agent has it on; the switches only narrow what binding and approval allow. -->
+          <div v-if="groupRows.length" class="setting-row setting-row-vertical">
+            <div class="setting-info">
+              <label>{{ $t('nexusAgent.toolGroupSwitch.label') }}</label>
+              <p class="desc">{{ $t('nexusAgent.toolGroupSwitch.desc') }}</p>
+            </div>
+            <div class="setting-control setting-control-full">
+              <ul class="group-switch-list">
+                <li v-for="row in groupRows" :key="row.id" class="group-switch-row">
+                  <div class="group-switch-main">
+                    <span class="group-switch-name">{{ row.label }}</span>
+                    <span class="group-switch-count">{{ $t('nexusAgent.toolGroupSwitch.toolCount', { count: row.toolCount }) }}</span>
+                    <span v-if="row.status === 'locked'" class="tool-card-badge tool-card-badge--muted">{{ $t('nexusAgent.toolGroupSwitch.locked') }}</span>
+                    <span v-else-if="row.status === 'planned'" class="tool-card-badge tool-card-badge--muted">
+                      {{ $t('nexusAgent.toolGroupSwitch.planned', { phase: row.planned }) }}
+                    </span>
+                  </div>
+                  <t-switch :value="row.enabled" size="small" :disabled="row.status === 'locked' || row.status === 'planned'"
+                    :aria-label="row.label" @change="(value: boolean) => onGroupSwitch(row.id, value)" />
+                  <p v-if="row.status === 'unavailable'" class="sandbox-note" role="status">
+                    <t-icon name="error-circle" />
+                    {{ $t('nexusAgent.toolGroupSwitch.unavailable', { reason: $t(`nexusAgent.groupReason.${row.reasonKey}`) }) }}
+                  </p>
+                </li>
+              </ul>
+            </div>
+          </div>
+
           <div class="setting-row setting-row-vertical">
             <div class="setting-info">
               <label>{{ $t('agent.editor.allowedTools') }}</label>
@@ -474,6 +503,7 @@ import { levelDescriptionKey, levelLabelKey } from '@/utils/reasoningEffort'
 import NexusSkillInstallDialog from './NexusSkillInstallDialog.vue'
 import NexusMySkillsDialog from './NexusMySkillsDialog.vue'
 import { usageText } from './mySkills'
+import { groupEnabled, groupReasonKey, groupStatus, withGroupSwitch } from './nexusToolGroups'
 import NexusSkillReviewDialog from './NexusSkillReviewDialog.vue'
 import {
   createNexusAgent, disableBuiltinResource, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent,
@@ -643,6 +673,25 @@ function sandboxReasonLabel(reason: string): string {
     skill_execution_not_permitted: 'reasonSkillLocal',
   } as Record<string, string>)[reason] || 'reasonOther'
   return t(`nexusAgent.sandboxProfile.${key}`)
+}
+
+// ---- Tool group switches: explicit choices live in `form.tool_groups_enabled`, defaults come from the catalog.
+const groupRows = computed(() => (catalog.value?.group_info || []).map(info => {
+  const status = groupStatus(info, form.tool_groups_enabled)
+  return {
+    id: info.id,
+    label: te(`nexusAgent.toolGroups.${info.id}`) ? t(`nexusAgent.toolGroups.${info.id}`) : info.label,
+    toolCount: info.tool_count,
+    planned: info.planned,
+    status,
+    enabled: groupEnabled(info, form.tool_groups_enabled),
+    reasonKey: groupReasonKey(info.reason),
+  }
+}))
+
+function onGroupSwitch(id: string, value: boolean) {
+  const info = (catalog.value?.group_info || []).find(item => item.id === id)
+  if (info) form.tool_groups_enabled = withGroupSwitch(form.tool_groups_enabled, info, value)
 }
 
 // Knowledge bases the agent may bind: the space's own and those shared into it.
@@ -1239,6 +1288,12 @@ async function save() {
 .sandbox-control { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .sandbox-note { margin: 0; font-size: var(--app-text-xs); line-height: 1.5; color: var(--td-warning-color); }
 .sandbox-note--ok { color: var(--td-text-color-secondary); }
+.group-switch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.group-switch-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 12px; border: 1px solid var(--td-component-stroke, #e7e7e7); border-radius: 6px; }
+.group-switch-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.group-switch-name { font-weight: 500; }
+.group-switch-count { color: var(--td-text-color-placeholder, #999); font-size: 12px; }
+.group-switch-row .sandbox-note { flex-basis: 100%; margin: 0; }
 .tools-overview {
   display: flex;
   flex-direction: column;
@@ -1702,5 +1757,4 @@ async function save() {
     word-break: break-word;
   }
 }
-
 </style>

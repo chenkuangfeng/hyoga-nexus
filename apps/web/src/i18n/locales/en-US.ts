@@ -9304,7 +9304,32 @@ export default {
       base: "Basic",
       memory: "Memory",
       knowledge: "Knowledge",
-      skills: "Skills"
+      skills: "Skills",
+      sandbox: "Sandbox",
+      wiki: "Wiki",
+      web: "Web",
+      collab: "Collaboration",
+      schedule: "Schedule",
+      media: "Media",
+      mcp: "MCP tools"
+    },
+    toolGroupSwitch: {
+      label: "Tool groups",
+      desc: "A group switch decides whether this agent can use the group's tools. Sandbox, Web, Collaboration, Schedule, Media and MCP are off by default. Switches only narrow access: bound tools still need authorization and approval.",
+      toolCount: "{count} tools",
+      locked: "Always on",
+      planned: "Planned · {phase}",
+      unavailable: "Unavailable now: {reason}. Turning it on has no effect."
+    },
+    groupReason: {
+      reasonSandboxDisabled: "The sandbox is not enabled",
+      reasonNotAccepted: "The sandbox has not passed isolation acceptance",
+      reasonLocalNotAllowed: "The local profile has no isolation; development mode only and the operator must allow it",
+      reasonUnknown: "The chosen sandbox profile does not exist",
+      reasonSandboxRequired: "A usable sandbox is required",
+      reasonWebDisabled: "Web tools are not enabled in this deployment",
+      reasonWikiNotBound: "No knowledge base with a wiki is bound",
+      reasonOther: "Unknown reason"
     },
     requiresApproval: "Approval",
     readOnly: "Read-only",

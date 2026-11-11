@@ -9315,7 +9315,32 @@ export default {
       base: "기본",
       memory: "메모리",
       knowledge: "지식",
-      skills: "스킬"
+      skills: "스킬",
+      sandbox: "샌드박스",
+      wiki: "Wiki",
+      web: "Web",
+      collab: "협업",
+      schedule: "예약",
+      media: "미디어",
+      mcp: "MCP 도구"
+    },
+    toolGroupSwitch: {
+      label: "도구 그룹",
+      desc: "그룹 스위치는 이 에이전트가 해당 그룹의 도구를 사용할 수 있는지를 정합니다. 샌드박스, Web, 협업, 예약, 미디어, MCP는 기본적으로 꺼져 있습니다. 스위치는 권한을 좁히기만 하며, 연결된 도구도 권한과 승인이 필요합니다.",
+      toolCount: "도구 {count}개",
+      locked: "항상 켜짐",
+      planned: "구현 예정 · {phase}",
+      unavailable: "현재 사용할 수 없음: {reason}. 켜도 나타나지 않습니다."
+    },
+    groupReason: {
+      reasonSandboxDisabled: "샌드박스가 활성화되지 않았습니다",
+      reasonNotAccepted: "샌드박스가 격리 검증을 통과하지 않았습니다",
+      reasonLocalNotAllowed: "로컬 프로필은 격리되지 않습니다. 개발 모드이며 운영자의 허용이 필요합니다",
+      reasonUnknown: "선택한 샌드박스 프로필이 없습니다",
+      reasonSandboxRequired: "사용 가능한 샌드박스가 필요합니다",
+      reasonWebDisabled: "이 배포에서는 Web 도구가 활성화되지 않았습니다",
+      reasonWikiNotBound: "Wiki가 있는 지식 베이스가 연결되지 않았습니다",
+      reasonOther: "원인을 알 수 없음"
     },
     requiresApproval: "승인 필요",
     readOnly: "읽기 전용",

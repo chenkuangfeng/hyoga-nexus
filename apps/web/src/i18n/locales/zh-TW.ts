@@ -9311,7 +9311,32 @@ export default {
       base: "基礎",
       memory: "記憶",
       knowledge: "知識庫",
-      skills: "技能"
+      skills: "技能",
+      sandbox: "沙箱",
+      wiki: "Wiki",
+      web: "Web",
+      collab: "協作",
+      schedule: "排程",
+      media: "多媒體",
+      mcp: "MCP 工具"
+    },
+    toolGroupSwitch: {
+      label: "工具分組",
+      desc: "整組開關決定這個智慧體能否用到該組工具。沙箱、Web、協作、排程、多媒體、MCP 預設關閉；開關只會收緊權限，已綁定工具仍須經授權與審批。",
+      toolCount: "{count} 個工具",
+      locked: "一律開啟",
+      planned: "待實作 · {phase}",
+      unavailable: "目前無法使用：{reason}。開啟也不會出現。"
+    },
+    groupReason: {
+      reasonSandboxDisabled: "沙箱未啟用",
+      reasonNotAccepted: "沙箱尚未通過隔離驗收",
+      reasonLocalNotAllowed: "本機檔位沒有隔離，僅限開發模式且需維運允許",
+      reasonUnknown: "所選沙箱檔位不存在",
+      reasonSandboxRequired: "需要可用的沙箱",
+      reasonWebDisabled: "Web 功能未在部署中啟用",
+      reasonWikiNotBound: "沒有綁定含 Wiki 的知識庫",
+      reasonOther: "原因未知"
     },
     requiresApproval: "需審批",
     readOnly: "唯讀",

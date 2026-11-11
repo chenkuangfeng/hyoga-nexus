@@ -154,3 +154,15 @@ test('a newer version is reported only for a bound skill with a known latest ver
   assert.equal(skillHasNewerVersion(bound, null), false)
   assert.equal(skillHasNewerVersion({ ...bound, version_id: '' }, 'v2'), false)
 })
+
+test('tool group switches round-trip, keep other behavior keys, and are dropped when none remain', () => {
+  const stored = agent({ budgets: { behavior: { tool_groups_enabled: { sandbox: true, web: 'x' }, project_name: 'x' } } })
+  const form = formFromAgent(stored)
+  assert.deepEqual(form.tool_groups_enabled, { sandbox: true })
+  const kept = draftFromForm({ ...form, tool_groups_enabled: { sandbox: true, mcp: true } }, stored, null, TENANT)
+  assert.deepEqual((kept.budgets.behavior as Record<string, unknown>).tool_groups_enabled, { sandbox: true, mcp: true })
+  assert.equal((kept.budgets.behavior as Record<string, unknown>).project_name, 'x')
+  const cleared = draftFromForm({ ...form, tool_groups_enabled: {} }, stored, null, TENANT)
+  assert.equal('tool_groups_enabled' in (cleared.budgets.behavior as Record<string, unknown>), false)
+  assert.deepEqual(formForNewAgent(null, 'm-1', []).tool_groups_enabled, {})
+})

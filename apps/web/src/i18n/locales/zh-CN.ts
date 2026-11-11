@@ -9297,7 +9297,32 @@ export default {
       base: "基础",
       memory: "记忆",
       knowledge: "知识库",
-      skills: "技能"
+      skills: "技能",
+      sandbox: "沙箱",
+      wiki: "Wiki",
+      web: "Web",
+      collab: "协作",
+      schedule: "定时",
+      media: "多媒体",
+      mcp: "MCP 工具"
+    },
+    toolGroupSwitch: {
+      label: "工具分组",
+      desc: "整组开关决定这个智能体能否用到该组工具。沙箱、Web、协作、定时、多媒体、MCP 默认关闭；开关只会收紧权限，已绑定工具仍要经授权与审批。",
+      toolCount: "{count} 个工具",
+      locked: "始终开启",
+      planned: "待实现 · {phase}",
+      unavailable: "当前不可用：{reason}。开启也不会出现。"
+    },
+    groupReason: {
+      reasonSandboxDisabled: "沙箱未启用",
+      reasonNotAccepted: "沙箱尚未通过隔离验收",
+      reasonLocalNotAllowed: "本机档位没有隔离，仅限开发模式且需运维允许",
+      reasonUnknown: "所选沙箱档位不存在",
+      reasonSandboxRequired: "需要可用的沙箱",
+      reasonWebDisabled: "Web 功能未在部署中启用",
+      reasonWikiNotBound: "没有绑定带 Wiki 的知识库",
+      reasonOther: "原因未知"
     },
     requiresApproval: "需审批",
     readOnly: "只读",

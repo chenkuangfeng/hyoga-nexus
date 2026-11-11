@@ -9315,7 +9315,32 @@ export default {
       base: "基本",
       memory: "メモリ",
       knowledge: "ナレッジ",
-      skills: "スキル"
+      skills: "スキル",
+      sandbox: "サンドボックス",
+      wiki: "Wiki",
+      web: "Web",
+      collab: "コラボレーション",
+      schedule: "スケジュール",
+      media: "メディア",
+      mcp: "MCP ツール"
+    },
+    toolGroupSwitch: {
+      label: "ツールグループ",
+      desc: "グループのスイッチは、このエージェントがそのグループのツールを使えるかを決めます。サンドボックス・Web・コラボレーション・スケジュール・メディア・MCP は既定でオフです。スイッチは権限を狭めるだけで、バインド済みツールにも認可と承認が必要です。",
+      toolCount: "{count} 個のツール",
+      locked: "常にオン",
+      planned: "未実装 · {phase}",
+      unavailable: "現在利用できません：{reason}。オンにしても表示されません。"
+    },
+    groupReason: {
+      reasonSandboxDisabled: "サンドボックスが有効ではありません",
+      reasonNotAccepted: "サンドボックスが隔離検証に合格していません",
+      reasonLocalNotAllowed: "ローカルプロファイルは隔離されません。開発モードかつ運用者の許可が必要です",
+      reasonUnknown: "選択したサンドボックスプロファイルが存在しません",
+      reasonSandboxRequired: "利用可能なサンドボックスが必要です",
+      reasonWebDisabled: "このデプロイでは Web ツールが有効ではありません",
+      reasonWikiNotBound: "Wiki を持つナレッジベースがバインドされていません",
+      reasonOther: "理由不明"
     },
     requiresApproval: "要承認",
     readOnly: "読み取り専用",

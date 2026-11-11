@@ -5,6 +5,7 @@
  * Pure functions with no Vue or network dependency, so they are unit tested directly.
  * Type-only imports keep this module loadable by `tsx --test` without the HTTP client.
  */
+import { switchesOf, type GroupSwitches } from './nexusToolGroups'
 import type { AgentDraftInput, AgentResourceBinding, NativeDefaults, NexusAgent } from '../../api/nexus-agents'
 
 /** `ExecutionBudget` defaults in `nexus_core.runtime.budgets`; shown when the agent sets no value. */
@@ -46,6 +47,8 @@ export interface AgentEditorForm {
   skills: SkillBinding[]
   /** `budgets.behavior.sandbox_profile`: the sandbox profile this agent runs on; empty takes the deployment's default. */
   sandbox_profile: string
+  /** `budgets.behavior.tool_groups_enabled`: only the group switches changed from their defaults (see nexusToolGroups.ts). */
+  tool_groups_enabled: GroupSwitches
 }
 
 export interface SkillBinding { name: string, version_id: string, source_tenant_id: string }
@@ -86,6 +89,11 @@ function sandboxProfileOf(budgets: Record<string, unknown> | undefined): string 
   const behavior = budgets?.behavior
   const value = behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).sandbox_profile : undefined
   return typeof value === 'string' ? value : ''
+}
+
+function groupSwitchesOf(budgets: Record<string, unknown> | undefined): GroupSwitches {
+  const behavior = budgets?.behavior
+  return switchesOf(behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).tool_groups_enabled : undefined)
 }
 
 function memoryOf(budgets: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -134,6 +142,7 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     skills: (agent.resource_bindings || []).filter(b => b.kind === 'skill')
       .map(b => ({ name: b.resource_id, version_id: b.resource_version_id || '', source_tenant_id: b.source_tenant_id })),
     sandbox_profile: sandboxProfileOf(budgets),
+    tool_groups_enabled: groupSwitchesOf(budgets),
   }
 }
 
@@ -157,6 +166,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
     skills: [],
     sandbox_profile: '',
+    tool_groups_enabled: groupSwitchesOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
   }
 }
 
@@ -208,6 +218,9 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   // An empty profile means "the deployment's default": the key is dropped rather than stored as an empty string.
   if (form.sandbox_profile) behavior.sandbox_profile = form.sandbox_profile
   else delete behavior.sandbox_profile
+  // Only explicit choices are stored; an agent with none inherits every group's default.
+  if (Object.keys(form.tool_groups_enabled).length) behavior.tool_groups_enabled = { ...form.tool_groups_enabled }
+  else delete behavior.tool_groups_enabled
   if (Object.keys(behavior).length) budgets.behavior = behavior
 
   const kept = (base?.resource_bindings || []).filter(b => b.kind !== 'tool' && b.kind !== 'knowledge_base' && b.kind !== 'skill')
