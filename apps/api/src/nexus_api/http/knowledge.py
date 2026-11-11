@@ -198,6 +198,8 @@ async def test_graph_store_draft(tenant_id: UUID, body: GraphStoreInput, princip
     user = resolve_user(db, principal)
     require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
     capabilities.require_available('graph_store', body.engine)
+    from nexus_platform.knowledge.connections import check_store
+    check_store('graph', body.engine, body.connection_config)
     return await _ping_graph_store(body.engine, body.connection_config)
 
 
@@ -870,6 +872,8 @@ async def test_vector_store_draft(tenant_id: UUID, body: VectorStoreInput, princ
     user = resolve_user(db, principal)
     require_membership(db, tenant_id, user.id, roles=ADMIN_ROLES)
     capabilities.require_available('vector_engine', body.engine)
+    from nexus_platform.knowledge.connections import check_store
+    check_store('vector', body.engine, body.connection_config)
     return await _ping(_engines.open_index(body.engine, body.connection_config, body.index_config))
 
 

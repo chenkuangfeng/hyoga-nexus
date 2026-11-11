@@ -201,7 +201,8 @@ def test_graph_api_status_rebuild_and_browse(graph_env):
     from pathlib import Path
     factory, tenant_id, owner, member, model = graph_env
     config = Path('configs/nexus.toml')  # the deployment key encrypts graph store credentials
-    config.write_text(config.read_text() + f'\n[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n')
+    config.write_text(config.read_text() + f'\n[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n'
+                      '[model_network]\nprivate_host_allowlist = ["127.0.0.1"]\n')
     kb_id = make_graph_kb(factory, tenant_id, owner)
     for name, text in TEXTS.items():
         upload(factory, tenant_id, owner, kb_id, name, text.encode())

@@ -23,7 +23,9 @@ STRANGER = Principal('api-kb-stranger', 'test')
 @pytest.fixture
 def api(database, deployment_config, tmp_path):
     deployment_config(f'[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n'
-                      f'[knowledge]\ndata_dir = "{tmp_path / "k"}"\nmax_upload_mb = 1\n')
+                      f'[knowledge]\ndata_dir = "{tmp_path / "k"}"\nmax_upload_mb = 1\n'
+                      # The registry tests point stores at a local address (openspec 2026-11-11 decision 9).
+                      '[model_network]\nprivate_host_allowlist = ["127.0.0.1"]\n')
     with database() as db:
         tenant = create_tenant(db, OWNER, 'KB API')
         create_tenant(db, STRANGER, 'Other')

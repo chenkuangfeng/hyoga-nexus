@@ -25,6 +25,7 @@ from nexus_knowledge.index import VectorIndex, open_index
 from nexus_knowledge.providers import BlobStore, open_blob_store
 from nexus_platform.authz.audit import audit
 from nexus_platform.configuration import knowledge_settings
+from nexus_platform.knowledge.connections import check_store
 from nexus_platform.errors import Conflict, NotFound, ServiceUnavailable
 from nexus_platform.identity.service import require_membership
 from nexus_platform.models.provider_settings import cipher
@@ -164,6 +165,7 @@ def create_vector_store(db: Session, tenant_id: UUID, user_id: UUID, *, name: st
     require_membership(db, tenant_id, user_id, roles=ADMIN_ROLES)
     capabilities.require_available('vector_engine', engine)
     store_id, now = new_id(), utc_now()
+    check_store('vector', engine, connection_config)
     sealed = seal_config(store_id, connection_config)
     open_index(engine, reveal_config(store_id, sealed), index_config)  # rejects unusable configuration early
     row = VectorStoreRecord(id=store_id, tenant_id=tenant_id, name=_validate_name(name), engine=engine,
@@ -182,6 +184,7 @@ def update_vector_store(db: Session, tenant_id: UUID, user_id: UUID, store_id: U
     if row is None or row.tenant_id != tenant_id:
         raise NotFound('Vector store not found')
     sealed = seal_config(row.id, connection_config, row.connection_config)
+    check_store('vector', row.engine, reveal_config(row.id, sealed))
     open_index(row.engine, reveal_config(row.id, sealed), index_config)
     row.name, row.connection_config, row.index_config = _validate_name(name), sealed, dict(index_config)
     row.updated_at = utc_now()
@@ -204,6 +207,7 @@ def create_storage_backend(db: Session, tenant_id: UUID, user_id: UUID, *, name:
                            config: dict[str, Any]) -> StorageBackendRecord:
     require_membership(db, tenant_id, user_id, roles=ADMIN_ROLES)
     capabilities.require_available('storage_provider', provider)
+    check_store('storage', provider, config)
     backend_id, now = new_id(), utc_now()
     sealed = seal_config(backend_id, config)
     open_blob_store(provider, reveal_config(backend_id, sealed))
@@ -269,6 +273,7 @@ def create_graph_store(db: Session, tenant_id: UUID, user_id: UUID, *, name: str
         raise ValueError('the builtin graph store is always available and cannot be registered')
     capabilities.require_available('graph_store', engine)
     store_id, now = new_id(), utc_now()
+    check_store('graph', engine, connection_config)
     sealed = seal_config(store_id, connection_config)
     row = GraphStoreRecord(id=store_id, tenant_id=tenant_id, name=_validate_name(name), engine=engine,
                            connection_config=sealed, created_by=user_id, created_at=now, updated_at=now)

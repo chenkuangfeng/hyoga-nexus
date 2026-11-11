@@ -33,8 +33,9 @@
 - [ ] E2.3 抽取 `core`：请求层与接口、store、composables、directives、utils、types、i18n、样式与主题、共用组件（登录与扫码登录、改密、企业切换、布局骨架、空状态、错误页、文档预览、Markdown、智能体编辑器、知识库编辑器、IM 渠道面板）。
 - [ ] E2.4 员工工作台：对话、我的智能体、我的知识库、我维护的企业知识库、企业分配、技能、记忆、产物、自动化、共享空间、个人设置；单智能体模式；`embed.html` 第二入口；手机宽度布局。
 - [ ] E2.5 企业管理后台：企业信息、成员、部门架构、角色与权限、企业策略、企业智能体、企业知识库（含知识库管理员）、个人资源治理、模型、工具与技能、MCP、存储与检索、共享空间、运行状况、审计。
-- [ ] E2.6 后端配合：`/auth/me` 的 `entries`；管理接口前缀 `/api/v1/tenants/{id}/admin/...`（旧路径保留一个版本周期）。
-- [ ] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
+- [ ] E2.6 后端配合（`entries` 已完成，接口前缀迁移未做）：`/auth/me` 的 `entries`；管理接口前缀 `/api/v1/tenants/{id}/admin/...`（旧路径保留一个版本周期）。
+- [x] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
+  - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
 - [ ] E2.9 文档：`AGENTS.md` 前端命令（并更正其中“Element Plus”的旧描述）；`apps/web` 父模块文档与三个项目的 `README.md`；`docs/architecture.md` 1.4 与 2.15；反向代理示例。
 
