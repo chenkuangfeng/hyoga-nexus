@@ -12,24 +12,24 @@
 
 ## E1 租户与个人区
 
-- [ ] E1.1 迁移：`tenants.plan`；`knowledge_bases.visibility`；新表 `enterprise_policies`；`tenant_roles.builtin`；按需要确认的项 2 处理 `personal`。
-- [ ] E1.2 注册改为只创建单人试用企业；`tenants/plan.py` 试用限制与各检查点；命令行 `upgrade-enterprise`。
+- [ ] E1.1 迁移：`knowledge_bases.visibility`；新表 `enterprise_policies`；`tenant_roles.builtin`；按需要确认的项 2 处理 `personal`。
+- [ ] E1.2 注册改为只创建企业（名称与编码选填、缺省自动生成）；注册页去掉空间类型选择。
 - [ ] E1.3 登录默认空间改为上次使用的企业；空间选择页去掉个人空间。
 - [ ] E1.4 私有知识库：`can_read` 按可见范围判断；修改可见范围的冲突检查；智能体发布时的绑定范围检查。
 - [ ] E1.5 企业策略：读取与修改接口（`policy:manage`）；在创建智能体、模型选择与 Run 准备、共享到共享空间三处检查。
 - [ ] E1.6 企业级管理角色：`policy:manage`、`audit:read_content`；内置 `security_admin` 与 `auditor`；审计正文的查看权限与留痕。
-- [ ] E1.7 测试：试用限制与转正、私有库可见性矩阵、绑定范围拦截、三项策略、内置角色不可删除、不能新建个人空间。
+- [ ] E1.7 测试：注册即创建企业、私有库可见性矩阵、绑定范围拦截、三项策略、内置角色不可删除、不能新建个人空间。
 - [ ] E1.8 PostgreSQL 门禁：完成路线图 2.9，并覆盖本阶段新增的列与表。
 - [ ] E1.9 文档：`docs/architecture.md` 2.10、2.11、`docs/roadmap.md`（新增企业化步骤，2.9 改为前置门禁）、`configs/README.md`、`README.md`。
 
-## E2 前端两个入口
+## E2 前端两个应用
 
 - [ ] E2.1 `/auth/me` 返回 `entries`；管理接口前缀 `/api/v1/tenants/{id}/admin/...`，旧路径保留一个版本周期。
 - [ ] E2.2 路由与布局拆成 `/workspace` 与 `/admin`，管理后台独立分包；`/platform/*` 重定向。
 - [ ] E2.3 `config/settingsAccess.ts` 改为按入口和权限归属（`design.md` 第 4 节表格），`Settings.vue` 拆为工作台的个人设置与管理后台的各个分区。
 - [ ] E2.4 工作台导航：“我的”与“企业共享”分组；我的审批待办入口（E4 之前只显示本人的审批）。
 - [ ] E2.5 管理后台：企业策略分区、知识库治理、内置角色。
-- [ ] E2.6 手机宽度布局（工作台）；浏览器测试覆盖两个入口的权限跳转与手机布局。
+- [ ] E2.6 手机宽度布局（工作台）；浏览器测试覆盖两个应用的权限跳转与手机布局。
 
 ## E3 企业微信
 

@@ -6,19 +6,19 @@
 
 ```text
 部署（共享数据库、共享表，按 tenant_id 隔离）
-  ├─ 企业 A（tenants.kind = 'enterprise', plan = 'standard'）
+  ├─ 企业 A（tenants.kind = 'enterprise'）
   │    ├─ enterprise_policies、tenant_wecom_apps
   │    ├─ 组织树（org_units / user_org_units，source = manual | wecom）
   │    ├─ 成员（tenant_memberships，source 增加 wecom）与角色（含 security_admin、auditor）
   │    ├─ 企业共享资源：可见范围为 tenant（以及 E4 的部门）的智能体、知识库……
   │    └─ 每个成员的个人区：本人的会话、记忆、私有智能体、私有知识库、产物
-  ├─ 企业 B（plan = 'trial'，单人试用企业）
-  └─ 共享空间（跨企业协作，受各企业的 external_sharing 约束；试用企业不能加入）
+  ├─ 企业 B（只有一个成员，与企业 A 没有任何区别）
+  └─ 共享空间（跨企业协作，受各企业的 external_sharing 约束）
 ```
 
 - **多租户方式**：共享库、共享表，用行级的 `tenant_id` 隔离。所有业务表都带 `tenant_id`，并用复合外键保证引用不跨企业（沿用 `org_units`、`tenant_agent_grants` 的做法）。PostgreSQL 行级安全（RLS）作为纵深防御，暂不启用，见第 7 节。
 - **只收紧**：平台守卫 ⊇ 企业策略 ⊇ 空间角色与资源授权。企业策略不能放宽平台已有的检查。
-- **执行时复核**：策略、组织关系、成员状态、套餐在每次请求和每次工具调用时重新查询，不进入 Run 快照。
+- **执行时复核**：策略、组织关系、成员状态在每次请求和每次工具调用时重新查询，不进入 Run 快照。
 
 ## 2. E0 知识库维护开放给智能体管理员
 
@@ -38,12 +38,11 @@ def can_maintain_content(db, kb, user_id) -> bool:
 
 ## 3. E1 租户与个人区
 
-### 3.1 套餐与试用企业
+### 3.1 注册即创建企业
 
-- 迁移：`tenants.plan`（`trial`、`standard`，非空；已有企业设为 `standard`）。`kind` 的取值按需要确认的项 2 处理。
-- `auth/accounts.py` `register`：去掉 `space_kind` 参数，一律创建企业。没有提供企业名称时，生成“{显示名}的试用企业”和一个随机企业编码，`plan = 'trial'`。在注册页填写企业名称与编码的，仍然创建 `trial`。
-- 试用限制集中在 `tenants/plan.py` 的 `require_plan_feature(tenant, feature)`，`feature` 取 `invite_members`、`wecom`、`shared_spaces`，违反时返回 403 `plan_restricted`。检查点：添加成员与邀请、邀请链接、加入申请审批、企微接入配置、加入或创建共享空间。
-- 命令行 `upgrade-enterprise --tenant <id>`：把 `plan` 改为 `standard`，写入审计。
+- `kind` 的取值按需要确认的项 2 处理；不增加套餐或试用字段。
+- `auth/accounts.py` `register`：去掉 `space_kind` 参数，一律创建企业。企业名称选填，不填时生成“{显示名}的企业”；企业编码选填，不填时生成随机编码（仍然全局唯一）。
+- 注册页去掉“个人 / 企业”的选择，企业名称与编码作为选填项。
 - 登录：默认进入 `last_active_tenant_id`，没有时进入最早加入的企业（不再“个人空间优先”）。`onboarding/workspace` 页面去掉“创建个人空间”。
 
 ### 3.2 私有知识库
@@ -73,7 +72,16 @@ def can_maintain_content(db, kb, user_id) -> bool:
 
 路线图 2.9 的全部项目，加上本提案新增的列与表，在 PostgreSQL 上完成迁移往返和并发测试后，E1 才算验收。
 
-## 4. E2 前端两个入口
+## 4. E2 前端两个应用
+
+- **应用与入口一览**：
+
+| 入口 | 面向 | 本提案 |
+|---|---|---|
+| 员工工作台 `/workspace` | 企业全体员工；企微 H5 打开的就是它 | 新拆分 |
+| 企业管理后台 `/admin` | 企业 owner、admin、安全管理员、审计员等有治理权限的人 | 新拆分 |
+| 平台管理 `/platform-admin` | 部署运维（`is_platform_admin`） | 不变 |
+| 对外嵌入页 `/embed/:channelId`（`embed.html`） | 企业外部访客，经智能体的嵌入渠道访问 | 不变 |
 
 - **构建**：`apps/web` 保持一个工程，路由分为 `/workspace/*` 与 `/admin/*` 两棵，各有自己的布局组件。`/admin` 下的页面全部用动态 `import()` 引入，并在 Vite 中配置独立的 chunk 组，员工端首屏不加载管理页面的代码。现有 `/platform/*` 路由重定向到新位置，保留一个版本周期。
 - **入口判断**：`/auth/me` 增加 `entries`：
@@ -96,7 +104,7 @@ def can_maintain_content(db, kb, user_id) -> bool:
 
 ## 5. E3 企业微信（要点）
 
-- `tenant_wecom_apps` 的 `secret` 与 `encoding_aes_key` 用现有 Fernet 主密钥加密，不进事件与审计。试用企业不能创建（`require_plan_feature('wecom')`）。
+- `tenant_wecom_apps` 的 `secret` 与 `encoding_aes_key` 用现有 Fernet 主密钥加密，不进事件与审计。
 - 回调：每企业一个 URL `/api/v1/integrations/wecom/{tenant_id}/callback`，先验签解密，再分发到“通讯录变更”“消息”“卡片按钮”。
 - `WeComDirectory` 协议扩展为：部门列表、部门成员详情、成员详情、发送应用消息、更新模板卡片。HTTP 实现放在 `connectors/wecom`，platform 只依赖协议。
 - 同步顺序：部门 → 成员 → 主部门与上级 → 停用差集。上级保存在新表 `user_managers(tenant_id, user_id, manager_user_id, source)`。
