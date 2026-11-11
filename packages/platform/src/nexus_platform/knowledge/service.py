@@ -311,17 +311,13 @@ def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, change
     if 'visibility' in changes and changes['visibility'] != kb.visibility:
         if changes['visibility'] not in access.VISIBILITIES:
             raise ValueError('visibility must be private or tenant')
-        if changes['visibility'] == access.PRIVATE:
-            from nexus_platform.agents.service import agents_exposing_base
-            exposing = agents_exposing_base(db, kb)
-            if exposing:
-                raise Conflict('kb_in_use: agents used by other members bind this base: ' + ', '.join(exposing))
-            if db.scalar(select(func.count()).select_from(KnowledgeBaseShareRecord).where(
-                    KnowledgeBaseShareRecord.kb_id == kb.id)):
-                raise Conflict('kb_in_use: remove the shares to shared spaces first')
+        if changes['visibility'] != access.TENANT and db.scalar(select(func.count()).select_from(
+                KnowledgeBaseShareRecord).where(KnowledgeBaseShareRecord.kb_id == kb.id)):
+            raise Conflict('kb_in_use: remove the shares to shared spaces first')
         audit(db, tenant_id, user_id, 'knowledge_base.visibility_changed', access.KIND, str(kb.id),
               {'from': kb.visibility, 'to': changes['visibility']})
         kb.visibility = changes['visibility']
+        recheck_agents(db, kb)
     if 'vector_store_id' in changes and (changes['vector_store_id'] or stores.BUILTIN) != (
             str(kb.vector_store_id) if kb.vector_store_id else stores.BUILTIN):
         raise Conflict('The vector store of a knowledge base cannot change')
@@ -367,6 +363,23 @@ def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, change
 def list_bases(db: Session, tenant_id: UUID, user_id: UUID) -> list[KnowledgeBaseRecord]:
     require_membership(db, tenant_id, user_id)
     return access.readable_bases(db, tenant_id, user_id)
+
+
+def recheck_agents(db: Session, kb: KnowledgeBaseRecord) -> None:
+    """After a base narrows (visibility or audience), refuse the change while an agent that other members use
+    would bind a base they cannot read (``kb_in_use``)."""
+    from nexus_platform.agents.service import agents_exposing_base, check_binding_scope
+    from nexus_platform.errors import InvalidConfiguration
+    from nexus_platform.persistence.models import AgentRecord
+    names = []
+    for name in agents_exposing_base(db, kb):
+        agent = db.scalar(select(AgentRecord).where(AgentRecord.tenant_id == kb.tenant_id, AgentRecord.name == name))
+        try:
+            check_binding_scope(db, agent)
+        except InvalidConfiguration:
+            names.append(name)
+    if names:
+        raise Conflict('kb_in_use: agents used by other members bind this base: ' + ', '.join(names))
 
 
 def delete_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> None:

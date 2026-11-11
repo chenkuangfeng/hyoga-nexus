@@ -37,7 +37,8 @@ KIND = 'knowledge_base'
 PERSONAL = 'personal'
 PRIVATE = 'private'
 TENANT = 'tenant'
-VISIBILITIES = frozenset({PRIVATE, TENANT})
+SCOPED = 'scoped'
+VISIBILITIES = frozenset({PRIVATE, TENANT, SCOPED})
 ENTERPRISE = 'enterprise'
 OWNERSHIPS = frozenset({PERSONAL, ENTERPRISE})
 MANAGE_ENTERPRISE_KBS = 'enterprise_kbs:manage'
@@ -72,6 +73,10 @@ def visible_in_space(db: Session, kb: KnowledgeBaseRecord, user_id: UUID, member
     """Visibility for a member of the base's own space."""
     if kb.visibility == TENANT or membership.role in ADMIN_ROLES:
         return True
+    if kb.visibility == SCOPED:
+        from nexus_platform.authz.audiences import in_base_audience
+        if in_base_audience(db, kb.tenant_id, user_id, kb.id):
+            return True
     return can_maintain(db, kb, user_id)
 
 

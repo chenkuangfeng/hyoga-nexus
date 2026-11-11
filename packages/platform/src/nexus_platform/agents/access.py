@@ -78,6 +78,9 @@ def agent_permissions(session: Session, tenant_id: UUID, user_id: UUID, agent: A
     if can_maintain_agent(session, tenant_id, user_id, agent):
         return AGENT_PERMISSIONS
     granted = set(_granted(session, tenant_id, user_id, agent.id))
+    from nexus_platform.authz.audiences import in_agent_audience
+    if in_agent_audience(session, tenant_id, user_id, agent.id):  # departments and members assigned to use it (E5)
+        granted |= {"view", "run"}
     if membership.role in FULL_ROLES:
         granted |= GOVERNANCE_PERMISSIONS
     return frozenset(granted)
@@ -122,6 +125,8 @@ def visible_agent_ids(session: Session, tenant_id: UUID, user_id: UUID) -> set[U
     visible |= set(session.scalars(select(AgentRecord.id).where(
         AgentRecord.tenant_id == tenant_id, AgentRecord.ownership == PERSONAL, AgentRecord.created_by == user_id
     )))
+    from nexus_platform.authz.audiences import agents_for
+    visible |= agents_for(session, tenant_id, user_id)
     if effective_permissions(session, tenant_id, user_id).allows_api(MANAGE_ENTERPRISE_AGENTS):
         visible |= set(session.scalars(select(AgentRecord.id).where(
             AgentRecord.tenant_id == tenant_id, AgentRecord.ownership == ENTERPRISE
@@ -151,7 +156,7 @@ def set_agent_grants(
             raise Forbidden("A role cannot grant agent permissions the actor does not hold")
         if permission_set:
             from nexus_platform.agents.service import check_binding_scope
-            check_binding_scope(session, agent, other_users=True)
+            check_binding_scope(session, agent, other_users=True, broad_users=True)
         session.query(TenantAgentGrantRecord).filter(
             TenantAgentGrantRecord.role_id == role_id, TenantAgentGrantRecord.agent_id == agent_id
         ).delete()

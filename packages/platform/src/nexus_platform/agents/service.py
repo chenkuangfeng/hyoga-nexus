@@ -424,8 +424,10 @@ def check_knowledge_ownership(session: Session, agent: AgentRecord, bindings: li
 
 def agent_has_other_users(session: Session, agent: AgentRecord) -> bool:
     """True when someone besides the creator may use the agent: enterprise agents, role grants, shared spaces."""
-    from nexus_platform.persistence.models import AgentShareRecord, TenantAgentGrantRecord
+    from nexus_platform.persistence.models import AgentAudienceRecord, AgentShareRecord, TenantAgentGrantRecord
     if agent.ownership == ENTERPRISE:
+        return True
+    if session.scalar(select(AgentAudienceRecord.id).where(AgentAudienceRecord.agent_id == agent.id).limit(1)):
         return True
     if session.scalar(select(TenantAgentGrantRecord.agent_id).where(
             TenantAgentGrantRecord.agent_id == agent.id).limit(1)) is not None:
@@ -443,18 +445,38 @@ def _bound_base_ids(session: Session, agent: AgentRecord) -> set[str]:
     return set(rows)
 
 
-def check_binding_scope(session: Session, agent: AgentRecord, *, other_users: bool | None = None) -> None:
-    """An agent others may use must not bind a private base of its own space (decision 3), so sharing never widens
-    what a base exposes. ``other_users`` overrides the detection when the caller is about to add a user."""
+def check_binding_scope(session: Session, agent: AgentRecord, *, other_users: bool | None = None,
+                        broad_users: bool = False) -> None:
+    """An agent others may use must not bind a base they could not read themselves (decisions 3 and 5), so sharing
+    never widens what a base exposes.
+
+    A ``tenant`` base is always fine. A ``scoped`` base is fine only while the agent's users are exactly its
+    department and member audience, and that audience is covered by the base's audience; role grants and shared
+    spaces (``broad_users``, or rows already present) reach people the check cannot enumerate, so they need a
+    ``tenant`` base. A ``private`` base is never fine. ``other_users`` overrides the detection when the caller is
+    about to add a user."""
+    from nexus_platform.authz.audiences import covered_by
+    from nexus_platform.persistence.models import (AgentAudienceRecord, AgentShareRecord, KnowledgeBaseAudienceRecord,
+                                                   TenantAgentGrantRecord)
     if not (agent_has_other_users(session, agent) if other_users is None else other_users):
         return
+    broad = broad_users or session.scalar(select(TenantAgentGrantRecord.agent_id).where(
+        TenantAgentGrantRecord.agent_id == agent.id).limit(1)) is not None or session.scalar(
+        select(AgentShareRecord.id).where(AgentShareRecord.agent_id == agent.id).limit(1)) is not None
+    audience = session.scalars(select(AgentAudienceRecord).where(AgentAudienceRecord.agent_id == agent.id)).all()
     for value in _bound_base_ids(session, agent):
         try:
             kb = session.get(KnowledgeBaseRecord, UUID(value))
         except ValueError:
             continue
-        if kb is not None and kb.tenant_id == agent.tenant_id and kb.visibility != "tenant":
-            raise InvalidConfiguration(f"binding_scope_narrower:{kb.name}")
+        if kb is None or kb.tenant_id != agent.tenant_id or kb.visibility == "tenant":
+            continue
+        if kb.visibility == "scoped" and not broad and covered_by(
+                session, agent.tenant_id, audience,
+                session.scalars(select(KnowledgeBaseAudienceRecord).where(
+                    KnowledgeBaseAudienceRecord.kb_id == kb.id)).all()):
+            continue
+        raise InvalidConfiguration(f"binding_scope_narrower:{kb.name}")
 
 
 def agents_exposing_base(session: Session, kb: KnowledgeBaseRecord) -> list[str]:

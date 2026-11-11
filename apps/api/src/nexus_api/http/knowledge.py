@@ -68,7 +68,7 @@ class BaseInput(BaseModel):
     #: WeKnora configuration blocks of later stages, kept as submitted (FAQ, Wiki, graph, parser rules...).
     settings: dict[str, Any] = Field(default_factory=dict)
     #: ``private`` or ``tenant``; omitted means private for personal bases, tenant for enterprise bases.
-    visibility: Literal['private', 'tenant'] | None = None
+    visibility: Literal['private', 'tenant', 'scoped'] | None = None
 
 
 class BaseUpdate(BaseModel):
@@ -77,7 +77,7 @@ class BaseUpdate(BaseModel):
     indexing_strategy: dict[str, bool] | None = None
     embedding_model_id: UUID | None = None
     chunking_config: ChunkingInput | None = None
-    visibility: Literal['private', 'tenant'] | None = None
+    visibility: Literal['private', 'tenant', 'scoped'] | None = None
     settings: dict[str, Any] | None = None
 
 

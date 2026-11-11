@@ -62,7 +62,7 @@ class KnowledgeBaseRecord(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active','deleting')", name='ck_knowledge_bases_status'),
         CheckConstraint("ownership IN ('personal','enterprise')", name='ck_knowledge_bases_ownership'),
-        CheckConstraint("visibility IN ('private','tenant')", name='ck_knowledge_bases_visibility'),
+        CheckConstraint("visibility IN ('private','tenant','scoped')", name='ck_knowledge_bases_visibility'),
         UniqueConstraint('id', 'tenant_id', name='uq_knowledge_bases_id_tenant'),
         Index('ix_knowledge_bases_tenant', 'tenant_id', 'status'),
         Index('uq_knowledge_bases_name', 'tenant_id', 'name', unique=True,
