@@ -1289,10 +1289,10 @@ async function save() {
 .sandbox-note { margin: 0; font-size: var(--app-text-xs); line-height: 1.5; color: var(--td-warning-color); }
 .sandbox-note--ok { color: var(--td-text-color-secondary); }
 .group-switch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.group-switch-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 12px; border: 1px solid var(--td-component-stroke, #e7e7e7); border-radius: 6px; }
+.group-switch-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 12px; border: 1px solid var(--td-component-stroke); border-radius: 6px; }
 .group-switch-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .group-switch-name { font-weight: 500; }
-.group-switch-count { color: var(--td-text-color-placeholder, #999); font-size: 12px; }
+.group-switch-count { color: var(--td-text-color-placeholder); font-size: var(--app-text-xs); }
 .group-switch-row .sandbox-note { flex-basis: 100%; margin: 0; }
 .tools-overview {
   display: flex;

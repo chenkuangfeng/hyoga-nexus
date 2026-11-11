@@ -1,5 +1,10 @@
-import { get, post, put, del } from '@/utils/request'
+import { get, post, patch, del } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
 import type { AssistantAccessLevel } from '@/api/assistant'
+import { PlannedFeatureError } from './knowledge-base/nexusAdapter'
+import {
+  ok, toNexusCreateBody, toNexusUpdateBody, toWeKnoraAutomation, toWeKnoraRun, ruleFromTrigger,
+} from './nexusAutomationAdapter'
 
 // Shapes mirror internal/types/automation.go. Every endpoint works on the
 // caller's own automations; the server derives the owner from the request.
@@ -60,10 +65,21 @@ export interface Automation {
   paused_reason: string
   created_at: string
   updated_at: string
+  // Nexus-only fields (openspec 2026-11-07-tool-expansion 8.2a): the pinned agent, task state and owner.
+  agent_id?: string | null
+  agent_name?: string
+  agent_version?: number | null
+  /** `active`, `paused` (by the owner or a space admin) or `suspended` (by the scheduler; `paused_reason` says why). */
+  state?: 'active' | 'paused' | 'suspended' | string
+  run_count?: number
+  owner_user_id?: string
+  owner_name?: string
+  session_id?: string
 }
 
 /** Fields of a create or update; on update a field left out is kept. */
 export type AutomationInput = Partial<Pick<Automation,
+  | 'agent_id'
   | 'name'
   | 'description'
   | 'model_id'
@@ -119,76 +135,104 @@ export interface AutomationGrantCandidate {
   asked_at: string
 }
 
-const base = '/api/v1/automations'
+/** `/api/v1/tenants/{effective tenant}/schedules`: scheduled tasks of the Nexus platform. */
+function schedulesPath(): string {
+  const tenantId = useAuthStore().effectiveTenantId || ''
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/schedules`
+}
+
 const enc = encodeURIComponent
 
-export function listAutomations() {
-  return get<{ success: boolean; data: Automation[] }>(base)
+/** Rejects, without sending a request, for WeKnora features Nexus scheduling does not have. */
+function planned(feature: string): Promise<never> {
+  return Promise.reject(new PlannedFeatureError(feature, null))
 }
 
-export function getAutomation(id: string) {
-  return get<{ success: boolean; data: Automation }>(`${base}/${enc(id)}`)
+/** Own tasks; a space owner or admin can ask for `all` to see everyone's. */
+export async function listAutomations(scope: 'mine' | 'all' = 'mine') {
+  const res: any = await get(`${schedulesPath()}?scope=${scope}`)
+  return ok((res.items || []).map(toWeKnoraAutomation)) as { success: boolean; data: Automation[] }
 }
 
-export function getAutomationBySession(sessionId: string) {
-  return get<{ success: boolean; data: Automation }>(`${base}/by-session/${enc(sessionId)}`)
+export async function getAutomation(id: string) {
+  return ok(toWeKnoraAutomation(await get(`${schedulesPath()}/${enc(id)}`))) as { success: boolean; data: Automation }
 }
 
-export function createAutomation(input: AutomationInput) {
-  return post<{ success: boolean; data: Automation }>(base, input)
+/** The task whose own session is `sessionId` (the page opens a task from its conversation). */
+export async function getAutomationBySession(sessionId: string) {
+  const res: any = await get(`${schedulesPath()}?scope=mine`)
+  const found = (res.items || []).find((job: any) => job.session_id === sessionId)
+  if (!found) throw new Error('Scheduled task not found')
+  return ok(toWeKnoraAutomation(found)) as { success: boolean; data: Automation }
 }
 
-export function updateAutomation(id: string, input: AutomationInput) {
-  return put<{ success: boolean; data: Automation }>(`${base}/${enc(id)}`, input)
+export async function createAutomation(input: AutomationInput) {
+  return ok(toWeKnoraAutomation(await post(schedulesPath(), toNexusCreateBody(input)))) as { success: boolean; data: Automation }
 }
 
-export function deleteAutomation(id: string) {
-  return del<{ success: boolean }>(`${base}/${enc(id)}`)
+export async function updateAutomation(id: string, input: AutomationInput) {
+  return ok(toWeKnoraAutomation(await patch(`${schedulesPath()}/${enc(id)}`, toNexusUpdateBody(input)))) as { success: boolean; data: Automation }
 }
 
-export function pauseAutomation(id: string) {
-  return post<{ success: boolean; data: Automation }>(`${base}/${enc(id)}/pause`, {})
+export async function deleteAutomation(id: string) {
+  await del(`${schedulesPath()}/${enc(id)}`)
+  return ok(null) as { success: boolean }
 }
 
-/** Schedule again from now and clear the failure count; missed runs are not caught up. */
-export function resumeAutomation(id: string) {
-  return post<{ success: boolean; data: Automation }>(`${base}/${enc(id)}/resume`, {})
+/** The owner or a space admin may pause. */
+export async function pauseAutomation(id: string) {
+  return ok(toWeKnoraAutomation(await post(`${schedulesPath()}/${enc(id)}/pause`, {}))) as { success: boolean; data: Automation }
 }
 
-export function runAutomationNow(id: string) {
-  return post<{ success: boolean; data: AutomationRun }>(`${base}/${enc(id)}/run`, {})
+/** Schedule again from now; missed runs are not caught up. Only the owner can resume. */
+export async function resumeAutomation(id: string) {
+  return ok(toWeKnoraAutomation(await post(`${schedulesPath()}/${enc(id)}/resume`, {}))) as { success: boolean; data: Automation }
 }
 
-/** The next three times trigger fires, in UTC; rejects an invalid or too frequent trigger. */
-export function validateAutomationTrigger(trigger: AutomationTrigger) {
-  return post<{ success: boolean; data: { next_runs: string[] } }>(`${base}/validate-trigger`, { trigger })
+/** Start one run now (the schedule is unchanged); the answer is the run just started. */
+export async function runAutomationNow(id: string) {
+  const job: any = await post(`${schedulesPath()}/${enc(id)}/run`, {})
+  const run = { id: job.last_run_id, session_id: job.session_id, status: 'queued', created_at: job.last_run_at }
+  return ok(toWeKnoraRun(run, id)) as { success: boolean; data: AutomationRun }
 }
 
-export function listAutomationRuns(id: string, page = 1, pageSize = 20) {
-  return get<{ success: boolean; data: AutomationRun[]; total: number }>(
-    `${base}/${enc(id)}/runs?page=${page}&page_size=${pageSize}`,
-  )
+/** The next fire times of a trigger in UTC; rejects an invalid or too frequent trigger. */
+export async function validateAutomationTrigger(trigger: AutomationTrigger) {
+  const rule = ruleFromTrigger(trigger)
+  const res: any = await post(`${schedulesPath()}/preview`, { schedule: rule, timezone: trigger.timezone || 'UTC', count: 3 })
+  return ok({ next_runs: res.times || [] }) as { success: boolean; data: { next_runs: string[] } }
 }
 
-export function cancelAutomationRun(runId: string) {
-  return post<{ success: boolean; data: AutomationRun }>(`/api/v1/automation-runs/${enc(runId)}/cancel`, {})
+/** Runs of the task's session, newest first. */
+export async function listAutomationRuns(id: string, page = 1, pageSize = 20) {
+  const res: any = await get(`${schedulesPath()}/${enc(id)}/runs?limit=${Math.min(50, page * pageSize)}`)
+  const all = (res.items || []).map((run: any) => toWeKnoraRun(run, id))
+  return ok(all.slice((page - 1) * pageSize, page * pageSize), { total: all.length }) as
+    { success: boolean; data: AutomationRun[]; total: number }
 }
 
-export function listAutomationGrants(id: string) {
-  return get<{ success: boolean; data: AutomationGrant[] }>(`${base}/${enc(id)}/grants`)
+/** Cancels a run through the platform's run cancellation. */
+export async function cancelAutomationRun(runId: string) {
+  const tenantId = useAuthStore().effectiveTenantId || ''
+  await post(`/api/v1/tenants/${encodeURIComponent(tenantId)}/runs/${enc(runId)}/cancel`, {})
+  return ok({ id: runId } as AutomationRun) as { success: boolean; data: AutomationRun }
 }
 
-export function listAutomationGrantCandidates(id: string) {
-  return get<{ success: boolean; data: AutomationGrantCandidate[] }>(`${base}/${enc(id)}/grant-candidates`)
+// Scheduled runs are unattended in Nexus: they get no approval prompts, so there is nothing to grant.
+export function listAutomationGrants(_id: string) {
+  return Promise.resolve(ok([] as AutomationGrant[]))
 }
 
-/** Let later runs make the call a past run asked approval for without asking. */
-export function addAutomationGrant(id: string, promptId: string) {
-  return post<{ success: boolean; data: AutomationGrant }>(`${base}/${enc(id)}/grants`, { prompt_id: promptId })
+export function listAutomationGrantCandidates(_id: string) {
+  return Promise.resolve(ok([] as AutomationGrantCandidate[]))
 }
 
-export function revokeAutomationGrant(grantId: string) {
-  return del<{ success: boolean }>(`/api/v1/agent/grants/${enc(grantId)}`)
+export function addAutomationGrant(_id: string, _promptId: string) {
+  return planned('自动化授权') as Promise<{ success: boolean; data: AutomationGrant }>
+}
+
+export function revokeAutomationGrant(_grantId: string) {
+  return planned('自动化授权') as Promise<{ success: boolean }>
 }
 
 // ---------------------------------------------------------------------------
@@ -230,18 +274,16 @@ export interface NotificationPage {
   next_cursor: string
 }
 
-export function listNotifications(limit = 20, cursor = '') {
-  return get<{ success: boolean; data: NotificationPage }>(
-    `/api/v1/notifications?limit=${limit}${cursor ? `&cursor=${enc(cursor)}` : ''}`,
-  )
+// Nexus has no in-app notification centre yet (design 8.2a, "不做"): the list is empty and marking is a no-op.
+export function listNotifications(_limit = 20, _cursor = '') {
+  const page: NotificationPage = { items: [], pending: [], unread: 0, read_count: 0, next_cursor: '' }
+  return Promise.resolve(ok(page))
 }
 
-/** Removes read history only; live approvals and run records are unaffected. */
 export function clearReadNotifications() {
-  return del<{ success: boolean }>('/api/v1/notifications/read')
+  return Promise.resolve({ success: true })
 }
 
-/** Mark history ids read; no ids marks all history. Pending work is separate. */
-export function markNotificationsRead(ids: string[] = []) {
-  return post<{ success: boolean }>('/api/v1/notifications/read', { ids })
+export function markNotificationsRead(_ids: string[] = []) {
+  return Promise.resolve({ success: true })
 }

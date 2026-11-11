@@ -150,6 +150,21 @@ export default {
     "historyNoOverrides": "無管理員修改",
   },
   automation: {
+    nexus: {
+      agent: '智慧體',
+      agentHelp: '任務固定使用所選智慧體目前已發布的版本，建立後不能更換；之後智慧體更新不影響這個任務。',
+      agentPlaceholder: '請選擇已發布的智慧體',
+      agentRequired: '請選擇智慧體',
+      weeklyOneDay: '每週任務目前只能選一天。',
+      intervalLabel: '間隔（分鐘）',
+      intervalHint: '最短 {min} 分鐘，從儲存時開始計時。',
+      scopeLabel: '任務範圍',
+      scopeMine: '我的',
+      scopeAll: '全部成員',
+      agentLine: '智慧體：{name}（版本 {version}）',
+      ownerBy: '建立者：{name}',
+      managerReadOnly: '你以空間管理員身分檢視，只能暫停這個任務。'
+    },
     conversationNotice: "此對話由自動化任務執行，無法手動傳送訊息。請在上方處理待審批事項。",
     title: '自動化',
     description: '讓 Nexus 助手按排程以你的身分執行任務，結果與待審批事項會通知你。',
@@ -240,6 +255,7 @@ export default {
     },
     schedule: {
       kinds: {
+        interval: '每隔一段時間',
         daily: '每天',
         weekdays: '工作日',
         weekly: '每週',

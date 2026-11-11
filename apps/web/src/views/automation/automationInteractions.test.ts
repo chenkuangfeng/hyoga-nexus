@@ -1,15 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import test, { type TestContext } from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 import * as vue from 'vue'
 import { change, fixture, flush } from '../../test-utils/vueFixture.ts'
 import * as schedule from '../../utils/automationSchedule.ts'
 
-const require = createRequire(import.meta.url)
-const useInputNumber = require('tdesign-vue-next/cjs/input-number/hooks/useInputNumber.js').default
-const numberProps = require('tdesign-vue-next/cjs/input-number/props.js').default
 
 const automation = {
   id: 'automation-1', name: 'Reminder', instruction: 'Take a break',
@@ -19,7 +15,8 @@ const automation = {
   carry_last_result: false, misfire_policy: 'skip', overlap_policy: 'skip', notify_on_success: false,
 }
 
-function setup(t: TestContext, file: string, api: Record<string, unknown>, props: Record<string, unknown>) {
+function setup(t: TestContext, file: string, api: Record<string, unknown>, props: Record<string, unknown>,
+  extra: Record<string, unknown> = {}) {
   const f = fixture(t)
   const url = new URL(file, import.meta.url)
   const page = f.component(url, {
@@ -29,8 +26,11 @@ function setup(t: TestContext, file: string, api: Record<string, unknown>, props
     '@/api/automation': api,
     '@/api/assistant': { ASSISTANT_ACCESS_LEVELS: ['read_only', 'confirm', 'auto_write'] },
     '@/stores/ui': { useUIStore: () => ({ openSettings() {} }) },
+    '@/stores/auth': { useAuthStore: () => ({ hasRole: () => false, currentUserId: 'me', effectiveTenantId: 'tenant-1' }) },
+    '@/api/nexus-agents': { listNexusAgents: async () => [{ id: 'agent-1', name: 'Helper', published_version_id: 'v1' }, { id: 'agent-2', name: 'Draft only', published_version_id: null }] },
     '@/utils/automationSchedule': schedule,
     '@/composables/useModalShell': { useModalShell: () => ({ markClean() {}, requestClose() {} }) },
+    ...extra,
   }, props)
   const { descriptor } = parse(readFileSync(url, 'utf8'))
   const script = compileScript(descriptor, { id: 'automation-interactions' })
@@ -260,10 +260,10 @@ test('a stale poll cannot restore a deleted card and polling recovers from error
   assert.equal(vm.automations.length, 0)
 })
 
-test('approval hours update in both directions and save as minutes, without resetting on an empty edit', async t => {
+test('approval hours stay clamped and saved as minutes; the control itself is a disabled planned feature', async t => {
   let saved: any
   const props = { visible: false, automation }
-  const { vm, render, mount } = setup(t, './AutomationEditor.vue', {
+  const { vm, render } = setup(t, './AutomationEditor.vue', {
     updateAutomation: async (_id: string, input: unknown) => { saved = input; return { data: automation } },
     validateAutomationTrigger: async () => ({ data: { next_runs: [] } }),
   }, props)
@@ -274,22 +274,8 @@ test('approval hours update in both directions and save as minutes, without rese
   assert.ok(input)
   assert.equal(input.props.theme, 'row', 'both controls stay visible with full-sized click targets')
   assert.equal(input.props.suffix, undefined, 'the unit cannot crowd the numeric input or controls')
-  // Use TDesign's real step handlers against the editor's compiled v-model binding.
-  let control: any
-  const NumberControl = vue.defineComponent({
-    props: numberProps,
-    setup(props) { control = useInputNumber(props); return () => null },
-  })
-  mount({ setup: () => () => vue.h(NumberControl,
-    nodes(render()).find(node => node.type === 't-input-number' && node.props.max === 168).props) })
-  control.handleAdd({})
-  await vue.nextTick()
-  assert.equal(vm.form.approval_timeout_minutes, 1500)
-  assert.equal(control.userInput.value, '25')
-  control.handleReduce({})
-  await vue.nextTick()
-  assert.equal(vm.form.approval_timeout_minutes, 1440)
-  assert.equal(control.userInput.value, '24')
+  // Nexus has no approval prompts for unattended runs, so the control is shown as planned and cannot be edited.
+  assert.ok(input.props.disabled === '' || input.props.disabled === true, 'a bare disabled attribute compiles to an empty string')
   const update = input.props['onUpdate:modelValue']
   update(undefined)
   assert.equal(vm.approvalHours, 24)
@@ -302,21 +288,36 @@ test('approval hours update in both directions and save as minutes, without rese
   assert.equal(saved.approval_timeout_minutes, 240)
 })
 
-test('the editor preserves, changes, and clears an automation model override', async t => {
+test('the editor keeps the pinned agent of a task, offers only published agents, and sends the agent on create', async t => {
   const saved: any[] = []
+  const created: any[] = []
   const { vm } = setup(t, './AutomationEditor.vue', {
     updateAutomation: async (_id: string, input: unknown) => { saved.push(input); return { data: automation } },
+    createAutomation: async (input: unknown) => { created.push(input); return { data: automation } },
     validateAutomationTrigger: async () => ({ data: { next_runs: [] } }),
-  }, { visible: false, automation: { ...automation, model_id: 'model-one' } })
+  }, { visible: false, automation: { ...automation, agent_id: 'agent-1', agent_name: 'Helper' } })
   vm.$.props.visible = true
   await vue.nextTick()
-  assert.equal(vm.form.model_id, 'model-one')
-  vm.form.model_id = 'model-two'
+  await flush()
+  assert.equal(vm.form.agent_id, 'agent-1')
+  assert.deepEqual(vm.agentOptions.map((item: any) => item.value), ['agent-1'], 'a draft-only agent is not offered')
   await vm.save()
-  assert.equal(saved[0].model_id, 'model-two')
-  vm.form.model_id = ''
+  assert.equal(saved[0].agent_id, 'agent-1')
+
+  // A new task needs an agent before anything is sent.
+  vm.$.props.automation = null
+  vm.$.props.visible = false
+  await vue.nextTick()
+  vm.$.props.visible = true
+  await vue.nextTick()
+  await flush()
+  vm.form.name = 'New task'
+  vm.form.instruction = 'Do it'
   await vm.save()
-  assert.equal(saved[1].model_id, '', 'clearing restores the assistant default instead of omitting the patch')
+  assert.equal(created.length, 0, 'no agent chosen: nothing is created')
+  vm.form.agent_id = 'agent-1'
+  await vm.save()
+  assert.equal(created[0].agent_id, 'agent-1')
 })
 
 test('list run and delete actions call APIs only after their inline confirmation', async t => {
@@ -425,3 +426,31 @@ for (const file of ['./AutomationList.vue', './AutomationDetail.vue']) {
     assert.equal(resumeCalls, 1)
   })
 }
+
+test('a space admin sees everyone\'s tasks but can only pause the ones that are not theirs', async t => {
+  const scopes: string[] = []
+  const mine = { ...automation, id: 'mine', owner_user_id: 'me', owner_name: 'Me', agent_name: 'Helper', agent_version: 1 }
+  const theirs = { ...automation, id: 'theirs', owner_user_id: 'other', owner_name: 'Dave', agent_name: 'Helper', agent_version: 1 }
+  const { vm, render } = setup(t, './AutomationList.vue', {
+    listAutomations: async (scope: string) => { scopes.push(scope); return { data: scope === 'all' ? [mine, theirs] : [mine] } },
+  }, {}, { '@/stores/auth': { useAuthStore: () => ({ hasRole: () => true, currentUserId: 'me', effectiveTenantId: 'tenant-1' }) } })
+  await flush()
+  assert.deepEqual(scopes, ['mine'])
+  assert.equal(vm.canSeeAll, true)
+  vm.scope = 'all'
+  vm.onScopeChange()
+  await flush()
+  assert.deepEqual(scopes, ['mine', 'all'])
+  assert.deepEqual(vm.automations.map((a: any) => a.id), ['mine', 'theirs'])
+  assert.equal(vm.isMine(mine), true)
+  assert.equal(vm.isMine(theirs), false)
+  // Only the caller's own card carries the run and delete confirmations.
+  const popups = nodes(render()).filter(node => node.type === 't-popconfirm')
+  assert.equal(popups.length, 2)
+})
+
+test('an ordinary member cannot switch to everyone\'s tasks', async t => {
+  const { vm } = setup(t, './AutomationList.vue', { listAutomations: async () => ({ data: [] }) }, {})
+  await flush()
+  assert.equal(vm.canSeeAll, false)
+})

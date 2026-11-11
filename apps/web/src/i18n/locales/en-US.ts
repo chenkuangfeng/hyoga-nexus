@@ -226,6 +226,21 @@ export default {
     "historyNoOverrides": "No administrator changes",
   },
   automation: {
+    nexus: {
+      agent: 'Agent',
+      agentHelp: 'The task always uses the agent\'s published version at the time of creation and the agent cannot be changed later; later agent updates do not affect it.',
+      agentPlaceholder: 'Choose a published agent',
+      agentRequired: 'Choose an agent',
+      weeklyOneDay: 'A weekly task can only run on one day for now.',
+      intervalLabel: 'Interval (minutes)',
+      intervalHint: 'At least {min} minutes, counted from when you save.',
+      scopeLabel: 'Scope',
+      scopeMine: 'Mine',
+      scopeAll: 'Everyone',
+      agentLine: 'Agent: {name} (version {version})',
+      ownerBy: 'Created by {name}',
+      managerReadOnly: 'You are viewing as a space admin and can only pause this task.'
+    },
     conversationNotice: "This conversation is run by an automation. Manual messages are unavailable; handle pending requests above.",
     title: 'Automations',
     description: 'Have the Nexus assistant run tasks on a schedule as you. You are notified of results and pending approvals.',
@@ -316,6 +331,7 @@ export default {
     },
     schedule: {
       kinds: {
+        interval: 'Every so often',
         daily: 'Daily',
         weekdays: 'Weekdays',
         weekly: 'Weekly',

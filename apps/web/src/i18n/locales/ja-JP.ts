@@ -150,6 +150,21 @@ export default {
     "historyNoOverrides": "管理者の変更なし",
   },
   automation: {
+    nexus: {
+      agent: 'エージェント',
+      agentHelp: 'タスクは作成時点で公開されているエージェントのバージョンに固定され、後から変更できません。以降のエージェント更新はこのタスクに影響しません。',
+      agentPlaceholder: '公開済みのエージェントを選択',
+      agentRequired: 'エージェントを選択してください',
+      weeklyOneDay: '週次タスクは現在 1 日だけ選べます。',
+      intervalLabel: '間隔（分）',
+      intervalHint: '最短 {min} 分。保存した時点から数えます。',
+      scopeLabel: '範囲',
+      scopeMine: '自分',
+      scopeAll: '全メンバー',
+      agentLine: 'エージェント：{name}（バージョン {version}）',
+      ownerBy: '作成者：{name}',
+      managerReadOnly: 'スペース管理者として表示しています。このタスクは一時停止のみ可能です。'
+    },
     conversationNotice: "この会話は自動化タスクが実行します。手動でメッセージは送信できません。保留中のリクエストは上で対応してください。",
     title: 'オートメーション',
     description: 'Nexus アシスタントがあなたに代わって定期的にタスクを実行します。結果と承認待ちの操作を通知します。',
@@ -240,6 +255,7 @@ export default {
     },
     schedule: {
       kinds: {
+        interval: '一定間隔',
         daily: '毎日',
         weekdays: '平日',
         weekly: '毎週',

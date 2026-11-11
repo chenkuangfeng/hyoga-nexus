@@ -13,7 +13,7 @@
 
     <template v-if="automation" #header-actions>
       <div class="automation-detail__actions">
-        <t-popconfirm :content="t('automation.runConfirm', { name: automation.name })" theme="default" placement="bottom-right"
+        <t-popconfirm v-if="!readOnly" :content="t('automation.runConfirm', { name: automation.name })" theme="default" placement="bottom-right"
           :confirm-btn="{ content: t('automation.actions.runNow'), theme: 'primary' }" :cancel-btn="t('common.cancel')"
           :popup-props="{ zIndex: 2600, disabled: !!busy }" @confirm="runNow">
           <button type="button" class="automation-detail__icon-btn" :disabled="!!busy" :aria-busy="busy === 'run'"
@@ -22,13 +22,13 @@
             <ChatActionIcon v-else name="play" />
           </button>
         </t-popconfirm>
-        <button v-if="!hasEndedOnceSchedule(automation)" type="button" class="automation-detail__icon-btn" :disabled="!!busy" :aria-busy="busy === 'toggle'"
+        <button v-if="!hasEndedOnceSchedule(automation) && (!readOnly || automation.enabled)" type="button" class="automation-detail__icon-btn" :disabled="!!busy" :aria-busy="busy === 'toggle'"
           :title="automation.enabled ? t('automation.actions.pause') : t('automation.actions.resume')"
           :aria-label="automation.enabled ? t('automation.actions.pause') : t('automation.actions.resume')" @click="toggle">
           <t-loading v-if="busy === 'toggle'" size="14px" />
           <ChatActionIcon v-else :name="automation.enabled ? 'pause' : 'resume'" />
         </button>
-        <button type="button" class="automation-detail__icon-btn" :title="t('common.edit')"
+        <button v-if="!readOnly" type="button" class="automation-detail__icon-btn" :title="t('common.edit')"
           :aria-label="t('common.edit')" @click="emit('edit', automation)">
           <ChatActionIcon name="edit" />
         </button>
@@ -36,6 +36,7 @@
     </template>
 
     <template v-if="automation">
+      <t-alert v-if="readOnly" theme="info" class="automation-detail__alert" :message="t('automation.nexus.managerReadOnly')" />
       <t-alert v-if="!automation.enabled && automation.paused_reason" theme="warning" class="automation-detail__alert"
         :message="t('automation.detail.pausedBecause', { reason: automation.paused_reason })" />
       <section class="automation-detail__brief" :aria-label="t('automation.detail.task')">
@@ -43,8 +44,10 @@
           <div class="automation-detail__brief-context">
             <h3>{{ t('automation.detail.task') }}</h3>
             <div class="automation-detail__execution">
-              <span :title="t('automation.fields.accessLevel')">{{ t(`assistant.access.levels.${automation.access_level}.label`) }}</span>
-              <span :title="t('automation.fields.sessionMode')">{{ t(`automation.sessionMode.${automation.session_mode}`) }}</span>
+              <span v-if="automation.agent_name">
+                {{ t('automation.nexus.agentLine', { name: automation.agent_name, version: automation.agent_version ?? '-' }) }}
+              </span>
+              <span v-if="automation.owner_name">{{ t('automation.nexus.ownerBy', { name: automation.owner_name }) }}</span>
             </div>
           </div>
           <t-popup v-model:visible="grantsVisible" trigger="click" placement="bottom-right" :z-index="2600">
@@ -52,6 +55,7 @@
               :aria-expanded="grantsVisible">
               <t-icon name="secured" size="14px" />
               {{ t('automation.detail.grants') }}
+              <t-tag size="small" variant="light">{{ t('planned.badge') }}</t-tag>
               <span v-if="candidates.length || grants.length" class="automation-detail__count"
                 :title="candidates.length ? t('automation.grants.candidates') : t('automation.grants.active')">
                 {{ candidates.length || grants.length }}
@@ -206,6 +210,8 @@ const props = defineProps<{
   visible: boolean
   automation: Automation | null
   focusRunId?: string
+  /** A space admin looking at somebody else's task: it can only be paused. */
+  readOnly?: boolean
 }>()
 const emit = defineEmits<{
   'update:visible': [value: boolean]

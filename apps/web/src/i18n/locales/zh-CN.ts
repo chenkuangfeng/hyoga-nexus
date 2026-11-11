@@ -226,6 +226,21 @@ export default {
     "historyNoOverrides": "无管理员修改",
   },
   automation: {
+    nexus: {
+      agent: '智能体',
+      agentHelp: '任务固定使用所选智能体当前已发布的版本，创建后不能更换；之后智能体更新不影响这个任务。',
+      agentPlaceholder: '请选择已发布的智能体',
+      agentRequired: '请选择智能体',
+      weeklyOneDay: '每周任务目前只能选一天。',
+      intervalLabel: '间隔（分钟）',
+      intervalHint: '最短 {min} 分钟，从保存时开始计时。',
+      scopeLabel: '任务范围',
+      scopeMine: '我的',
+      scopeAll: '全部成员',
+      agentLine: '智能体：{name}（版本 {version}）',
+      ownerBy: '创建者：{name}',
+      managerReadOnly: '你以空间管理员身份查看，只能暂停这个任务。'
+    },
     conversationNotice: "此会话由自动化任务运行，不能手动发送消息。请在上方处理待审批事项。",
     title: '自动化',
     description: '让 Nexus 助手按计划以你的身份执行任务，结果和待审批事项会通知你。',
@@ -316,6 +331,7 @@ export default {
     },
     schedule: {
       kinds: {
+        interval: '每隔一段时间',
         daily: '每天',
         weekdays: '工作日',
         weekly: '每周',

@@ -7,6 +7,11 @@
           {{ t('automation.title') }}
         </h2>
         <div class="automation-page__tools" style="--wails-draggable: no-drag">
+          <t-radio-group v-if="canSeeAll" v-model="scope" variant="default-filled" size="small"
+            class="automation-page__scope" :aria-label="t('automation.nexus.scopeLabel')" @change="onScopeChange">
+            <t-radio-button value="mine">{{ t('automation.nexus.scopeMine') }}</t-radio-button>
+            <t-radio-button value="all">{{ t('automation.nexus.scopeAll') }}</t-radio-button>
+          </t-radio-group>
           <t-input v-if="automations.length > 0" v-model="query" class="automation-page__search"
             :placeholder="t('menu.search')" :aria-label="t('menu.search')" clearable>
             <template #prefix-icon><t-icon name="search" size="16px" /></template>
@@ -35,7 +40,7 @@
           <div class="automation-card__header">
             <div class="automation-card__badge" aria-hidden="true"><t-icon name="time" size="14px" /></div>
             <h3 class="automation-card__title" :title="item.name">{{ item.name }}</h3>
-            <div class="automation-card__actions">
+            <div v-if="isMine(item)" class="automation-card__actions">
               <t-popconfirm :content="t('automation.runConfirm', { name: item.name })"
                 :confirm-btn="{ content: t('automation.actions.runNow'), theme: 'primary' }"
                 :cancel-btn="t('common.cancel')" theme="default" placement="bottom"
@@ -61,6 +66,10 @@
             </div>
           </div>
           <p class="automation-card__schedule">{{ describeTrigger(item.trigger, t, locale) }}</p>
+          <p v-if="item.agent_name" class="automation-card__meta-line">
+            {{ t('automation.nexus.agentLine', { name: item.agent_name, version: item.agent_version ?? '-' }) }}
+            <template v-if="!isMine(item) && item.owner_name"> · {{ t('automation.nexus.ownerBy', { name: item.owner_name }) }}</template>
+          </p>
           <p v-if="!item.enabled && item.paused_reason" class="automation-card__paused" :title="item.paused_reason">
             {{ item.paused_reason }}
           </p>
@@ -76,7 +85,7 @@
             </span>
             <button v-else type="button" role="switch" class="automation-card__status" :class="{ 'is-enabled': item.enabled }"
               :aria-checked="item.enabled" :aria-label="`${item.name} · ${t('automation.fields.enabled')}`"
-              :disabled="busy.has(item.id)" @click="toggle(item)">
+              :disabled="busy.has(item.id) || (!isMine(item) && !item.enabled)" @click="toggle(item)">
               <t-loading v-if="busy.has(item.id)" size="12px" />
               <span v-else class="automation-card__dot" aria-hidden="true" />
               {{ item.enabled ? t('common.on') : t('automation.paused') }}
@@ -92,7 +101,7 @@
     </section>
 
     <AutomationEditor v-model:visible="editorVisible" :automation="editing" @saved="onSaved" />
-    <AutomationDetail v-model:visible="detailVisible" :automation="detail"
+    <AutomationDetail v-model:visible="detailVisible" :automation="detail" :read-only="!!detail && !isMine(detail)"
       :focus-run-id="focusRunId" @changed="onSaved" @edit="openEditor" />
   </main>
 </template>
@@ -113,6 +122,7 @@ import {
 } from '@/api/automation'
 import { describeTrigger, formatInZone, hasEndedOnceSchedule } from '@/utils/automationSchedule'
 import { useAssistantDataChange } from '@/utils/assistantDataChange'
+import { useAuthStore } from '@/stores/auth'
 import AutomationEditor from './AutomationEditor.vue'
 import AutomationDetail from './AutomationDetail.vue'
 import AutomationStatusTag from './AutomationStatusTag.vue'
@@ -121,9 +131,19 @@ import ResourceIcon from '@/components/icons/ResourceIcon.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
+const authStore = useAuthStore()
 const router = useRouter()
 
 const automations = ref<Automation[]>([])
+// Space owners and admins can switch to everyone's tasks; they may only pause other people's (design 8.2a, C3).
+const scope = ref<'mine' | 'all'>('mine')
+const canSeeAll = computed(() => authStore.hasRole('admin'))
+const isMine = (item: Automation) =>
+  scope.value === 'mine' || !item.owner_user_id || item.owner_user_id === authStore.currentUserId
+function onScopeChange() {
+  loading.value = true
+  void load()
+}
 const loading = ref(true)
 const query = ref('')
 const busy = ref(new Set<string>())
@@ -153,7 +173,7 @@ async function load(silent = false) {
   clearTimeout(poll)
   const version = ++loadVersion
   try {
-    const res = await listAutomations()
+    const res = await listAutomations(scope.value)
     if (version !== loadVersion) return
     automations.value = res.data ?? []
     if (detail.value) {

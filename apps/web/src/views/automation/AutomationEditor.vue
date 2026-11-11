@@ -21,12 +21,12 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.editor.model') }}</label>
-              <p class="desc">{{ t('automation.editor.modelHelp') }}</p>
+              <label>{{ t('automation.nexus.agent') }}<span v-if="!automation" class="required">*</span></label>
+              <p class="desc">{{ t('automation.nexus.agentHelp') }}</p>
             </div>
             <div class="setting-control">
-              <ModelSelector v-model:selected-model-id="form.model_id" model-type="KnowledgeQA" clearable
-                :placeholder="t('automation.editor.modelDefault')" @add-model="uiStore.openSettings('models', 'llm')" />
+              <t-select v-model="form.agent_id" :disabled="!!automation" :loading="agentsLoading"
+                :placeholder="t('automation.nexus.agentPlaceholder')" :options="agentOptions" />
             </div>
           </div>
           <div class="setting-row setting-row-vertical">
@@ -35,7 +35,7 @@
               <p class="desc">{{ t('automation.editor.unattendedHint') }}</p>
             </div>
             <div class="setting-control setting-control-full automation-editor__stack">
-              <t-textarea v-model="form.instruction" :autosize="{ minRows: 6, maxRows: 16 }" :maxlength="20000"
+              <t-textarea v-model="form.instruction" :autosize="{ minRows: 6, maxRows: 16 }" :maxlength="4000"
                 :placeholder="t('automation.editor.instructionPlaceholder')" />
               <p class="automation-editor__hint">
                 {{ t('automation.editor.variablesHint') }}
@@ -59,9 +59,12 @@
             </div>
             <div class="setting-control setting-control-full">
               <div class="automation-editor__frequency" role="group" :aria-label="t('automation.editor.frequency')">
-                <label v-for="kind in KINDS" :key="kind" class="automation-editor__frequency-option">
-                  <input v-model="schedule.kind" type="radio" name="automation-frequency" :value="kind" />
+                <label v-for="kind in KINDS" :key="kind" class="automation-editor__frequency-option"
+                  :class="{ 'is-disabled': !isSupportedKind(kind) }">
+                  <input v-model="schedule.kind" type="radio" name="automation-frequency" :value="kind"
+                    :disabled="!isSupportedKind(kind)" />
                   <span>{{ t(`automation.schedule.kinds.${kind}`) }}</span>
+                  <t-tag v-if="!isSupportedKind(kind)" size="small" variant="light">{{ t('planned.badge') }}</t-tag>
                 </label>
               </div>
             </div>
@@ -75,6 +78,7 @@
               <t-checkbox-group v-model="schedule.days" class="automation-editor__days">
                 <t-checkbox v-for="day in WEEK" :key="day" :value="day">{{ weekdayName(day, locale) }}</t-checkbox>
               </t-checkbox-group>
+              <p class="automation-editor__hint">{{ t('automation.nexus.weeklyOneDay') }}</p>
             </div>
           </div>
 
@@ -88,7 +92,18 @@
             </div>
           </div>
 
-          <div v-if="schedule.kind === 'hourly'" class="setting-row">
+          <div v-if="schedule.kind === 'interval'" class="setting-row">
+            <div class="setting-info">
+              <label>{{ t('automation.nexus.intervalLabel') }}</label>
+              <p class="desc">{{ t('automation.nexus.intervalHint', { min: MIN_INTERVAL_MINUTES }) }}</p>
+            </div>
+            <div class="setting-control">
+              <t-input-number v-model="schedule.every" :min="MIN_INTERVAL_MINUTES" :max="10080" :step="5" :decimal-places="0"
+                theme="row" :allow-input-over-limit="false" :aria-label="t('automation.nexus.intervalLabel')" />
+            </div>
+          </div>
+
+          <div v-else-if="schedule.kind === 'hourly'" class="setting-row">
             <div class="setting-info">
               <label>{{ t('automation.schedule.atMinute') }}</label>
             </div>
@@ -169,11 +184,11 @@
         <div class="settings-group">
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.accessLevel') }}</label>
+              <label>{{ t('automation.fields.accessLevel') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t(`automation.editor.access.${form.access_level}`) }}</p>
             </div>
             <div class="setting-control">
-              <t-select v-model="form.access_level">
+              <t-select v-model="form.access_level" disabled>
                 <t-option v-for="level in ASSISTANT_ACCESS_LEVELS" :key="level" :value="level"
                   :label="t(`assistant.access.levels.${level}.label`)" />
               </t-select>
@@ -181,11 +196,11 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.sessionMode') }}</label>
+              <label>{{ t('automation.fields.sessionMode') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t(`automation.editor.sessionModeDesc.${form.session_mode}`) }}</p>
             </div>
             <div class="setting-control">
-              <t-select v-model="form.session_mode">
+              <t-select v-model="form.session_mode" disabled>
                 <t-option value="per_run" :label="t('automation.sessionMode.per_run')" />
                 <t-option value="persistent" :label="t('automation.sessionMode.persistent')" />
               </t-select>
@@ -193,19 +208,19 @@
           </div>
           <div v-if="form.session_mode === 'per_run'" class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.carryLastResult') }}</label>
+              <label>{{ t('automation.fields.carryLastResult') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t('automation.editor.carryDesc') }}</p>
             </div>
             <div class="setting-control">
-              <t-switch v-model="form.carry_last_result" />
+              <t-switch v-model="form.carry_last_result" disabled />
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.overlapPolicy') }}</label>
+              <label>{{ t('automation.fields.overlapPolicy') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
             </div>
             <div class="setting-control">
-              <t-select v-model="form.overlap_policy">
+              <t-select v-model="form.overlap_policy" disabled>
                 <t-option value="skip" :label="t('automation.overlap.skip')" />
                 <t-option value="queue" :label="t('automation.overlap.queue')" />
               </t-select>
@@ -213,11 +228,11 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.misfirePolicy') }}</label>
+              <label>{{ t('automation.fields.misfirePolicy') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t('automation.editor.misfireDesc') }}</p>
             </div>
             <div class="setting-control">
-              <t-select v-model="form.misfire_policy">
+              <t-select v-model="form.misfire_policy" disabled>
                 <t-option value="skip" :label="t('automation.misfire.skip')" />
                 <t-option value="run_once" :label="t('automation.misfire.run_once')" />
               </t-select>
@@ -225,12 +240,12 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.maxDuration') }}</label>
+              <label>{{ t('automation.fields.maxDuration') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t('automation.editor.maxDurationDesc') }}</p>
             </div>
             <div class="setting-control">
               <div class="automation-editor__number">
-                <t-input-number v-model="maxMinutes" :min="1" :max="240" :step="1" :decimal-places="0"
+                <t-input-number v-model="maxMinutes" disabled :min="1" :max="240" :step="1" :decimal-places="0"
                   theme="row" :allow-input-over-limit="false" :aria-label="t('automation.fields.maxDuration')" />
                 <span>{{ t('automation.units.minutes') }}</span>
               </div>
@@ -248,12 +263,12 @@
         <div class="settings-group">
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.approvalTimeout') }}</label>
+              <label>{{ t('automation.fields.approvalTimeout') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t('automation.editor.approvalTimeoutHelp') }}</p>
             </div>
             <div class="setting-control">
               <div class="automation-editor__number">
-                <t-input-number v-model="approvalHours" :min="1" :max="168" :step="1" :decimal-places="0"
+                <t-input-number v-model="approvalHours" disabled :min="1" :max="168" :step="1" :decimal-places="0"
                   theme="row" :allow-input-over-limit="false" :aria-label="t('automation.fields.approvalTimeout')" />
                 <span>{{ t('automation.units.hours') }}</span>
               </div>
@@ -261,11 +276,11 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <label>{{ t('automation.fields.notifyOnSuccess') }}</label>
+              <label>{{ t('automation.fields.notifyOnSuccess') }}<t-tag size="small" variant="light" class="automation-editor__planned">{{ t('planned.badge') }}</t-tag></label>
               <p class="desc">{{ t('automation.editor.notifyHint') }}</p>
             </div>
             <div class="setting-control">
-              <t-switch v-model="form.notify_on_success" />
+              <t-switch v-model="form.notify_on_success" disabled />
             </div>
           </div>
         </div>
@@ -307,13 +322,15 @@ import {
   defaultScheduleForm,
   formatInZone,
   scheduleFormFromTrigger,
+  isSupportedKind,
+  MIN_INTERVAL_MINUTES,
   timezoneOptions,
   triggerFromScheduleForm,
   weekdayName,
   type ScheduleKind,
 } from '@/utils/automationSchedule'
-import ModelSelector from '@/components/ModelSelector.vue'
-import { useUIStore } from '@/stores/ui'
+import { useAuthStore } from '@/stores/auth'
+import { listNexusAgents, type NexusAgent } from '@/api/nexus-agents'
 
 const props = defineProps<{
   visible: boolean
@@ -322,13 +339,14 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:visible': [value: boolean]; saved: [value: Automation] }>()
 
 const { t, locale } = useI18n()
-const uiStore = useUIStore()
+const authStore = useAuthStore()
 
 type Section = 'basic' | 'schedule' | 'execution' | 'notify'
 
 const VARIABLE_TAGS = ['now', 'last_run_at', 'last_success_at', 'run_id', 'automation_name']
   .map((name) => `{{${name}}}`)
-const KINDS: ScheduleKind[] = ['daily', 'weekdays', 'weekly', 'monthly', 'hourly', 'once', 'custom']
+// The kinds Nexus can schedule come first; the rest stay visible as "待实现" (see isSupportedKind).
+const KINDS: ScheduleKind[] = ['interval', 'daily', 'weekly', 'weekdays', 'monthly', 'hourly', 'once', 'custom']
 const WEEK = [1, 2, 3, 4, 5, 6, 0]
 
 const section = ref<Section>('basic')
@@ -353,6 +371,7 @@ const navGroups = computed(() => [
 
 const blank = (): Required<Omit<AutomationInput, 'trigger' | 'limits' | 'description'>> => ({
   name: '',
+  agent_id: '',
   model_id: '',
   instruction: '',
   session_mode: 'per_run',
@@ -371,6 +390,34 @@ const maxMinutes = ref(30)
 const saving = ref(false)
 
 const zones = computed(() => timezoneOptions(timezone.value))
+
+// Published agents of the space; a task is pinned to the agent's current published version (design 8.2a, C2).
+const agents = ref<NexusAgent[]>([])
+const agentsLoading = ref(false)
+const agentOptions = computed(() => {
+  const list = agents.value.filter(agent => agent.published_version_id).map(agent => ({ value: agent.id, label: agent.name }))
+  const current = props.automation?.agent_id
+  // An existing task keeps showing its agent even if the agent was archived since.
+  if (current && !list.some(item => item.value === current)) list.push({ value: current, label: props.automation?.agent_name || current })
+  return list
+})
+
+async function loadAgents() {
+  agentsLoading.value = true
+  try {
+    agents.value = await listNexusAgents(authStore.effectiveTenantId || '')
+  } catch {
+    agents.value = []
+  } finally {
+    agentsLoading.value = false
+  }
+}
+
+// Weekly tasks run on one day (the Nexus rule); picking another day replaces the first.
+watch(() => [...schedule.days], (now, before) => {
+  if (schedule.kind !== 'weekly' || now.length <= 1) return
+  schedule.days = [now.find(day => !before.includes(day)) ?? now[now.length - 1]]
+})
 
 const approvalHours = computed({
   get: () => Math.max(1, Math.round(form.approval_timeout_minutes / 60)),
@@ -412,7 +459,8 @@ watch(() => props.visible, (open) => {
   if (a) {
     Object.assign(form, {
       name: a.name,
-      model_id: a.model_id || '',
+      agent_id: a.agent_id || '',
+      model_id: '',
       instruction: a.instruction,
       session_mode: a.session_mode,
       carry_last_result: a.carry_last_result,
@@ -428,6 +476,7 @@ watch(() => props.visible, (open) => {
   }
   previewRuns.value = []
   previewError.value = ''
+  if (open) void loadAgents()
   modalShell.markClean()
 }, { immediate: true })
 
@@ -460,6 +509,7 @@ watch([trigger, () => props.visible], () => {
 // The first section with a problem, with what to tell the user.
 function firstProblem(): [Section, string] | null {
   if (!form.name.trim()) return ['basic', t('automation.editor.errors.name')]
+  if (!props.automation && !form.agent_id) return ['basic', t('automation.nexus.agentRequired')]
   if (!form.instruction.trim()) return ['basic', t('automation.editor.errors.instruction')]
   if (!trigger.value || previewError.value) return ['schedule', previewError.value || t('automation.editor.errors.schedule')]
   return null
@@ -475,6 +525,7 @@ async function save() {
   saving.value = true
   const input: AutomationInput = {
     ...form,
+    agent_id: form.agent_id || undefined,
     name: form.name.trim(),
     trigger: trigger.value!,
     limits: { max_duration_minutes: maxMinutes.value },
@@ -641,6 +692,8 @@ async function save() {
   }
 }
 
+.automation-editor__planned { margin-left: 8px; }
+
 .automation-editor__frequency {
   display: flex;
   flex-wrap: wrap;
@@ -649,7 +702,18 @@ async function save() {
 
 .automation-editor__frequency-option {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
+
+  // Kinds Nexus cannot schedule yet stay visible with a "待实现" tag and cannot be picked.
+  &.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+
+    input { cursor: not-allowed; }
+  }
 
   input {
     position: absolute;

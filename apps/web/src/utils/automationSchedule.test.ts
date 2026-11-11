@@ -9,6 +9,7 @@ import {
   wallClockToISO,
   zonedWallClock,
   defaultScheduleForm,
+  isSupportedKind,
 } from './automationSchedule'
 
 test('presets round-trip through cron', () => {
@@ -115,4 +116,21 @@ test('valid leap days and times adjacent to transitions retain the requested wal
     assert.ok(iso, `${local} in ${zone}`)
     assert.equal(zonedWallClock(iso, zone), local)
   }
+})
+
+test('an every-N-minutes trigger is its own kind and round-trips', () => {
+  const form = scheduleFormFromTrigger({ type: 'cron', expr: '@every 30m', timezone: 'UTC' })
+  assert.equal(form.kind, 'interval')
+  assert.equal(form.every, 30)
+  assert.equal(scheduleFormFromTrigger({ type: 'cron', expr: '@every 2h', timezone: 'UTC' }).every, 120)
+  assert.deepEqual(triggerFromScheduleForm({ ...defaultScheduleForm(), kind: 'interval', every: 45 }, 'UTC'),
+    { type: 'cron', expr: '@every 45m', timezone: 'UTC' })
+  assert.equal(triggerFromScheduleForm({ ...defaultScheduleForm(), kind: 'interval', every: 0 }, 'UTC'), null)
+  const said = describeTrigger({ type: 'cron', expr: '@every 30m', timezone: 'UTC' }, (key, params) => `${key}:${params?.n}`, 'en')
+  assert.equal(said, 'automation.schedule.describe.everyMinutes:30')
+})
+
+test('only the kinds Nexus can schedule are selectable', () => {
+  assert.deepEqual((['interval', 'daily', 'weekly'] as const).map(isSupportedKind), [true, true, true])
+  for (const kind of ['hourly', 'weekdays', 'monthly', 'once', 'custom'] as const) assert.equal(isSupportedKind(kind), false, kind)
 })

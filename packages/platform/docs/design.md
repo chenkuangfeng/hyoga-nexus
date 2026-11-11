@@ -93,3 +93,7 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 ## 知识库共享（shared_spaces/kb_shares）
 
 `knowledge_base_shares` 记录库共享到共享空间的级别；`kb_shares.shared_levels` 按「共享级别、成员空间在共享空间的角色、本人在本空间的角色上限」取最小得到每个库的有效级别，`knowledge/access.py` 的 `can_read` 与 `readable_bases` 把它并入读取判定（与租户级 `resource_grants` 并列）。写入、设置与共享管理仍只属于所属空间。有效级别规则与智能体共享共用 `agent_shares.effective_level`。
+
+## 定时任务（schedule）
+
+`schedule/rules.py` 校验三种规则（每 N 分钟、每天、每周一天，IANA 时区），`schedule/service.py` 是唯一的业务入口，`cronjob_*` 工具与 REST（`apps/api/.../http/schedules.py`）共用它：创建（工具按会话的智能体版本，REST 按智能体当前已发布版本）、更新（改规则或时区重算下次时间，改提示词重新扫描，挂起的任务仍需恢复）、暂停 / 恢复 / 删除、立即运行（不改 `next_run_at`，60 秒节流）、任务会话的运行列表、触发预览，以及到点触发 `fire_due`。他人的任务对普通成员一律是「不存在」；空间 owner / admin 可列出全部并读取、暂停，其余操作仍只限所有者。`ScheduleError` 由 API 的统一处理转成 `{error: {code, message}}`（404 / 403 / 409 / 429 / 422）。

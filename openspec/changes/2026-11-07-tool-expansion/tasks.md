@@ -113,9 +113,10 @@
 
 - [x] 10.1 服务层：`get_job`、`update_job`、`run_now`、`list_runs`、`preview`、`all` 范围与管理员暂停，审计动作，单元测试。
 - [x] 10.2 REST：`/api/v1/tenants/{tenant_id}/schedules` 全部接口、错误码映射、权限与越权测试。
-- [ ] 10.3 前端数据层：`nexusAutomationAdapter.ts`（含单测）与 `api/automation.ts` 接 Nexus；授权、通知调用短路为待实现。
-- [ ] 10.4 前端页面：路由 `automations` 指向 `AutomationList.vue`；编辑器的智能体选择、触发器类型限制与待实现标记；列表的我的 / 全部切换；详情运行记录；六种语言文案；交互测试。
-- [ ] 10.5 文档：`docs/architecture.md` 定时部分、`docs/roadmap.md` 3.27、`packages/platform` 文档、`apps/web` 说明。
+- [x] 10.3 前端数据层：`nexusAutomationAdapter.ts`（含单测）与 `api/automation.ts` 接 Nexus；授权、通知调用短路为待实现。
+- [x] 10.4 前端页面：路由 `automations` 指向 `AutomationList.vue`；编辑器的智能体选择、触发器类型限制与待实现标记；列表的我的 / 全部切换；详情运行记录；六种语言文案；交互测试。
+  - 实施说明（2026-11-11）：数据层 `api/nexusAutomationAdapter.ts`（纯函数，单测 6 项）；`api/automation.ts` 改调 `/schedules`，授权与通知返回空并标待实现；`utils/automationSchedule.ts` 增加 `interval` 类型与 `isSupportedKind`；编辑器用智能体选择器替换模型选择器、不支持的调度类型与执行控件禁用并标「待实现」、每周只能选一天；列表页管理员的「我的 / 全部成员」切换，他人任务只能暂停；详情页只读模式；路由 `automations` 指向 `AutomationList.vue`；六种语言文案；原有交互测试补上 `@/stores/auth`、`@/api/nexus-agents` 依赖并改写模型覆盖与审批超时两条，新增管理员视图 2 条。**未在浏览器里验证**，也未跑 `vue-tsc` / `pnpm build`（本机内存不足）；对适配器与相关 TS 文件做了 `tsc --strict` 检查并用故意出错探针确认有效，三个 Vue 模板编译无错。
+- [x] 10.5 文档：`docs/architecture.md` 定时部分、`docs/roadmap.md` 3.27、`packages/platform` 文档、`apps/web` 说明。
 
 ## 9. 收尾
 

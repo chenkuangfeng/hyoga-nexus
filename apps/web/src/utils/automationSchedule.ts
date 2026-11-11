@@ -10,7 +10,20 @@ export function hasEndedOnceSchedule(automation: Pick<Automation, 'enabled' | 't
     && Date.parse(automation.trigger.at || '') <= now
 }
 
-export type ScheduleKind = 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'once' | 'custom'
+export type ScheduleKind = 'interval' | 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'once' | 'custom'
+
+/**
+ * Kinds the Nexus scheduler can run (design 8.2a): every N minutes, daily, and weekly on one day. The editor shows the
+ * others as "待实现" and does not let them be chosen.
+ */
+export const SUPPORTED_KINDS: readonly ScheduleKind[] = ['interval', 'daily', 'weekly']
+
+/** Shortest interval the scheduler accepts, in minutes (`MIN_INTERVAL_MINUTES` of the backend). */
+export const MIN_INTERVAL_MINUTES = 15
+
+export function isSupportedKind(kind: ScheduleKind): boolean {
+  return SUPPORTED_KINDS.includes(kind)
+}
 
 export interface ScheduleForm {
   kind: ScheduleKind
@@ -24,10 +37,12 @@ export interface ScheduleForm {
   at: string
   /** Expression of a custom trigger. */
   expr: string
+  /** Minutes between runs of an interval trigger. */
+  every: number
 }
 
 export function defaultScheduleForm(): ScheduleForm {
-  return { kind: 'daily', minute: 0, hour: 9, days: [1], day: 1, at: '', expr: '' }
+  return { kind: 'daily', minute: 0, hour: 9, days: [1], day: 1, at: '', expr: '', every: 60 }
 }
 
 export function browserTimezone(): string {
@@ -71,6 +86,8 @@ export function scheduleFormFromTrigger(trigger: AutomationTrigger | undefined):
   const expr = (trigger.expr || '').trim()
   form.expr = expr
   form.kind = 'custom'
+  const every = /^@every (\d+)([mh])$/.exec(expr)
+  if (every) return { ...form, kind: 'interval', every: Number(every[1]) * (every[2] === 'h' ? 60 : 1) }
   const f = expr.split(/\s+/)
   if (f.length !== 5) return form
   const [mi, h, dom, mon, dow] = f
@@ -99,6 +116,10 @@ export function triggerFromScheduleForm(form: ScheduleForm, timezone: string): A
   const h = form.hour
   let expr = ''
   switch (form.kind) {
+    case 'interval':
+      if (!Number.isInteger(form.every) || form.every < 1) return null
+      expr = `@every ${form.every}m`
+      break
     case 'hourly':
       expr = `${m} * * * *`
       break
@@ -204,6 +225,8 @@ export function describeTrigger(trigger: AutomationTrigger, t: Translate, locale
   const form = scheduleFormFromTrigger(trigger)
   const time = `${String(form.hour).padStart(2, '0')}:${String(form.minute).padStart(2, '0')}`
   switch (form.kind) {
+    case 'interval':
+      return t('automation.schedule.describe.everyMinutes', { n: form.every })
     case 'hourly':
       return t('automation.schedule.describe.hourly', { minute: String(form.minute).padStart(2, '0') })
     case 'daily':

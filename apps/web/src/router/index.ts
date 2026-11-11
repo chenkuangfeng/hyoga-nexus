@@ -157,7 +157,8 @@ const router = createRouter({
         {
           path: "automations/:automationId?",
           name: "automationList",
-          component: PlannedPage,
+          // Scheduled tasks on the Nexus API (openspec 2026-11-07-tool-expansion 8.2a); the WeKnora pages are adapted.
+          component: () => import("../views/automation/AutomationList.vue"),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {

@@ -150,6 +150,21 @@ export default {
     "historyNoOverrides": "관리자 변경 없음",
   },
   automation: {
+    nexus: {
+      agent: '에이전트',
+      agentHelp: '작업은 생성 시점에 게시된 에이전트 버전에 고정되며 나중에 바꿀 수 없습니다. 이후 에이전트가 바뀌어도 이 작업에는 영향이 없습니다.',
+      agentPlaceholder: '게시된 에이전트를 선택하세요',
+      agentRequired: '에이전트를 선택하세요',
+      weeklyOneDay: '주간 작업은 현재 하루만 선택할 수 있습니다.',
+      intervalLabel: '간격(분)',
+      intervalHint: '최소 {min}분이며 저장한 시점부터 계산합니다.',
+      scopeLabel: '범위',
+      scopeMine: '내 작업',
+      scopeAll: '전체 구성원',
+      agentLine: '에이전트: {name}(버전 {version})',
+      ownerBy: '작성자: {name}',
+      managerReadOnly: '스페이스 관리자로 보고 있어 이 작업은 일시 중지만 할 수 있습니다.'
+    },
     conversationNotice: "자동화 작업이 실행하는 대화입니다. 메시지를 직접 보낼 수 없습니다. 대기 중인 요청은 위에서 처리하세요.",
     title: '자동화',
     description: 'Nexus 도우미가 예약된 시간에 사용자를 대신해 작업을 실행합니다. 결과와 승인 대기 항목을 알려드립니다.',
@@ -240,6 +255,7 @@ export default {
     },
     schedule: {
       kinds: {
+        interval: '일정 간격',
         daily: '매일',
         weekdays: '평일',
         weekly: '매주',
