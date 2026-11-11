@@ -62,9 +62,12 @@
   - `dangerous_shell_commands.json` 的 shell 类规则加入 `sandbox_exec`。路径越界与敏感位置的专门规则未加：路径越界已由 `paths` 拒绝。
 - [x] 4.5 `sandbox` 组 `availability`（部署启用且验收通过）与默认关闭；编辑器的沙箱分区、不可用原因展示。
   - 部分完成：`sandbox` 组 `availability`（部署启用且验收通过；`local` 需 `allow_local` 与开发认证模式）与默认关闭已完成；编辑器：沙箱档位选择与不可用原因已有（`sandboxProfile`），沙箱组的开关与不可用原因随 1.6 的「工具分组」块完成。
-- [ ] 4.6 `/outputs` 产物登记（新表）、下载授权检查、审计。
-  - 未做：产物登记需要新表和迁移，而迁移链上有另一项未提交的迁移（见 8.2），等链稳定后再做。目前 `/outputs` 下的文件在工作区目录里，没有登记与下载接口。
-  - 未做。
+- [ ] 4.6 `/outputs` 产物登记（新表）、下载授权检查、审计（设计见 design.md 2.6）。
+  - [ ] 4.6.1 `artifacts` 表、模型与迁移（空库 / 升降级）。
+  - [ ] 4.6.2 `HostFileStore.output_files()` 与 `nexus_platform/artifacts/service.py`：登记（复制、哈希、上限、去重、事件与审计）、列表、详情、下载、删除与授权。
+  - [ ] 4.6.3 worker 收尾接入登记。
+  - [ ] 4.6.4 REST `/artifacts` 与测试。
+  - [ ] 4.6.5 文档同步。
 - [x] 4.7 `sandbox_exec_async`、`sandbox_job_wait`、`sandbox_job_cancel`；Run 终态回收作业；与路线图 3.24 的关系写入文档。
   - 状态放在 `/workspace/.jobs/<id>/`（`out`、`rc`、`pid`、`started`），任何 worker 都能读；作业在独立会话里运行，看门狗负责超时（rc 124），取消与结束都杀整个进程组；每会话最多 4 个；Run 结束时 `close_jobs` 取消仍在跑的作业。后台命令只能在 `/workspace` 下。没有做跨 Run 的结果回投（路线图 3.24 单独评估）。
   - 未做，与路线图 3.24 一并设计。

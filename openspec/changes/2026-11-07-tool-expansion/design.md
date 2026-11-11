@@ -78,6 +78,20 @@ exec_timeout_max_seconds = 120
 
 `NativePolicy` 新增 `tool_groups_enabled: dict[str, bool]`、`sandbox_exec_timeout_seconds`（默认 30）、`sandbox_output_limit`（默认 20000 字符）。设置页标签同步补齐。
 
+### 2.6 产物登记（4.6）
+
+`/outputs` 下的文件在 Run 结束时**复制**成不可变的产物并登记；之后下载读的是副本，不受工作区里后续改动影响。
+
+- **表 `artifacts`**：`id`、`tenant_id`、`session_id`（会话删除时级联）、`run_id`、`owner_user_id`（Run 的发起人）、`path`（虚拟路径，如 `/outputs/report.pdf`）、`name`、`size`、`sha256`、`mime`、`storage_key`（相对产物根目录的路径）、`created_at`、`deleted_at`；唯一 `(run_id, path)`，索引 `(tenant_id, session_id, created_at)`。
+- **存放**：`<[sandbox].workspace_root>/_artifacts/<tenant_id>/<artifact_id>`。API 与 worker 需共享该目录（单机或共享卷部署）；与知识库本地文件存储同样的约束，写入文档。
+- **登记时机**：worker 的 Run 收尾（`close_jobs` 之后、不论成功、失败或取消），失败只记日志、不影响 Run 终态。
+- **登记规则**：只收普通文件（符号链接、非常规文件跳过），复制时流式计算 `sha256`，并再次确认没有越出 `/outputs`。同一会话里同一路径、内容哈希与最近一次登记相同的文件不重复登记。
+- **上限**（超出的跳过并记入 `artifacts.registered` 事件的 `skipped`，原因 `too_large` / `too_many` / `run_quota` / `tenant_quota`）：单文件 50 MB、每 Run 50 个、每 Run 200 MB、每空间未删除产物合计 2 GB。
+- **授权**：与会话一致——会话所有者可读写自己会话的产物，空间 owner / admin 可读写全空间的；其他人、其他空间一律「不存在」。
+- **接口**（`/api/v1/tenants/{tenant_id}/artifacts`）：`GET ?session_id=&run_id=&limit=&offset=` 列表、`GET /{id}` 元数据、`GET /{id}/download`（`Content-Disposition: attachment`、`X-Content-Type-Options: nosniff`、统一按 `application/octet-stream` 返回以免被浏览器当页面执行）、`DELETE /{id}`（软删除并删除副本）。
+- **审计**：`artifact.registered`（每 Run 一条，含数量与跳过数）、`artifact.downloaded`、`artifact.deleted`。
+- **不做**：前端界面（先有接口）、跨会话共享、保留期自动清理、对象存储后端。
+
 ## 3. 调度
 
 ```python
