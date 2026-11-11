@@ -74,9 +74,8 @@
 - [x] 4.7 `sandbox_exec_async`、`sandbox_job_wait`、`sandbox_job_cancel`；Run 终态回收作业；与路线图 3.24 的关系写入文档。
   - 状态放在 `/workspace/.jobs/<id>/`（`out`、`rc`、`pid`、`started`），任何 worker 都能读；作业在独立会话里运行，看门狗负责超时（rc 124），取消与结束都杀整个进程组；每会话最多 4 个；Run 结束时 `close_jobs` 取消仍在跑的作业。后台命令只能在 `/workspace` 下。没有做跨 Run 的结果回投（路线图 3.24 单独评估）。
   - 未做，与路线图 3.24 一并设计。
-- [ ] 4.8 `run_skill_script` 在沙箱可用时改走沙箱后端（决定 5）；不可用时保持现有门禁；原有技能脚本测试保持通过。
-  - 未做：技能脚本通过 stdin 传 JSON 参数，沙箱执行器目前不支持 stdin；`run_skill_script` 的开关（`scripts_available`）也要重新设计，改动面大，单独做。
-  - 未做。
+- [x] 4.8 `run_skill_script` 在沙箱可用时改走沙箱后端（决定 5）；不可用时保持现有门禁；原有技能脚本测试保持通过。
+  - 作废（2026-11-11）：`run_skill_script` 已由技能演进提案（`2026-11-07-skill-evolution`）移除并列入 `RETIRED_TOOL_NAMES`，改为结构化的 `exec_skill`，经沙箱后端执行；`sandbox_exec` 已支持 `stdin`。原先的两个阻塞点（stdin、开关重设计）都已不存在，本项不再单独实施。
 - [ ] 4.9 端到端：开启沙箱组的智能体能写文件、运行脚本、读回产物；关闭组或 `read_only` 时工具不可见；`strict` 下写与命令进入审批。
   - 部分完成：`tests/test_sandbox_tools.py` 用本地后端经真实网关走通写、读、编辑、搜索、命令、访问级别与批次调度；真实 Docker 与 worker 端到端待验收后进行。
 
