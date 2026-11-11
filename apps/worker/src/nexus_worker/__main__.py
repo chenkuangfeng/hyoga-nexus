@@ -86,6 +86,40 @@ def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> b
     return True
 
 
+def sandbox_startup_check(factory) -> list[str]:
+    """Log a warning for every docker or bwrap sandbox profile without a valid acceptance report; returns their names.
+
+    Read-only: it never runs the probes (they exhaust memory and processes on purpose, and several workers starting
+    together would race), so an operator runs `--sandbox-check` once. Until then the `sandbox` tool group stays
+    unavailable for agents using that profile. Never raises: a broken `[sandbox]` section or database only skips the check.
+    """
+    try:
+        from nexus_core.deployment import DeploymentConfigError
+        from nexus_platform.runs.sandbox_acceptance import DbReportStore
+        from nexus_sandbox import acceptance
+        from nexus_sandbox.settings import load_config
+        try:
+            config = load_config()
+        except DeploymentConfigError:
+            return []  # reported when a Run asks for the sandbox; not a reason to stop the worker
+        if not config.enabled:
+            return []
+        missing = []
+        with factory() as db:
+            store = DbReportStore(db)
+            for settings in config.profiles.values():
+                if settings.backend != "local" and not acceptance.passed(settings, store):
+                    missing.append(settings.profile)
+        if missing:
+            logger.warning("Sandbox profiles without a passing acceptance report: %s; run "
+                           "`python -m nexus_worker --sandbox-check` (agents on them cannot use the sandbox tools until then)",
+                           ", ".join(missing))
+        return missing
+    except Exception:
+        logger.warning("Sandbox startup check skipped", exc_info=True)
+        return []
+
+
 def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = False) -> None:
     pool = model_connection_pool()
     # Read before any Run starts: an invalid [watchdog] section stops the worker instead of silently changing behaviour.
@@ -105,6 +139,7 @@ def run_worker(*, database_url: str, poll_interval: float = 1.0, once: bool = Fa
     except Exception:
         logger.exception("System space sync failed; builtin tools may be unavailable until it succeeds")
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
+    sandbox_startup_check(factory)
     install_embedder()
     knowledge_index.install_embedder()
     # Read before work starts: an invalid [knowledge] section stops the worker.

@@ -49,7 +49,7 @@ Run 准备（preparation.py）：  绑定 ─► 过滤1：group.availability(ct
 | 崩溃残留 | 强制杀掉 worker 后重启，能发现并回收遗留容器 |
 | 连通 | 写 → 读 → 删一个探测文件 |
 
-结果写表 `sandbox_acceptance`（每个档位一行，列见 2.3.1）。镜像摘要变化、后端配置变化时旧结果失效。入口：worker 启动自检，以及 `uv run python -m nexus_worker sandbox-check` 手动执行。`sandbox` 组可用性 = `[sandbox].enabled` 且最近一次验收对当前镜像与配置通过。
+结果写表 `sandbox_acceptance`（每个档位一行，列见 2.3.1）。镜像摘要变化、后端配置变化时旧结果失效。入口：worker 启动自检（只读：未通过的档位打警告，不自动运行探测），以及 `uv run python -m nexus_worker sandbox-check` 手动执行。`sandbox` 组可用性 = `[sandbox].enabled` 且最近一次验收对当前镜像与配置通过。
 
 #### 2.3.1 验收结果入库（追加，待确认）
 

@@ -47,12 +47,13 @@
 - [ ] 3.8 `bwrap` 后端（追加，用户确认）：`backends/bwrap`、`backend = "bwrap"`、管理器与验收接入、`exec_async` 明确拒绝。
   - 代码与参数测试已写，未在真实 bwrap 上验证（待用户验证）；进程数限制缺失，验收的进程数探测预计不通过。
 - [ ] 3.6 `acceptance` 全部探测项与迁移 `sandbox_acceptance`；worker 启动自检与 `sandbox-check` 命令；验收报告输出到文件。
-  - 部分完成：验收模块 12 项探测与按指纹失效的报告已实现；`--sandbox-check` 命令已加入 worker（调整：用参数而非子命令）。报告原先保存在 `workspace_root/acceptance.json`，现已改为写 `sandbox_acceptance` 表（见下）。剩余：worker 启动自检。
+  - 部分完成：验收模块 12 项探测与按指纹失效的报告已实现；`--sandbox-check` 命令已加入 worker（调整：用参数而非子命令）。报告原先保存在 `workspace_root/acceptance.json`，现已改为写 `sandbox_acceptance` 表（见下）。worker 启动自检已做只读版（见 3.6.5）。
   - 结果入库（追加，2026-11-11 用户确认 design.md 2.3.1 方案 B）：
     - [x] 3.6.1 `ReportStore` 端口与文件实现；`acceptance.run` / `passed` 经端口读写，`nexus_sandbox` 不依赖平台包。
     - [x] 3.6.2 `sandbox_acceptance` 模型与 Alembic 迁移（空库、升降级往返）。
     - [x] 3.6.3 平台数据库实现；`profile_facts` 等经 `db` 参数读取（方案 B，无缓存，读失败按未验收）、旧文件退回；改造 design.md 2.3.1 列出的全部调用点。
-    - [x] 3.6.4 worker `--sandbox-check` 写表（无数据库配置时只写文件）；测试与文档（`packages/sandbox/docs`、`packages/sandbox/README.md`）同步。新增迁移 `d3e4f5a6b7c8`；测试 6 项（存取、指纹失效、行优先于文件、读失败不放行、网关读表、包不依赖平台）。**未做**：worker 启动自检仍未实现（设计 2.3 的入口之一），不属于入库改动。
+    - [x] 3.6.4 worker `--sandbox-check` 写表（无数据库配置时只写文件）；测试与文档（`packages/sandbox/docs`、`packages/sandbox/README.md`）同步。新增迁移 `d3e4f5a6b7c8`；测试 6 项（存取、指纹失效、行优先于文件、读失败不放行、网关读表、包不依赖平台）。
+    - [x] 3.6.5 worker 启动自检（只读，2026-11-11）：`sandbox_startup_check` 在启动时读取各 docker / bwrap 档位的验收结果，未通过的打警告并提示运行 `--sandbox-check`；**不自动运行探测**（探测会耗尽内存与进程，多个 worker 同时启动会互相抢），设计 2.3 的“启动自检”按此解释。测试 1 项。
 - [ ] 3.7 在真实 Docker 上跑通验收并保存报告；无 Docker 的环境相关测试跳过并说明。
   - 未做：需要有 Docker 权限的环境运行 `--sandbox-check`。
 

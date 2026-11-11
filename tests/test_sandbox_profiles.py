@@ -314,3 +314,26 @@ def test_the_sandbox_package_does_not_import_the_platform():
     import subprocess
     code = "import sys, nexus_sandbox.acceptance; assert not any(m.startswith('nexus_platform') for m in sys.modules)"
     assert subprocess.run([sys.executable, '-c', code]).returncode == 0
+
+
+def test_the_worker_startup_check_reports_unaccepted_profiles_without_running_probes(db, monkeypatch, tmp_path, caplog):
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    from nexus_worker.__main__ import sandbox_startup_check
+    _facts(monkeypatch, tmp_path, FULL)
+
+    class Factory:
+        def __call__(self):
+            return self
+        def __enter__(self):
+            return db
+        def __exit__(self, *_):
+            return False
+    with caplog.at_level('WARNING', logger='nexus_worker'):
+        assert sorted(sandbox_startup_check(Factory())) == ['bwrap', 'docker']   # `local` is never accepted, so never listed
+    assert 'sandbox-check' in caplog.text
+    for name in ('docker', 'bwrap'):
+        settings = load_config().get(name)
+        DbReportStore(db).save(settings, _report(settings))
+    assert sandbox_startup_check(Factory()) == []
+    _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = false')
+    assert sandbox_startup_check(Factory()) == []
