@@ -412,7 +412,7 @@ onMounted(load)
 .kind-tag {
   padding: 0 6px;
   border-radius: var(--app-radius-sm);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
 }
@@ -425,7 +425,7 @@ onMounted(load)
 .origin,
 .target,
 .meta {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -439,13 +439,13 @@ onMounted(load)
 .evidence {
   margin: 6px 0 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 
 .hint-line {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 
   &.is-warning {
@@ -471,7 +471,7 @@ onMounted(load)
 }
 
 .inline-label {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 </style>

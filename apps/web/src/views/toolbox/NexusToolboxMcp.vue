@@ -271,14 +271,14 @@ watch(() => props.tenantId, () => {
 .tbm-badge { padding: 0 6px; font-size: var(--app-text-xs); border: 1px solid var(--td-warning-color); color: var(--td-warning-color); border-radius: var(--td-radius-small); }
 .tbm-badge--muted { border-color: var(--td-component-border); color: var(--td-text-color-secondary); }
 .tbm-badge--on { border-color: var(--td-success-color); color: var(--td-success-color); }
-.tbm-target { margin: 4px 0 0; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); font-family: var(--td-font-family-mono, monospace); word-break: break-all; }
+.tbm-target { margin: 4px 0 0; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); font-family: var(--app-font-family-mono); word-break: break-all; }
 .tbm-desc { margin: 4px 0 0; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
 .tbm-tools { margin-top: 8px; padding: 8px 0 0 16px; border-left: 2px solid var(--td-component-stroke); }
 .tbm-tools-empty { margin: 0; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 .tbm-tool { padding: 4px 0; }
 .tbm-tool--off .tbm-tool-name { color: var(--td-text-color-secondary); }
 .tbm-tool-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.tbm-tool-name { font-family: var(--td-font-family-mono, monospace); }
+.tbm-tool-name { font-family: var(--app-font-family-mono); }
 .tbm-tool-desc { margin: 2px 0 0 24px; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
 @media (max-width: 768px) {
   .tbm-head { flex-direction: column; align-items: stretch; }

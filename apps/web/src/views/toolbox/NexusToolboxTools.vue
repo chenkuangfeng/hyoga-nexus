@@ -97,7 +97,7 @@ watch(() => props.tenantId, () => { void load() }, { immediate: true })
 .tbt-row { padding: 8px 0; border-bottom: 1px solid var(--td-component-stroke); }
 .tbt-off .tbt-name { color: var(--td-text-color-secondary); }
 .tbt-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.tbt-name { font-weight: 600; font-family: var(--td-font-family-mono, monospace); }
+.tbt-name { font-weight: 600; font-family: var(--app-font-family-mono); }
 .tbt-spacer { flex: 1; }
 .tbt-badge { padding: 0 6px; font-size: var(--app-text-xs); border: 1px solid var(--td-warning-color); color: var(--td-warning-color); border-radius: var(--td-radius-small); }
 .tbt-badge--muted { border-color: var(--td-component-border); color: var(--td-text-color-secondary); }

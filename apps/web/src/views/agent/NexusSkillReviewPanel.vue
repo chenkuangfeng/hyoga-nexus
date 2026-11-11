@@ -141,7 +141,7 @@ watch(() => props.tenantId, () => { detail.value = null; void load() }, { immedi
 .rv-notice { margin: 0 0 6px; font-size: var(--app-text-xs); display: flex; align-items: center; gap: 4px; }
 .rv-notice--warn { color: var(--td-warning-color); }
 .rv-findings { margin: 0; padding-left: 18px; font-size: var(--app-text-xs); line-height: 1.6; max-height: 140px; overflow: auto; }
-.rv-excerpt { display: block; color: var(--td-text-color-secondary); font-family: var(--td-font-family-mono, monospace); word-break: break-all; }
+.rv-excerpt { display: block; color: var(--td-text-color-secondary); font-family: var(--app-font-family-mono); word-break: break-all; }
 .rv-pre { margin: 0; padding: 8px; max-height: 240px; overflow: auto; font-size: var(--app-text-xs); line-height: 1.5; background: var(--td-bg-color-secondarycontainer); border-radius: var(--td-radius-default); white-space: pre-wrap; word-break: break-all; }
 .rv-file { margin-top: 6px; font-size: var(--app-text-xs); }
 .rv-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }

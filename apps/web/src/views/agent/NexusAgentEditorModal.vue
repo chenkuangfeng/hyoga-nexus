@@ -1292,7 +1292,7 @@ async function save() {
 .group-switch-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 12px; border: 1px solid var(--td-component-stroke); border-radius: 6px; }
 .group-switch-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .group-switch-name { font-weight: 500; }
-.group-switch-count { color: var(--td-text-color-placeholder); font-size: var(--app-text-xs); }
+.group-switch-count { color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); }
 .group-switch-row .sandbox-note { flex-basis: 100%; margin: 0; }
 .tools-overview {
   display: flex;

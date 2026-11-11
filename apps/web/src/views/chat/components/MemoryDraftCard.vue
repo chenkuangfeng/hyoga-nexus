@@ -110,14 +110,14 @@ async function submit(approve: boolean) {
 .memory-draft-kind,
 .memory-draft-status {
   margin-left: 8px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 
 .memory-draft-target,
 .memory-draft-hint {
   margin: 4px 12px 0;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -129,7 +129,7 @@ async function submit(approve: boolean) {
   margin: 6px 12px 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   color: var(--td-text-color-primary);
 }
 
@@ -142,7 +142,7 @@ async function submit(approve: boolean) {
 }
 
 .memory-draft-label {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 

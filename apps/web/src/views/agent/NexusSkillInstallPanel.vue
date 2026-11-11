@@ -200,7 +200,7 @@ onBeforeUnmount(stopPolling)
 .install-panel--warn { border-color: var(--td-warning-color); }
 .install-panel-title { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .install-findings { margin: 0 0 8px; padding-left: 18px; font-size: var(--app-text-xs); line-height: 1.6; max-height: 160px; overflow: auto; }
-.install-excerpt { display: block; color: var(--td-text-color-secondary); font-family: var(--td-font-family-mono, monospace); word-break: break-all; }
+.install-excerpt { display: block; color: var(--td-text-color-secondary); font-family: var(--app-font-family-mono); word-break: break-all; }
 .install-state { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--app-text-sm); }
 .install-log { margin: 0 0 8px; padding: 8px; max-height: 200px; overflow: auto; font-size: var(--app-text-xs); line-height: 1.5; background: var(--td-bg-color-secondarycontainer); border-radius: var(--td-radius-default); white-space: pre-wrap; word-break: break-all; }
 </style>

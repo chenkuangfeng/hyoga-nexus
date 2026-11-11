@@ -340,7 +340,7 @@ onBeforeUnmount(() => { generation++; emit('busy', false) })
 }
 
 .tool-detail__param-title code {
-  font: 12px/1.5 var(--app-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font: var(--app-text-sm)/1.5 var(--app-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 600;
 }
 
@@ -366,7 +366,7 @@ onBeforeUnmount(() => { generation++; emit('busy', false) })
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 12px/1.55 var(--app-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font: var(--app-text-sm)/1.55 var(--app-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   color: var(--td-text-color-secondary);
 }
 </style>

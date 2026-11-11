@@ -822,7 +822,7 @@ defineExpose({ sendText })
 
 .tool-grants-hint {
     margin: 0 0 8px;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     color: var(--td-text-color-secondary);
 }
 
@@ -835,7 +835,7 @@ defineExpose({ sendText })
 
 .tool-grants-name {
     font-family: var(--app-font-mono, monospace);
-    font-size: 13px;
+    font-size: var(--app-text-md);
 }
 
 .sandbox-header-toggle__btn {
