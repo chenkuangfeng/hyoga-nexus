@@ -134,11 +134,6 @@
 - [ ] 6.5 LLM 安装智能体（输出依赖清单，接在第 3 节流水线之前）。
 - [ ] 6.6 额外卷、远程 docker 主机与 TLS、`allocation = user`。
 - [ ] 6.7 审核辅助数据：确定性包分析器（资源引用图、内容摘要），审核页展示。
-  - 设计见 design.md 10.2（待确认，确认前不编码）。
-  - [ ] 6.7.1 `nexus_skills.review.analyze`：文件清单、引用图（含缺失 / 孤立 / 越界）、脚本摘要、内容摘要与上限。
-  - [ ] 6.7.2 `submissions.detail` 返回 `analysis`。
-  - [ ] 6.7.3 前端审核对话框「概览」标签与中英文案。
-  - [ ] 6.7.4 测试与文档同步（`packages/skills` 文档、`docs/roadmap.md`）。
 - [ ] 6.8 上传前浏览器端解压并预览文件清单（服务端校验不变）。
 
 ## 7. 收尾
@@ -147,4 +142,5 @@
   - 已同步 `docs/architecture.md` 2.6、`docs/roadmap.md` 7.1、`skills/general/README.md`；`packages/skills`、`packages/sandbox`、`configs` 已随各期更新。S6 各项未实现，只在路线图里标为计划。
 - [ ] 7.2 后端全量 pytest、迁移升降级、前端单测与构建通过。
   - 后端全量 pytest 已通过（分两半：732 + 840，共 1572 项，1 项按条件跳过）；迁移升降级有往返测试；前端 `*.test.ts` 全量单测 1681 项（1680 通过、0 失败、1 项跳过）。**`pnpm build`（类型检查与生产构建）没跑**：这台机器内存只有约 1.8 GB，之前 `vue-tsc` 会耗尽内存，需要在内存足够的机器上做，所以 7.2 暂不勾选。能做的部分已做：`nexus-agents.ts`、`mySkills.ts`、`skillInstall.ts` 用 `tsc --strict` 检查通过（请求层打桩，并用故意出错的探针文件确认检查有效）；四个新 `.vue` 的模板编译无错，但它们的 `<script>` 类型检查要等 `vue-tsc`。
-- [ ] 7.3 规格同步到 `openspec/specs/skill-evolution/` 并归档本变更。
+- [x] 7.3 规格同步到 `openspec/specs/skill-evolution/` 并归档本变更。
+  - 2026-11-11 按用户决定归档：S1–S5 与 6.2、6.4 已实施；6.1、6.3、6.5–6.8 未做，不在本变更内继续，保留为 `docs/roadmap.md` 的计划，需要时另立提案；7.2 的 `pnpm build` 与真实环境验证未完成，同样记在路线图「未完成」。
