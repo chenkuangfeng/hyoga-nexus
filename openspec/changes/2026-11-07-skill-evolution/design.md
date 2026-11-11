@@ -239,6 +239,21 @@ bwrap 的已知缺口：无进程数限制、无 CPU 配额、内存为地址空
 - `skill_search(query, limit?)`（`skills` 组，只读）：在本次 Run **能用**的技能里按名字、简介、正文检索——智能体绑定的 ∪ 当前用户的私有技能，且 `model_invocable`。打分：名字命中 3、简介命中 2、正文命中 1，按分数再按名字排序，返回最多 10 条 `名字 | 简介`。中日韩文本没有空格，按字符二元组匹配。索引被 `INDEX_LIMIT` 截断时，索引末尾提示用 `skill_search` 找其余技能。它不授予任何权限，读取仍用 `load_skill`。
 - 使用记录：新表 `skill_usage(skill_id, user_id, last_used_at, use_count)`。`load_skill` 使 `use_count` 加一并更新时间，`exec_skill` 只更新时间。私有技能显示本人的次数与最近使用；库技能显示全空间的总次数与最近使用（不暴露谁用了）。**只记录与展示，不做自动归档**（生命周期与 `cronjob` 引用检查留待有需要时再设计）。记录失败不影响读取技能。
 
+### 10.2 审核辅助分析器（6.7，待确认）
+
+目的：审核人只看到 `SKILL.md`、文件文本、diff 和扫描发现，看不出「这个包整体长什么样」。分析器给出**事实性、确定性**的概览，不打分、不给结论、不影响通过策略（策略仍只由扫描裁决与来源信任决定）。
+
+- 位置与形态：`nexus_skills.review.analyze(skill_md, text, binary) -> dict` 纯函数，不执行任何内容、不读包外资源、不调 LLM；同样输入同样输出。
+- 输出（均有上限，超出标 `truncated`）：
+  - `inventory`：每个文件的路径、大小、类别（`skill_md` / `markdown` / `script`(含解释器：py、sh、js…) / `data` / `binary`），及总文件数与总字节数。
+  - `references`：引用图。从 `SKILL.md` 与其余 markdown 中提取相对路径引用（Markdown 链接、反引号路径、`scripts/…` 形式），得到边 `来源 → 目标`；另列 `missing`（引用了但包内没有）与 `orphans`（包内有但从 `SKILL.md` 不可达）。路径先规范化并拒绝越出包根的引用，越界引用单独列为 `escaping`。
+  - `scripts`：每个脚本的入口摘要——解释器、行数、是否被 `SKILL.md` 引用、从文本静态提取的第三方导入（py 的 `import`、js 的 `require`/`import`）与出现的外部主机名（URL 中的 host，去重）。只是列举，不判断好坏。
+  - `summary`：`SKILL.md` 的标题大纲、字符数、frontmatter 声明的 `execution` 策略与 `model_invocable`、是否含二进制。
+- 接入：`submissions.detail` 返回新增字段 `analysis`（与 `scan`、`diff` 同级，详情时现算，不落库）；`skills` 的版本详情暂不接，需要再提。
+- 前端：审核对话框新增「概览」标签，展示文件清单表、引用关系列表（缺失 / 孤立 / 越界高亮）、脚本表与外部主机；所有内容按纯文本渲染；中英文案一次加齐。
+- 不做：风险评分、LLM 总结、跨版本对比（已有 diff）、自动拒绝。
+- 测试：纯函数用例（引用提取各形态、越界、缺失、孤立、导入与主机提取、上限截断、确定性）；`detail` 接口带 `analysis`；前端纯函数单测。
+
 ## 11. 迁移与兼容
 
 - 迁移：`tenants.kind` 约束；系统租户与保留用户；`tenant_builtin_disabled`；`skills.owner_user_id` 与部分唯一索引；`skill_versions` 增加 `bundle`、`bundle_sha256`、`build_state`（既有行置 `ready`）、`build_error`、`build_heartbeat_at`、`env_ref`、`trust`、`scan_version`、`scan`、`extra`；新表 `skill_drafts`、`skill_submissions`；`installed → admin`；既有版本的 zip 可在首次读取时由文件行惰性生成，也可迁移时批量生成。降级删除新表与新列、还原约束（存在私有技能或系统租户数据时先提示）。
