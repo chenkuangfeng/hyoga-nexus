@@ -53,7 +53,7 @@ def can_maintain_kb_content(db, kb, user_id) -> bool:
     """文档、分块、问答。can_manage_kb，或者（enterprise 且）在 knowledge_base_maintainers 中。"""
 ```
 
-- 企业 owner、admin 对个人资源只有治理操作：查看、停用、删除、转为企业资源（需要你确认的项 1），不能编辑内容。
+- 企业 owner、admin 对个人资源只有治理操作：查看、停用、删除、转为企业资源（已确认），不能编辑内容。
 - 智能体级授权（`tenant_agent_grants`）只保留 `view`、`run`。迁移把现有的 `edit`、`publish`、`manage` 降为 `run`，`AGENT_PERMISSIONS` 与 `AGENT_IMPLIED` 同步收窄；编辑、发布、管理一律走 `can_maintain_agent`。
 - 绑定检查（智能体草稿保存与发布时）：
   - 企业智能体只能绑定企业知识库；
@@ -317,7 +317,7 @@ channel_identities / channel_session_bindings：沿用架构 2.14 的 ChannelIde
 
 ## 8. E5–E7（要点）
 
-- **E5**：新增 `agent_principal_grants(tenant_id, agent_id, principal_kind, principal_id, include_descendants)`（只授予使用），`principal_kind` 取 `org_unit` 或 `user`；知识库可见范围增加按部门、成员开放；知识库管理员可按部门、角色指定（视需要确认的项 3）。部门展开用递归 CTE，每个请求内缓存一次。
+- **E5**：新增 `agent_principal_grants(tenant_id, agent_id, principal_kind, principal_id, include_descendants)`（只授予使用），`principal_kind` 取 `org_unit` 或 `user`；知识库可见范围增加按部门、成员开放；知识库管理员可按部门、角色指定（已确认，E5 实施）。部门展开用递归 CTE，每个请求内缓存一次。
 - **E6**：`usage_ledger(tenant_id, user_id, org_unit_id, agent_id, channel_id, model_version_id, day, input, output, cache_read, cache_creation)` 从 `usage.updated` 累加；准入时检查企业、部门、个人三级的月度上限，超出返回 429 `quota_exhausted`。
 - **E7**：worker 每天按 `retention_days` 清理会话、运行事件与产物；审计按日导出为 JSONL，并写入哈希链字段。
 
