@@ -262,7 +262,7 @@
   - 工具扩展（`2026-11-07-tool-expansion`）：产物库页面（4.6.6）、聊天页产物卡片（4.6.7）、自动化页、智能体编辑器的工具分组开关与沙箱档位。
   - 其他提案遗留的浏览器项：`2026-11-04-native-run-workbench` 4.3、`2026-11-04-weknora-chat-dialog` 5.3 与 7.10、`2026-11-05-weknora-agent-tool-model-settings` 4.4、`2026-11-02-session-management` 前端、`2026-11-07-worker-concurrency` 4.3。
 - **真实环境验收**：
-  - 沙箱：真实 Docker 上运行 `python -m nexus_worker --sandbox-check` 并保存报告（3.7）；真实 bwrap（3.8）；开启沙箱组的智能体经 worker 端到端（4.9）。
+  - 沙箱：真实 Docker 上运行 `python -m nexus_worker --sandbox-check` 并保存报告（3.7，本机当前用户无 Docker 权限）；开启沙箱组的智能体经 worker 端到端（4.9）。真实 bwrap 已于 2026-11-11 在本机验收通过（3.8），其放宽的进程数准入条件待确认。
   - 知识库：PostgreSQL（pgvector）、Qdrant、Elasticsearch、Milvus（K1.2c）、Neo4j（K2.7b）、视觉与语音模型（K4.2b）、重排模型（K5.3c）、Wiki 合成质量（K6.2）。
   - PostgreSQL 上的迁移与部分唯一索引（2.9）。
 - **收尾**：上述通过后，同步各提案规格并归档：`2026-11-07-tool-expansion`（9.1–9.3）、`2026-11-06-knowledge-base` 等。
