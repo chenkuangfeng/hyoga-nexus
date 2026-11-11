@@ -143,6 +143,8 @@ app.include_router(admin_resources_router)
 from nexus_api.http.wecom_apps import admin_router as wecom_admin_router, public_router as wecom_public_router
 app.include_router(wecom_admin_router)
 app.include_router(wecom_public_router)
+from nexus_api.http.channels import router as channels_router
+app.include_router(channels_router)
 from nexus_api.http.mcp import router as mcp_router
 app.include_router(mcp_router)
 from nexus_api.http.schedules import router as schedules_router

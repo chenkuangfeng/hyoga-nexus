@@ -170,9 +170,28 @@ async def callback_event(tenant_id: UUID, request: Request, msg_signature: str =
     body = (await request.body())[:65536].decode('utf-8', 'replace')
     message = service.decrypt_event(db, tenant_id, msg_signature=msg_signature, timestamp=timestamp, nonce=nonce,
                                     body=body)
-    handler = getattr(request.app.state, 'wecom_message_handler', None)
-    if message.findtext('MsgType') != 'event' and handler is not None:
-        handler(db, tenant_id, message)  # application messages go to IM channels (E4)
-    else:
+    if message.findtext('MsgType') == 'event':
         service.handle_contact_event(db, tenant_id, message)
+        return PlainTextResponse('success')
+    # An application message: route it to the agent's WeCom app channel (E4). Refusals are answered at once;
+    # replies to submitted Runs are sent by the worker when the Run stops.
+    from nexus_platform.channels import service as channels
+    result = channels.wecom_app_message(db, tenant_id, message)
+    if result.reply:
+        try:
+            with db.begin():
+                channel_id = _channel_for(db, tenant_id, message)
+                corp_id, secret, agentid = channels.wecom_app_target(db, channel_id)
+            wecom_api(request).send_text(corp_id, secret, agentid, message.findtext('FromUserName') or '',
+                                         result.reply)
+        except Exception:  # the refusal is a courtesy; the callback must still be acknowledged
+            pass
     return PlainTextResponse('success')
+
+
+def _channel_for(db: Session, tenant_id: UUID, message):
+    from sqlalchemy import select
+    from nexus_platform.persistence.models import AgentChannelRecord, WeComAppRecord
+    app = db.scalar(select(WeComAppRecord).where(WeComAppRecord.tenant_id == tenant_id,
+                                                 WeComAppRecord.wecom_agentid == (message.findtext('AgentID') or '')))
+    return db.scalar(select(AgentChannelRecord.id).where(AgentChannelRecord.wecom_app_id == app.id))

@@ -112,6 +112,10 @@ def update_policy(db: Session, principal: Principal, tenant_id: UUID, changes: d
             setattr(row, name, value)
         row.updated_by, row.updated_at = user.id, utc_now()
         db.flush()
+        from nexus_platform.channels.service import enforce_policy
+        stopped = enforce_policy(db, tenant_id)  # tightening stops the personal channels it no longer allows
+        if stopped:
+            clean = {**clean, 'channels_stopped': stopped}
         audit(db, tenant_id, user.id, "enterprise.policy_updated", "tenant", str(tenant_id),
               {"fields": sorted(clean)})
         return policy_view(get_policy(db, tenant_id))

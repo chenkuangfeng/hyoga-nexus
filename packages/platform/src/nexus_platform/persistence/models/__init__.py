@@ -48,6 +48,7 @@ from .mcp import (McpServiceRecord, McpServiceToolRecord, McpToolApprovalRecord,
 from .auth import LocalCredentialRecord, AuthSessionRecord, AuthStateRecord
 from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
 from .wecom import WeComCorpRecord, WeComAppRecord, WeComMemberRecord
+from .channel import AgentChannelRecord, ChannelSessionBindingRecord, ChannelMessageRecord, ChannelDeliveryRecord
 from .space import AgentShareRecord, KnowledgeBaseShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
 
 from .knowledge import (
@@ -145,6 +146,10 @@ __all__ = [
     'WeComCorpRecord',
     'WeComAppRecord',
     'WeComMemberRecord',
+    'AgentChannelRecord',
+    'ChannelSessionBindingRecord',
+    'ChannelMessageRecord',
+    'ChannelDeliveryRecord',
     'UserOrgUnitRecord',
     
     'OrgAuditRecord',

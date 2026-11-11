@@ -231,6 +231,9 @@ def _background_pass(factory, worker_id: str, knowledge_concurrency: int) -> boo
     from .wecom_sync import wecom_tick
     if wecom_tick(factory):
         return True
+    from .channels import delivery_tick
+    if delivery_tick(factory):
+        return True
     if knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency):
         return True
     if capture_tick(factory, worker_id):
@@ -313,6 +316,8 @@ async def run_async(factory, worker_id: str, stopped: threading.Event, *, epoch:
     lag_task = asyncio.create_task(_watch_loop_lag(stopped, active))
     from .sandbox_runtime import reap_periodically
     reap_task = asyncio.create_task(reap_periodically(stopped)) if background else None
+    from .channels import wechat_poller
+    wechat_task = asyncio.create_task(wechat_poller(factory, stopped, worker_id)) if background else None
     logger.info("Worker accepting Runs", extra={"worker_id": worker_id, "max_concurrent_runs": max_runs})
     try:
         while not stopped.is_set():
@@ -350,6 +355,8 @@ async def run_async(factory, worker_id: str, stopped: threading.Event, *, epoch:
         lag_task.cancel()
         if reap_task is not None:
             reap_task.cancel()
+        if wechat_task is not None:
+            wechat_task.cancel()
         if background_tasks:
             await asyncio.wait(set(background_tasks), timeout=5)
         background_pool.shutdown(wait=False)
