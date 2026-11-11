@@ -50,6 +50,7 @@ from .org import OrgUnitRecord, UserOrgUnitRecord, OrgAuditRecord
 from .wecom import WeComCorpRecord, WeComAppRecord, WeComMemberRecord
 from .channel import AgentChannelRecord, ChannelSessionBindingRecord, ChannelMessageRecord, ChannelDeliveryRecord
 from .audience import AgentAudienceRecord, KnowledgeBaseAudienceRecord
+from .usage import UsageLedgerRecord, UsageRecordedRunRecord, UsageLimitRecord
 from .space import AgentShareRecord, KnowledgeBaseShareRecord, SpaceInviteLinkRecord, SpaceJoinRequestRecord, SharedSpaceRecord, SharedSpaceTenantMemberRecord, SharedSpaceJoinRequestRecord
 
 from .knowledge import (
@@ -153,6 +154,9 @@ __all__ = [
     'ChannelDeliveryRecord',
     'AgentAudienceRecord',
     'KnowledgeBaseAudienceRecord',
+    'UsageLedgerRecord',
+    'UsageRecordedRunRecord',
+    'UsageLimitRecord',
     'UserOrgUnitRecord',
     
     'OrgAuditRecord',

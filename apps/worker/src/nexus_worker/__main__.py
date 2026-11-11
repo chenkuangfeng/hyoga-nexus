@@ -83,6 +83,7 @@ def run_once(factory, worker_id: str, *, stopped=None, **execution_options) -> b
         run_id = task.run_id if task is not None else None
     if run_id is not None:
         after_run(factory, run_id)
+        _record_usage(factory, run_id)
     return True
 
 
@@ -219,6 +220,24 @@ def run_loop(factory, worker_id: str, stopped: threading.Event, *, epoch: int, w
             stopped.wait(poll_interval)
 
 
+def _record_usage(factory, run_id) -> None:
+    """E6: add an ended Run's tokens to the usage ledger; a Run still waiting is added later by usage_tick."""
+    from nexus_platform.usage.service import record_run_usage
+    try:
+        with factory() as session, session.begin():
+            record_run_usage(session, run_id)
+    except Exception:
+        logger.warning("Recording run usage failed", extra={"run_id": str(run_id)}, exc_info=True)
+
+
+def usage_tick(factory) -> bool:
+    """Add ended Runs the after-run hook missed to the usage ledger (E6); True when any was added."""
+    from nexus_platform.usage.service import record_run_usage, unrecorded_runs
+    with factory() as session, session.begin():
+        added = [run_id for run_id in unrecorded_runs(session, limit=50) if record_run_usage(session, run_id)]
+    return bool(added)
+
+
 def _background_pass(factory, worker_id: str, knowledge_concurrency: int) -> bool:
     """One pass over the idle-time jobs; True when any did work. Runs on the background thread.
 
@@ -233,6 +252,8 @@ def _background_pass(factory, worker_id: str, knowledge_concurrency: int) -> boo
         return True
     from .channels import delivery_tick
     if delivery_tick(factory):
+        return True
+    if usage_tick(factory):
         return True
     if knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency):
         return True
@@ -259,6 +280,7 @@ def _after_run(factory, task_id) -> None:
         run_id = task.run_id if task is not None else None
     if run_id is not None:
         after_run(factory, run_id)
+        _record_usage(factory, run_id)
 
 
 #: Seconds between measurements of how late the event loop runs; a Run's lease lasts 60 s.

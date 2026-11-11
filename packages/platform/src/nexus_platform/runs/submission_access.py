@@ -30,6 +30,11 @@ class SqlAlchemySubmissionAccess(SqlAlchemyTenantAccess):
     def require_model(self, tenant_id: UUID, user_id: UUID, version_id: UUID) -> None:
         authorize_model(self.session, tenant_id, user_id, version_id)
 
+    def require_usage_quota(self, tenant_id: UUID, user_id: UUID) -> None:
+        """Refuse a new Run while a monthly token limit of the member is used up (429 quota_exhausted)."""
+        from nexus_platform.usage.service import require_quota
+        require_quota(self.session, tenant_id, user_id)
+
     def require_agent_run(self, tenant_id: UUID, user_id: UUID, agent_id: UUID) -> None:
         """Re-check the run permission on every submission so revoked grants stop new Runs.
 

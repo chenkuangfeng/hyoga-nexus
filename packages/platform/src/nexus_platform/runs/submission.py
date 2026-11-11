@@ -48,6 +48,10 @@ class RunSubmissionService:
                 work.access.require_resource(tenant_id, binding)
             work.access.require_agent_run(tenant_id, member.user_id, agent.agent_id)
             work.access.require_model(tenant_id, member.user_id, agent.model_profile_version_id)
+            # Monthly token limits (openspec 2026-11-11-enterprise-saas E6); adapters without it skip the check.
+            require_quota = getattr(work.access, 'require_usage_quota', None)
+            if require_quota is not None:
+                require_quota(tenant_id, member.user_id)
             model = work.catalog.model_version(agent.model_profile_version_id)
             if model is None:
                 raise Conflict("Agent model profile version is unavailable")
