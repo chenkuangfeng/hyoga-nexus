@@ -18,7 +18,7 @@
 - [ ] E1.4 私有知识库：`can_read` 按可见范围判断；修改可见范围的冲突检查；智能体发布时的绑定范围检查。
 - [ ] E1.5 企业策略：读取与修改接口（`policy:manage`）；在创建智能体、模型选择与 Run 准备、共享到共享空间三处检查。
 - [ ] E1.6 企业级管理角色：`policy:manage`、`audit:read_content`；内置 `security_admin` 与 `auditor`；审计正文的查看权限与留痕。
-- [ ] E1.7 平台管理员的跨企业清单按需要确认的项 6 收窄。
+- [ ] E1.7 删除跨企业的 `/admin/tenants`、`/admin/summary`、`/admin/agents`、`/admin/sessions` 接口及对应服务函数与测试。
 - [ ] E1.8 测试：注册即创建企业、私有库可见性矩阵、绑定范围拦截、三项策略、内置角色不可删除、不能新建个人空间。
 - [ ] E1.9 PostgreSQL 门禁：完成路线图 2.9，并覆盖本阶段新增的列与表。
 - [ ] E1.10 文档：`docs/architecture.md` 2.10、2.11、`docs/roadmap.md`（新增企业化步骤，2.9 改为前置门禁）、`configs/README.md`、`README.md`。
@@ -27,7 +27,9 @@
 
 - [ ] E2.1 `/auth/me` 返回 `entries`；管理接口前缀 `/api/v1/tenants/{id}/admin/...`，旧路径保留一个版本周期。
 - [ ] E2.2 路由与布局拆成 `/workspace` 与 `/admin`，管理后台独立分包；`/platform/*` 重定向。
-- [ ] E2.3 `config/settingsAccess.ts` 改为按入口和权限归属（`design.md` 4.2–4.4），`Settings.vue` 拆为工作台的个人设置、管理后台的各个分区，部署级配置移到 `/platform-admin`。
+- [ ] E2.3 `config/settingsAccess.ts` 改为按入口和权限归属（`design.md` 4.2–4.3），`Settings.vue` 拆为工作台的个人设置与管理后台的各个分区（含存储与检索）。
+- [ ] E2.3a 删除 `/platform-admin` 与 `views/system/` 下的平台页面、系统设置相关的设置分区与 `requiresSystemAdmin` 路由守卫；`configs/README.md` 写明部署级配置的位置（`design.md` 4.4）。
+- [ ] E2.3b 外部向量库与存储后端的连接接入网络出口策略，并补私有地址被拒的测试。
 - [ ] E2.4 工作台导航：“对话”“我的”“企业共享”“个人设置”四组。
 - [ ] E2.5 管理后台：企业策略、知识库治理、智能体治理（停用、删除）、运行状况（unknown 列表与解除）、内置角色。
 - [ ] E2.6 手机宽度布局（工作台）；浏览器测试覆盖两个应用的权限跳转与手机布局。

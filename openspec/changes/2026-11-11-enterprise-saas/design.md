@@ -1,6 +1,6 @@
 # 设计
 
-本文件写 E0–E2 的设计、四个前端入口的功能清单，以及 E3–E6 的要点。各阶段开始前补齐接口与表结构，并经用户确认。
+本文件写 E0–E2 的设计、前端入口的功能清单与部署级配置的去向，以及 E3–E6 的要点。各阶段开始前补齐接口与表结构，并经用户确认。
 
 ## 1. 租户模型
 
@@ -80,8 +80,8 @@ def can_maintain_content(db, kb, user_id) -> bool:
 |---|---|---|---|
 | 员工工作台 `/workspace` | 企业全体员工；企微 H5 打开的就是它 | 桌面与手机 | E2 拆分 |
 | 企业管理后台 `/admin` | 有治理权限的企业成员 | 只做桌面 | E2 拆分 |
-| 平台管理 `/platform-admin` | 部署运维（`users.is_platform_admin`） | 只做桌面 | 只接收从设置页移入的部署级配置 |
 | 对外嵌入页 `/embed/:channelId`（`embed.html`） | 企业外部访客 | 嵌入第三方网页，桌面与手机 | 只列清单，后端另提案 |
+| ~~平台管理 `/platform-admin`~~ | — | — | E2 删除；部署级配置改由配置文件与命令行管理，见 4.4 |
 
 状态列的含义：**已有** = 后端与页面都已接通；**E0–E6** = 本提案对应阶段新增或改造；**待实现** = 页面已存在（WeKnora 副本或占位），Nexus 后端尚未接通，不在本提案范围。
 
@@ -140,6 +140,7 @@ def can_maintain_content(db, kb, user_id) -> bool:
 | | 技能导入、技能提交的审核 | `tools:manage` | 已有 |
 | | MCP 服务：登记、发现工具、启用工具、单个工具的风险策略、OAuth 授权 | `tools:manage` | 已有 |
 | | 联网搜索、对话历史、企业级记忆开关 | `tools:manage` | 已有 |
+| 存储与检索 | 向量库（内置或外部连接）、原文件存储后端、解析引擎配置、连接测试 | owner、admin | 已有（按企业保存，从设置页移入）；E2 补网络出口策略 |
 | 智能体治理 | 全企业智能体清单（含私有）、查看配置与版本、停用、删除 | owner、admin | 已有（列表），E2 补停用与删除 |
 | 知识库治理 | 全企业知识库清单（含私有）、修改设置与可见范围、共享到共享空间、删除 | owner、admin | 已有（共享），E1 补可见范围 |
 | 共享空间 | 创建与管理共享空间、邀请其他企业、成员企业的级别 | owner、admin | 已有，E1 受 `external_sharing` 约束 |
@@ -148,22 +149,23 @@ def can_maintain_content(db, kb, user_id) -> bool:
 | 审计 | 审计查询（元数据）；查看正文（另需权限并留痕） | `audit:read`、`audit:read_content` | 已有（查询），E1 补正文权限 |
 | | 审计导出 | `audit:read` | E6 |
 
-### 4.4 平台管理 `/platform-admin`
+### 4.4 部署级配置（取消平台管理界面后的去向）
 
-只面向部署运维。企业开通、停用与计费不在本提案范围。
+不提供 Web 界面。判断标准：配置项一旦改动会影响其他企业或宿主机，就属于部署级；只影响本企业的，放进企业管理后台。
 
-| 模块 | 功能 | 状态 |
+| 原平台管理或设置页中的项 | 去向 | 理由 |
 |---|---|---|
-| 平台概览 | 企业数、共享空间数的只读汇总 | 已有 |
-| 跨企业清单 | 全平台的企业、智能体、会话列表（`/admin/tenants`、`/admin/agents`、`/admin/sessions`） | 已有；SaaS 下建议只保留元数据（名称、所属企业、时间、数量），不返回会话内容（需要你确认的项 6） |
-| 平台管理员 | 指定或取消平台管理员 | 已有（命令行），页面待实现 |
-| 内置技能 | 从仓库 `skills/` 导入内置技能 | 已有 |
-| 部署配置 | 向量库、解析引擎、存储、联网搜索后端、沙箱档位与隔离验收结果（从设置页移入，E2） | 已有（配置文件与命令行），页面待实现 |
-| 模型目录 | 供应商与模型的预设目录 | 待实现 |
-| 任务队列 | 队列深度、运行中与排队的任务 | 待实现 |
-| 平台 API Key | 平台级接口密钥 | 待实现 |
-| 系统审计 | 平台管理员操作的审计 | 待实现 |
-| 系统设置 | 全局开关（例如注册开关），版本信息 | 待实现（目前在 `configs/nexus.toml`） |
+| 向量库、存储后端、解析引擎 | 企业管理后台（4.3“存储与检索”） | 已按企业保存（`vector_stores`、`storage_backends` 带 `tenant_id`），只影响本企业 |
+| 内置向量库与原文件目录（`[knowledge]`） | `configs/nexus.toml` | 宿主机路径，所有企业共用 |
+| 沙箱档位与隔离验收（`[sandbox]`、`--sandbox-check`） | 配置文件与命令行 | 关系到宿主机安全 |
+| 联网搜索后端与密钥（`[web]`） | 配置文件 | 全部署共用一份密钥 |
+| 模型网络出口、连接池、并发与限流（`[model_network]`、`[model_connection_pool]`、`[worker]`、`[platform]`、`[model_limits]`） | 配置文件 | 共享资源，改动影响所有企业 |
+| 注册开关、认证与主密钥（`[auth]`、`[security]`） | 配置文件与环境变量 | 部署安全 |
+| 平台管理员 | 命令行 `set-platform-admin` | 已有 |
+| 内置技能导入 | 命令行 `import-builtin-skills` | 已有 |
+| 结果未知的会话 | 企业管理后台（本企业）；命令行 `list-unknown` / `resolve-unknown`（全部署） | 已有 |
+| 平台概览、跨企业清单（`/admin/tenants`、`/admin/summary`、`/admin/agents`、`/admin/sessions`） | 删除 | 平台运维不应通过 Web 看到企业数据 |
+| 模型目录、任务队列、平台 API Key、系统审计、系统设置页面 | 删除（均为未接后端的 WeKnora 副本） | 以后做运营台时按需另提 |
 
 ### 4.5 对外嵌入页 `/embed/:channelId`
 
@@ -182,10 +184,10 @@ def can_maintain_content(db, kb, user_id) -> bool:
 - **构建**：`apps/web` 保持一个工程，路由分为 `/workspace/*` 与 `/admin/*` 两棵，各有自己的布局组件。`/admin` 下的页面全部用动态 `import()` 引入，并在 Vite 中配置独立的 chunk 组，员工端首屏不加载管理页面的代码。现有 `/platform/*` 路由重定向到新位置，保留一个版本周期。`embed.html` 仍是独立的 Vite 入口。
 - **入口判断**：`/auth/me` 增加 `entries`：
   - `workspace`：当前企业的有效成员；
-  - `admin`：当前企业中持有任一治理权限（`members:manage`、`roles:manage`、`org:manage`、`policy:manage`、`audit:read`、`models:manage`、`tools:manage`），或是 owner、admin；
-  - `platform_admin`：`users.is_platform_admin`。
+  - `admin`：当前企业中持有任一治理权限（`members:manage`、`roles:manage`、`org:manage`、`policy:manage`、`audit:read`、`models:manage`、`tools:manage`），或是 owner、admin。
   路由守卫只读取 `entries`。
-- **归属表**：`config/settingsAccess.ts` 改为一张表，每一项记录 `entry`（`workspace`、`admin` 或 `platform_admin`）与所需权限，内容与 4.2–4.4 一致，仍然是前端唯一的依据。
+- **归属表**：`config/settingsAccess.ts` 改为一张表，每一项记录 `entry`（`workspace` 或 `admin`）与所需权限，内容与 4.2–4.3 一致，仍然是前端唯一的依据。
+- **网络出口**：外部向量库与存储后端的连接（保存、测试、实际读写）复用模型调用的目的地址策略（只允许公网 HTTPS、检查 DNS 解析结果并固定 IP、禁用重定向），私有地址只有列入 `[model_network]` 白名单时才允许。
 - **“我的”与“企业共享”**：由接口字段区分（智能体与知识库的列表接口返回 `owned_by_me`、`visibility`），前端不自行推断。
 - **管理接口前缀**：新写的管理接口放在 `/api/v1/tenants/{id}/admin/...`；已有的管理接口在 E2 中迁移，并保留旧路径一个版本周期。
 
