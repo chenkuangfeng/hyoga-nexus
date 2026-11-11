@@ -79,7 +79,7 @@ def can_maintain_kb_content(db, kb, user_id) -> bool:
 
 ### 3.3 企业策略
 
-`enterprise_policies(tenant_id PK, self_build_agents, self_build_org_unit_ids JSON, personal_models, external_sharing, retention_days, updated_by, updated_at)`；企业创建时写入默认行。读取对所有成员开放，修改需要 `policy:manage`。检查点：创建个人智能体（`self_build_agents`，企业 owner、admin 不受限）；模型选择、发布与 Run 准备（`personal_models`）；共享到共享空间（`external_sharing`）。
+`enterprise_policies(tenant_id PK, self_build_agents, self_build_org_unit_ids JSON, personal_models, external_sharing, personal_wecom_channels, personal_external_channels, retention_days, updated_by, updated_at)`；企业创建时写入默认行。读取对所有成员开放，修改需要 `policy:manage`。检查点：创建个人智能体（`self_build_agents`，企业 owner、admin 不受限）；模型选择、发布与 Run 准备（`personal_models`）；共享到共享空间（`external_sharing`）。
 
 ### 3.4 企业级管理角色
 
@@ -192,6 +192,7 @@ apps/web/                         pnpm workspace 根（不是应用）
 | 对话 | 流式回复、思考摘要、引用与证据、附件、工具调用过程、本人确认与“本会话允许”、取消与追问、会话分叉、会话管理、本次生成的文件、运行停滞提示、解除阻塞 | 已有 |
 | 单智能体模式 | 企微 `agent` 用途应用打开后直接进入该智能体的对话，只显示会话列表、对话区与产物 | E2、E3 |
 | 我的智能体（个人） | 创建、编辑、试运行、发布、停用、删除；共享给角色或共享空间（对方只能使用） | 已有，E0 改为只有创建者可维护，E1 受企业策略约束 |
+| | 渠道：企微智能机器人（按策略提交审核）、微信扫码绑定、QQ 扫码绑定；查看渠道状态与审核结果 | E4 |
 | | 共享给部门、成员 | E5 |
 | 我的知识库（个人） | 创建、可见范围（私有 / 全企业）、文档上传与解析、分块与问答编辑、检索测试、Wiki | 已有，E0、E1 改造 |
 | 我维护的企业知识库 | 被指定为知识库管理员的企业知识库：维护文档、分块与问答（不能改设置、可见范围、删除） | E0 |
@@ -213,9 +214,10 @@ apps/web/                         pnpm workspace 根（不是应用）
 | | 企微同步的部门（只读）与同步状态 | `org:manage` | E3 |
 | 角色与权限 | 自定义角色（菜单与 API 权限）、按部门批量分配 | `roles:manage` | 已有 |
 | | 内置角色 `security_admin`、`auditor`；新权限 `enterprise_agents:manage`、`enterprise_kbs:manage` | `roles:manage` | E0、E1 |
-| 企业策略 | 自建范围、个人模型、外部共享、留存天数 | `policy:manage` | E1 |
+| 企业策略 | 自建范围、个人模型、外部共享、个人企微机器人（审核 / 开放 / 禁止）、个人微信与 QQ 渠道、留存天数 | `policy:manage` | E1（渠道两项 E4 生效） |
 | 企业微信 | 企业绑定（corp_id、通讯录密钥、回调参数）；自建应用列表（用途、agentid、密钥、绑定的智能体、主页地址一键复制、是否用于扫码登录）；通讯录同步 | `org:manage` | E3 |
-| 企业智能体 | 创建、编辑、试运行、发布、停用、删除；分配给角色（E5 起含部门、成员）；IM 渠道配置 | `enterprise_agents:manage` | E0（复用现有编辑器），E4（渠道） |
+| 企业智能体 | 创建、编辑、试运行、发布、停用、删除；分配给角色（E5 起含部门、成员）；企微渠道配置 | `enterprise_agents:manage` | E0（复用现有编辑器），E4（渠道） |
+| 渠道审核与总览 | 个人企微机器人的待审核列表（通过、驳回）；全企业渠道总览（类型、所属智能体、创建者、状态），可停用任一渠道 | `enterprise_agents:manage` | E4 |
 | 企业知识库 | 创建、设置、可见范围、删除、共享到共享空间；指定知识库管理员；维护内容 | `enterprise_kbs:manage` | E0 |
 | 个人资源治理 | 全企业的个人智能体与个人知识库清单；查看、停用、删除、转为企业资源 | owner、admin | E0 |
 | 模型 | 企业模型供应商与 Key、连接测试、各类型默认模型 | `models:manage` | 已有 |
@@ -290,30 +292,56 @@ tenant_wecom_apps(id PK, tenant_id, wecom_agentid, secret_ciphertext, name,
 
 ## 7. E4 IM 渠道
 
+参考实现：WeKnora `internal/im/`（`wecom/ws_adapter.go` 企微智能机器人长连接、`wechat/` iLink 扫码与长轮询、`qqbot/` QQ 官方机器人、`service.go` 与 `qaqueue.go` 的会话与排队、`channel_security.go`）；octop-gateway `channels/weixin/`、`channels/qq/`（含 `login_qr.py` 扫码绑定）、`manager.py`（按会话合批）、`constraints.py`（平台限制与限流）；deer-flow `app/channels/`（`wechat_qr_login.py`、`leadership.py` 连接归属）。实施前按 `AGENTS.md` 比较这些实现后选型。
+
 ### 7.1 数据
 
 ```text
-agent_channels(id PK, tenant_id, agent_id, kind CHECK IN ('wecom_bot','wecom_app'),
-               config_ciphertext, status, created_by, created_at, updated_at)
-  wecom_bot：智能机器人的 bot id、回调 token 与 encoding_aes_key
-  wecom_app：引用 tenant_wecom_apps.id（purpose = 'agent' 且绑定同一智能体）
+agent_channels(id PK, tenant_id, agent_id, kind CHECK IN ('wecom_bot','wecom_app','wechat','qq'),
+               owner_user_id,            -- 创建渠道的人；微信、QQ 渠道的唯一对话者
+               config_ciphertext,        -- wecom_bot：bot id 与 secret；wechat：iLink token 与 bot 账号；
+                                         -- qq：AppID 与 AppSecret；wecom_app：引用 tenant_wecom_apps.id
+               bound_external_id NULL,   -- 微信、QQ：绑定者在该平台的用户 id（认领后写入）
+               claim_code_hash NULL,     -- QQ：首次对话的绑定码（一次性、限时）
+               status CHECK IN ('pending_review','active','rejected','disabled','expired'),
+               reviewed_by NULL, reviewed_at NULL, review_note NULL,
+               lease_owner NULL, lease_until NULL,   -- 长连接 / 长轮询的持有者
+               created_at, updated_at)
 channel_identities / channel_session_bindings：沿用架构 2.14 的 ChannelIdentity、ChannelSessionBinding，
-  会话键为 (channel_id, 企微会话 id, user_id)
+  会话键为 (channel_id, 平台会话 id, user_id)
 ```
 
-- 一个渠道只绑定一个智能体；一个智能体可以有多个渠道。企业智能体的渠道由 `enterprise_agents:manage` 配置；个人智能体能否配置见需要确认的项 2。
-- 对外嵌入页将来作为 `kind = 'embed'` 加入同一张表（另提案）。
+### 7.2 创建与状态
 
-### 7.2 处理流程
+| 渠道 | 谁能创建 | 初始状态 |
+|---|---|---|
+| `wecom_bot`、`wecom_app`（企业智能体） | `enterprise_agents:manage` | `active` |
+| `wecom_bot`（个人智能体） | 智能体创建者 | `personal_wecom_channels`：`review` → `pending_review`；`open` → `active`；`disabled` → 拒绝创建 |
+| `wechat`、`qq`（个人智能体） | 智能体创建者 | `personal_external_channels = true` 时，扫码或认领完成后为 `active`；否则拒绝创建 |
 
-1. 回调验签解密，按消息 id 去重。
-2. 发送者 `userid` → `(wecom, corp_id, userid)` → Nexus 成员；找不到或已离职，回复“未开通”。
-3. 检查 `can_use_agent`，不满足回复“无权限”。
-4. 找到或创建该（渠道、会话、成员）的会话，以该成员身份提交 Run（与工作台相同的准入、预算与授权）。
-5. 流式结果按渠道限制合并后回复；超长内容截断并附工作台链接。需要人工确认的工具调用，回复“请到工作台确认”并附链接。
-6. 只在企微明确拒绝时重试投递（沿用路线图 9.1 的约定）。
+- 审核：管理后台“渠道审核”列出 `pending_review`，可以查看智能体（只读）、渠道配置（不含密钥），然后通过或驳回（填写原因）。通过、驳回、停用都写入审计并通知创建者（工作台消息）。
+- 策略收紧时（例如改为 `disabled`、关闭 `personal_external_channels`），已启用的对应渠道转为 `disabled`。
+- 微信 iLink 令牌失效时转为 `expired`，在渠道页提示重新扫码。
+- 智能体停用或删除、渠道创建者离职（成员身份撤销）时，渠道转为 `disabled`。
 
-实施前在 E3.0 一并核对企微智能机器人的接收方式（回调或长连接）、单聊与群聊 @ 的消息格式、流式回复能力与频率限制；企微群机器人 Webhook 只能发送，不作为对话渠道。
+### 7.3 连接管理
+
+- worker 内新增渠道连接管理器：周期性领取 `active` 且租约过期的渠道（`lease_owner`、`lease_until`，与 Run 租约同一模式），为每个渠道维持一个长连接（企微智能机器人 WebSocket、QQ 网关 WebSocket）或长轮询（微信 iLink）；续租失败立即断开，保证同一渠道同一时刻只有一个持有者。
+- 每个 worker 的渠道连接数上限由 `[channels].max_connections_per_worker` 配置；重连使用指数退避与抖动。
+- 网络出口：只允许连接各平台的固定域名（企微、iLink、QQ），不经过模型出口白名单的私有地址例外。
+
+### 7.4 消息处理
+
+1. 收到消息，按平台消息 id 去重。
+2. 确定身份：
+   - 企微渠道：发送者 `userid` → `(wecom, corp_id, userid)` → Nexus 成员；找不到或已离职回复“未开通”；
+   - 微信、QQ 渠道：发送者必须等于 `bound_external_id`，否则不处理；QQ 渠道未认领时，只接受绑定码消息，校验通过后写入 `bound_external_id`；身份即 `owner_user_id`。
+3. 检查 `can_use_agent`（个人智能体的创建者总是满足），以及渠道状态为 `active`、所属企业策略仍允许。
+4. 找到或创建（渠道、会话、成员）的会话，以该成员身份提交 Run（与工作台相同的准入、预算、授权与审计）。
+5. 流式结果按平台限制合并后回复；超长内容截断并附工作台链接。需要人工确认的工具调用，回复“请到工作台确认”并附链接。
+6. 只在平台明确拒绝时重试投递。
+
+实施前（E4.0）核对：企微智能机器人长连接的协议与限流、单聊与群聊 @ 的消息格式；腾讯 iLink Bot 接口的扫码流程、令牌有效期与使用条款；QQ 官方机器人对个人开发者的开放范围、扫码创建绑定流程、私聊（C2C）的主动与被动回复限制。结论记入本节；某个平台条件不满足时，该渠道标记为 `unverified`，不在界面上提供。
 
 ## 8. E5–E7（要点）
 
