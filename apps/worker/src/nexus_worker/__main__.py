@@ -171,6 +171,10 @@ def run_loop(factory, worker_id: str, stopped: threading.Event, *, epoch: int, w
                 retention_tick(factory)
             if background and not processed:
                 processed = embedding_tick(factory, _worker_loop()) > 0
+            if background:
+                # Idle and orphaned sandbox containers (openspec 2026-11-07-tool-expansion 3.3); on the loop that ran the Runs.
+                from .sandbox_runtime import reap_if_due
+                reap_if_due(_worker_loop())
         except Exception:
             logger.error("Worker task failed; task lease retained for recovery", extra={"worker_id": worker_id}, exc_info=True)
             processed = False
@@ -269,6 +273,8 @@ async def run_async(factory, worker_id: str, stopped: threading.Event, *, epoch:
             logger.error("Background job failed", extra={"worker_id": worker_id}, exc_info=True)
 
     lag_task = asyncio.create_task(_watch_loop_lag(stopped, active))
+    from .sandbox_runtime import reap_periodically
+    reap_task = asyncio.create_task(reap_periodically(stopped)) if background else None
     logger.info("Worker accepting Runs", extra={"worker_id": worker_id, "max_concurrent_runs": max_runs})
     try:
         while not stopped.is_set():
@@ -304,6 +310,8 @@ async def run_async(factory, worker_id: str, stopped: threading.Event, *, epoch:
             if pending:
                 logger.warning("%d Runs still running after the stop timeout; their leases will expire", len(pending))
         lag_task.cancel()
+        if reap_task is not None:
+            reap_task.cancel()
         if background_tasks:
             await asyncio.wait(set(background_tasks), timeout=5)
         background_pool.shutdown(wait=False)

@@ -22,6 +22,28 @@ from nexus_core.sandbox import SandboxError
 _ID = re.compile(r'[A-Za-z0-9_-]{1,64}')
 
 
+class _TouchingExecutor:
+    """Forwards to the real executor and records the use time around each command.
+
+    `reap` judges idleness by the last use. Without this, a Run that outlasts `idle_seconds` would have its
+    container removed in the middle of a command, because the time was only set when the session was created.
+    Other attributes (mount paths, `close`, `supports_background`) pass through unchanged.
+    """
+
+    def __init__(self, inner, touch):
+        self._inner, self._touch = inner, touch
+
+    async def run(self, *args, **kwargs):
+        self._touch()
+        try:
+            return await self._inner.run(*args, **kwargs)
+        finally:
+            self._touch()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 class SandboxManager:
     """Creates sessions and reclaims idle ones. One instance per process."""
 
@@ -55,6 +77,7 @@ class SandboxManager:
             executor = LocalExecutor(files.roots, self.settings.env_passthrough, skills, envs)
         self._last_used[key] = time.monotonic()
         self._executors[key] = executor
+        executor = _TouchingExecutor(executor, lambda: self._last_used.__setitem__(key, time.monotonic()))
         return SandboxSession(files, executor, default_timeout=default_timeout,
                               max_timeout=self.settings.exec_timeout_max_seconds, output_limit=output_limit, skills_dir=skills,
                               envs_dir=envs)

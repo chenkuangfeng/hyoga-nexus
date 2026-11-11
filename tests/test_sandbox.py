@@ -332,6 +332,18 @@ def test_reap_removes_idle_and_unknown_containers_only(tmp_path, fake_docker):
     assert run(manager.docker.list_managed()) == [container_name('t1', 's1')]
 
 
+def test_a_command_in_progress_keeps_its_container_from_being_reaped(tmp_path, fake_docker):
+    """The use time is renewed by each command, so a Run that outlasts `idle_seconds` keeps its container."""
+    binary, _calls = fake_docker
+    settings = docker_settings(tmp_path, idle_seconds=30)
+    manager = SandboxManager(settings, docker=DockerBackend(settings, binary=binary))
+    session = manager.session('t1', 's1')
+    manager._last_used['t1/s1'] -= 100  # created long ago; the Run has been working since
+    run(session.exec('true', cwd='/workspace', timeout_seconds=5))
+    assert run(manager.reap()) == []
+    assert run(manager.docker.list_managed()) == [container_name('t1', 's1')]
+
+
 def test_local_backend_has_no_docker_to_reap(tmp_path):
     assert run(SandboxManager(local_settings(tmp_path)).reap()) == []
 
@@ -409,7 +421,7 @@ def test_bwrap_limits_wrap_the_jail_without_a_shell_injection_path(tmp_path):
 def test_bwrap_manager_builds_an_executor_without_docker(tmp_path):
     manager = SandboxManager(bwrap_settings(tmp_path))
     session = manager.session('t1', 's1')
-    assert manager.docker is None and isinstance(session.executor, BwrapExecutor)
+    assert manager.docker is None and isinstance(session.executor._inner, BwrapExecutor)
     assert run(manager.reap()) == []
 
 

@@ -41,7 +41,7 @@
 - [x] 3.3 `backends/docker`：容器生命周期、卷、`exec`、资源限制、超时与取消杀进程组、输出上限、环境从零构造。
   - `backends/docker`、`backends/local`（开发替身）、`backends/output`；用记录型 `docker` 替身脚本测试参数与流程。**未在真实守护进程上运行**：当前开发机的用户无权访问 Docker 套接字。取消时按命令标记杀进程组的脚本只能在真实容器里验证，已列入验收的 `cancellation` 项。
 - [x] 3.4 `lease`：Run 持有、空闲回收、崩溃后遗留容器回收。
-  - `manager`：目录、容器名、空闲与孤儿回收（`reap`）。后台定期调用 `reap` 尚未接入 worker 循环。
+  - `manager`：目录、容器名、空闲与孤儿回收（`reap`）。worker 每 60 秒回收一次（异步循环用定时任务，同步循环在空闲时检查）；每条命令前后刷新使用时间，超过 `idle_seconds` 的长 Run 不会被误删容器。
 - [x] 3.5 `[sandbox]` 部署配置读取与校验（`deployment.py`），配置错误不泄露细节；`configs/README.md` 与示例同步。
   - `[sandbox]` 读取与校验、`configs/nexus.example.toml`、`configs/README.md`、`.gitignore`。
 - [ ] 3.8 `bwrap` 后端（追加，用户确认）：`backends/bwrap`、`backend = "bwrap"`、管理器与验收接入、`exec_async` 明确拒绝。

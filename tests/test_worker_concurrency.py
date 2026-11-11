@@ -152,3 +152,28 @@ def test_worker_settings_defaults_and_validation(deployment_config):
     deployment_config("[api]\nthreads = 'many'\n")
     with pytest.raises(DeploymentConfigError):
         api_settings()
+
+
+def test_sandbox_reclamation_runs_only_when_a_manager_exists_and_the_interval_passed(monkeypatch):
+    """`reap_if_due` is a no-op without managers, and otherwise reclaims at most once per interval."""
+    import asyncio
+    from nexus_worker import sandbox_runtime
+
+    calls = []
+
+    async def fake_reap():
+        calls.append(1)
+
+    monkeypatch.setattr(sandbox_runtime, "reap_idle", fake_reap)
+    monkeypatch.setattr(sandbox_runtime, "_last_reap", 0.0)
+    loop = asyncio.new_event_loop()
+    try:
+        monkeypatch.setattr(sandbox_runtime, "managers", lambda: [])
+        sandbox_runtime.reap_if_due(loop)
+        assert calls == []
+        monkeypatch.setattr(sandbox_runtime, "managers", lambda: [object()])
+        sandbox_runtime.reap_if_due(loop)
+        sandbox_runtime.reap_if_due(loop)  # within the interval
+        assert calls == [1]
+    finally:
+        loop.close()
