@@ -888,7 +888,7 @@ onBeforeUnmount(() => {
   border-radius: var(--app-radius-md);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-primary);
-  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font: var(--app-text-sm)/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   white-space: pre-wrap;
   word-break: break-word;
 }

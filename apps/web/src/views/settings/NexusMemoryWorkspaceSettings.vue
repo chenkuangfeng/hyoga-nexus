@@ -262,7 +262,7 @@ onMounted(load)
   margin-left: 6px;
   padding: 0 6px;
   border-radius: var(--app-radius-sm);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   font-weight: 400;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);

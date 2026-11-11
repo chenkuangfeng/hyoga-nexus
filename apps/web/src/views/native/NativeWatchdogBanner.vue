@@ -85,7 +85,7 @@ function submitHint() {
 }
 
 .watchdog-banner__icon {
-  font-size: 20px;
+  font-size: var(--app-text-3xl);
   color: var(--td-warning-color);
   flex-shrink: 0;
   margin-top: 2px;
