@@ -1,6 +1,6 @@
 # 实施任务
 
-状态：草案第三版，待用户最终确认（2026-11-11）；需要确认的项已全部确认。确认前不开始编码。各阶段开始前在 `design.md` 补齐细节并经确认，实施中发现的追加工作写入本文件。
+状态：已确认并实施中（2026-11-12）。E0、E1（除 PostgreSQL 门禁）、E3–E7 的后端已完成；E2 前端暂缓；各阶段未完成项与偏离见各节的实施说明。确认前不开始编码。各阶段开始前在 `design.md` 补齐细节并经确认，实施中发现的追加工作写入本文件。
 
 ## E0 资源归属与维护权
 
@@ -38,6 +38,7 @@
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
 - [ ] E2.9 文档：`AGENTS.md` 前端命令（并更正其中“Element Plus”的旧描述）；`apps/web` 父模块文档与三个项目的 `README.md`；`docs/architecture.md` 1.4 与 2.15；反向代理示例。
+- 暂缓说明（2026-11-12）：E2.1–E2.5、E2.8、E2.9 未开始。本机内存约 1.8GB（可用约 780MB），`pnpm build` 与 `vue-tsc` 都需要 2GB 以上，无法构建或做类型检查；拆分要移动约 900 个 Vue/TS 文件并改写导入，在无法验证的情况下进行风险过高，等用户确认做法（在内存充足的机器或 CI 上进行，或接受只做语法检查）后再开始。前端所需的后端接口均已就绪：`/auth/me` 的 `entries`、`/admin/agents`、`/admin/knowledge/bases`（含知识库管理员、转为企业资源）、`/admin/policy`、`/admin/wecom`、`/admin/channels`、`/agents/{id}/channels`、`/agents/{id}/audience`、`/knowledge/bases/{id}/audience`、`/admin/usage`、`/usage/me`、`/admin/usage/limits`、`/admin/audit/export`。
 
 ## E3 企业微信：企业、多应用与登录
 
