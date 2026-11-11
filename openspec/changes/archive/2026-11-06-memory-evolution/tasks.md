@@ -111,13 +111,14 @@
   - 已完成（2026-11-06）：我的记忆页的关注主题列表（次数/阈值、是否已提议、别名）。
 - [x] 6.3 `MemoryProviderPort`、`BuiltinMemoryProvider`、外部提供方注册、超时与卡死保护、测试替身（D6）。
   - 端口在 `nexus_core.runtime.memory`（同步钩子 `snapshot_block`、`prefetch`、`sync_turn`，上下文只提供 `propose`）；平台 `memory/providers.py` 负责注册、按空间选择、截止时间（8 秒 / 30 秒）、连续 3 次失败暂停 10 分钟、`memory.provider_failed` 审计、结果包裹转义。内置记忆就是现有的快照、召回与工具，不另包一层 `BuiltinMemoryProvider` 类，`builtin` 名称保留。hermes 的会话结束与子任务钩子未接入：Nexus 目前没有对应事件。
-- [ ] 6.4 门禁：路线图第 6 步知识检索与引用登记可用后，实施 `memory_doc_affinity`、Run 完成时的记录、重排加权、管理入口（D5）。门禁不满足时保持未勾选。
+- [x] 6.4 门禁：路线图第 6 步知识检索与引用登记可用后，实施 `memory_doc_affinity`、Run 完成时的记录、重排加权、管理入口（D5）。门禁不满足时保持未勾选。
+  - 门禁已满足（知识库 K1 检索与 `[ID:n]` 引用登记可用）。后端（提交 9b7b6ff）：`memory/doc_affinity.py`、`memory_doc_affinity` 表与迁移、`attach_citations` 在 Run 完成时记录（每 Run 每文档一次，随记忆开关）、`search` 在重排后加权并重排序（≥2 次引用，×(1+0.15×min(hits,8)/8)，wiki 页与 FAQ 条目不计）、`GET/DELETE /memory-doc-affinity`；测试 `tests/test_memory_doc_affinity.py`（3 项）。前端（2026-11-11）：「我的记忆」新增「文档亲和」标签，列出文档、引用次数与加权，支持单条与全部清除；纯函数单测 1 项，六种语言文案；**未在浏览器里验证**。
 - [x] 6.5 pytest 与前端单元测试；文档同步。
   - `tests/test_memory_evolution_stage6.py`（9 项），全量 854 通过。
 
 ## 7. 规格与归档
 
-- [ ] 7.1 新增 `openspec/specs/memory-evolution/spec.md`，由本变更的 `specs/` 归档生成。
+- [x] 7.1 新增 `openspec/specs/memory-evolution/spec.md`，由本变更的 `specs/` 归档生成。
 - [x] 7.2 `docs/roadmap.md`：第 3 步记忆相关子项和第 9.3 节的状态。
-- [ ] 7.3 全部阶段完成后归档本变更。D5 未满足门禁时，说明保留项后再归档，或者等门禁满足后归档。
+- [x] 7.3 全部阶段完成后归档本变更。D5 未满足门禁时，说明保留项后再归档，或者等门禁满足后归档。
   - 用户决定（2026-11-06）：等 D5 门禁满足、6.4 实施后再归档；在此之前本变更保持打开，7.1 随归档一并完成。

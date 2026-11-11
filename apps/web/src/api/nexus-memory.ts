@@ -52,7 +52,7 @@ export async function archiveMemoryEntry(tenantId: string, entryId: string): Pro
 export * from './nexus-memory-types'
 import {
   asNumber, asString, memoryListFromResponse, type CaptureSettings, type CaptureUsage, type MemoryDraft, type MemoryEntry,
-  type MemoryPreferences, type MemoryTopic, type SpaceMemorySettings, type WriteMode,
+  memoryDocAffinityFromResponse, type MemoryDocAffinity, type MemoryPreferences, type MemoryTopic, type SpaceMemorySettings, type WriteMode,
 } from './nexus-memory-types'
 
 export async function getSpaceMemorySettings(tenantId: string): Promise<SpaceMemorySettings> {
@@ -149,4 +149,15 @@ export async function listMemoryTopics(tenantId: string): Promise<MemoryTopic[]>
     aliases: Array.isArray(item.aliases) ? item.aliases.filter(isString) : [],
     hits: asNumber(item.hits), threshold: asNumber(item.threshold, 3), promoted: item.promoted === true,
   }))
+}
+
+/** Documents the caller's answers cite most (document affinity); only documents that still exist are listed. */
+export async function listMemoryDocAffinity(tenantId: string): Promise<MemoryDocAffinity[]> {
+  return memoryDocAffinityFromResponse(await get(`${memoryPath(tenantId)}/memory-doc-affinity`))
+}
+
+/** Clear one document's counter, or all of the caller's counters when ``documentId`` is omitted. */
+export async function clearMemoryDocAffinity(tenantId: string, documentId?: string): Promise<void> {
+  const query = documentId ? `?document_id=${encodeURIComponent(documentId)}` : ''
+  await del(`${memoryPath(tenantId)}/memory-doc-affinity${query}`)
 }

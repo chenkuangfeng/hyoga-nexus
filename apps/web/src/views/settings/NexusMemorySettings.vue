@@ -165,6 +165,24 @@
           </div>
         </t-tab-panel>
 
+        <t-tab-panel value="affinity" :label="t('nexusMemory.tabAffinity', { count: affinity.length })">
+          <p class="hint-line">{{ t('nexusMemory.affinityHint') }}</p>
+          <p v-if="!affinity.length" class="empty">{{ t('nexusMemory.emptyAffinity') }}</p>
+          <div v-for="item in affinity" :key="item.document_id" class="memory-card">
+            <div class="card-head">
+              <span class="entry-title">{{ item.filename }}</span>
+              <span class="meta">{{ t('nexusMemory.affinityHits', { hits: item.hits }) }}</span>
+              <span v-if="item.boost > 1" class="kind-tag">{{ t('nexusMemory.affinityBoost', { boost: item.boost.toFixed(2) }) }}</span>
+              <t-popconfirm :content="t('nexusMemory.affinityClearConfirm')" @confirm="clearAffinity(item.document_id)">
+                <t-button size="small" variant="text" theme="danger" :disabled="busy">{{ t('nexusMemory.affinityClear') }}</t-button>
+              </t-popconfirm>
+            </div>
+          </div>
+          <t-popconfirm v-if="affinity.length" :content="t('nexusMemory.affinityClearAllConfirm')" @confirm="clearAffinity()">
+            <t-button size="small" variant="outline" theme="danger" :disabled="busy">{{ t('nexusMemory.affinityClearAll') }}</t-button>
+          </t-popconfirm>
+        </t-tab-panel>
+
         <t-tab-panel value="archived" :label="t('nexusMemory.tabArchived')">
           <p class="empty">{{ t('nexusMemory.archivedPlanned') }}</p>
         </t-tab-panel>
@@ -179,10 +197,10 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import {
-  archiveMemoryEntry, getCaptureSettings, getCaptureUsage, getMemoryPreferences, listMemory, listMemoryTopics,
+  archiveMemoryEntry, getCaptureSettings, getCaptureUsage, getMemoryPreferences, listMemory, listMemoryDocAffinity, listMemoryTopics, clearMemoryDocAffinity,
   requestConsolidation, restoreMemoryVersion, reviewMemoryDraftWith, setMemoryAvailability, updateCaptureSettings,
   updateMemoryPreferences, type CaptureSettings, type CaptureUsage, type MemoryDraft, type MemoryEntry,
-  type MemoryPreferences, type MemoryTopic,
+  type MemoryDocAffinity, type MemoryPreferences, type MemoryTopic,
 } from '@/api/nexus-memory'
 import { getModelSettings, type NexusModel } from '@/api/nexus-models'
 
@@ -197,6 +215,7 @@ const chatModels = ref<NexusModel[]>([])
 const entries = ref<MemoryEntry[]>([])
 const drafts = ref<MemoryDraft[]>([])
 const topics = ref<MemoryTopic[]>([])
+const affinity = ref<MemoryDocAffinity[]>([])
 const titles = reactive<Record<string, string>>({})
 const importances = reactive<Record<string, number>>({})
 const tab = ref('pending')
@@ -228,6 +247,12 @@ async function loadLists() {
     importances[draft.id] ??= draft.importance ?? 3
   }
   topics.value = await listMemoryTopics(tenant())
+  affinity.value = await listMemoryDocAffinity(tenant())
+}
+
+/** Clear one document's counter, or every counter when no id is given. */
+async function clearAffinity(documentId?: string) {
+  await run(() => clearMemoryDocAffinity(tenant(), documentId), t('nexusMemory.affinityCleared'))
 }
 
 async function load() {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { memoryListFromResponse } from './nexus-memory-types.ts'
+import { memoryDocAffinityFromResponse, memoryListFromResponse } from './nexus-memory-types.ts'
 
 test('memory list keeps metadata, hints and merge targets and drops malformed items', () => {
   const listed = memoryListFromResponse({
@@ -27,4 +27,17 @@ test('memory list keeps metadata, hints and merge targets and drops malformed it
 
 test('a response without the two lists is rejected', () => {
   assert.throws(() => memoryListFromResponse({ entries: [] }))
+})
+
+test('document affinity rows keep counts and boost, default the boost to 1 and drop rows without an id', () => {
+  const rows = memoryDocAffinityFromResponse([
+    { document_id: 'd1', filename: '手册.pdf', hits: 5, boost: 1.09, last_cited_at: '2026-11-11T00:00:00Z' },
+    { document_id: 'd2', filename: 'b.md', hits: 2 },
+    { filename: 'no id', hits: 9 }, null, 'x',
+  ])
+  assert.deepEqual(rows.map(r => r.document_id), ['d1', 'd2'])
+  assert.equal(rows[0].boost, 1.09)
+  assert.equal(rows[1].boost, 1)
+  assert.equal(rows[1].last_cited_at, '')
+  assert.throws(() => memoryDocAffinityFromResponse({}), /document affinity/)
 })

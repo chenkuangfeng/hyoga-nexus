@@ -80,6 +80,29 @@ export interface MemoryTopic {
   promoted: boolean
 }
 
+/** A document the person's answers keep citing; ``boost`` is the score multiplier retrieval applies (1.0–1.15). */
+export interface MemoryDocAffinity {
+  document_id: string
+  filename: string
+  hits: number
+  boost: number
+  last_cited_at: string
+}
+
+/** Document affinity rows from the API; malformed items (no document id) are dropped. */
+export function memoryDocAffinityFromResponse(data: unknown): MemoryDocAffinity[] {
+  if (!Array.isArray(data)) throw new Error('Unexpected document affinity response')
+  return data.flatMap((item): MemoryDocAffinity[] => {
+    if (typeof item !== 'object' || item === null) return []
+    const row = item as Record<string, unknown>
+    if (typeof row.document_id !== 'string') return []
+    return [{
+      document_id: row.document_id, filename: asString(row.filename), hits: asNumber(row.hits),
+      boost: asNumber(row.boost, 1), last_cited_at: asString(row.last_cited_at),
+    }]
+  })
+}
+
 export function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback
 }
