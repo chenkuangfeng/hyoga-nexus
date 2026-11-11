@@ -22,6 +22,7 @@ export function toLibraryItem(item: Json): ArtifactLibraryItem {
   return {
     id: String(item.id),
     session_id: String(item.session_id || ''),
+    run_id: String(item.run_id || ''),
     session_title: String(item.session_title || ''),
     message_id: '',
     index: 0,

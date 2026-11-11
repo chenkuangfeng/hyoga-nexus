@@ -9185,6 +9185,12 @@ export default {
     }
   },
   nexusChat: {
+    artifacts: {
+      title: '이번 실행에서 생성된 파일({count})',
+      library: '전체 산출물',
+      showAll: '{count}개 더 보기',
+      showLess: '접기'
+    },
     placeholder: '메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)',
     needAgent: '먼저 에이전트를 선택하세요',
     scrollToBottom: '맨 아래로 이동',

@@ -10,6 +10,8 @@ import { toLibraryPage, toListQuery } from './nexusArtifactAdapter'
 export interface ArtifactLibraryItem {
   /** The Nexus artifact id; downloads and deletes address the file by it. */
   id: string
+  /** The Run that left the file; empty for rows that do not know it. */
+  run_id?: string
   session_id: string
   session_title: string
   message_id: string
@@ -51,6 +53,16 @@ function artifactsPath(): string {
 export async function listArtifactLibrary(params: ArtifactLibraryParams = {}): Promise<ArtifactLibraryPage> {
   const res = await get(`${artifactsPath()}?${toListQuery(params)}`)
   return toLibraryPage(res as any, params.page || 1, params.pageSize || 30)
+}
+
+/**
+ * Every artifact of one session, oldest first, for the conversation page (each belongs to the Run that registered
+ * it). Versions are not collapsed: a file a Run changed again is a new artifact of that Run.
+ */
+export async function listSessionArtifacts(sessionId: string): Promise<ArtifactLibraryItem[]> {
+  const query = new URLSearchParams({ session_id: sessionId, limit: '200' })
+  const res: any = await get(`${artifactsPath()}?${query.toString()}`)
+  return toLibraryPage(res, 1, 200).data.sort((a, b) => a.created_at.localeCompare(b.created_at))
 }
 
 /** The stored copy's bytes. The server audits the download and re-checks that the caller may see the session. */

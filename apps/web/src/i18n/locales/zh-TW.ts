@@ -9181,6 +9181,12 @@ export default {
     }
   },
   nexusChat: {
+    artifacts: {
+      title: '本次產生的檔案（{count}）',
+      library: '全部產物',
+      showAll: '展開其餘 {count} 個',
+      showLess: '收合'
+    },
     placeholder: '輸入訊息，按 Enter 傳送，Shift+Enter 換行',
     needAgent: '請先選擇智能體',
     scrollToBottom: '回到底部',

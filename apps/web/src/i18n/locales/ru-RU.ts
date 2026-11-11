@@ -9185,6 +9185,12 @@ export default {
     }
   },
   nexusChat: {
+    artifacts: {
+      title: 'Файлы этого запуска ({count})',
+      library: 'Все артефакты',
+      showAll: 'Показать ещё {count}',
+      showLess: 'Свернуть'
+    },
     placeholder: 'Введите сообщение. Enter — отправить, Shift+Enter — новая строка',
     needAgent: 'Сначала выберите агента',
     scrollToBottom: 'Прокрутить вниз',

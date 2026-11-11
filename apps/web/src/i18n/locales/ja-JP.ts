@@ -9185,6 +9185,12 @@ export default {
     }
   },
   nexusChat: {
+    artifacts: {
+      title: 'この実行で生成されたファイル（{count}）',
+      library: 'すべての成果物',
+      showAll: '残り {count} 件を表示',
+      showLess: '折りたたむ'
+    },
     placeholder: 'メッセージを入力（Enter で送信、Shift+Enter で改行）',
     needAgent: '先にエージェントを選択してください',
     scrollToBottom: '一番下へ移動',

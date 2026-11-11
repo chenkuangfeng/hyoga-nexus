@@ -9174,6 +9174,12 @@ export default {
     }
   },
   nexusChat: {
+    artifacts: {
+      title: 'Files from this run ({count})',
+      library: 'All artifacts',
+      showAll: 'Show {count} more',
+      showLess: 'Show less'
+    },
     placeholder: 'Type a message. Enter to send, Shift+Enter for a new line',
     needAgent: 'Choose an agent first',
     scrollToBottom: 'Scroll to bottom',

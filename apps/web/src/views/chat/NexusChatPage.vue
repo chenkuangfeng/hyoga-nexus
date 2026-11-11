@@ -121,6 +121,8 @@
                   :can-ask-assistant="!compact" @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
                   @rewind="planned('rewind')" @ask-assistant="planned('askAssistant')" />
                 <KnowledgeCitations v-if="row.citations?.length" :citations="row.citations" />
+                <RunArtifactCards v-if="row.run_id && artifactsByRun.get(row.run_id)?.length"
+                  :items="artifactsByRun.get(row.run_id)!" />
               </div>
             </div>
 
@@ -158,6 +160,7 @@
 
 <script setup lang="ts">
 import KnowledgeCitations from '@/components/knowledge/KnowledgeCitations.vue'
+import RunArtifactCards from '@/views/chat/components/RunArtifactCards.vue'
 /**
  * Conversation core. The session comes from the parent as `sessionId`; empty means the welcome state.
  * Sending from the welcome state creates the session first and emits `session-created`.
@@ -199,6 +202,8 @@ import usermsg from '@/views/chat/components/usermsg.vue'
 import botmsg from '@/views/chat/components/botmsg.vue'
 import PendingPromptDock from '@/views/chat/components/PendingPromptDock.vue'
 import { shouldShowConversationTimestamp } from '@/utils/messageTimestamp'
+import { listSessionArtifacts, type ArtifactLibraryItem } from '@/api/artifacts'
+import { groupArtifactsByRun } from '@/utils/runArtifacts'
 import { copyWithToast } from '@/utils/clipboard'
 import { deriveSessionTitle } from '@/utils/nexusChatTitle'
 import { summarizeAskUserAnswer, type AskUserQuestion } from '@/utils/askUser'
@@ -372,6 +377,19 @@ async function loadRunEvents(sessionId: string) {
   await Promise.all(Array.from({ length: EVENT_READ_CONCURRENCY }, worker))
 }
 
+/** Files the session's Runs left under /outputs (openspec 2026-11-07-tool-expansion 4.6), shown under their answers. */
+const sessionArtifacts = ref<ArtifactLibraryItem[]>([])
+const artifactsByRun = computed(() => groupArtifactsByRun(sessionArtifacts.value))
+
+async function loadArtifacts(sessionId: string) {
+  try {
+    const items = await listSessionArtifacts(sessionId)
+    if (activeSessionId.value === sessionId) sessionArtifacts.value = items
+  } catch {
+    /* the answer is complete without its file cards; the artifacts page still lists them */
+  }
+}
+
 async function openSession() {
   errorText.value = ''
   if (!tenantId.value) {
@@ -384,6 +402,8 @@ async function openSession() {
   isFirstEnter.value = true
   eventsByRun.value = new Map()
   approvalArgs.value = new Map()
+  sessionArtifacts.value = []
+  void loadArtifacts(id)
   void loadSessionTitle(id)
   void loadAgents()
   try {
@@ -405,6 +425,8 @@ async function settleRun() {
   const page = await getConversation(tenantId.value, activeSessionId.value)
   messages.value = page.messages
   pendingUsers.value = []
+  // The worker registers a Run's outputs before it finishes, so they exist by now.
+  void loadArtifacts(activeSessionId.value)
 }
 
 /** Approval arguments are only exposed to the Run owner through the approvals API. */
@@ -636,6 +658,7 @@ watch(activeSessionId, (id) => {
   if (!id) {
     messages.value = []
     eventsByRun.value = new Map()
+    sessionArtifacts.value = []
     errorText.value = ''
     void loadAgents()
     return

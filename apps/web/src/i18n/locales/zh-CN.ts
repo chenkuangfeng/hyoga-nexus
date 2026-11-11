@@ -9167,6 +9167,12 @@ export default {
     }
   },
   nexusChat: {
+    artifacts: {
+      title: '本次生成的文件（{count}）',
+      library: '全部产物',
+      showAll: '展开另外 {count} 个',
+      showLess: '收起'
+    },
     placeholder: '输入消息，按 Enter 发送，Shift+Enter 换行',
     needAgent: '请先选择智能体',
     scrollToBottom: '回到底部',

@@ -5,10 +5,11 @@ import { extensionOf, toLibraryItem, toLibraryPage, toListQuery } from './nexusA
 
 test('an artifact becomes a library row addressed by its id', () => {
   const row = toLibraryItem({
-    id: 'a1', session_id: 's1', session_title: '周报', name: 'report.pdf', path: '/outputs/report.pdf', size: 2048,
+    id: 'a1', session_id: 's1', run_id: 'r1', session_title: '周报', name: 'report.pdf', path: '/outputs/report.pdf', size: 2048,
     mime: 'application/pdf', created_at: '2026-11-11T08:00:00Z', version_count: 3,
   })
   assert.equal(row.id, 'a1')
+  assert.equal(row.run_id, 'r1')
   assert.equal(row.file_name, 'report.pdf')
   assert.equal(row.file_size, 2048)
   assert.equal(row.file_type, 'pdf', 'the file type is the extension the preview picks a renderer by')
