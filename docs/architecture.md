@@ -347,6 +347,12 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 **企业即租户**（提案 `2026-11-11-enterprise-saas` 决定 1）：租户只有企业（`enterprise`）与保留的系统租户（`system`）两种；自助注册即创建一家企业，注册人为 owner，企业名称与编码不填时自动生成。一个账号可属于多家企业，登录默认进入上次使用的企业，否则进入最早加入的企业。
 
+**部门与成员授权**（决定 5，`authz/audiences.py`）：智能体可分配给部门（可含下级）与成员，只授予使用权；知识库可设为 `scoped`，由部门与成员受众读取。按检查时的组织关系判断。他人可用的智能体只能绑定其使用者都能读取的知识库：`tenant` 库总可以；`scoped` 库要求智能体的使用者正好是被库受众覆盖的部门与成员受众（有角色授权或共享空间共享时不行）；收窄库会让已绑定的智能体失效时拒绝（`kb_in_use`）。
+
+**用量与配额**（E6，`usage/service.py`）：Run 结束时把其 `model.completed` 事件中的用量按日加入 `usage_ledger`；企业、部门（含下级成员）、成员可设月度 Token 上限（输入加输出），提交 Run 时超限返回 429 `quota_exhausted`。
+
+**数据治理**（E7，`governance/retention.py`）：设置了 `retention_days` 的企业，超期且没有进行中 Run 的会话由 worker 清除内容（消息、Run 事件、产物），会话保留为 `purged` 空壳；审计记录可按日期导出为带哈希链的 JSON Lines（`audit:read`）。
+
 **企业策略**（`enterprise_policies`，`tenants/policies.py`，决定 4）：只收紧平台已有的检查，缺省行即默认值。`self_build_agents`（`all` / `org_units` / `none`，owner、admin 不受限，viewer 不能自建）决定谁能创建个人智能体；`personal_models`（默认关闭）决定成员能否使用个人模型与 Key，关闭后下一次选择或执行即被拒绝；`external_sharing`（默认关闭）决定能否共享到含其他企业的共享空间；`personal_wecom_channels`、`personal_external_channels` 供 IM 渠道使用；`retention_days` 供数据治理使用。读取接口 `GET /tenants/{id}/admin/policy` 对全体成员开放，修改 `PATCH` 需要 `policy:manage`。
 
 **内置角色**（决定 8）：每家企业创建时写入 `security_admin`（`policy:manage`、`tools:manage`、`audit:read`）与 `auditor`（`audit:read`），`tenant_roles.builtin` 为真，可以分配，不能改授权。`policy:manage`、`audit:read_content` 属于治理权限，admin 默认不持有。
@@ -464,9 +470,11 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 借鉴：LobeHub 渠道适配器的组织方式（`chat-adapter-*`）；Octop `infra/gateway/`（多 IM 通道归一为同一处理链路，渠道内审批 `gateway/hitl/`）；octop-gateway（`channel.py` 渠道抽象、`manager.py` 按会话合批、`constraints.py` 平台限制与限流、`push_routing.py` 主动推送路由、`channels/wecom.py`、`channels/feishu.py`、`channels/dingtalk.py`、`channels/telegram/delivery.py` 只在明确拒绝时重试、`channels/telegram/policy.py` 先准入再取媒体）。
 
-- 企业微信优先，随后微信、QQ。各渠道只做消息标准化与投递，不复制智能体循环。
-- 渠道身份映射到平台用户（`ChannelIdentity`），渠道会话映射到平台会话（`ChannelSessionBinding`）。
-- 去重、鉴权、回复长度限制与重试由渠道适配器处理。
+- **每个渠道绑定一个智能体**（提案 `2026-11-11-enterprise-saas` 决定 6，`agent_channels`）。种类：`wecom_app`（智能体用途的企微自建应用消息，经企业的企微回调进入）、`wechat`（创建者本人的微信，腾讯 iLink 扫码绑定、长轮询收消息，只服务绑定者）、`wecom_bot`、`qq`（平台条件未核对，创建时返回 `channel_kind_unverified`）。企业智能体的渠道由 `enterprise_agents:manage` 添加并立即生效；个人智能体的企微机器人按企业策略 `personal_wecom_channels` 审核、开放或禁止，微信与 QQ 由 `personal_external_channels` 控制；策略收紧时已启用的渠道随之停用。
+- **入站**（`channels/service.process_inbound`）：按平台消息 id 去重（`channel_messages`）→ 企微渠道按 `(wecom, corp_id, userid)` 找到成员，微信与 QQ 只接受绑定者 → 检查渠道状态、企业策略、成员身份与智能体使用权（不满足时立即回复“无权限”或“未开通”）→ 以该成员身份在其（渠道、会话、成员）专属会话（`channel_session_bindings`）中提交 Run，并记下待发回复（`channel_deliveries`）。
+- **回复**：worker 的空闲任务在 Run 停下（完成、失败、取消，或需要到工作台确认）后发送回复，超过 1800 字截断并附工作台链接；只有网络类错误重试，最多 3 次。
+- **长连接**：worker 按租约（`lease_owner`、`lease_until`，90 秒）领取渠道，同一渠道同一时刻只有一个持有者；令牌失效的微信渠道转为 `expired`，由创建者重新扫码。
+- **企业微信自建应用**（E3，`wecom/`）：每家企业绑定一个企微企业（`tenant_wecom_corps`），登记多个自建应用（`tenant_wecom_apps`，用途 `workspace` / `admin` / `agent`）。应用主页 `/wecom/apps/{id}/entry` 在企微内免登，扫码登录经 `/api/v1/auth/wecom/qr?enterprise_code=`；已同步的成员首次进入自动开户（`contributor`）。通讯录由扫码登录应用的密钥读取（只含其可见范围），每天同步一次，或在请求或回调后尽快同步；部门写入 `org_units`（`source = wecom`），成员写入 `wecom_members`；被删除或移出范围的成员撤销企业成员身份（owner 除外），资产不动。回调 `/api/v1/integrations/wecom/{tenant}/callback` 先验签解密再处理。
 
 ### 2.15 Web 工作台
 
