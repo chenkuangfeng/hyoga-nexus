@@ -46,4 +46,4 @@ result = await client.call(resolved_config, "get_repo", {"repo": "hyoga"}, timeo
 
 - 需求：`docs/requirements.md`
 - 设计：`docs/design.md`
-- 提案与任务：`openspec/changes/2026-11-08-mcp/`
+- 提案与任务：`openspec/changes/archive/2026-11-08-mcp/`

@@ -1,6 +1,6 @@
 # MCP 包需求
 
-`hyoga-nexus-mcp` 提供 MCP 客户端、OAuth 协议层、工具桥与服务端协议层。完整规格见 `openspec/changes/2026-11-08-mcp/specs/mcp/spec.md`（R1–R11），这里只记录包自身承担的需求。
+`hyoga-nexus-mcp` 提供 MCP 客户端、OAuth 协议层、工具桥与服务端协议层。完整规格见 `openspec/specs/mcp/spec.md`（R1–R11），这里只记录包自身承担的需求。
 
 ## 客户端连接
 
