@@ -65,7 +65,7 @@ def hidden_groups(facts: GateFacts, switches: dict[str, bool] | None) -> frozens
     return frozenset(group for group in GROUP_IDS if group in unavailable or not group_enabled(switches, group))
 
 
-def profile_facts(config, settings, web_enabled: bool = False) -> GateFacts:
+def profile_facts(db, config, settings, web_enabled: bool = False) -> GateFacts:
     """Gate facts for one sandbox profile of an enabled `[sandbox]` section (`settings` None: no such profile)."""
     from nexus_platform.configuration import auth_settings
     from nexus_sandbox import acceptance
@@ -76,17 +76,19 @@ def profile_facts(config, settings, web_enabled: bool = False) -> GateFacts:
         allowed = sandbox_local_allowed(settings, development_mode=auth_settings().mode == 'development')
         return GateFacts(sandbox_enabled=True, sandbox_accepted=allowed,
                          sandbox_reason='' if allowed else 'sandbox_local_not_allowed', web_enabled=web_enabled)
-    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings), web_enabled=web_enabled)
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings, DbReportStore(db)),
+                     web_enabled=web_enabled)
 
 
-def deployment_gate_facts(profile: str | None = None) -> GateFacts:
+def deployment_gate_facts(db, profile: str | None = None) -> GateFacts:
     """Facts read from the deployment for one agent: whether the sandbox is enabled and its profile usable.
 
     `profile` is the agent's `sandbox_profile`; empty or None takes the deployment's default profile. A stored
     isolation report counts only when it matches that profile's backend, image and limits. A `local` profile never
     passes acceptance: it is usable only when the operator set `allow_local` and the platform runs in development
     auth mode (reason `sandbox_local_not_allowed` otherwise). A broken `[sandbox]` section leaves the group
-    unavailable rather than failing the Run.
+    unavailable rather than failing the Run. `db` is read for the acceptance report only.
     """
     from nexus_core.deployment import DeploymentConfigError
     web_enabled = _web_enabled()
@@ -97,10 +99,10 @@ def deployment_gate_facts(profile: str | None = None) -> GateFacts:
         return GateFacts(web_enabled=web_enabled)
     if not config.enabled:
         return GateFacts(web_enabled=web_enabled)
-    return profile_facts(config, config.get(profile), web_enabled)
+    return profile_facts(db, config, config.get(profile), web_enabled)
 
 
-def sandbox_profiles() -> list[dict]:
+def sandbox_profiles(db) -> list[dict]:
     """Every profile the operator defined, for the agent editor: name, type, whether it is the default and, when
     it cannot be used, the stable reason code. Empty when the sandbox is off or its configuration is broken."""
     from nexus_core.deployment import DeploymentConfigError
@@ -113,7 +115,7 @@ def sandbox_profiles() -> list[dict]:
         return []
     listed = []
     for name, settings in config.profiles.items():
-        reason = _sandbox(profile_facts(config, settings))
+        reason = _sandbox(profile_facts(db, config, settings))
         listed.append({'name': name, 'type': settings.backend, 'default': name == config.default_profile,
                        'available': not reason, 'reason': reason})
     return listed

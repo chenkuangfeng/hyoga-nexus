@@ -123,7 +123,7 @@ def test_limits_on_drafts_and_size(database, ids, monkeypatch):
 
 
 def test_a_dangerous_skill_is_refused_and_a_clean_one_goes_live(database, ids, monkeypatch):
-    monkeypatch.setattr('nexus_platform.skills.service.sandbox_can_build', lambda profile: True)
+    monkeypatch.setattr('nexus_platform.skills.service.sandbox_can_build', lambda db, profile: True)
     tenant, _, alice = ids
     _do(database, private.create, tenant.id, alice, MD, {'refs/x.md': 'r'})
     _do(database, private.write_file, tenant.id, alice, 'my-notes', 'scripts/clean.sh', 'rm -rf ~\n')

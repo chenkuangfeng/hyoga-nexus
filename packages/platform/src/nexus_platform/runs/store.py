@@ -518,6 +518,7 @@ class DurableRuntimeStore:
         it, and the outcome is audited in another. A skill whose declared place to run does not fit the agent's
         profile is refused, never moved to another place.
         """
+        from nexus_platform.runs.tool_gates import deployment_gate_facts
         from nexus_platform.skills.service import execution_allowed, exec_skill_available, prepare_exec
         from nexus_sandbox.settings import load_config
         from nexus_skills.exec import ScriptError, build_command, check_args
@@ -528,15 +529,17 @@ class DurableRuntimeStore:
                 db = work.session
                 run = self._run(db)
                 require_membership(db, run.tenant_id, run.principal_id)
-                if not exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile):
+                if not exec_skill_available(db, behavior.skill_scripts, behavior.sandbox_profile):
                     raise NotFound('skill_script_unavailable')
                 prepared = prepare_exec(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, script,
                                         user_id=run.principal_id)
                 from nexus_platform.persistence.models import SkillVersionRecord
                 from nexus_platform.skills.service import record_use
                 record_use(db, db.get(SkillVersionRecord, UUID(prepared.version_id)), run.principal_id, loaded=False)
-                return run, prepared
-        run, prepared = await run_db(prepare)
+                # Read while the session is open: the later checks run outside the transaction.
+                accepted = deployment_gate_facts(db, behavior.sandbox_profile).sandbox_accepted
+                return run, prepared, accepted
+        run, prepared, accepted = await run_db(prepare)
         detail = {'skill': name, 'version': prepared.version, 'script': prepared.script.path,
                   'script_hash': prepared.script.content_hash}
         refusal = ''
@@ -545,7 +548,7 @@ class DurableRuntimeStore:
         except ScriptError as exc:
             arguments, refusal = [], str(exc)
         if not refusal:
-            allowed, reason = execution_allowed(prepared, behavior.sandbox_profile)
+            allowed, reason = execution_allowed(prepared, behavior.sandbox_profile, accepted=accepted)
             refusal = '' if allowed else reason
         if refusal:
             await self._audit_script(run.tenant_id, run.principal_id, run.id, detail | {'refused': refusal})

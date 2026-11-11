@@ -158,7 +158,7 @@ def test_withdrawing_and_resubmitting_supersedes_the_older_request(database, wor
 
 def test_dangerous_content_is_refused_when_submitting_and_when_approving(database, world, monkeypatch):
     from uuid import UUID
-    monkeypatch.setattr('nexus_platform.skills.service.sandbox_can_build', lambda profile: True)
+    monkeypatch.setattr('nexus_platform.skills.service.sandbox_can_build', lambda db, profile: True)
     _private(database, world, BOB)
     made = _submit(database, world)
     # The scanner gets stricter after the submission: approval scans again and refuses.

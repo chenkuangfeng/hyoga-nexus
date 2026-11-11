@@ -184,7 +184,10 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         except (ValueError, TypeError):
             raise RuntimeFault('runtime_budget_invalid') from None
         spill = OutputSpill(policy.tool_output_inline_limit, policy.tool_preview_chars, policy.tool_output_page_chars)
-        hidden = hidden_groups(deployment_gate_facts(policy.sandbox_profile), policy.tool_groups_enabled)
+        def read_gate_facts():
+            with factory() as db:
+                return deployment_gate_facts(db, policy.sandbox_profile)
+        hidden = hidden_groups(await run_db(read_gate_facts), policy.tool_groups_enabled)
         # The session serves the sandbox tools and `exec_skill`, which is offered (see preparation) only when the
         # agent's profile is usable even if the whole sandbox group is switched off.
         needs_sandbox = 'sandbox' not in hidden or any(name == 'exec_skill' for name, _, _ in context.bindings)

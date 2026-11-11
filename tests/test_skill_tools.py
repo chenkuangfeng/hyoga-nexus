@@ -81,7 +81,7 @@ def test_guard_errors_come_back_as_codes_the_model_can_act_on(database, run):
 
 
 def test_a_dangerous_skill_is_refused_with_the_finding(database, run, monkeypatch):
-    monkeypatch.setattr('nexus_platform.skills.service.sandbox_can_build', lambda profile: True)
+    monkeypatch.setattr('nexus_platform.skills.service.sandbox_can_build', lambda db, profile: True)
     _call(run, 'skill_manage', action='create', skill_md=MD, files={'scripts/clean.sh': 'rm -rf ~\n'})
     refused = _call(run, 'skill_save', name='my-notes')
     assert refused.error_code == 'skill_scan_refused' and 'scripts/clean.sh' in refused.data

@@ -70,14 +70,19 @@ Run 准备（preparation.py）：  绑定 ─► 过滤1：group.availability(ct
 
 **分层**：`nexus_sandbox` 不能依赖平台包。`acceptance.run` 通过一个存储端口（`ReportStore`：`save(settings, report)`、`load(settings)`）保存与读取，包内默认实现仍是现有的 JSON 文件；平台包提供数据库实现，由 worker 与 API 的装配处注入。`--sandbox-check` 仍打印逐项结果，并继续写文件副本供运维查看（不再作为判断依据）。
 
-**读取方式（需要确认）**：`deployment_gate_facts` 有六个同步调用点（编辑器、Run 准备、技能服务三处），都没有数据库会话。两个方案：
+**读取方式（已确认：方案 B）**：数据库会话逐层传入，没有缓存，验收刚通过就对所有进程生效。`profile_facts`、`deployment_gate_facts`、`sandbox_profiles` 增加 `db` 参数（读取失败按"未验收"，不放行）。调用点：
 
-- **A（推荐）**：`profile_facts` 内部用短会话读取，结果在进程内缓存 30 秒。调用点不变；代价是验收刚通过后，另一进程最多 30 秒才看到。数据库读失败按"未验收"处理（不放行）。
-- B：把会话逐层传入六个调用点。无缓存延迟，但改动面大，且技能服务的纯函数要改签名。
+| 调用点 | 做法 |
+| --- | --- |
+| 智能体编辑器（`agent_editor.py`） | 已有会话，直接传入 |
+| Run 准备（`runs/preparation.py`） | 已在事务内，传入 |
+| `exec_skill` 执行（`runs/store.py`） | `prepare()` 事务内取得 `accepted`，随后在事务外判定 `execution_allowed(prepared, profile, accepted=...)`，不重新开会话 |
+| 技能服务（`skills/service.py` 的 `exec_skill_available`、`sandbox_can_build`、`_script_fit`）与私有技能（`skills/private.py`） | 签名增加 `db`，调用方已有会话 |
+| worker 的 Run 启动（`native.py`） | 经 `run_db` 在短会话内读取 |
 
-**旧报告**：表里没有该档位的行时，退回读取旧的 JSON 文件（指纹仍须匹配），这样升级后不必立刻重跑验收；一旦有行，以表为准。（备选：不退回，升级后须重跑 `--sandbox-check`。）
+**旧报告**：表里没有该档位的行时退回读取旧的 JSON 文件（指纹仍须匹配），升级后不必立刻重跑验收；一旦有行，以表为准（行的指纹不符不再退回文件）。
 
-**迁移与测试**：新增一个 Alembic 迁移（空库升级、升降级往返）；测试覆盖存取往返、指纹变化使结果失效、数据库读失败不放行、缓存过期、旧文件退回、`nexus_sandbox` 不导入平台包。
+**迁移与测试**：新增一个 Alembic 迁移（空库升级、升降级往返）；测试覆盖存取往返、指纹变化使结果失效、数据库读失败不放行、旧文件退回、行优先于文件、`nexus_sandbox` 不导入平台包。
 
 ### 2.4 工具实现要点
 

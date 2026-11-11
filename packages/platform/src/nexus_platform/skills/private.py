@@ -265,7 +265,7 @@ def save(db: Session, tenant_id: UUID, user_id: UUID, name: str, *, profile: str
     if _taken_elsewhere(db, tenant_id, name):
         raise InvalidConfiguration('skill_name_taken')
     needs_sandbox = service.has_manifest(draft.files) or any(path.startswith('scripts/') for path in draft.files)
-    if needs_sandbox and not service.sandbox_can_build(profile):
+    if needs_sandbox and not service.sandbox_can_build(db, profile):
         raise InvalidConfiguration('skill_sandbox_required')
     binary = service._binary_files(db, current, set(draft.files)) if current is not None else {}
     try:

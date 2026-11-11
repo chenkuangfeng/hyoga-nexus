@@ -6,7 +6,7 @@
 
 1. 在 `configs/nexus.toml` 写 `[sandbox]`（见 `configs/nexus.example.toml`），`enabled = true`。
 2. 确保镜像已在本机（沙箱从不自动拉取），且包含 `sh`、`timeout`、`python3`。
-3. 运行 `uv run python -m nexus_worker --sandbox-check`，全部通过后写入验收报告。
+3. 运行 `uv run python -m nexus_worker --sandbox-check`，全部通过后写入验收报告（平台数据库的 `sandbox_acceptance` 表，并在 `workspace_root` 下留一份 JSON 副本；未配置数据库时只写文件）。
 4. 在智能体编辑器里打开「沙箱」工具组并勾选需要的工具。部署、验收、智能体开关三者缺一，工具都不会出现。
 
 `local` 后端不隔离，只用于开发，需要 `allow_local = true` 和开发认证模式，且不能运行验收。

@@ -44,7 +44,7 @@ connectivity、user、network、time_limit、output_limit、memory_limit、proce
 ## 已知限制
 
 - 路径检查与打开之间存在符号链接替换的竞态；边界由容器提供，不由路径检查提供。
-- 验收报告保存在 `workspace_root/acceptance.json`，多机部署时各机各自验收。迁移到数据库表需要等仓库中迁移链稳定后进行。
+- 验收报告按档位保存在平台数据库表 `sandbox_acceptance`（每档位一行，重新验收时覆盖），API 与各 worker 共读，所以分机部署也一致；有效条件是行的 `fingerprint`（后端、镜像、限制的哈希）等于当前配置。`nexus_sandbox` 只依赖存储端口 `ReportStore`，数据库实现在平台包（`nexus_platform/runs/sandbox_acceptance.py`）。每次验收仍在 `workspace_root` 下写一份 `acceptance[-<档位>].json` 副本供运维查看；表里没有该档位的行时（升级前做过的验收）退回读这份文件，有行则以行为准。数据库读取失败按未验收处理。
 - 配额以目录总大小估算，每次写入遍历一次工作区。
 
 ## 依赖环境构建（技能安装）

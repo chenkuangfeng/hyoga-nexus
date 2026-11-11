@@ -1,8 +1,10 @@
 """Isolation acceptance (architecture 2.9, openspec 2026-11-07-tool-expansion 3.6).
 
 Every item is a real probe run inside the sandbox, not a configuration check. The report is stored in
-`<workspace_root>/acceptance.json` together with a fingerprint of the backend, image and limits, so a change
-of any of them invalidates the result. Only an isolating backend can pass: the `local` backend is refused
+a `ReportStore` together with a fingerprint of the backend, image and limits, so a change of any of them
+invalidates the result. The platform stores reports in its database (so an API and a worker on different hosts
+agree); this package knows only the port and a file implementation, which is also the fallback for a report made
+before the database table existed. Only an isolating backend can pass: the `local` backend is refused
 before any probe runs, because several probes (memory, process count) are hostile by design.
 
 The probes assume the image offers `sh` and `python3`; an image without them fails the affected items with
@@ -18,6 +20,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Protocol
 
 from nexus_core.sandbox import SandboxError
 from .manager import SandboxManager
@@ -48,13 +51,50 @@ def report_path(settings: SandboxSettings) -> Path:
     return settings.root / f'acceptance-{settings.profile}.json'
 
 
-def passed(settings: SandboxSettings) -> bool:
-    """Whether a stored report passed for exactly the current backend, image and limits."""
-    try:
-        report = json.loads(report_path(settings).read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        return False
-    return bool(report.get('passed')) and report.get('fingerprint') == fingerprint(settings)
+class ReportStore(Protocol):
+    """Where acceptance reports live. `load` returns None when the store has no report for the profile."""
+
+    def load(self, settings: SandboxSettings) -> dict | None: ...
+
+    def save(self, settings: SandboxSettings, report: dict) -> None: ...
+
+
+class FileReportStore:
+    """Reports as JSON files under `workspace_root` (see `report_path`)."""
+
+    def load(self, settings: SandboxSettings) -> dict | None:
+        try:
+            report = json.loads(report_path(settings).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return None
+        return report if isinstance(report, dict) else None
+
+    def save(self, settings: SandboxSettings, report: dict) -> None:
+        settings.root.mkdir(parents=True, exist_ok=True)
+        report_path(settings).write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')
+
+
+def valid(settings: SandboxSettings, report: dict | None) -> bool:
+    """Whether `report` passed for exactly the current backend, image and limits."""
+    return bool(report) and bool(report.get('passed')) and report.get('fingerprint') == fingerprint(settings)
+
+
+def passed(settings: SandboxSettings, store: ReportStore | None = None) -> bool:
+    """Whether a stored report passed for exactly the current backend, image and limits.
+
+    A report in `store` decides, even a stale one (it was made after the file). Only when `store` has none does the
+    file written by an earlier version count, so an upgrade does not force a new acceptance run. A store that
+    cannot be read counts as not accepted.
+    """
+    report = None
+    if store is not None:
+        try:
+            report = store.load(settings)
+        except Exception:
+            return False  # an unreadable store is "not accepted", never a reason to trust an older file
+    if report is None:
+        report = FileReportStore().load(settings)
+    return valid(settings, report)
 
 
 async def _guard(name: str, probe) -> Item:
@@ -67,8 +107,9 @@ async def _guard(name: str, probe) -> Item:
     return Item(name, bool(ok), detail)
 
 
-async def run(settings: SandboxSettings, *, manager: SandboxManager | None = None) -> dict:
-    """Run every probe and store the report. Raises `sandbox_acceptance_requires_isolating_backend` for `local`."""
+async def run(settings: SandboxSettings, *, manager: SandboxManager | None = None,
+              store: ReportStore | None = None) -> dict:
+    """Run every probe and store the report (in `store` when given, and always as a file copy for operators). Raises `sandbox_acceptance_requires_isolating_backend` for `local`."""
     if settings.backend not in ('docker', 'bwrap'):
         raise SandboxError('sandbox_acceptance_requires_isolating_backend')
     manager = manager or SandboxManager(settings)
@@ -188,6 +229,7 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
     report = {'passed': all(item.ok for item in items), 'fingerprint': fingerprint(settings), 'backend': settings.backend,
               'image': settings.image, 'checked_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
               'items': [asdict(item) for item in items]}
-    settings.root.mkdir(parents=True, exist_ok=True)
-    report_path(settings).write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')
+    FileReportStore().save(settings, report)
+    if store is not None:
+        store.save(settings, report)
     return report

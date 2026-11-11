@@ -318,6 +318,29 @@ async def run_async(factory, worker_id: str, stopped: threading.Event, *, epoch:
         logger.info("Worker stopped accepting Runs", extra={"worker_id": worker_id})
 
 
+def _run_acceptance(settings) -> dict:
+    """Run the acceptance of one profile and store the report in the platform database (the file copy is always
+    written). Without a usable database configuration only the file is written, which a single-host deployment
+    still reads; the missing database is reported once on stderr."""
+    import sys
+    from nexus_sandbox import acceptance
+    try:
+        database_url = resolve_database_url()
+    except DatabaseConfigurationError as exc:
+        print(f"database not configured, the report is saved as a file only: {exc}", file=sys.stderr)
+        return asyncio.run(acceptance.run(settings))
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    engine = create_database_engine(database_url)
+    try:
+        # The session connects only when the report is saved, so no connection is held while the probes run.
+        with session_factory(engine)() as db:
+            report = asyncio.run(acceptance.run(settings, store=DbReportStore(db)))
+            db.commit()
+        return report
+    finally:
+        engine.dispose()
+
+
 def _sandbox_check(profile: str | None = None) -> int:
     """Run the isolation acceptance against `[sandbox]` profiles and print each item. Returns the process exit code.
 
@@ -349,7 +372,7 @@ def _sandbox_check(profile: str | None = None) -> int:
     for settings in chosen:
         print(f"== profile {settings.profile} ({settings.backend})")
         try:
-            report = asyncio.run(acceptance.run(settings))
+            report = _run_acceptance(settings)
         except SandboxError as error:
             print(f"sandbox check not run: {getattr(error, 'code', error)}")
             exit_code = max(exit_code, 2)

@@ -512,7 +512,7 @@ def skill_files(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str,
     return version.content_hash, {**files, **_binary_files(db, version, set(files))}
 
 
-def exec_skill_available(policy_flag: bool, profile: str | None) -> bool:
+def exec_skill_available(db: Session, policy_flag: bool, profile: str | None) -> bool:
     """Whether `exec_skill` may be offered to an agent: its setting is on and its sandbox profile is usable.
 
     The tool is not an arbitrary shell (a script of a bound skill, arguments not interpreted), so it does not wait for
@@ -522,26 +522,27 @@ def exec_skill_available(policy_flag: bool, profile: str | None) -> bool:
     if not policy_flag:
         return False
     from nexus_platform.runs.tool_gates import deployment_gate_facts
-    facts = deployment_gate_facts(profile)
+    facts = deployment_gate_facts(db, profile)
     return facts.sandbox_enabled and facts.sandbox_accepted
 
 
-def sandbox_can_build(profile: str | None) -> bool:
+def sandbox_can_build(db: Session, profile: str | None) -> bool:
     """Whether the chosen sandbox profile is usable, so a skill with scripts or dependencies can be made live."""
     from nexus_platform.runs.tool_gates import deployment_gate_facts
-    facts = deployment_gate_facts(profile)
+    facts = deployment_gate_facts(db, profile)
     return facts.sandbox_enabled and facts.sandbox_accepted
 
 
-def execution_allowed(prepared: PreparedExec, profile: str | None) -> tuple[bool, str]:
-    """Whether this skill's declared place to run fits the agent's profile, and the reason when it does not."""
-    from nexus_platform.runs.tool_gates import deployment_gate_facts
+def execution_allowed(prepared: PreparedExec, profile: str | None, *, accepted: bool) -> tuple[bool, str]:
+    """Whether this skill's declared place to run fits the agent's profile, and the reason when it does not.
+
+    `accepted` is whether the profile passed acceptance, read by the caller while it still held a session."""
     from nexus_sandbox.settings import load_config
     settings = load_config().get(profile)
     if settings is None:
         return False, 'sandbox_unavailable'
     return resolve_execution(prepared.declared, prepared.source, profile_type=settings.backend,
-                             accepted=deployment_gate_facts(profile).sandbox_accepted,
+                             accepted=accepted,
                              allow_local_scripts=settings.allow_local_scripts)
 
 
@@ -596,7 +597,7 @@ def _script_fit(db: Session, versions: list[SkillVersionRecord], profile: str) -
     from nexus_core.deployment import DeploymentConfigError
     from nexus_platform.runs.tool_gates import deployment_gate_facts
     from nexus_sandbox.settings import load_config
-    facts = deployment_gate_facts(profile)
+    facts = deployment_gate_facts(db, profile)
     try:
         settings = load_config().get(profile)
     except DeploymentConfigError:

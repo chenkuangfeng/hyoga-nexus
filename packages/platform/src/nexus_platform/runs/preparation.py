@@ -235,7 +235,7 @@ class ExecutionPreparer:
                 from nexus_core.native import KNOWLEDGE_TOOL_NAMES, RETIRED_TOOL_NAMES, NativePolicy
                 from nexus_platform.skills.service import exec_skill_available
                 behavior = NativePolicy(**(version.budgets.get('behavior') or {}))
-                script_tool_on = exec_skill_available(behavior.skill_scripts, behavior.sandbox_profile)
+                script_tool_on = exec_skill_available(db, behavior.skill_scripts, behavior.sandbox_profile)
                 bindings = tuple((binding.resource_id, binding.resource_version_id or 'v1', str(binding.id))
                     for binding in db.scalars(select(ResourceBindingRecord).where(
                         ResourceBindingRecord.agent_version_id == version.id, ResourceBindingRecord.kind == 'tool'))

@@ -69,9 +69,9 @@ def agent_tools(tenant_id: UUID, principal: Principal = Depends(get_principal),
         # Per-group switch metadata for the editor: `available` is the deployment-side layer (sandbox accepted,
         # search backend configured...), `reason` its stable code; `default_enabled` is the agent-side default.
         "group_info": [info | {"available": info["id"] not in reasons, "reason": reasons.get(info["id"], "")}
-                       for info in group_catalog() for reasons in [unavailable_groups(deployment_gate_facts())]],
+                       for info in group_catalog() for reasons in [unavailable_groups(deployment_gate_facts(db))]],
         # Profiles the operator defined; an agent picks one by name in `sandbox_profile` (empty: the default).
-        "sandbox_profiles": sandbox_profiles(),
+        "sandbox_profiles": sandbox_profiles(db),
         "default_tools": default_tools,
         "can_enable_tools": membership.role in ADMIN_ROLES,
     }

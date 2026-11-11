@@ -17,6 +17,21 @@ from nexus_sandbox.backends.docker import DockerBackend, PROFILE_LABEL, containe
 from nexus_sandbox.backends.local import LocalExecutor
 from nexus_sandbox.settings import SandboxSettings, load_config, load_settings, sandbox_local_allowed
 
+@pytest.fixture
+def db():
+    """A session on an in-memory database holding the platform tables."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from nexus_platform.persistence.base import Base
+    import nexus_platform.persistence.models  # noqa: F401  (registers the tables)
+    engine = create_engine('sqlite://', poolclass=StaticPool, connect_args={'check_same_thread': False})
+    Base.metadata.create_all(engine)
+    with sessionmaker(engine)() as session:
+        yield session
+    engine.dispose()
+
+
 FULL = '''
 [sandbox]
 enabled = true
@@ -166,40 +181,40 @@ def _facts(monkeypatch, tmp_path, body, mode='development'):
     monkeypatch.setattr(tool_gates, '_web_enabled', lambda: False)
 
 
-def test_gating_follows_the_agents_profile(monkeypatch, tmp_path):
+def test_gating_follows_the_agents_profile(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, FULL)
-    assert tool_gates.deployment_gate_facts('local').sandbox_accepted is True            # allow_local and development mode
-    assert unavailable_groups(tool_gates.deployment_gate_facts('docker'))['sandbox'] == 'sandbox_not_accepted'
-    assert unavailable_groups(tool_gates.deployment_gate_facts('ghost'))['sandbox'] == 'sandbox_profile_unknown'
-    assert tool_gates.deployment_gate_facts('').sandbox_accepted is False                # the empty name is the default: docker
+    assert tool_gates.deployment_gate_facts(db, 'local').sandbox_accepted is True            # allow_local and development mode
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'docker'))['sandbox'] == 'sandbox_not_accepted'
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'ghost'))['sandbox'] == 'sandbox_profile_unknown'
+    assert tool_gates.deployment_gate_facts(db, '').sandbox_accepted is False                # the empty name is the default: docker
 
 
-def test_a_local_profile_is_unavailable_outside_development_mode(monkeypatch, tmp_path):
+def test_a_local_profile_is_unavailable_outside_development_mode(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, FULL, mode='production')
-    facts = tool_gates.deployment_gate_facts('local')
+    facts = tool_gates.deployment_gate_facts(db, 'local')
     assert unavailable_groups(facts)['sandbox'] == 'sandbox_local_not_allowed'
     assert 'sandbox' in hidden_groups(facts, {'sandbox': True})
 
 
-def test_the_default_local_profile_is_unavailable_in_production_without_failing(monkeypatch, tmp_path):
+def test_the_default_local_profile_is_unavailable_in_production_without_failing(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = true', mode='production')
-    assert unavailable_groups(tool_gates.deployment_gate_facts())['sandbox'] == 'sandbox_local_not_allowed'
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db))['sandbox'] == 'sandbox_local_not_allowed'
 
 
-def test_a_disabled_or_broken_section_leaves_the_sandbox_off(monkeypatch, tmp_path):
+def test_a_disabled_or_broken_section_leaves_the_sandbox_off(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = false')
-    assert unavailable_groups(tool_gates.deployment_gate_facts())['sandbox'] == 'sandbox_disabled'
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db))['sandbox'] == 'sandbox_disabled'
     _facts(monkeypatch, tmp_path, '[sandbox]\nsurprise = 1')
-    assert unavailable_groups(tool_gates.deployment_gate_facts())['sandbox'] == 'sandbox_disabled'
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db))['sandbox'] == 'sandbox_disabled'
 
 
-def test_the_editor_lists_the_profiles_with_their_availability(monkeypatch, tmp_path):
+def test_the_editor_lists_the_profiles_with_their_availability(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, FULL)
-    listed = {p['name']: p for p in tool_gates.sandbox_profiles()}
+    listed = {p['name']: p for p in tool_gates.sandbox_profiles(db)}
     assert listed['docker']['default'] and not listed['docker']['available'] and listed['docker']['reason'] == 'sandbox_not_accepted'
     assert listed['local']['available'] and listed['local']['type'] == 'local'
     _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = false')
-    assert tool_gates.sandbox_profiles() == []
+    assert tool_gates.sandbox_profiles(db) == []
 
 
 def test_the_agent_policy_accepts_only_profile_names():
@@ -231,3 +246,71 @@ def _exec_tool(monkeypatch, tmp_path, body):
 def test_sandbox_exec_risk_and_timeout_follow_the_profiles(monkeypatch, tmp_path, body, risk, timeout):
     definition = _exec_tool(monkeypatch, tmp_path, body)
     assert definition.risk == risk and definition.timeout_seconds == timeout
+
+
+# ------------------------------------------------------------------ reports in the database (design 2.3.1)
+
+def _report(settings, *, passed=True, fingerprint=None):
+    return {'passed': passed, 'fingerprint': fingerprint or acceptance.fingerprint(settings), 'backend': settings.backend,
+            'checked_at': '2026-11-11T08:00:00Z', 'items': [{'name': 'network', 'ok': passed, 'detail': ''}]}
+
+
+def test_the_database_store_round_trips_and_replaces_one_row_per_profile(db, tmp_path):
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    settings = SandboxSettings(enabled=True, backend='docker', workspace_root=str(tmp_path), profile='strict')
+    store = DbReportStore(db)
+    assert store.load(settings) is None
+    store.save(settings, _report(settings, passed=False))
+    store.save(settings, _report(settings))
+    loaded = store.load(settings)
+    assert loaded['passed'] is True and loaded['items'][0]['name'] == 'network' and loaded['checked_at'] == '2026-11-11T08:00:00Z'
+    other = SandboxSettings(enabled=True, backend='docker', workspace_root=str(tmp_path), profile='other')
+    assert store.load(other) is None
+
+
+def test_a_database_report_decides_and_a_changed_fingerprint_invalidates_it(db, tmp_path):
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    settings = SandboxSettings(enabled=True, backend='docker', workspace_root=str(tmp_path))
+    store = DbReportStore(db)
+    assert acceptance.passed(settings, store) is False
+    store.save(settings, _report(settings))
+    assert acceptance.passed(settings, store) is True
+    changed = SandboxSettings(enabled=True, backend='docker', workspace_root=str(tmp_path), tmpfs_mb=8)
+    assert acceptance.passed(changed, store) is False  # the same profile, different limits
+
+
+def test_the_row_wins_over_an_older_file_and_a_file_is_used_only_without_a_row(db, tmp_path):
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    settings = SandboxSettings(enabled=True, backend='docker', workspace_root=str(tmp_path))
+    store = DbReportStore(db)
+    acceptance.FileReportStore().save(settings, _report(settings))
+    assert acceptance.passed(settings, store) is True            # no row: the report made before the table counts
+    store.save(settings, _report(settings, passed=False))
+    assert acceptance.passed(settings, store) is False           # the row says failed; the old file no longer counts
+
+
+def test_an_unreadable_store_means_not_accepted_even_with_a_valid_file(tmp_path):
+    settings = SandboxSettings(enabled=True, backend='docker', workspace_root=str(tmp_path))
+    acceptance.FileReportStore().save(settings, _report(settings))
+
+    class Broken:
+        def load(self, _settings):
+            raise RuntimeError('database down')
+    assert acceptance.passed(settings, Broken()) is False
+    assert acceptance.passed(settings) is True                    # without a store the file still counts
+
+
+def test_gating_reads_the_database_report(db, monkeypatch, tmp_path):
+    from nexus_platform.runs.sandbox_acceptance import DbReportStore
+    _facts(monkeypatch, tmp_path, FULL)
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'docker'))['sandbox'] == 'sandbox_not_accepted'
+    settings = load_config().get('docker')
+    DbReportStore(db).save(settings, _report(settings))
+    assert 'sandbox' not in unavailable_groups(tool_gates.deployment_gate_facts(db, 'docker'))
+    assert {p['name']: p['available'] for p in tool_gates.sandbox_profiles(db)}['docker'] is True
+
+
+def test_the_sandbox_package_does_not_import_the_platform():
+    import subprocess
+    code = "import sys, nexus_sandbox.acceptance; assert not any(m.startswith('nexus_platform') for m in sys.modules)"
+    assert subprocess.run([sys.executable, '-c', code]).returncode == 0
