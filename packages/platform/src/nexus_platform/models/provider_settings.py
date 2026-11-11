@@ -25,6 +25,7 @@ from nexus_platform.persistence.models import (
 )
 from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.audit import audit
+from nexus_platform.tenants.policies import personal_models_allowed
 
 
 def cipher() -> Fernet:
@@ -81,6 +82,8 @@ def provider_access(db: Session, tenant_id: UUID, user_id: UUID, provider_id: UU
         raise NotFound('Provider unavailable')
     if row.owner_user_id is not None and row.owner_user_id != user_id:
         raise NotFound('Provider unavailable')
+    if row.owner_user_id is not None and not personal_models_allowed(db, tenant_id):
+        raise Forbidden('Your enterprise does not allow personal models')
     if manage and row.owner_user_id is None:
         require_membership(db, tenant_id, user_id)
         require_api_permission(db, tenant_id, user_id, "models:manage")
@@ -231,6 +234,8 @@ def save_provider(db: Session, principal: Principal, tenant_id: UUID, *, name: s
             if scope == 'tenant':
                 require_membership(db, tenant_id, user.id)
                 require_api_permission(db, tenant_id, user.id, "models:manage")
+            elif not personal_models_allowed(db, tenant_id):
+                raise Forbidden('Your enterprise does not allow personal models')
             if not api_key:
                 raise ValueError('API Key is required')
             credential_id = new_id()

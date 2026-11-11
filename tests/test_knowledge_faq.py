@@ -19,7 +19,7 @@ from test_platform import database  # noqa: F401 (pytest fixture)
 def make_faq_kb(factory, tenant_id, owner, **kwargs):
     kwargs.setdefault('indexing', {'vector': False, 'keyword': True})
     with factory() as db, db.begin():
-        return service.create_base(db, tenant_id, owner, name=kwargs.pop('name', '常见问题'), kb_type='faq', **kwargs).id
+        return service.create_base(db, tenant_id, owner, visibility='tenant', name=kwargs.pop('name', '常见问题'), kb_type='faq', **kwargs).id
 
 
 def add(factory, tenant_id, owner, kb_id, question, answers, **extra):
@@ -101,13 +101,13 @@ def test_faq_bases_have_their_own_rules(env):
     factory, tenant_id, _, owner, member, _ = env
     with factory() as db, db.begin():
         with pytest.raises(ValueError, match='graph or wiki'):
-            service.create_base(db, tenant_id, owner, name='f', kb_type='faq', indexing={'vector': False, 'keyword': True, 'graph': True})
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='f', kb_type='faq', indexing={'vector': False, 'keyword': True, 'graph': True})
         with pytest.raises(ValueError, match='index_mode'):
-            service.create_base(db, tenant_id, owner, name='g', kb_type='faq', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='g', kb_type='faq', indexing={'vector': False, 'keyword': True},
                                 settings={'faq_config': {'index_mode': 'bogus'}})
     doc_kb = None
     with factory() as db, db.begin():
-        doc_kb = service.create_base(db, tenant_id, owner, name='文档', indexing={'vector': False, 'keyword': True}).id
+        doc_kb = service.create_base(db, tenant_id, owner, visibility='tenant', name='文档', indexing={'vector': False, 'keyword': True}).id
     with factory() as db, db.begin():
         with pytest.raises(Conflict):
             faq.create_entry(db, tenant_id, owner, doc_kb, {'standard_question': 'q', 'answers': ['a']})

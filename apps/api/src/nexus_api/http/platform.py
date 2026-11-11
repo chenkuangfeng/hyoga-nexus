@@ -65,7 +65,6 @@ from nexus_api.schemas.platform import (
     RunEventView,
     RunView,
     SessionCreate,
-    AdminAgentView,
     MemorySnapshotView,
     SessionView,
     TenantCreate,
@@ -456,39 +455,6 @@ def list_sessions(
     db: Session = Depends(get_database_session),
 ):
     rows = sessions.list_sessions(db, principal, tenant_id)
-    return [SessionView.model_validate(row, from_attributes=True) for row in rows]
-
-
-@router.get("/admin/tenants", response_model=list[TenantView])
-def list_all_tenants(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
-    """Platform administrators only: every active space, for choosing a filter."""
-    return [tenant_view(row, "") for row in tenants.list_all_tenants(db, principal)]
-
-
-@router.get("/admin/summary")
-def platform_summary(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
-    """Platform administrators only: read-only counts of enterprises, personal spaces and shared spaces."""
-    return tenants.platform_summary(db, principal)
-
-
-@router.get("/admin/agents", response_model=list[AdminAgentView])
-def list_all_agents(principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
-    """Platform administrators only: every agent across spaces, for the session filter."""
-    rows = agents.list_all_agents_for_platform_admin(db, principal)
-    return [AdminAgentView(id=row.id, tenant_id=row.tenant_id, name=row.name,
-                           published_version_id=row.published_version_id) for row in rows]
-
-
-@router.get("/admin/sessions", response_model=list[SessionView])
-def list_all_sessions(
-    tenant_id: UUID | None = None,
-    agent_id: UUID | None = None,
-    principal: Principal = Depends(get_principal),
-    db: Session = Depends(get_database_session),
-):
-    """Platform administrators only: sessions across spaces, filtered by space or agent."""
-    rows = sessions.list_sessions_for_platform_admin(
-        db, principal, tenant_id=tenant_id, agent_id=agent_id)
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
 
 

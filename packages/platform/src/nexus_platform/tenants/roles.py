@@ -95,6 +95,8 @@ def update_role_grants(
         actor_id, actor = require_role_manager(session, principal, tenant_id)
         lock_tenant(session, tenant_id)
         role = _role_in_tenant(session, tenant_id, role_id)
+        if role.builtin:
+            raise Forbidden("Built-in roles cannot be changed")
         _ensure_within_actor(actor, menu_set, api_set)
         _write_grants(session, role.id, menu_set, api_set)
         role.updated_at = utc_now()

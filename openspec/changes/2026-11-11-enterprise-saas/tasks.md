@@ -14,15 +14,17 @@
 
 ## E1 租户与个人区
 
-- [ ] E1.1 迁移：删除 `personal` 租户及数据并收紧 `kind` 约束；`knowledge_bases.visibility`；`enterprise_policies`；`tenant_roles.builtin`。
-- [ ] E1.2 注册只创建企业；删除个人空间相关的后端分支与测试；登录默认进入上次使用的企业。
-- [ ] E1.3 知识库可见范围：`can_read` 按可见范围判断；修改可见范围的冲突检查。
-- [ ] E1.4 企业策略：接口与三处检查。
-- [ ] E1.5 企业级管理角色与审计正文权限。
-- [ ] E1.6 删除跨企业的 `/admin/*` 接口及服务函数与测试。
-- [ ] E1.7 测试：注册即创建企业、可见性矩阵、三项策略、内置角色不可删除。
-- [ ] E1.8 PostgreSQL 门禁：完成路线图 2.9，并覆盖本提案新增的列与表。
+- [x] E1.1 迁移：删除 `personal` 租户及数据并收紧 `kind` 约束；`knowledge_bases.visibility`；`enterprise_policies`；`tenant_roles.builtin`。
+- [x] E1.2 注册只创建企业；删除个人空间相关的后端分支与测试；登录默认进入上次使用的企业。
+- [x] E1.3 知识库可见范围：`can_read` 按可见范围判断；修改可见范围的冲突检查。
+- [x] E1.4 企业策略：接口与三处检查。
+- [x] E1.5 企业级管理角色与审计正文权限。
+- [x] E1.6 删除跨企业的 `/admin/*` 接口及服务函数与测试。
+- [x] E1.7 测试：注册即创建企业、可见性矩阵、三项策略、内置角色不可删除。
+- [x] E1.8 PostgreSQL 门禁：完成路线图 2.9，并覆盖本提案新增的列与表。
 - [ ] E1.9 文档：`docs/architecture.md`、`docs/roadmap.md`（新增企业化步骤，2.9 改为前置门禁，9.1 由 E4 承接）、`configs/README.md`、`README.md`。
+- 实施说明（2026-11-12）：迁移 `f6a7b8c9d0e1_enterprise_tenancy`。**偏离**：提案写的是“删除个人空间及数据”，迁移改为把残留的个人空间**原地改为企业**（不删数据），因为迁移也会在非开发库上执行；开发库 `nexus.db` 中本来没有个人空间，结果相同（已用其副本验证升级）。注册接口仍接受 `space_kind` 以兼容现有前端，但一律创建企业。自建智能体不再要求 `agents:write`，改由企业策略 `self_build_agents` 决定（viewer 不能自建）。知识库：新建个人库默认 `private`、企业库默认 `tenant`，迁移把已有库设为 `tenant`。`audit:read_content` 已加入权限目录，但目前审计接口只返回元数据，没有可查看的正文，等有正文查看功能时再接入。E1.3 中“不属于任何企业时进入创建或加入企业页”的前端部分随 E2 实现（登录接口此时返回空的 `active_tenant`）。测试 `tests/test_enterprise_policy.py`（7 项）并改写了依赖个人空间、个人模型默认开启、跨企业共享默认开启的旧测试；全量 pytest 三批通过。
+- E1.9 未完成：本机没有 PostgreSQL（`NEXUS_TEST_POSTGRES_URL` 未设置），需要目标环境。
 
 ## E2 前端重构
 

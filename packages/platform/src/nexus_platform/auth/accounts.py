@@ -2,11 +2,14 @@
 
 A password account is a user with an identity `(provider='password', scope='', external_id=username)`,
 a unique `users.email` and a `local_credentials` row. Registration creates the account together with its
-first space: a personal space (one member) or an enterprise space (owner, enterprise code required).
+first space: an enterprise whose owner is the registrant (openspec 2026-11-11-enterprise-saas decision 1; a
+one-member enterprise is an ordinary enterprise). Name and enterprise code are optional and generated when empty.
 Creating an account for someone else is a tenant administration action and adds the new user to that
 tenant with the chosen role.
 """
 from __future__ import annotations
+
+import secrets
 
 import re
 from datetime import timedelta
@@ -16,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole, new_id, utc_now
+from nexus_platform.tenants.builtin_roles import ensure_builtin_roles
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.auth.passwords import DUMMY_HASH, hash_password, validate_new_password, verify_password
@@ -36,6 +40,7 @@ LOCK_DURATION = timedelta(minutes=15)
 _USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
 _COMPANY_CODE = re.compile(r"^[a-z0-9][a-z0-9_-]{2,31}$")
+#: Accepted for compatibility with clients that still send ``space_kind``; every registration creates an enterprise.
 SPACE_KINDS = frozenset({"personal", "enterprise"})
 GENERIC_FAILURE = "邮箱或密码错误"
 
@@ -70,14 +75,14 @@ def _password_identity_taken(session: Session, username: str) -> bool:
 
 
 def register(
-    session: Session, *, username: str, email: str, password: str, space_kind: str,
+    session: Session, *, username: str, email: str, password: str, space_kind: str = "enterprise",
     space_name: str = "", company_code: str = "", display_name: str = "", allow_registration: bool = True,
 ) -> tuple[UserRecord, TenantRecord]:
-    """Self-service sign-up. Creates the account and its first space; returns (user, space).
+    """Self-service sign-up. Creates the account and its first enterprise, owned by the registrant.
 
-    `space_kind` `personal` creates a one-member space named after the account. `enterprise` needs a
-    space name and a company code that no other space uses; the registrant becomes its owner. When
-    `allow_registration` is false (`[auth].registration_enabled`), the call is refused before any write.
+    ``space_kind`` is ignored apart from validation: personal spaces no longer exist. ``space_name`` defaults to
+    "{display name}的企业" and ``company_code`` to a generated unique code. When ``allow_registration`` is false
+    (``[auth].registration_enabled``), the call is refused before any write.
     """
     if not allow_registration:
         raise Forbidden("注册已关闭，请联系管理员")
@@ -86,11 +91,7 @@ def register(
     validate_new_password(password)
     if space_kind not in SPACE_KINDS:
         raise ValueError("Space kind must be personal or enterprise")
-    code: str | None = None
-    if space_kind == "enterprise":
-        if not space_name.strip():
-            raise ValueError("Enterprise name must not be empty")
-        code = normalize_company_code(company_code)
+    code: str | None = normalize_company_code(company_code) if company_code.strip() else None
     now = utc_now()
     with session.begin():
         if _password_identity_taken(session, username):
@@ -99,6 +100,10 @@ def register(
             raise Conflict("邮箱已被注册")
         if code is not None and session.scalar(select(TenantRecord.id).where(TenantRecord.code == code)) is not None:
             raise Conflict("企业编码已被占用")
+        while code is None:
+            candidate = f"e{secrets.token_hex(5)}"
+            if session.scalar(select(TenantRecord.id).where(TenantRecord.code == candidate)) is None:
+                code = candidate
         user = UserRecord(id=new_id(), display_name=display_name.strip() or username, email=address,
                           status="active", must_change_password=False, created_at=now)
         session.add(user)
@@ -110,18 +115,16 @@ def register(
         session.add(LocalCredentialRecord(
             user_id=user.id, password_hash=hash_password(password), failed_attempts=0, updated_at=now,
         ))
-        if space_kind == "personal":
-            name = f"{user.display_name}的个人空间"
-        else:
-            name = space_name.strip()
-        space = TenantRecord(id=new_id(), name=name[:160], kind=space_kind, code=code, status="active",
+        name = space_name.strip() or f"{user.display_name}的企业"
+        space = TenantRecord(id=new_id(), name=name[:160], kind="enterprise", code=code, status="active",
                              created_by=user.id, created_at=now, updated_at=now)
         session.add(space)
         session.flush()
+        ensure_builtin_roles(session, space.id)
         session.add(MembershipRecord(
             tenant_id=space.id, user_id=user.id, role=TenantRole.OWNER.value, status="active", joined_at=now,
         ))
-        audit(session, space.id, user.id, "tenant.created", "tenant", str(space.id), {"kind": space_kind})
+        audit(session, space.id, user.id, "tenant.created", "tenant", str(space.id), {"kind": "enterprise"})
     return user, space
 
 

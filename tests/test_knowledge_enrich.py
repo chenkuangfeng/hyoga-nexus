@@ -48,7 +48,7 @@ def enriched(env, monkeypatch):
                 'auto_tag_config': {'enabled': True, 'max_tags': 2},
                 'profile_config': {'enabled': True}}
     with factory() as db, db.begin():
-        kb_id = service.create_base(db, tenant_id, owner, name='售后', settings=settings,
+        kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='售后', settings=settings,
                                     indexing={'vector': False, 'keyword': True}).id
     yield factory, tenant_id, owner, member, kb_id, model
     llm.set_completer(None)
@@ -109,11 +109,11 @@ def test_enrichment_settings_are_validated(env, monkeypatch):
     monkeypatch.setattr(service, '_authorize_chat_model', lambda *args: None)
     with factory() as db, db.begin():
         with pytest.raises(ValueError, match='question_count'):
-            service.create_base(db, tenant_id, owner, name='a', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='a', indexing={'vector': False, 'keyword': True},
                                 settings={'question_generation_config': {'enabled': True, 'question_count': 50}})
         with pytest.raises(ValueError, match='max_tags'):
-            service.create_base(db, tenant_id, owner, name='b', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='b', indexing={'vector': False, 'keyword': True},
                                 settings={'auto_tag_config': {'enabled': True, 'max_tags': 0}})
-        kb = service.create_base(db, tenant_id, owner, name='c', indexing={'vector': False, 'keyword': True})
+        kb = service.create_base(db, tenant_id, owner, visibility='tenant', name='c', indexing={'vector': False, 'keyword': True})
         with pytest.raises(ValueError, match='profile'):
             enrich.request_profile(db, kb)

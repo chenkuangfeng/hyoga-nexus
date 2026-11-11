@@ -130,14 +130,6 @@ class AgentVersionView(BaseModel):
     published_at: datetime
 
 
-class AdminAgentView(BaseModel):
-    """An agent as listed for the platform administrator's session filter."""
-    id: UUID
-    tenant_id: UUID
-    name: str
-    published_version_id: UUID | None
-
-
 class AgentView(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -260,6 +252,8 @@ class RoleView(BaseModel):
     name: str
     menus: list[str]
     apis: list[str]
+    #: Built-in roles (security_admin, auditor) cannot be changed, only assigned.
+    builtin: bool = False
     created_at: datetime
     updated_at: datetime
 

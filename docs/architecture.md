@@ -218,7 +218,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **渐进披露**：默认只向模型提供名称与简介，正文按需加载，资源按需读取。
 - **依赖校验**：发布智能体版本时检查技能依赖是否已由智能体绑定满足；缺失则拒绝发布并说明原因。
 - **来源检疫**：内置技能可信；其余按来源（`admin` / `import` / `agent` / `user` / 私有）与规则扫描结论（`safe` / `caution` / `dangerous`）查放行矩阵：`admin` 遇 `dangerous` 须显式确认并审计；`import` 遇任何发现阻止，管理员可留理由放行；`agent` 与 `user` 进入共享审核，遇 `dangerous` 拒绝；私有技能遇 `dangerous` 拒绝保存。扫描覆盖可疑网络请求、凭据读取、敏感路径写入、破坏性命令、混淆代码与针对模型的指令覆盖，扫描器带版本号，升级后旧版本标为需重扫。已实现：规则扫描器、放行矩阵、`admin` / `import` / `builtin` 的发布路径、确认放行与审计、重扫；`agent` / `user` 的审核流程尚未实现。扫描只是门禁之一，运行时授权仍然有效。
-- **内置技能与工具**：登记在保留的系统租户（`tenants.kind = 'system'`，无成员、不可登录、不出现在任何列表）名下，对所有空间含个人空间**可见且可分配**（不是自动启用，智能体仍须绑定）；授权对系统租户来源的技能与工具放行，无需授权行；空间管理员可对本空间停用某个内置资源（`tenant_builtin_disabled`），不影响其他空间与已发布的智能体版本。内置技能由平台管理员接口或 `uv run python -m nexus_api.cli import-builtin-skills` 从仓库 `skills/` 导入，内置工具随 API 与 worker 启动同步。
+- **内置技能与工具**：登记在保留的系统租户（`tenants.kind = 'system'`，无成员、不可登录、不出现在任何列表）名下，对所有企业**可见且可分配**（不是自动启用，智能体仍须绑定）；授权对系统租户来源的技能与工具放行，无需授权行；空间管理员可对本空间停用某个内置资源（`tenant_builtin_disabled`），不影响其他空间与已发布的智能体版本。内置技能由平台管理员接口或 `uv run python -m nexus_api.cli import-builtin-skills` 从仓库 `skills/` 导入，内置工具随 API 与 worker 启动同步。
 - **脚本执行**：技能脚本是技能目录里的普通文件，不在 frontmatter 声明。`exec_skill(name, script, args?, stdin?)`（`skills` 组）在智能体所选的沙箱档位里运行其中一个脚本：技能文件按内容哈希只读投射到沙箱，`args` 作为参数列表传入、不经 shell 解释，`stdin` 最多 65536 字节，解释器按扩展名或 `#!` 行在 `python3`、`bash` / `sh`、`node` 中选择；运行前校验脚本哈希，审计记录脚本路径与哈希；脚本从 `$NEXUS_SKILL_DIR` 找到自己的文件。需要管道或串联的场景用 `sandbox_exec`（`sandbox` 组）。技能的 `execution` 声明（`sandbox` 默认 / `local`）只是声明：`local` 仅限内置来源且部署开启 `allow_local_scripts`，不满足时不运行，不回退到另一个位置。沙箱档位见 2.9。
 - **frontmatter**：`SKILL.md` 的前置块按 YAML（`safe_load`）读取，已知键之外的键保留不拒绝，常见的缩进与冒号问题做保守修复并标记；名字为小写字母、数字与连字符（1–64 字符，不含 `anthropic`、`claude`）；`model_invocable` 为假的技能不进模型的技能索引；`execution` 声明脚本位置，`local` 仅限内置来源。
 - **包与安装**：每个版本保存一份规范 zip（排序、固定时间，同内容同字节），二进制文件只存于 zip，运行时与文本文件一起投射进沙箱。zip 经 `nexus_skills.bundle` 先查条目表再按上限读取（拒绝穿越、符号链接、重复路径、加密、压缩炸弹），再做语法验证（`.py` / `.sh` / `.js`）、扫描与放行矩阵。带 `requirements.txt` 或 `package.json` 的版本先是 `installing`，由 worker 在所选档位的临时环境里联网构建依赖，核对清单包后原子换入，再 `ready` 并移动当前版本指针；失败保留 zip 可重试，旧版本继续服务。远程来源（GitHub、GitLab、skills.sh、ClawHub、直链）经 `nexus_core.egress` 受保护下载（只允许公网地址、逐跳校验），仅管理员且必须确认，只比较更新、不自动更新。
@@ -344,6 +344,14 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 **组织与空间绑定**：组织是一棵树（集团为根，子公司与部门为节点，层级不限）。人员就是 `users`，可属于多个节点，其中只有一个主节点。平台管理员（`users.is_platform_admin`）管理树、人员与空间绑定。空间绑定到节点后，空间成员可以看到该节点的子树与去重后的人员；人员不会因此成为空间成员，加入须由空间管理员从绑定子树中显式选人（`members:manage`）。组织侧审计写入 `org_audit_records`，因为组织可以不绑定任何空间。
 
 **资源归属**（提案 `2026-11-11-enterprise-saas` 决定 2）：智能体与知识库分为个人与企业两种归属，由创建入口决定（工作台创建个人资源，`/tenants/{id}/admin/...` 创建企业资源）。个人资源只由创建者维护；企业智能体只由持有 `enterprise_agents:manage` 的成员维护，企业知识库由持有 `enterprise_kbs:manage` 的成员管理，并可指定知识库管理员维护内容（`knowledge_base_maintainers`）。角色分配与共享只授予使用权（`view`、`run`）。空间 owner、admin 对个人资源只有治理权：查看、归档或删除、转为企业资源。企业智能体不能绑定个人知识库，个人智能体只能绑定创建者本人的个人知识库与企业知识库。
+
+**企业即租户**（提案 `2026-11-11-enterprise-saas` 决定 1）：租户只有企业（`enterprise`）与保留的系统租户（`system`）两种；自助注册即创建一家企业，注册人为 owner，企业名称与编码不填时自动生成。一个账号可属于多家企业，登录默认进入上次使用的企业，否则进入最早加入的企业。
+
+**企业策略**（`enterprise_policies`，`tenants/policies.py`，决定 4）：只收紧平台已有的检查，缺省行即默认值。`self_build_agents`（`all` / `org_units` / `none`，owner、admin 不受限，viewer 不能自建）决定谁能创建个人智能体；`personal_models`（默认关闭）决定成员能否使用个人模型与 Key，关闭后下一次选择或执行即被拒绝；`external_sharing`（默认关闭）决定能否共享到含其他企业的共享空间；`personal_wecom_channels`、`personal_external_channels` 供 IM 渠道使用；`retention_days` 供数据治理使用。读取接口 `GET /tenants/{id}/admin/policy` 对全体成员开放，修改 `PATCH` 需要 `policy:manage`。
+
+**内置角色**（决定 8）：每家企业创建时写入 `security_admin`（`policy:manage`、`tools:manage`、`audit:read`）与 `auditor`（`audit:read`），`tenant_roles.builtin` 为真，可以分配，不能改授权。`policy:manage`、`audit:read_content` 属于治理权限，admin 默认不持有。
+
+**知识库可见范围**（决定 3）：`knowledge_bases.visibility` 为 `private` 或 `tenant`。新建个人库默认 `private`（只有创建者与 owner、admin 可读），新建企业库默认 `tenant`；企业库设为 `private` 时只有管理者、知识库管理员与 owner、admin 可读。他人可用的智能体（企业智能体、有角色授权或共享空间共享的个人智能体）只能绑定 `tenant` 库，发布、分配与共享时检查；被这类智能体绑定或已共享到共享空间的库不能改为 `private`（`kb_in_use`）；只有 `tenant` 库能共享到共享空间。
 
 **三类授权严格分离**：
 

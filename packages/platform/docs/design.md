@@ -105,3 +105,6 @@ Redis 后端每个（事件循环，Run）一个共享的阻塞读取器，再�
 ## 沙箱产物（artifacts）
 
 `artifacts/service.py` 在 Run 结束时登记沙箱 `/outputs` 下的文件：先在事务外流式复制并计算 `sha256`（`O_NOFOLLOW`，只收普通文件，复制中超限即放弃），再在一个事务里写 `artifacts` 行、`artifacts.registered` 事件与审计；上限与跳过原因见 `docs/architecture.md` 沙箱部分。读取与删除一律经会话授权：会话所有者或空间 owner / admin，其余按「不存在」处理。下载前再次确认副本位于产物根目录内、不是符号链接，副本缺失时报告不存在而不是出错。worker 侧入口是 `nexus_worker.artifacts.register_outputs`，在 Run 收尾调用且从不抛出，失败只记日志。
+
+
+企业化（提案 2026-11-11-enterprise-saas E1，迁移 `f6a7b8c9d0e1`）：`auth/accounts.register` 一律创建企业（`space_kind` 只为兼容旧客户端而接受），企业编码缺省为随机生成；迁移把残留的个人空间原地改为企业并收紧 `tenants.kind`。`tenants/policies.py` 读写 `enterprise_policies` 并提供 `require_self_build`、`personal_models_allowed`、`require_external_sharing`，分别接在 `agents/service.create_agent`（个人智能体）、`models/provider_settings`（`provider_access` 与个人供应商创建）和两种共享入口上。`tenants/builtin_roles.py` 在 `create_tenant`、注册与默认企业引导时写入内置角色，`roles.update_role_grants` 拒绝修改内置角色。`knowledge/access.py` 的 `visible_in_space` 按 `visibility` 判断本企业成员的读取；`agents/service.py` 的 `check_binding_scope`、`agents_exposing_base` 保证他人可用的智能体只绑定 `tenant` 库。跨企业的 `/admin/tenants`、`/admin/summary`、`/admin/agents`、`/admin/sessions` 已删除。

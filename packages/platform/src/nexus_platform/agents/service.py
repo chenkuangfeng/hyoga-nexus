@@ -27,6 +27,7 @@ from nexus_platform.agents.access import (
     ENTERPRISE, FULL_ROLES, MANAGE_ENTERPRISE_AGENTS, OWNERSHIPS, PERSONAL, require_agent_permission,
 )
 from nexus_platform.authz.permissions import require_api_permission
+from nexus_platform.tenants.policies import require_self_build
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
 from nexus_platform.agents.generation import validate_generation
@@ -54,8 +55,8 @@ def create_agent(
     """Create a draft agent.
 
     ``ownership`` is decided by the entry point, never by the request body: the workspace creates ``personal``
-    agents (needs ``agents:write``), the enterprise admin API creates ``enterprise`` agents (needs
-    ``enterprise_agents:manage``).
+    agents (allowed by the enterprise policy ``self_build_agents``), the enterprise admin API creates ``enterprise``
+    agents (needs ``enterprise_agents:manage``).
     """
     if ownership not in OWNERSHIPS:
         raise ValueError("Unknown agent ownership")
@@ -72,9 +73,10 @@ def create_agent(
         user = resolve_user(session, principal)
         require_tenant(session, tenant_id)
         require_membership(session, tenant_id, user.id)
-        require_api_permission(
-            session, tenant_id, user.id, MANAGE_ENTERPRISE_AGENTS if ownership == ENTERPRISE else "agents:write"
-        )
+        if ownership == ENTERPRISE:
+            require_api_permission(session, tenant_id, user.id, MANAGE_ENTERPRISE_AGENTS)
+        else:  # self-built agents follow the enterprise policy (decision 4), open to every contributor by default
+            require_self_build(session, tenant_id, user.id)
         verify_model_version(session, tenant_id, model_profile_version_id)
         authorize_model(session, tenant_id, user.id, model_profile_version_id)
         agent = AgentRecord(
@@ -193,6 +195,7 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
         check_skill_dependencies(session, tenant_id, draft_bindings)
         check_knowledge_dependencies(draft_bindings)
         check_knowledge_ownership(session, agent, [binding_snapshot(row) for row in draft_bindings])
+        check_binding_scope(session, agent)
         version_number = agent.version_counter + 1
         snapshot = {
             "agent_id": str(agent.id), "version": version_number, "name": agent.name,
@@ -240,16 +243,6 @@ def get_agent(session: Session, tenant_id: UUID, agent_id: UUID):
         session.scalars(select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == agent.id))
     )
     return agent, draft_bindings
-
-
-def list_all_agents_for_platform_admin(session: Session, principal: Principal) -> list[AgentRecord]:
-    """Every agent across spaces, for the platform administrator's session filter. Others get Forbidden."""
-    from nexus_platform.errors import Forbidden
-    from nexus_platform.identity.service import resolve_user
-    with session.begin():
-        if not resolve_user(session, principal).is_platform_admin:
-            raise Forbidden("Platform administrator required")
-        return list(session.scalars(select(AgentRecord).order_by(AgentRecord.tenant_id, AgentRecord.name)))
 
 
 def list_agents(session: Session, tenant_id: UUID) -> list[AgentRecord]:
@@ -429,6 +422,51 @@ def check_knowledge_ownership(session: Session, agent: AgentRecord, bindings: li
             raise InvalidConfiguration(f"knowledge_binding_ownership:{kb.name}")
 
 
+def agent_has_other_users(session: Session, agent: AgentRecord) -> bool:
+    """True when someone besides the creator may use the agent: enterprise agents, role grants, shared spaces."""
+    from nexus_platform.persistence.models import AgentShareRecord, TenantAgentGrantRecord
+    if agent.ownership == ENTERPRISE:
+        return True
+    if session.scalar(select(TenantAgentGrantRecord.agent_id).where(
+            TenantAgentGrantRecord.agent_id == agent.id).limit(1)) is not None:
+        return True
+    return session.scalar(select(AgentShareRecord.id).where(AgentShareRecord.agent_id == agent.id).limit(1)) is not None
+
+
+def _bound_base_ids(session: Session, agent: AgentRecord) -> set[str]:
+    rows = [row.resource_id for row in session.scalars(select(AgentDraftBindingRecord).where(
+        AgentDraftBindingRecord.agent_id == agent.id, AgentDraftBindingRecord.kind == "knowledge_base"))]
+    if agent.published_version_id:
+        rows += [row.resource_id for row in session.scalars(select(ResourceBindingRecord).where(
+            ResourceBindingRecord.agent_version_id == agent.published_version_id,
+            ResourceBindingRecord.kind == "knowledge_base"))]
+    return set(rows)
+
+
+def check_binding_scope(session: Session, agent: AgentRecord, *, other_users: bool | None = None) -> None:
+    """An agent others may use must not bind a private base of its own space (decision 3), so sharing never widens
+    what a base exposes. ``other_users`` overrides the detection when the caller is about to add a user."""
+    if not (agent_has_other_users(session, agent) if other_users is None else other_users):
+        return
+    for value in _bound_base_ids(session, agent):
+        try:
+            kb = session.get(KnowledgeBaseRecord, UUID(value))
+        except ValueError:
+            continue
+        if kb is not None and kb.tenant_id == agent.tenant_id and kb.visibility != "tenant":
+            raise InvalidConfiguration(f"binding_scope_narrower:{kb.name}")
+
+
+def agents_exposing_base(session: Session, kb: KnowledgeBaseRecord) -> list[str]:
+    """Names of live agents of the base's space that bind it and that members besides their creator may use."""
+    names = []
+    for agent in session.scalars(select(AgentRecord).where(
+            AgentRecord.tenant_id == kb.tenant_id, AgentRecord.status != ARCHIVED)):
+        if str(kb.id) in _bound_base_ids(session, agent) and agent_has_other_users(session, agent):
+            names.append(agent.name)
+    return sorted(names)
+
+
 def convert_agent_to_enterprise(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID) -> AgentRecord:
     """Turn a member's personal agent into an enterprise agent (owner or admin only; decision 2).
 
@@ -457,6 +495,10 @@ def convert_agent_to_enterprise(session: Session, principal: Principal, tenant_i
             check_knowledge_ownership(session, agent, draft + published)
         except InvalidConfiguration as exc:
             raise Conflict(f"Convert the bound personal knowledge base first ({exc})") from None
+        try:
+            check_binding_scope(session, agent)
+        except InvalidConfiguration as exc:
+            raise Conflict(f"Make the bound knowledge base visible to the enterprise first ({exc})") from None
         agent.updated_at = utc_now()
         audit(session, tenant_id, user.id, "agent.converted_to_enterprise", "agent", str(agent.id),
               {"creator_id": str(agent.created_by)})

@@ -149,6 +149,9 @@ def set_agent_grants(
         actor_agent_perms = agent_permissions(session, tenant_id, actor_id, agent)
         if not permission_set <= actor_agent_perms:
             raise Forbidden("A role cannot grant agent permissions the actor does not hold")
+        if permission_set:
+            from nexus_platform.agents.service import check_binding_scope
+            check_binding_scope(session, agent, other_users=True)
         session.query(TenantAgentGrantRecord).filter(
             TenantAgentGrantRecord.role_id == role_id, TenantAgentGrantRecord.agent_id == agent_id
         ).delete()

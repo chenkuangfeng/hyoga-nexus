@@ -62,6 +62,7 @@ class KnowledgeBaseRecord(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active','deleting')", name='ck_knowledge_bases_status'),
         CheckConstraint("ownership IN ('personal','enterprise')", name='ck_knowledge_bases_ownership'),
+        CheckConstraint("visibility IN ('private','tenant')", name='ck_knowledge_bases_visibility'),
         UniqueConstraint('id', 'tenant_id', name='uq_knowledge_bases_id_tenant'),
         Index('ix_knowledge_bases_tenant', 'tenant_id', 'status'),
         Index('uq_knowledge_bases_name', 'tenant_id', 'name', unique=True,
@@ -75,6 +76,9 @@ class KnowledgeBaseRecord(Base):
     #: ``personal`` (maintained by its creator) or ``enterprise`` (managed by holders of ``enterprise_kbs:manage``;
     #: content also by the members in ``knowledge_base_maintainers``). openspec 2026-11-11-enterprise-saas decision 2.
     ownership: Mapped[str] = mapped_column(String(16), nullable=False, default='personal')
+    #: ``private``: only its managers and maintainers (plus the enterprise's owners and admins) read it;
+    #: ``tenant``: every member of the enterprise reads it (openspec 2026-11-11-enterprise-saas decision 3).
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, default='private')
     #: ``{"vector": bool, "keyword": bool, "graph": bool, "wiki": bool}`` (WeKnora IndexingStrategy).
     indexing: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     #: NULL selects the builtin SQLite store.

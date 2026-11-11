@@ -37,7 +37,8 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=10, max_length=256)
-    space_kind: str = Field(default="personal", pattern="^(personal|enterprise)$")
+    #: Ignored: every registration creates an enterprise (openspec 2026-11-11-enterprise-saas). Kept for old clients.
+    space_kind: str = Field(default="enterprise", pattern="^(personal|enterprise)$")
     space_name: str = Field(default="", max_length=160)
     company_code: str = Field(default="", max_length=32)
     display_name: str = Field(default="", max_length=160)
@@ -168,13 +169,13 @@ def _login_payload(db: Session, user_id: UUID, token: str) -> dict[str, Any]:
         user_view = _user_view(db, user)
     principal = Principal(id=user_view["username"], issuer=accounts.PASSWORD_PROVIDER)
     memberships = _memberships(db, principal)
-    # The home space is the personal space when there is one, otherwise the first space. The client may
-    # pick another space with switch-tenant, sending its id as X-Tenant-ID.
+    # The home space is the first enterprise the user joined. The client may pick another space with
+    # switch-tenant, sending its id as X-Tenant-ID.
     # A remembered space (users.preferences.last_active_tenant_id) wins while the user is still a member.
     remembered = (user_view["preferences"] or {}).get("last_active_tenant_id")
     home = next((m for m in memberships if str(m["id"]) == remembered), None)
     if home is None:
-        home = next((m for m in memberships if m["kind"] == "personal"), memberships[0] if memberships else None)
+        home = memberships[0] if memberships else None
     user_view["tenant_id"] = home["id"] if home else None
     return {
         "success": True,

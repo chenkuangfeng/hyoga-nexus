@@ -45,7 +45,7 @@ def media_env(env, monkeypatch):
     settings = {'vlm_config': {'enabled': True, 'model_id': str(uuid4()), 'description_language': '中文'},
                 'asr_config': {'enabled': True, 'model_id': str(uuid4()), 'language': 'zh'}}
     with factory() as db, db.begin():
-        kb_id = service.create_base(db, tenant_id, owner, name='多媒体', settings=settings,
+        kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='多媒体', settings=settings,
                                     indexing={'vector': False, 'keyword': True}).id
     yield factory, tenant_id, owner, member, kb_id
     media.set_media_factory()
@@ -65,7 +65,7 @@ def test_images_and_audio_become_searchable_text(media_env):
 def test_media_uploads_need_their_models(env):
     factory, tenant_id, _, owner, member, _ = env
     with factory() as db, db.begin():
-        kb_id = service.create_base(db, tenant_id, owner, name='纯文本', indexing={'vector': False, 'keyword': True}).id
+        kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='纯文本', indexing={'vector': False, 'keyword': True}).id
     with factory() as db:
         with pytest.raises(ValueError, match='VLM'):
             service.prepare_upload(db, tenant_id, owner, kb_id, 'a.png', b'x', 100)
@@ -80,10 +80,10 @@ def test_model_settings_are_validated(env, monkeypatch):
     monkeypatch.setattr(service, '_authorize_model_of_type', lambda *args: None)
     with factory() as db, db.begin():
         with pytest.raises(ValueError, match='vision model'):
-            service.create_base(db, tenant_id, owner, name='x', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='x', indexing={'vector': False, 'keyword': True},
                                 settings={'vlm_config': {'enabled': True}})
         with pytest.raises(ValueError, match='speech model'):
-            service.create_base(db, tenant_id, owner, name='y', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='y', indexing={'vector': False, 'keyword': True},
                                 settings={'asr_config': {'enabled': True}})
 
 
@@ -102,7 +102,7 @@ def test_scanned_pdf_without_a_vision_model_fails_with_a_reason(env):
     from nexus_platform.persistence.models import KnowledgeDocumentVersionRecord
     factory, tenant_id, _, owner, member, _ = env
     with factory() as db, db.begin():
-        kb_id = service.create_base(db, tenant_id, owner, name='无视觉', indexing={'vector': False, 'keyword': True}).id
+        kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='无视觉', indexing={'vector': False, 'keyword': True}).id
     upload(factory, tenant_id, owner, kb_id, '扫描件.pdf', _pdf(['']))
     drain(factory)
     with factory() as db:

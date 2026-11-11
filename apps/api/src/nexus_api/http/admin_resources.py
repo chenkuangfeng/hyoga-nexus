@@ -14,7 +14,9 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from nexus_api.dependencies.platform import get_database_session, get_principal
@@ -25,12 +27,41 @@ from nexus_core.platform import Principal
 from nexus_platform.agents import service as agents
 from nexus_platform.agents.access import ENTERPRISE
 from nexus_platform.knowledge import ownership, service as knowledge
+from nexus_platform.tenants import policies
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/admin', tags=['Enterprise administration'])
 
 
 class MaintainerInput(BaseModel):
     user_id: UUID
+
+
+class PolicyInput(BaseModel):
+    """Fields to change; omitted fields keep their value."""
+    self_build_agents: Literal['all', 'org_units', 'none'] | None = None
+    self_build_org_unit_ids: list[UUID] | None = None
+    personal_models: bool | None = None
+    external_sharing: bool | None = None
+    personal_wecom_channels: Literal['review', 'open', 'disabled'] | None = None
+    personal_external_channels: bool | None = None
+    retention_days: int | None = Field(default=None, ge=1, le=3650)
+
+
+@router.get('/policy')
+def read_policy(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """The enterprise policy (decision 4). Every member may read it so clients can hide what it forbids."""
+    return policies.read_policy(db, principal, tenant_id)
+
+
+@router.patch('/policy')
+def update_policy(tenant_id: UUID, body: PolicyInput, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)) -> dict[str, Any]:
+    """Change the enterprise policy; needs ``policy:manage``. ``retention_days: null`` must be sent explicitly."""
+    changes = body.model_dump(exclude_unset=True)
+    if 'self_build_org_unit_ids' in changes and changes['self_build_org_unit_ids'] is not None:
+        changes['self_build_org_unit_ids'] = [str(value) for value in changes['self_build_org_unit_ids']]
+    return policies.update_policy(db, principal, tenant_id, changes)
 
 
 @router.post('/agents', response_model=AgentView, status_code=status.HTTP_201_CREATED)
@@ -72,7 +103,7 @@ def create_enterprise_base(tenant_id: UUID, body: BaseInput, principal: Principa
             indexing=body.indexing_strategy, vector_store_id=body.vector_store_id,
             storage_backend_id=body.storage_backend_id, embedding_model_id=body.embedding_model_id,
             chunk_size=body.chunking_config.chunk_size, chunk_overlap=body.chunking_config.chunk_overlap,
-            settings=body.settings, ownership=ENTERPRISE)
+            settings=body.settings, ownership=ENTERPRISE, visibility=body.visibility)
     return knowledge.base_view(db, kb, tenant_id, user.id)
 
 

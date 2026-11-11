@@ -59,7 +59,7 @@ def wikis(env, monkeypatch):
     llm.set_completer(model)
     settings = {'wiki_config': {'synthesis_model_id': str(uuid4()), 'extraction_granularity': 'standard'}}
     with factory() as db, db.begin():
-        kb = service.create_base(db, tenant_id, owner, name='星河', kb_type='wiki', settings=settings,
+        kb = service.create_base(db, tenant_id, owner, visibility='tenant', name='星河', kb_type='wiki', settings=settings,
                                  indexing={'vector': False, 'keyword': True})
         kb_id = kb.id
         assert kb.indexing['wiki'] is True
@@ -199,7 +199,7 @@ def test_wiki_needs_model_and_backfills_existing_documents(env, monkeypatch):
     llm.set_completer(Scripted())
     try:
         with factory() as db, db.begin():
-            kb_id = service.create_base(db, tenant_id, owner, name='普通', indexing={'vector': False, 'keyword': True}).id
+            kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='普通', indexing={'vector': False, 'keyword': True}).id
         upload(factory, tenant_id, owner, kb_id, 'a.md', DOC.encode())
         drain(factory)
         with factory() as db, db.begin():
@@ -241,11 +241,11 @@ def test_wiki_http_api(database, deployment_config, tmp_path, monkeypatch):
     try:
         with TestClient(app) as client:
             base = f'/api/v1/tenants/{tenant.id}/knowledge'
-            plain = client.post(base + '/bases', json={'name': '普通', 'indexing_strategy': {'vector': False, 'keyword': True}}).json()
+            plain = client.post(base + '/bases', json={'visibility': 'tenant', 'name': '普通', 'indexing_strategy': {'vector': False, 'keyword': True}}).json()
             assert client.get(f'{base}/bases/{plain["id"]}/wiki/pages').status_code == 404  # wiki is not enabled
-            missing = client.post(base + '/bases', json={'name': 'w0', 'type': 'wiki', 'indexing_strategy': {'vector': False, 'keyword': True}})
+            missing = client.post(base + '/bases', json={'visibility': 'tenant', 'name': 'w0', 'type': 'wiki', 'indexing_strategy': {'vector': False, 'keyword': True}})
             assert missing.status_code == 422
-            kb = client.post(base + '/bases', json={
+            kb = client.post(base + '/bases', json={'visibility': 'tenant', 
                 'name': 'w', 'type': 'wiki', 'indexing_strategy': {'vector': False, 'keyword': True},
                 'settings': {'wiki_config': {'synthesis_model_id': str(uuid4())}}})
             assert kb.status_code == 201, kb.text

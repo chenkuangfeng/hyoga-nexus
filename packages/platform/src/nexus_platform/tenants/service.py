@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, TenantRole, new_id, utc_now
+from nexus_platform.tenants.builtin_roles import ensure_builtin_roles
 from nexus_platform.errors import Conflict, Forbidden, NotFound
 from nexus_platform.authz.audit import audit
 from nexus_platform.orgs.access import is_space_manager, membership_is_active
@@ -29,6 +30,7 @@ def create_tenant(session: Session, principal: Principal, name: str) -> TenantRe
         )
         session.add(tenant)
         session.flush()
+        ensure_builtin_roles(session, tenant.id)
         session.add(
             MembershipRecord(
                 tenant_id=tenant.id,
@@ -40,34 +42,6 @@ def create_tenant(session: Session, principal: Principal, name: str) -> TenantRe
         )
         audit(session, tenant.id, user.id, "tenant.created", "tenant", str(tenant.id))
     return tenant
-
-
-def platform_summary(session: Session, principal: Principal) -> dict:
-    """Read-only counts for the platform administration page: enterprises, personal spaces, shared spaces."""
-    from nexus_platform.persistence.models import SharedSpaceRecord
-
-    with session.begin():
-        user = resolve_user(session, principal)
-        if not user.is_platform_admin:
-            raise Forbidden("Platform administrator required")
-        enterprises = session.scalar(select(func.count()).select_from(TenantRecord).where(
-            TenantRecord.kind == "enterprise", TenantRecord.status == "active")) or 0
-        personal = session.scalar(select(func.count()).select_from(TenantRecord).where(
-            TenantRecord.kind == "personal", TenantRecord.status == "active")) or 0
-        shared = session.scalar(select(func.count()).select_from(SharedSpaceRecord).where(
-            SharedSpaceRecord.deleted_at.is_(None))) or 0
-        return {"enterprises": enterprises, "personal_spaces": personal, "shared_spaces": shared}
-
-
-def list_all_tenants(session: Session, principal: Principal) -> list[TenantRecord]:
-    """Every active space, for platform administrators choosing a space filter. Others get Forbidden."""
-    with session.begin():
-        user = resolve_user(session, principal)
-        if not user.is_platform_admin:
-            raise Forbidden("Platform administrator required")
-        return list(session.scalars(
-            select(TenantRecord).where(TenantRecord.status == "active", TenantRecord.kind != "system")
-            .order_by(TenantRecord.created_at)))
 
 
 def list_tenants(session: Session, principal: Principal) -> list[tuple[TenantRecord, str]]:
@@ -153,8 +127,6 @@ def delete_space(session: Session, principal: Principal, tenant_id: UUID) -> Non
         membership = require_membership(session, tenant_id, actor.id)
         if membership.role != TenantRole.OWNER.value:
             raise Forbidden("Only the space owner can delete the space")
-        if tenant.kind == "personal":
-            raise Forbidden("A personal space cannot be deleted")
         owned_shared = session.scalar(select(func.count()).select_from(SharedSpaceRecord).where(
             SharedSpaceRecord.owner_tenant_id == tenant_id, SharedSpaceRecord.deleted_at.is_(None))) or 0
         if owned_shared:

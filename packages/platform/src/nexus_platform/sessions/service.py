@@ -59,28 +59,6 @@ def list_sessions(session: Session, principal: Principal, tenant_id: UUID) -> li
         return list(session.scalars(query.order_by(SessionRecord.updated_at.desc())))
 
 
-def list_sessions_for_platform_admin(
-    session: Session, principal: Principal, *, tenant_id: UUID | None = None,
-    agent_id: UUID | None = None, limit: int = 200,
-) -> list[SessionRecord]:
-    """Sessions across all spaces for a platform administrator, optionally filtered.
-
-    `agent_id` matches the agent behind the session's version. Organization nodes do not affect
-    session access, so there is no organization filter. Non-administrators get Forbidden.
-    """
-    with session.begin():
-        user = resolve_user(session, principal)
-        if not user.is_platform_admin:
-            raise Forbidden("Platform administrator required")
-        query = select(SessionRecord)
-        if tenant_id is not None:
-            query = query.where(SessionRecord.tenant_id == tenant_id)
-        if agent_id is not None:
-            query = query.join(AgentVersionRecord, AgentVersionRecord.id == SessionRecord.agent_version_id).where(
-                AgentVersionRecord.agent_id == agent_id)
-        return list(session.scalars(query.order_by(SessionRecord.updated_at.desc()).limit(limit)))
-
-
 def get_session_for_user(session: Session, principal: Principal, tenant_id: UUID, session_id: UUID):
     with session.begin():
         user = resolve_user(session, principal)

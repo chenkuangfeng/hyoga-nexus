@@ -54,9 +54,9 @@ def kb_env(database, deployment_config, tmp_path):
         db.commit()
     with database() as db, db.begin():
         # Enterprise bases: one of them is shared to and bound from another space, which personal bases may not.
-        bound = service.create_base(db, tenant.id, user_id, name='产品', description='产品使用说明',
+        bound = service.create_base(db, tenant.id, user_id, visibility='tenant', name='产品', description='产品使用说明',
                                     indexing={'vector': False, 'keyword': True}, ownership='enterprise').id
-        other = service.create_base(db, tenant.id, user_id, name='财务', indexing={'vector': False, 'keyword': True},
+        other = service.create_base(db, tenant.id, user_id, visibility='tenant', name='财务', indexing={'vector': False, 'keyword': True},
                                     ownership='enterprise').id
     upload(database, tenant.id, user_id, bound, '安装.md', '# 安装\n双击安装程序完成安装。\n# 卸载\n在控制面板卸载。'.encode())
     upload(database, tenant.id, user_id, other, '预算.md', '# 预算\n安装费用预算十万元。'.encode())

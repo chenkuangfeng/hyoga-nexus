@@ -38,6 +38,7 @@ def settings_client(database, deployment_config):
         with db.begin():
             user = resolve_user(db, member)
             db.add(MembershipRecord(tenant_id=tenant.id, user_id=user.id, role='contributor', status='active', joined_at=utc_now()))
+    allow_personal_models(database, owner, tenant.id)
     identity = [owner]
     def session():
         with database() as db:
@@ -58,6 +59,13 @@ def add_member_role(client, tenant_path, identity, owner):
     assert role.status_code == 201, role.text
     assigned = client.put(tenant_path + '/members/' + member_user_id + '/roles/' + role.json()['id'])
     assert assigned.status_code == 204, assigned.text
+
+
+def allow_personal_models(database, owner, tenant_id):
+    """These tests cover personal providers, which an enterprise must allow (openspec 2026-11-11 decision 4)."""
+    from nexus_platform.tenants.policies import update_policy
+    with database() as db:
+        update_policy(db, owner, tenant_id, {'personal_models': True})
 
 
 def add_provider(client, path, scope='personal', key='test-private-key'):

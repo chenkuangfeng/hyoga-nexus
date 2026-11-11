@@ -178,6 +178,11 @@ def test_convert_personal_agent_and_its_knowledge_base(env):
     with factory() as db, db.begin():
         ownership.convert_to_enterprise(db, tid, _uid_in(db, ADMIN), kb_id)
     with factory() as db:
+        with pytest.raises(Conflict):  # the converted base is still private; an enterprise agent is for everyone
+            convert_agent_to_enterprise(db, ADMIN, tid, agent_id)
+    with factory() as db, db.begin():
+        service.update_base(db, tid, _uid_in(db, ADMIN), kb_id, {'visibility': 'tenant'})
+    with factory() as db:
         assert convert_agent_to_enterprise(db, ADMIN, tid, agent_id).ownership == 'enterprise'
     with pytest.raises(NotFound):  # the creator lost maintenance and has no use grant
         _edit(factory, MEMBER, tid, agent_id, model_id)

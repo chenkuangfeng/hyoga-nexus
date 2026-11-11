@@ -53,7 +53,7 @@ def test_unassigned_member_has_no_access_and_removed_role_is_dropped(database):
     with database() as db:
         assert roles.effective_permissions(db, tid, member).apis == frozenset()
     with database() as db:
-        role = roles.create_role(db, OWNER, tid, "auditor", ["audit"], ["audit:read"])
+        role = roles.create_role(db, OWNER, tid, "audit-reader", ["audit"], ["audit:read"])
         roles.assign_role(db, OWNER, tid, member, role.id)
         roles.unassign_role(db, OWNER, tid, member, role.id)
     with database() as db:

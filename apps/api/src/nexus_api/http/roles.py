@@ -28,7 +28,8 @@ def role_view(row: dict) -> RoleView:
     role = row["role"]
     return RoleView(
         id=role.id, tenant_id=role.tenant_id, name=role.name,
-        menus=row["menus"], apis=row["apis"], created_at=role.created_at, updated_at=role.updated_at,
+        menus=row["menus"], apis=row["apis"], builtin=bool(role.builtin),
+        created_at=role.created_at, updated_at=role.updated_at,
     )
 
 

@@ -148,8 +148,8 @@ def test_rerank_settings_are_validated(env, monkeypatch):
     monkeypatch.setattr(service, '_authorize_model_of_type', lambda *args: None)
     with factory() as db, db.begin():
         with pytest.raises(ValueError, match='rerank model'):
-            service.create_base(db, tenant_id, owner, name='a', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='a', indexing={'vector': False, 'keyword': True},
                                 settings={'rerank_config': {'enabled': True}})
         with pytest.raises(ValueError, match='threshold'):
-            service.create_base(db, tenant_id, owner, name='b', indexing={'vector': False, 'keyword': True},
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='b', indexing={'vector': False, 'keyword': True},
                                 settings={'rerank_config': {'enabled': True, 'model_id': 'x', 'threshold': 3}})

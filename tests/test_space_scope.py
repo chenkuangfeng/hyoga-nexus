@@ -18,14 +18,12 @@ def _register(client, username, kind="personal", name="", code=""):
     return {"Authorization": f"Bearer {token}"}, response.json()["data"]["tenant"]["id"]
 
 
-def test_personal_space_has_no_enterprise_interfaces(client):
+def test_a_registered_one_member_enterprise_has_the_enterprise_interfaces(client):
+    """Registration creates an ordinary enterprise (openspec 2026-11-11-enterprise-saas decision 1)."""
     headers, space = _register(client, "solo")
     scoped = {**headers, "X-Tenant-ID": space}
-    assert client.post(f"/api/v1/tenants/{space}/members/by-email", headers=scoped,
-                       json={"email": "x@example.com", "role": "viewer"}).status_code == 404
-    assert client.post(f"/api/v1/tenants/{space}/org-units", headers=scoped, json={"name": "Dept"}).status_code == 404
-    assert client.get(f"/api/v1/tenants/{space}/invitations", headers=scoped).status_code == 404
-    # Personal spaces still work for their own settings.
+    assert client.post(f"/api/v1/tenants/{space}/org-units", headers=scoped, json={"name": "Dept"}).status_code == 201
+    assert client.get(f"/api/v1/tenants/{space}/invitations", headers=scoped).status_code == 200
     assert client.patch("/api/v1/tenants/current", headers=scoped, json={"name": "My notes"}).status_code == 200
 
 
@@ -40,17 +38,15 @@ def test_enterprise_member_without_permission_gets_403(client):
     assert response.status_code == 403
 
 
-def test_platform_summary_is_read_only_and_admin_only(client):
+def test_cross_enterprise_listings_are_gone(client):
+    """Platform administrators no longer list other enterprises' data over HTTP (openspec 2026-11-11 E1.7)."""
     headers, _ = _register(client, "nobody")
-    _register(client, "acme-owner", "enterprise", "Acme", "acme")
-    assert client.get("/api/v1/admin/summary", headers=headers).status_code == 403
     with client.factory() as db:
         user = db.scalar(select(UserRecord).where(UserRecord.email == "nobody@example.com"))
         user.is_platform_admin = True
         db.commit()
-    summary = client.get("/api/v1/admin/summary", headers=headers)
-    assert summary.status_code == 200
-    assert summary.json() == {"enterprises": 1, "personal_spaces": 1, "shared_spaces": 0}
+    for path in ("/api/v1/admin/summary", "/api/v1/admin/tenants", "/api/v1/admin/agents", "/api/v1/admin/sessions"):
+        assert client.get(path, headers=headers).status_code in (404, 405)
 
 
 def test_enterprise_admin_needs_a_role_for_governance_but_keeps_everyday_access(client):

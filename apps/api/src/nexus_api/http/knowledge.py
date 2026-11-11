@@ -67,6 +67,8 @@ class BaseInput(BaseModel):
     chunking_config: ChunkingInput = Field(default_factory=ChunkingInput)
     #: WeKnora configuration blocks of later stages, kept as submitted (FAQ, Wiki, graph, parser rules...).
     settings: dict[str, Any] = Field(default_factory=dict)
+    #: ``private`` or ``tenant``; omitted means private for personal bases, tenant for enterprise bases.
+    visibility: Literal['private', 'tenant'] | None = None
 
 
 class BaseUpdate(BaseModel):
@@ -75,6 +77,7 @@ class BaseUpdate(BaseModel):
     indexing_strategy: dict[str, bool] | None = None
     embedding_model_id: UUID | None = None
     chunking_config: ChunkingInput | None = None
+    visibility: Literal['private', 'tenant'] | None = None
     settings: dict[str, Any] | None = None
 
 
@@ -96,7 +99,7 @@ def create_base(tenant_id: UUID, body: BaseInput, principal: Principal = Depends
             indexing=body.indexing_strategy, vector_store_id=body.vector_store_id,
             storage_backend_id=body.storage_backend_id, embedding_model_id=body.embedding_model_id,
             chunk_size=body.chunking_config.chunk_size, chunk_overlap=body.chunking_config.chunk_overlap,
-            settings=body.settings)
+            settings=body.settings, visibility=body.visibility)
     return service.base_view(db, kb, tenant_id, user.id)
 
 

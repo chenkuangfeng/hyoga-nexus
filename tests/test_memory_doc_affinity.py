@@ -19,7 +19,8 @@ def test_factor_is_capped_and_starts_at_two_citations():
 def test_favourite_document_is_boosted_only_for_its_reader(env):
     factory, tenant_id, _, owner, member, _ = env
     with factory() as db, db.begin():
-        kb_id = service.create_base(db, tenant_id, owner, name='退货', indexing={'vector': False, 'keyword': True}).id
+        kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='退货',
+                                    indexing={'vector': False, 'keyword': True}).id
     first, _ = upload(factory, tenant_id, owner, kb_id, 'a.md', '# 退货\n退货流程说明，七天内可退。甲'.encode())
     second, _ = upload(factory, tenant_id, owner, kb_id, 'b.md', '# 退货\n退货流程说明，七天内可退。乙'.encode())
     drain(factory)

@@ -148,7 +148,7 @@ def test_a_base_with_a_rule_parses_through_the_engine(env, monkeypatch):
     parsers.set_http_client_factory(factory_for(handler))
     try:
         with factory() as db, db.begin():
-            kb_id = service.create_base(db, tenant_id, owner, name='引擎', indexing={'vector': False, 'keyword': True},
+            kb_id = service.create_base(db, tenant_id, owner, visibility='tenant', name='引擎', indexing={'vector': False, 'keyword': True},
                                         settings={'chunking_config': {'parser_engine_rules': [
                                             {'file_types': ['pdf'], 'engine': 'mineru'}]}}).id
         upload(factory, tenant_id, owner, kb_id, 'a.pdf', b'%PDF-1.4 bytes the engine reads')

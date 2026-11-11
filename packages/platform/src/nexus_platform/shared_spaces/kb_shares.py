@@ -79,7 +79,12 @@ def share_base(db: Session, principal: Principal, tenant_id: UUID, kb_id: UUID, 
     now = utc_now()
     with db.begin():
         actor_id, kb = _require_share_actor(db, principal, tenant_id, kb_id, governance=False)
+        if kb.visibility != 'tenant':
+            from nexus_platform.errors import InvalidConfiguration
+            raise InvalidConfiguration('Only knowledge bases visible to the whole enterprise can be shared')
         shared = _live_shared(db, shared_space_id)
+        from nexus_platform.tenants.policies import require_external_sharing
+        require_external_sharing(db, tenant_id, shared.id)
         if db.get(SharedSpaceTenantMemberRecord, (shared.id, tenant_id)) is None:
             raise Forbidden('Your space must be a member of the shared space before sharing into it')
         share = db.scalar(select(KnowledgeBaseShareRecord).where(

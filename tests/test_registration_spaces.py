@@ -1,5 +1,7 @@
-"""Self-service registration (personal or enterprise space), email sign-in, Bearer tokens, space selection
-and space settings. Openspec 2026-11-03-enterprise-personal-spaces, section 2."""
+"""Self-service registration (always an enterprise, openspec 2026-11-11-enterprise-saas decision 1), email sign-in,
+Bearer tokens, space selection and space settings. Openspec 2026-11-03-enterprise-personal-spaces, section 2."""
+from uuid import UUID
+
 from sqlalchemy import select
 
 from nexus_platform.persistence.models import TenantRecord
@@ -14,20 +16,24 @@ def _register(client, *, username="ann", email="ann@example.com", kind="personal
     })
 
 
-def test_personal_registration_creates_one_owned_personal_space(client):
+def test_registration_always_creates_an_owned_enterprise(client):
+    """Even an old client asking for a personal space gets a one-member enterprise with a generated name and code."""
     response = _register(client)
     assert response.status_code == 201, response.text
     space = response.json()["data"]["tenant"]
-    assert space["kind"] == "personal"
+    assert space["kind"] == "enterprise" and space["name"] == "ann的企业"
     login = client.post("/api/v1/auth/login", json={"email": "ann@example.com", "password": PASSWORD})
     assert login.status_code == 200
-    assert [(m["id"], m["kind"], m["role"]) for m in login.json()["memberships"]] == [(space["id"], "personal", "owner")]
+    assert [(m["id"], m["kind"], m["role"]) for m in login.json()["memberships"]] == [(space["id"], "enterprise", "owner")]
+    with client.factory() as db:
+        assert db.scalar(select(TenantRecord.code).where(TenantRecord.id == UUID(space["id"])))
 
 
-def test_enterprise_registration_needs_name_and_unique_code(client):
-    missing = _register(client, kind="enterprise", name="", code="acme")
-    assert missing.status_code == 422
-    created = _register(client, kind="enterprise", name="Acme Ltd", code="ACME-01")
+def test_enterprise_registration_takes_an_optional_name_and_unique_code(client):
+    unnamed = _register(client, kind="enterprise", name="", code="acme")
+    assert unnamed.status_code == 201, unnamed.text
+    created = _register(client, username="cat", email="cat@example.com", kind="enterprise", name="Acme Ltd",
+                        code="ACME-01")
     assert created.status_code == 201, created.text
     assert created.json()["data"]["tenant"]["kind"] == "enterprise"
     taken = _register(client, username="bob", email="bob@example.com", kind="enterprise", name="Other", code="acme-01")
@@ -66,12 +72,12 @@ def test_current_space_is_chosen_by_header_and_membership_is_checked(client):
     _register(client)
     _register(client, username="bob", email="bob@example.com", kind="enterprise", name="Bob Co", code="bobco")
     login = client.post("/api/v1/auth/login", json={"email": "ann@example.com", "password": PASSWORD}).json()
-    personal = login["memberships"][0]["id"]
+    own = login["memberships"][0]["id"]
     headers = {"Authorization": f"Bearer {login['token']}"}
     client.cookies.clear()
     assert client.get("/api/v1/tenants/current", headers=headers).status_code == 404
-    current = client.get("/api/v1/tenants/current", headers={**headers, "X-Tenant-ID": personal})
-    assert current.status_code == 200 and current.json()["kind"] == "personal"
+    current = client.get("/api/v1/tenants/current", headers={**headers, "X-Tenant-ID": own})
+    assert current.status_code == 200 and current.json()["kind"] == "enterprise"
     with client.factory() as db:
         other = db.scalar(select(TenantRecord.id).where(TenantRecord.code == "bobco"))
     assert client.post("/api/v1/auth/switch-tenant", json={"tenant_id": str(other)}, headers=headers).status_code == 404
@@ -107,9 +113,9 @@ def test_preferences_remember_the_space_opened_at_sign_in(client):
     _register(client)
     login = _login(client)
     assert login["user"]["preferences"] == {}
-    personal = next(m["id"] for m in login["memberships"] if m["kind"] == "personal")
-    # The home space is the personal space until a preference is saved.
-    assert login["active_tenant"]["id"] == personal
+    first = login["memberships"][0]["id"]
+    # The home space is the first enterprise joined until a preference is saved.
+    assert login["active_tenant"]["id"] == first
 
     headers = {"Authorization": f"Bearer {login['token']}"}
     second = client.post("/api/v1/tenants", json={"name": "Second"}, headers=headers)
@@ -124,7 +130,7 @@ def test_preferences_remember_the_space_opened_at_sign_in(client):
 
     cleared = client.put("/api/v1/auth/me/preferences", json={"last_active_tenant_id": None}, headers=headers)
     assert cleared.json()["data"]["preferences"] == {}
-    assert _login(client)["active_tenant"]["id"] == personal
+    assert _login(client)["active_tenant"]["id"] == first
 
 
 def test_preferences_refuse_unknown_keys_and_spaces_the_user_is_not_in(client):
@@ -194,14 +200,13 @@ def test_owner_archives_enterprise_space_and_it_disappears(client):
     assert gone.status_code == 404
 
 
-def test_personal_space_cannot_be_deleted(client):
+def test_the_only_enterprise_can_be_deleted_and_login_then_has_no_space(client):
     _register(client)
     login = _login(client)
     headers = {"Authorization": f"Bearer {login['token']}"}
-    personal = login["active_tenant"]["id"]
-    refused = client.delete(f"/api/v1/tenants/{personal}", headers=headers)
-    assert refused.status_code == 403
-    assert "personal space" in refused.json()["error"]["message"]
+    assert client.delete(f"/api/v1/tenants/{login['active_tenant']['id']}", headers=headers).status_code == 204
+    again = _login(client)
+    assert again["memberships"] == [] and again["active_tenant"] is None
 
 
 def test_admin_cannot_delete_enterprise_space(client):

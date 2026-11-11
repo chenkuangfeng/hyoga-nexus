@@ -27,6 +27,9 @@ API_PERMISSIONS: frozenset[str] = frozenset({
     # Not governance keys: owners and admins hold them by default and may grant them to custom roles.
     "enterprise_agents:manage",
     "enterprise_kbs:manage",
+    # Enterprise policy and reading conversation content in the audit log (openspec 2026-11-11 decisions 4, 8).
+    "policy:manage",
+    "audit:read_content",
 })
 
 

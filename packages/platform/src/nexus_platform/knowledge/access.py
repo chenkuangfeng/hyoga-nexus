@@ -1,6 +1,7 @@
 """Who may read or change a knowledge base (openspec 2026-11-06-knowledge-base K1, design section 6).
 
-- Read: an active member of the base's space, or an active member of a space the base is shared with through
+- Read: an active member of the base's space when its ``visibility`` is ``tenant``; a ``private`` base only for
+  those who may maintain it and the space's owners and admins (openspec 2026-11-11-enterprise-saas decision 3); or an active member of a space the base is shared with through
   ``resource_grants`` (kind ``knowledge_base``, not revoked), or through a shared space the base is shared into
   (``knowledge_base_shares``; any effective level reads, see ``shared_spaces.kb_shares``).
 - Write follows ownership (openspec 2026-11-11-enterprise-saas decision 2), always for an active member of the
@@ -34,6 +35,9 @@ from nexus_platform.tenants.service import ADMIN_ROLES
 
 KIND = 'knowledge_base'
 PERSONAL = 'personal'
+PRIVATE = 'private'
+TENANT = 'tenant'
+VISIBILITIES = frozenset({PRIVATE, TENANT})
 ENTERPRISE = 'enterprise'
 OWNERSHIPS = frozenset({PERSONAL, ENTERPRISE})
 MANAGE_ENTERPRISE_KBS = 'enterprise_kbs:manage'
@@ -56,10 +60,19 @@ def shared_into(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID) -> bool:
 
 def can_read(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UUID) -> bool:
     """Read access from the caller's current space ``tenant_id``: own bases, tenant grants, or a shared space."""
-    if kb.status != 'active' or _membership(db, tenant_id, user_id) is None:
+    membership = _membership(db, tenant_id, user_id)
+    if kb.status != 'active' or membership is None:
         return False
-    return kb.tenant_id == tenant_id or shared_into(db, kb, tenant_id) or kb.id in kb_shares.shared_levels(
-        db, tenant_id, user_id)
+    if kb.tenant_id == tenant_id:
+        return visible_in_space(db, kb, user_id, membership)
+    return shared_into(db, kb, tenant_id) or kb.id in kb_shares.shared_levels(db, tenant_id, user_id)
+
+
+def visible_in_space(db: Session, kb: KnowledgeBaseRecord, user_id: UUID, membership: MembershipRecord) -> bool:
+    """Visibility for a member of the base's own space."""
+    if kb.visibility == TENANT or membership.role in ADMIN_ROLES:
+        return True
+    return can_maintain(db, kb, user_id)
 
 
 def can_manage(db: Session, kb: KnowledgeBaseRecord, user_id: UUID) -> bool:
@@ -139,8 +152,10 @@ def readable_bases(db: Session, tenant_id: UUID, user_id: UUID, kb_ids: list[UUI
                                      KnowledgeBaseRecord.created_at)).all()
     shared = {UUID(value) for value in db.scalars(shared_ids).all() if _is_uuid(value)}
     via_space = set(kb_shares.shared_levels(db, tenant_id, user_id))
-    return [kb for kb in rows if kb.tenant_id == tenant_id or kb.id in via_space
-            or (kb.id in shared and shared_into(db, kb, tenant_id))]
+    membership = _membership(db, tenant_id, user_id)
+    return [kb for kb in rows
+            if (kb.tenant_id == tenant_id and visible_in_space(db, kb, user_id, membership))
+            or (kb.tenant_id != tenant_id and (kb.id in via_space or (kb.id in shared and shared_into(db, kb, tenant_id))))]
 
 
 def _is_uuid(value: str) -> bool:

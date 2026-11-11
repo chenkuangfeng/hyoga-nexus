@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import TenantRole, new_id, utc_now
+from nexus_platform.tenants.builtin_roles import ensure_builtin_roles
 from nexus_platform.auth.accounts import PASSWORD_PROVIDER
 from nexus_platform.auth.passwords import hash_password_unchecked
 from nexus_platform.authz.audit import audit
@@ -94,6 +95,7 @@ def ensure_default_enterprise(session: Session) -> BootstrapResult:
             )
             session.add(space)
             session.flush()
+            ensure_builtin_roles(session, space.id)
             audit(session, space.id, user.id, "tenant.created", "tenant", str(space.id), {"kind": "enterprise"})
             created_space = True
 

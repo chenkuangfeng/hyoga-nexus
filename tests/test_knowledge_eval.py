@@ -29,8 +29,8 @@ def test_keyword_retrieval_meets_the_gate(database, deployment_config, tmp_path)
         db.commit()
     kinds = {'indexing': {'vector': False, 'keyword': True}}
     with database() as db, db.begin():
-        kb_a = service.create_base(db, space_a.id, user_a, name='语料', **kinds).id
-        kb_b = service.create_base(db, space_b.id, user_b, name='机密', **kinds).id
+        kb_a = service.create_base(db, space_a.id, user_a, visibility='tenant', name='语料', **kinds).id
+        kb_b = service.create_base(db, space_b.id, user_b, visibility='tenant', name='机密', **kinds).id
     for name, text in corpus.CORPUS_A.items():
         upload(database, space_a.id, user_a, kb_a, name, text.encode())
     for name, text in corpus.CORPUS_B.items():

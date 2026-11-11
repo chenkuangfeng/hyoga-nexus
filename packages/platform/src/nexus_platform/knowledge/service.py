@@ -34,7 +34,7 @@ from nexus_platform.authz.resources import register_resource, deactivate_resourc
 from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.identity.service import require_membership
-from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
+from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeBaseShareRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
 from . import access, media, stores
 from nexus_knowledge.retrieval import synonyms as synonym_rules
@@ -75,7 +75,7 @@ def base_view(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UU
         'embedding_dimension': kb.embedding_dimension,
         'chunking_config': {'chunk_size': kb.chunk_size, 'chunk_overlap': kb.chunk_overlap},
         'settings': dict(kb.settings), 'shared': kb.tenant_id != tenant_id,
-        'ownership': kb.ownership, 'owned_by_me': kb.created_by == user_id,
+        'ownership': kb.ownership, 'visibility': kb.visibility, 'owned_by_me': kb.created_by == user_id,
         # can_edit keeps the copied WeKnora pages working: it gates content editing, which maintainers may do.
         'can_edit': kb.tenant_id == tenant_id and access.can_maintain(db, kb, user_id),
         'can_maintain': kb.tenant_id == tenant_id and access.can_maintain(db, kb, user_id),
@@ -189,11 +189,15 @@ def create_base(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, descr
                 kb_type: str = 'document', indexing: dict[str, Any] | None = None, vector_store_id: str | None = None,
                 storage_backend_id: str | None = None, embedding_model_id: UUID | None = None,
                 chunk_size: int = 800, chunk_overlap: int = 120, settings: dict[str, Any] | None = None,
-                ownership: str = access.PERSONAL) -> KnowledgeBaseRecord:
+                ownership: str = access.PERSONAL, visibility: str | None = None) -> KnowledgeBaseRecord:
     """Create a base. ``ownership`` comes from the entry point, never from the request body: the workspace creates
     ``personal`` bases, the enterprise admin API creates ``enterprise`` bases (needs ``enterprise_kbs:manage``)."""
     if ownership not in access.OWNERSHIPS:
         raise ValueError('Unknown knowledge base ownership')
+    # Personal bases start private, enterprise bases start visible to every member (decision 3).
+    visibility = visibility or (access.PRIVATE if ownership == access.PERSONAL else access.TENANT)
+    if visibility not in access.VISIBILITIES:
+        raise ValueError('visibility must be private or tenant')
     require_membership(db, tenant_id, user_id)
     if ownership == access.ENTERPRISE:
         require_api_permission(db, tenant_id, user_id, access.MANAGE_ENTERPRISE_KBS)
@@ -210,7 +214,7 @@ def create_base(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, descr
     now = utc_now()
     kb = KnowledgeBaseRecord(
         id=new_id(), tenant_id=tenant_id, name=name, description=(description or '')[:2000], kb_type=kb_type,
-        ownership=ownership, indexing=normalized, vector_store_id=store.id if store else None,
+        ownership=ownership, visibility=visibility, indexing=normalized, vector_store_id=store.id if store else None,
         storage_backend_id=backend.id if backend else None, embedding_model_version_id=embedding_model_id,
         chunk_size=chunk_size, chunk_overlap=chunk_overlap, settings=dict(settings or {}), status='active',
         created_by=user_id, created_at=now, updated_at=now)
@@ -287,7 +291,10 @@ def _authorize_embedding(db: Session, tenant_id: UUID, user_id: UUID, version_id
 
 def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, changes: dict[str, Any]
                 ) -> KnowledgeBaseRecord:
-    """Change name, description, settings and chunking; the vector store and storage backend are fixed.
+    """Change name, description, visibility, settings and chunking; the vector store and storage backend are fixed.
+
+    Making a base private is refused (``kb_in_use``) while agents that other members may use bind it, or while it
+    is shared into a shared space.
 
     Changing the embedding model or chunking does not rebuild existing documents by itself; ``rebuild_base``
     re-indexes every document (a full rebuild also resets the embedding dimension).
@@ -301,6 +308,20 @@ def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, change
         kb.name = name
     if 'description' in changes:
         kb.description = (changes['description'] or '')[:2000]
+    if 'visibility' in changes and changes['visibility'] != kb.visibility:
+        if changes['visibility'] not in access.VISIBILITIES:
+            raise ValueError('visibility must be private or tenant')
+        if changes['visibility'] == access.PRIVATE:
+            from nexus_platform.agents.service import agents_exposing_base
+            exposing = agents_exposing_base(db, kb)
+            if exposing:
+                raise Conflict('kb_in_use: agents used by other members bind this base: ' + ', '.join(exposing))
+            if db.scalar(select(func.count()).select_from(KnowledgeBaseShareRecord).where(
+                    KnowledgeBaseShareRecord.kb_id == kb.id)):
+                raise Conflict('kb_in_use: remove the shares to shared spaces first')
+        audit(db, tenant_id, user_id, 'knowledge_base.visibility_changed', access.KIND, str(kb.id),
+              {'from': kb.visibility, 'to': changes['visibility']})
+        kb.visibility = changes['visibility']
     if 'vector_store_id' in changes and (changes['vector_store_id'] or stores.BUILTIN) != (
             str(kb.vector_store_id) if kb.vector_store_id else stores.BUILTIN):
         raise Conflict('The vector store of a knowledge base cannot change')

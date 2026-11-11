@@ -50,6 +50,11 @@ def _world(client, bea_role="editor"):
     """Acme (agent owner) and Beta (recipient) meet in one shared space; Beta's space has role `bea_role`."""
     ann, acme = _register(client, "ann", "enterprise", "Acme", "acme-shr")
     bea, beta = _register(client, "bea", "enterprise", "Beta", "beta-shr")
+    # Sharing with another enterprise is off by default (openspec 2026-11-11-enterprise-saas decision 4).
+    for headers, space in ((ann, acme), (bea, beta)):
+        allowed = client.patch(f"/api/v1/tenants/{space}/admin/policy", json={"external_sharing": True},
+                               headers=_as(headers, space))
+        assert allowed.status_code == 200, allowed.text
     shared = client.post("/api/v1/shared-spaces", json={"name": "Alliance"}, headers=_as(ann, acme)).json()["id"]
     code = client.post(f"/api/v1/shared-spaces/{shared}/invite-code", headers=_as(ann, acme)).json()["invite_code"]
     _join_as(client, shared, code, bea, beta, bea_role)
@@ -118,7 +123,7 @@ def test_only_the_owning_space_manages_shares_and_it_must_be_a_member(client):
     assert refused.status_code == 403
 
 
-def test_unshare_removes_access_and_personal_spaces_are_refused(client):
+def test_unshare_removes_access_and_outside_enterprises_are_refused(client):
     w = _world(client)
     client.post(f"/api/v1/tenants/{w['acme']}/agents/{w['agent']}/shares", headers=_as(w["ann"], w["acme"]),
                 json={"shared_space_id": w["shared"], "level": "editor"})
@@ -128,8 +133,9 @@ def test_unshare_removes_access_and_personal_spaces_are_refused(client):
     assert removed.status_code == 204
     assert client.get(f"/api/v1/tenants/{w['beta']}/shared-agents", headers=_as(w["bea"], w["beta"])).json() == []
 
+    # Registration now always creates an enterprise; one that has not joined the shared space cannot share into it.
     solo, solo_space = _register(client, "solo")
-    personal_agent = _agent(client, _as(solo, solo_space), solo_space, name="Mine")
-    refused = client.post(f"/api/v1/tenants/{solo_space}/agents/{personal_agent}/shares", headers=_as(solo, solo_space),
+    solo_agent = _agent(client, _as(solo, solo_space), solo_space, name="Mine")
+    refused = client.post(f"/api/v1/tenants/{solo_space}/agents/{solo_agent}/shares", headers=_as(solo, solo_space),
                           json={"shared_space_id": w["shared"], "level": "viewer"})
-    assert refused.status_code == 404
+    assert refused.status_code == 403

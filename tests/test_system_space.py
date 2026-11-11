@@ -18,7 +18,7 @@ from nexus_platform.persistence.models import (
 from nexus_platform.system import (
     disable_builtin, enable_builtin_resource, ensure_system_resources, list_disabled,
 )
-from nexus_platform.tenants.service import create_tenant, list_all_tenants, platform_summary
+from nexus_platform.tenants.service import create_tenant, list_tenants
 from test_platform import database  # noqa: F401  (pytest fixture)
 
 ALICE = Principal(id='alice', issuer='test')
@@ -59,7 +59,7 @@ def test_system_space_is_created_once_and_registers_every_builtin_tool(database)
     assert names == set(BUILTIN_TOOL_NAMES)
 
 
-@pytest.mark.parametrize('kind', ['enterprise', 'personal'])
+@pytest.mark.parametrize('kind', ['enterprise'])
 def test_any_space_binds_and_publishes_builtin_tools_without_enabling_them(database, kind):
     with database() as db:
         ensure_system_resources(db)
@@ -137,11 +137,5 @@ def test_the_system_space_is_never_listed(database):
     with database() as db:
         ensure_system_resources(db)
     _space(database)
-    with database() as db, db.begin():
-        from nexus_platform.identity.service import resolve_user
-        resolve_user(db, ALICE).is_platform_admin = True
     with database() as db:
-        assert SYSTEM_TENANT_ID not in {t.id for t in list_all_tenants(db, ALICE)}
-    with database() as db:
-        summary = platform_summary(db, ALICE)
-    assert summary['enterprises'] == 1 and summary['personal_spaces'] == 0
+        assert SYSTEM_TENANT_ID not in {tenant.id for tenant, _ in list_tenants(db, ALICE)}

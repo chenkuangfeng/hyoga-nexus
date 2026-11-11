@@ -60,7 +60,7 @@ def graph_env(env, monkeypatch):
 def make_graph_kb(factory, tenant_id, owner, mode='graphrag_light'):
     settings = {'graph': {'mode': mode, 'model_id': str(uuid4()), 'entity_types': ['组织', '人物', '产品']}}
     with factory() as db, db.begin():
-        return service.create_base(db, tenant_id, owner, name=f'图谱-{mode}', settings=settings,
+        return service.create_base(db, tenant_id, owner, visibility='tenant', name=f'图谱-{mode}', settings=settings,
                                    indexing={'vector': False, 'keyword': True, 'graph': True}).id
 
 

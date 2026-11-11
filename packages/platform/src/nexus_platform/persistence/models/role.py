@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, ForeignKeyConstraint, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, ForeignKeyConstraint, String, UniqueConstraint, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -26,6 +26,9 @@ class TenantRoleRecord(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Built-in roles (``security_admin``, ``auditor``) are created with every enterprise and cannot be renamed,
+    #: regranted or deleted; they can be assigned (openspec 2026-11-11-enterprise-saas decision 8).
+    builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

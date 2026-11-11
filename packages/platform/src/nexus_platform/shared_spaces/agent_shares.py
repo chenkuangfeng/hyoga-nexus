@@ -116,6 +116,10 @@ def share_agent(session: Session, principal: Principal, tenant_id: UUID, agent_i
     with session.begin():
         actor_id, agent = _require_share_actor(session, principal, tenant_id, agent_id, governance=False)
         shared = _live_shared(session, shared_space_id)
+        from nexus_platform.tenants.policies import require_external_sharing
+        from nexus_platform.agents.service import check_binding_scope
+        require_external_sharing(session, tenant_id, shared.id)
+        check_binding_scope(session, agent, other_users=True)
         if session.get(SharedSpaceTenantMemberRecord, (shared.id, tenant_id)) is None:
             raise Forbidden("Your space must be a member of the shared space before sharing agents into it")
         share = session.scalar(select(AgentShareRecord).where(

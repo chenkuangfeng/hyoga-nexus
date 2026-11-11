@@ -45,7 +45,7 @@ def run(coro):
 def create_kb(factory, tenant_id, user_id, name='手册', **kwargs):
     kwargs.setdefault('indexing', {'vector': False, 'keyword': True})
     with factory() as db, db.begin():
-        return service.create_base(db, tenant_id, user_id, name=name, **kwargs).id
+        return service.create_base(db, tenant_id, user_id, visibility='tenant', name=name, **kwargs).id
 
 
 def upload(factory, tenant_id, user_id, kb_id, filename, data):
@@ -173,15 +173,15 @@ def test_write_access_and_capability_checks(env):
             service.prepare_upload(db, tenant_id, owner, kb_id, 'a.txt', b'x' * 200, 100)
     with factory() as db, db.begin():
         with pytest.raises(ValueError, match='synthesis model'):  # wiki is implemented but needs its model
-            service.create_base(db, tenant_id, owner, name='wiki', kb_type='wiki', indexing={'vector': False, 'keyword': True})
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='wiki', kb_type='wiki', indexing={'vector': False, 'keyword': True})
         with pytest.raises(ValueError, match='synthesis model'):
-            service.create_base(db, tenant_id, owner, name='w', indexing={'keyword': True, 'wiki': True})
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='w', indexing={'keyword': True, 'wiki': True})
         with pytest.raises(ValueError, match='chat model'):  # graph is implemented but needs its configuration
-            service.create_base(db, tenant_id, owner, name='g', indexing={'keyword': True, 'graph': True})
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='g', indexing={'keyword': True, 'graph': True})
         with pytest.raises(ValueError):
-            service.create_base(db, tenant_id, owner, name='v', indexing={'vector': True, 'keyword': True})
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='v', indexing={'vector': True, 'keyword': True})
         with pytest.raises(Conflict):
-            service.create_base(db, tenant_id, owner, name='手册', indexing={'vector': False, 'keyword': True})
+            service.create_base(db, tenant_id, owner, visibility='tenant', name='手册', indexing={'vector': False, 'keyword': True})
     # A contributor may create their own base and then change it.
     mine = create_kb(factory, tenant_id, member, '我的库')
     with factory() as db, db.begin():

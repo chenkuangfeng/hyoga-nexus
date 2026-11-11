@@ -26,6 +26,8 @@ SECRET = 'owner-secret-key-123'
 def _owner_model(database, principal, tenant_id, deployment_config, protocol='openai_chat_completions'):
     """A capture model that uses the owner's personal key, stored encrypted like any provider key."""
     deployment_config(f'[security]\ncredential_encryption_key = "{Fernet.generate_key().decode()}"\n')
+    from test_model_settings import allow_personal_models
+    allow_personal_models(database, principal, tenant_id)
     with database() as db:
         provider = save_provider(db, principal, tenant_id, name='Mine', base_url='https://model.example/v1',
                                  scope='personal', api_key=SECRET)

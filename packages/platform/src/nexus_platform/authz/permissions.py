@@ -40,7 +40,9 @@ class EffectivePermissions:
 FULL_ACCESS = EffectivePermissions(MENUS, API_PERMISSIONS)
 
 # Keys an admin does not hold by default; they come only from a custom role assigned to the admin.
-GOVERNANCE_APIS = frozenset({"org:manage", "members:manage", "roles:manage", "audit:read"})
+GOVERNANCE_APIS = frozenset({
+    "org:manage", "members:manage", "roles:manage", "audit:read", "policy:manage", "audit:read_content",
+})
 ADMIN_BASELINE = EffectivePermissions(MENUS, API_PERMISSIONS - GOVERNANCE_APIS)
 
 

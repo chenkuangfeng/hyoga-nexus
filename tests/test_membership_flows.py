@@ -107,12 +107,12 @@ def test_members_without_members_manage_cannot_invite(client):
     assert response.status_code == 403
 
 
-def test_application_is_enterprise_only_and_approval_needs_node_and_role(client):
+def test_application_needs_an_outsider_and_approval_needs_node_and_role(client):
     space_id, owner = _owner_space(client)
-    personal = _register(client, "carl", "carl@example.com")
+    own = _register(client, "carl", "carl@example.com")  # registration creates carl's own enterprise
     carl = _token(client, "carl@example.com")
-    refused = client.post(f"/api/v1/tenants/{personal}/join-requests", headers=carl, json={"message": "hi"})
-    assert refused.status_code == 403
+    refused = client.post(f"/api/v1/tenants/{own}/join-requests", headers=carl, json={"message": "hi"})
+    assert refused.status_code == 409  # already a member of it
     applied = client.post(f"/api/v1/tenants/{space_id}/join-requests", headers=carl, json={"message": "Hello"})
     assert applied.status_code == 201, applied.text
     assert client.post(f"/api/v1/tenants/{space_id}/join-requests", headers=carl, json={}).status_code == 409
@@ -266,12 +266,12 @@ def test_revoked_or_expired_or_unknown_links_answer_not_found(client):
     assert listed == []
 
 
-def test_share_links_need_an_enterprise_space_and_a_valid_expiry(client):
+def test_share_links_work_in_every_enterprise_and_need_a_valid_expiry(client):
     _register(client, "fay", "fay@example.com")
-    fay_personal = _token(client, "fay@example.com")
-    personal = client.get("/api/v1/auth/me", headers=fay_personal).json()["data"]["memberships"][0]["id"]
-    refused = client.post(f"/api/v1/tenants/{personal}/invite-links", headers=fay_personal, json={"role": "viewer"})
-    assert refused.status_code == 404
+    fay = _token(client, "fay@example.com")
+    own = client.get("/api/v1/auth/me", headers=fay).json()["data"]["memberships"][0]["id"]
+    # A one-member enterprise is an ordinary enterprise (openspec 2026-11-11 decision 1).
+    assert client.post(f"/api/v1/tenants/{own}/invite-links", headers=fay, json={"role": "viewer"}).status_code == 201
 
     space_id, owner = _owner_space(client)
     too_long = client.post(f"/api/v1/tenants/{space_id}/invite-links", headers=owner,

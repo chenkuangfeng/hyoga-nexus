@@ -50,7 +50,7 @@ def drain(factory):
 
 def test_base_document_and_search_flow(api):
     client, path, identity, factory = api
-    created = client.post(path + '/bases', json={'name': '产品手册', 'indexing_strategy': {'vector': False, 'keyword': True}})
+    created = client.post(path + '/bases', json={'visibility': 'tenant', 'name': '产品手册', 'indexing_strategy': {'vector': False, 'keyword': True}})
     assert created.status_code == 201, created.text
     kb = created.json()
     assert kb['vector_engine'] == 'sqlite' and kb['vector_store_id'] == 'builtin' and kb['can_edit'] is True
@@ -86,7 +86,7 @@ def test_planned_features_and_limits_are_refused(api):
     client, path, identity, _ = api
     planned = client.post(path + '/vector-stores', json={'name': 'w', 'engine': 'pinecone'})
     assert planned.status_code == 422 and planned.json()['error']['code'] == 'capability_planned'
-    kb_id = client.post(path + '/bases', json={'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
+    kb_id = client.post(path + '/bases', json={'visibility': 'tenant', 'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
     too_big = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.txt', b'x' * (1024 * 1024 + 1))})
     assert too_big.status_code == 422
     unsupported = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.exe', b'x')})
@@ -122,7 +122,7 @@ def test_vector_store_registry_hides_secrets(api):
     assert client.post(path + '/vector-stores', json={'name': 'm', 'engine': 'sqlite',
                                                       'connection_config': {'path': 'x.db'}}).status_code == 403
     identity[0] = OWNER
-    kb = client.post(path + '/bases', json={'name': 'q', 'vector_store_id': store_id,
+    kb = client.post(path + '/bases', json={'visibility': 'tenant', 'name': 'q', 'vector_store_id': store_id,
                                             'indexing_strategy': {'vector': False, 'keyword': True}})
     assert kb.status_code == 422  # Qdrant needs vectors
     assert client.delete(f'{path}/vector-stores/{store_id}').status_code == 204
@@ -161,7 +161,7 @@ def test_chunk_preview_parser_engines_and_engine_rules(api):
     assert not engines['mineru']['Available'] and engines['mineru']['UnavailableReason'].startswith('未配置')  # implemented, not set up
     assert engines['anydoc']['Available'] and 'doc' in engines['anydoc']['FileTypes']  # in-process, nothing to set up
     assert not engines['markitdown']['Available'] and engines['markitdown']['UnavailableReason'].startswith('待实现')
-    rule = client.post(path + '/bases', json={'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
+    rule = client.post(path + '/bases', json={'visibility': 'tenant', 'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
                                               'settings': {'chunking_config': {'parser_engine_rules': [
                                                   {'file_types': ['pdf'], 'engine': 'markitdown'}]}}})
     assert rule.status_code == 422 and rule.json()['error']['code'] == 'capability_planned'
