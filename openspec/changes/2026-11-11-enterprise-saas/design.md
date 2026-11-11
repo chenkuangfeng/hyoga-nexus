@@ -1,6 +1,6 @@
 # 设计
 
-本文件写 E0–E2 的设计，以及 E3–E6 的要点。各阶段开始前补齐接口与表结构，并经用户确认。
+本文件写 E0–E2 的设计、四个前端入口的功能清单，以及 E3–E6 的要点。各阶段开始前补齐接口与表结构，并经用户确认。
 
 ## 1. 租户模型
 
@@ -10,7 +10,7 @@
   │    ├─ enterprise_policies、tenant_wecom_apps
   │    ├─ 组织树（org_units / user_org_units，source = manual | wecom）
   │    ├─ 成员（tenant_memberships，source 增加 wecom）与角色（含 security_admin、auditor）
-  │    ├─ 企业共享资源：可见范围为 tenant（以及 E4 的部门）的智能体、知识库……
+  │    ├─ 企业共享资源：可见范围为 tenant（以及 E4 的部门、成员）的智能体、知识库……
   │    └─ 每个成员的个人区：本人的会话、记忆、私有智能体、私有知识库、产物
   ├─ 企业 B（只有一个成员，与企业 A 没有任何区别）
   └─ 共享空间（跨企业协作，受各企业的 external_sharing 约束）
@@ -72,51 +72,139 @@ def can_maintain_content(db, kb, user_id) -> bool:
 
 路线图 2.9 的全部项目，加上本提案新增的列与表，在 PostgreSQL 上完成迁移往返和并发测试后，E1 才算验收。
 
-## 4. E2 前端两个应用
+## 4. 前端入口与功能清单
 
-- **应用与入口一览**：
+### 4.1 入口一览
 
-| 入口 | 面向 | 本提案 |
+| 入口 | 面向 | 形态 | 本提案 |
+|---|---|---|---|
+| 员工工作台 `/workspace` | 企业全体员工；企微 H5 打开的就是它 | 桌面与手机 | E2 拆分 |
+| 企业管理后台 `/admin` | 有治理权限的企业成员 | 只做桌面 | E2 拆分 |
+| 平台管理 `/platform-admin` | 部署运维（`users.is_platform_admin`） | 只做桌面 | 只接收从设置页移入的部署级配置 |
+| 对外嵌入页 `/embed/:channelId`（`embed.html`） | 企业外部访客 | 嵌入第三方网页，桌面与手机 | 只列清单，后端另提案 |
+
+状态列的含义：**已有** = 后端与页面都已接通；**E0–E6** = 本提案对应阶段新增或改造；**待实现** = 页面已存在（WeKnora 副本或占位），Nexus 后端尚未接通，不在本提案范围。
+
+### 4.2 员工工作台 `/workspace`
+
+导航分为“对话”“我的”“企业共享”“个人设置”四组。
+
+| 模块 | 功能 | 状态 |
 |---|---|---|
-| 员工工作台 `/workspace` | 企业全体员工；企微 H5 打开的就是它 | 新拆分 |
-| 企业管理后台 `/admin` | 企业 owner、admin、安全管理员、审计员等有治理权限的人 | 新拆分 |
-| 平台管理 `/platform-admin` | 部署运维（`is_platform_admin`） | 不变 |
-| 对外嵌入页 `/embed/:channelId`（`embed.html`） | 企业外部访客，经智能体的嵌入渠道访问 | 不变 |
+| 登录与企业 | 邮箱密码登录、首次改密 | 已有 |
+| | 企微扫码登录、企微内免登、首次进入自动开户 | E3 |
+| | 切换企业；接受邀请、凭邀请链接加入、按企业编码申请加入 | 已有 |
+| | 新建企业（注册人成为 owner） | 已有，E1 去掉个人空间 |
+| 对话 | 新建会话（选择可用智能体）、流式回复、思考摘要、引用与证据查看 | 已有 |
+| | 附件上传、工具调用过程展示、工具执行前本人确认、“本会话允许”的放行与撤销 | 已有 |
+| | 取消、继续、追问；会话分叉；会话列表、搜索、重命名、删除 | 已有 |
+| | 本次生成的文件卡片（预览、下载）；运行停滞提示与“继续等待”；结果未知的会话解除阻塞 | 已有 |
+| | 在企微里与智能体对话（消息渠道） | E3 |
+| 我的智能体 | 创建、编辑（提示词、模型、工具组、技能、知识库、MCP、记忆开关、沙箱档位）、试运行、发布版本 | 已有，E1 受企业策略约束 |
+| | 共享给角色 | 已有 |
+| | 共享给部门、成员 | E4 |
+| | 共享到共享空间 | 已有，E1 受 `external_sharing` 约束 |
+| | 嵌入渠道配置（生成嵌入码、允许的域名） | 待实现 |
+| 我的知识库 | 创建、设置可见范围（私有 / 全企业） | E1 |
+| | 文档上传、解析、分块与问答编辑、检索测试、知识库 Wiki | 已有 |
+| | 维护我管理的智能体所绑定的库 | E0 |
+| 我的技能 | 安装技能、提交技能审核、查看审核结果 | 已有 |
+| 我的记忆 | 记忆列表、草稿审核（改标题与重要度、看证据与冲突提示）、编辑、删除、个人开关 | 已有 |
+| 我的产物 | 列表、筛选、预览、下载、删除（含全部版本） | 已有 |
+| 我的自动化 | 定时任务的创建、修改、暂停与恢复、立即运行、运行记录 | 已有 |
+| 企业共享 | 企业或部门开放给我的智能体（直接开始对话） | 已有（按角色），E4（按部门、成员） |
+| | 全企业可见的知识库、共享空间共享来的知识库（只读检索） | 已有 |
+| | 知识搜索（跨我可读的全部知识库） | 已有 |
+| | 我所在的共享空间（查看共享来的智能体与知识库） | 已有 |
+| 个人设置 | 个人资料、修改密码、企微绑定、界面与助手偏好、技能环境变量 | 已有 |
+| | 个人模型与 Key（仅在 `personal_models` 开启时显示） | 已有，E1 受策略约束 |
+| | 我的用量（只读） | E5 |
+| | 个人 MCP endpoint 令牌（供 Codex、Claude Code 等外部客户端访问平台工具） | 已有 |
 
-- **构建**：`apps/web` 保持一个工程，路由分为 `/workspace/*` 与 `/admin/*` 两棵，各有自己的布局组件。`/admin` 下的页面全部用动态 `import()` 引入，并在 Vite 中配置独立的 chunk 组，员工端首屏不加载管理页面的代码。现有 `/platform/*` 路由重定向到新位置，保留一个版本周期。
+### 4.3 企业管理后台 `/admin`
+
+按所需权限显示菜单，持有任一治理权限即可进入（见 4.6）。
+
+| 模块 | 功能 | 所需权限 | 状态 |
+|---|---|---|---|
+| 企业信息 | 名称、编码、描述；删除企业 | owner | 已有 |
+| 成员 | 列表、按邮箱添加或邀请、邀请链接、加入申请审批、改角色、移除 | `members:manage` | 已有 |
+| 部门架构 | 子公司与部门的增删改、移动、停用；成员的部门归属 | `org:manage` | 已有 |
+| | 企微同步的部门（只读）与同步状态 | `org:manage` | E3 |
+| 角色与权限 | 自定义角色（菜单与 API 权限）、按部门批量分配、智能体级授权 | `roles:manage` | 已有 |
+| | 内置角色 `security_admin`、`auditor` | `roles:manage` | E1 |
+| 企业策略 | 自建范围、个人模型、外部共享、留存天数 | `policy:manage` | E1 |
+| 企业微信 | 应用配置（模式、corp_id、密钥、回调）、通讯录同步、消息渠道开关 | `org:manage` | E3 |
+| 模型 | 企业模型供应商与 Key、连接测试、各类型默认模型 | `models:manage` | 已有 |
+| 工具与技能 | 内置工具与技能的启停、工具风险等级 | `tools:manage` | 已有 |
+| | 技能导入、技能提交的审核 | `tools:manage` | 已有 |
+| | MCP 服务：登记、发现工具、启用工具、单个工具的风险策略、OAuth 授权 | `tools:manage` | 已有 |
+| | 联网搜索、对话历史、企业级记忆开关 | `tools:manage` | 已有 |
+| 智能体治理 | 全企业智能体清单（含私有）、查看配置与版本、停用、删除 | owner、admin | 已有（列表），E2 补停用与删除 |
+| 知识库治理 | 全企业知识库清单（含私有）、修改设置与可见范围、共享到共享空间、删除 | owner、admin | 已有（共享），E1 补可见范围 |
+| 共享空间 | 创建与管理共享空间、邀请其他企业、成员企业的级别 | owner、admin | 已有，E1 受 `external_sharing` 约束 |
+| 运行状况 | 结果未知（unknown）的会话列表与解除 | owner、admin | 已有（接口），E2 补页面 |
+| 用量与配额 | 按部门、成员、智能体、模型的用量报表；三级月度上限 | `models:manage` | E5 |
+| 审计 | 审计查询（元数据）；查看正文（另需权限并留痕） | `audit:read`、`audit:read_content` | 已有（查询），E1 补正文权限 |
+| | 审计导出 | `audit:read` | E6 |
+
+### 4.4 平台管理 `/platform-admin`
+
+只面向部署运维。企业开通、停用与计费不在本提案范围。
+
+| 模块 | 功能 | 状态 |
+|---|---|---|
+| 平台概览 | 企业数、共享空间数的只读汇总 | 已有 |
+| 跨企业清单 | 全平台的企业、智能体、会话列表（`/admin/tenants`、`/admin/agents`、`/admin/sessions`） | 已有；SaaS 下建议只保留元数据（名称、所属企业、时间、数量），不返回会话内容（需要你确认的项 6） |
+| 平台管理员 | 指定或取消平台管理员 | 已有（命令行），页面待实现 |
+| 内置技能 | 从仓库 `skills/` 导入内置技能 | 已有 |
+| 部署配置 | 向量库、解析引擎、存储、联网搜索后端、沙箱档位与隔离验收结果（从设置页移入，E2） | 已有（配置文件与命令行），页面待实现 |
+| 模型目录 | 供应商与模型的预设目录 | 待实现 |
+| 任务队列 | 队列深度、运行中与排队的任务 | 待实现 |
+| 平台 API Key | 平台级接口密钥 | 待实现 |
+| 系统审计 | 平台管理员操作的审计 | 待实现 |
+| 系统设置 | 全局开关（例如注册开关），版本信息 | 待实现（目前在 `configs/nexus.toml`） |
+
+### 4.5 对外嵌入页 `/embed/:channelId`
+
+给企业外部访客使用，嵌入在企业自己的网站或页面里。前端页面已存在（`embed.html`，WeKnora 副本），Nexus 尚无嵌入渠道的后端，整体为**待实现**，另提案。清单先固定下来，供那份提案使用：
+
+| 模块 | 功能 |
+|---|---|
+| 访客对话 | 单个绑定的智能体；流式回复；引用展示；受保护文件的预览 |
+| 会话保持 | 访客会话保存在浏览器本地，刷新后继续；不需要登录 |
+| 外观 | 标题、头像、欢迎语、推荐问题、主题色（由嵌入渠道配置决定） |
+| 安全边界 | 只能绑定无需人工确认的工具；只能读全企业可见的知识库；允许嵌入的域名白名单；按渠道与访客限流；不写入任何员工的记忆 |
+| 归属 | 访客会话属于企业，计入企业用量，写入审计；在管理后台可以停用渠道 |
+
+### 4.6 实现要点
+
+- **构建**：`apps/web` 保持一个工程，路由分为 `/workspace/*` 与 `/admin/*` 两棵，各有自己的布局组件。`/admin` 下的页面全部用动态 `import()` 引入，并在 Vite 中配置独立的 chunk 组，员工端首屏不加载管理页面的代码。现有 `/platform/*` 路由重定向到新位置，保留一个版本周期。`embed.html` 仍是独立的 Vite 入口。
 - **入口判断**：`/auth/me` 增加 `entries`：
   - `workspace`：当前企业的有效成员；
-  - `admin`：当前企业中持有任一治理权限（`members:manage`、`roles:manage`、`org:manage`、`policy:manage`、`audit:read`、`models:manage`、`tools:manage`）；
+  - `admin`：当前企业中持有任一治理权限（`members:manage`、`roles:manage`、`org:manage`、`policy:manage`、`audit:read`、`models:manage`、`tools:manage`），或是 owner、admin；
   - `platform_admin`：`users.is_platform_admin`。
   路由守卫只读取 `entries`。
-- **设置项归属**：`config/settingsAccess.ts` 改为一张表，每一项记录 `entry`（`workspace` 或 `admin`）与所需权限。仍然是前端唯一的依据：
-
-| 现有设置项 | 新位置 |
-|---|---|
-| `general`、`userprofile`、改密、企微绑定、`assistant`（个人部分）、`mymemory`、`envvars` | 工作台 → 个人设置 |
-| `models` | 工作台 → 个人设置（仅当 `personal_models` 开启时显示个人模型）；企业模型 → 管理后台 |
-| `tenant`、`members`、`org-structure`、角色、企业策略、`audit` | 管理后台 |
-| `mcp`、`skills`、`websearch`、`chathistory`、`memory`（企业级开关）、`assistant`（企业部分） | 管理后台 |
-| `vectorstore`、`parser`、`storage`、`sandbox`、`system-global`、`model-catalog`、`runtime-queues`、`platform-api-keys`、`system-audit-log`、`system` | `/platform-admin`（不变） |
-
-- **工作台导航**：“我的”与“企业共享”分组由接口字段区分（智能体与知识库的列表接口返回 `owned_by_me`、`visibility`），前端不自行推断。
-- **管理接口前缀**：新写的管理接口放在 `/api/v1/tenants/{id}/admin/...`；已有的管理接口在 E2 中迁移并保留旧路径一个版本周期。
+- **归属表**：`config/settingsAccess.ts` 改为一张表，每一项记录 `entry`（`workspace`、`admin` 或 `platform_admin`）与所需权限，内容与 4.2–4.4 一致，仍然是前端唯一的依据。
+- **“我的”与“企业共享”**：由接口字段区分（智能体与知识库的列表接口返回 `owned_by_me`、`visibility`），前端不自行推断。
+- **管理接口前缀**：新写的管理接口放在 `/api/v1/tenants/{id}/admin/...`；已有的管理接口在 E2 中迁移，并保留旧路径一个版本周期。
 
 ## 5. E3 企业微信（要点）
 
 - `tenant_wecom_apps` 的 `secret` 与 `encoding_aes_key` 用现有 Fernet 主密钥加密，不进事件与审计。
-- 回调：每企业一个 URL `/api/v1/integrations/wecom/{tenant_id}/callback`，先验签解密，再分发到“通讯录变更”“消息”“卡片按钮”。
-- `WeComDirectory` 协议扩展为：部门列表、部门成员详情、成员详情、发送应用消息、更新模板卡片。HTTP 实现放在 `connectors/wecom`，platform 只依赖协议。
-- 同步顺序：部门 → 成员 → 主部门与上级 → 停用差集。上级保存在新表 `user_managers(tenant_id, user_id, manager_user_id, source)`。
-- 自动开户：在 `auth/wecom.py` 的登录分支中，未绑定且 `(corp_id, userid)` 已同步的成员，创建 `users`、`user_identities` 与企业成员身份，不创建其他空间，也不写入 `local_credentials`。
+- 回调：每企业一个 URL `/api/v1/integrations/wecom/{tenant_id}/callback`，先验签解密，再分发到“通讯录变更”与“消息”。
+- `WeComDirectory` 协议扩展为：部门列表、部门成员详情、成员详情、发送应用消息。HTTP 实现放在 `connectors/wecom`，platform 只依赖协议。
+- 同步顺序：部门 → 成员 → 主部门 → 停用差集。
+- 自动开户：在 `auth/wecom.py` 的登录分支中，未绑定且 `(corp_id, userid)` 已同步的成员，创建 `users`、`user_identities` 与企业成员身份，不写入 `local_credentials`。
+- 离职：同步到成员被删除或移出可见范围时，把 `tenant_memberships.status` 设为 `revoked`，写入审计；资产不动。
 - 企微 H5：工作台在企微内置浏览器中使用网页授权免登；手机宽度下的布局纳入 E2 的验收。
-- 消息渠道：沿用路线图 9.1 与架构 2.14 的约定（`ChannelIdentity`、`ChannelSessionBinding`、去重、回复长度、只在明确拒绝时重试）。
+- 消息渠道：沿用路线图 9.1 与架构 2.14 的约定（`ChannelIdentity`、`ChannelSessionBinding`、去重、回复长度、只在明确拒绝时重试）。渠道内需要人工确认的工具调用，回复“请到工作台确认”并附链接，不做企微卡片。
 
 ## 6. E4–E6（要点）
 
-- **E4**：`tenant_agent_grants` 当前只有 `role_id` 作为接收方。新增 `agent_principal_grants(tenant_id, agent_id, principal_kind, principal_id, permission, include_descendants)`，`principal_kind` 取 `org_unit` 或 `user`；`agent_permissions` 取原有角色授权与新授权的并集。知识库可见范围增加 `org_units`。部门展开用递归 CTE 求调用者所在部门的祖先集合，每个请求内缓存一次。审批：`ActionApprovalRecord` 增加 `approver_kind` 与 `approver_user_ids`（发起时解析并冻结，决定时再校验审批人仍然有效），`resolve` 的权限由“Run 所有者”改为“在 `approver_user_ids` 中”。超时由 worker 定时扫描，按拒绝结束（`approval.resolved`，`reason = 'timeout'`）。
+- **E4**：`tenant_agent_grants` 当前只有 `role_id` 作为接收方。新增 `agent_principal_grants(tenant_id, agent_id, principal_kind, principal_id, permission, include_descendants)`，`principal_kind` 取 `org_unit` 或 `user`；`agent_permissions` 取原有角色授权与新授权的并集。知识库可见范围增加按部门、成员开放。部门展开用递归 CTE 求调用者所在部门的祖先集合，每个请求内缓存一次。
 - **E5**：`usage_ledger(tenant_id, user_id, org_unit_id, agent_id, model_version_id, day, input, output, cache_read, cache_creation)` 从 `usage.updated` 累加；准入时检查企业、部门、个人三级的月度上限，超出返回 429 `quota_exhausted`。
-- **E6**：worker 每天按 `retention_days` 清理会话、运行事件与产物，有法务保全标记的除外；审计按日导出为 JSONL，并写入哈希链字段；离职成员的企业内记忆默认删除。
+- **E6**：worker 每天按 `retention_days` 清理会话、运行事件与产物；审计按日导出为 JSONL，并写入哈希链字段。
 
 ## 7. 多租户隔离的后续加固（不在本提案实施）
 
