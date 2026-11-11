@@ -85,8 +85,12 @@
 
 ## E7 数据治理
 
-- [ ] E7.1 按 `retention_days` 留存清理。
-- [ ] E7.2 审计导出与哈希链。
+- [x] E7.1 按 `retention_days` 留存清理。
+- [x] E7.2 审计导出与哈希链。
+- 实施说明（2026-11-12）：`nexus_platform/governance/retention.py`、接口 `apps/api/.../http/governance.py`（`GET /tenants/{id}/admin/audit/export`，需 `audit:read`）、worker 每小时最多一次的保留清理。测试 `tests/test_governance.py`（3 项）。
+  - **偏离一**：保留期到了以后，删除会话的**内容**（消息、该会话 Run 的事件、产物文件与记录），会话行保留为状态 `purged` 的空壳，而不是删除整行；因为 Run、用量、审计、渠道绑定、记忆快照等多张表引用会话与 Run，整行删除风险高。有排队、运行中或等待中的 Run 的会话不清理。
+  - **偏离二**：哈希链在导出时计算并写在导出文件的每一行（`prev_hash`、`hash`），用于发现导出文件被改动、删行或调换顺序；没有在审计表中存储哈希字段，因此不防数据库内部的修改。存储式哈希链需要按企业串行写审计，留待评估。
+  - 局限：会话列表仍会显示 `purged` 的空会话；法务保全（暂停清理）未做。
 
 ## 收尾
 

@@ -230,6 +230,26 @@ def _record_usage(factory, run_id) -> None:
         logger.warning("Recording run usage failed", extra={"run_id": str(run_id)}, exc_info=True)
 
 
+_LAST_GOVERNANCE_RETENTION: list[float] = []
+
+
+def governance_retention_tick(factory, *, interval_seconds: float = 3600.0) -> None:
+    """E7: purge sessions past their enterprise's retention period, at most hourly per process."""
+    import time
+    from nexus_platform.governance.retention import run_retention
+    now = time.monotonic()
+    if _LAST_GOVERNANCE_RETENTION and now - _LAST_GOVERNANCE_RETENTION[0] < interval_seconds:
+        return
+    _LAST_GOVERNANCE_RETENTION[:] = [now]
+    try:
+        with factory() as session:
+            stats = run_retention(session)
+        if stats:
+            logger.info("Retention purged sessions", extra={"purged": stats})
+    except Exception:
+        logger.warning("Retention failed", exc_info=True)
+
+
 def usage_tick(factory) -> bool:
     """Add ended Runs the after-run hook missed to the usage ledger (E6); True when any was added."""
     from nexus_platform.usage.service import record_run_usage, unrecorded_runs
@@ -255,6 +275,7 @@ def _background_pass(factory, worker_id: str, knowledge_concurrency: int) -> boo
         return True
     if usage_tick(factory):
         return True
+    governance_retention_tick(factory)
     if knowledge_index.knowledge_tick(factory, _worker_loop(), knowledge_concurrency):
         return True
     if capture_tick(factory, worker_id):

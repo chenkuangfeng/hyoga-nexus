@@ -149,6 +149,8 @@ from nexus_api.http.audiences import router as audiences_router
 app.include_router(audiences_router)
 from nexus_api.http.usage import router as usage_router
 app.include_router(usage_router)
+from nexus_api.http.governance import router as governance_router
+app.include_router(governance_router)
 from nexus_api.http.mcp import router as mcp_router
 app.include_router(mcp_router)
 from nexus_api.http.schedules import router as schedules_router
