@@ -29,6 +29,7 @@ class _RunLog:
     next_id: int = 1
     ended_at: float | None = None
     waiters: list = field(default_factory=list)  # (loop, asyncio.Event)
+    created_at: float = field(default_factory=time.monotonic)
 
 
 class MemoryBus:
@@ -53,8 +54,12 @@ class MemoryBus:
         return log
 
     def _purge(self, now: float) -> None:
-        """Drop logs that ended longer ago than the retention; called under the lock."""
-        for key in [k for k, log in self._runs.items() if log.ended_at is not None and now - log.ended_at > self.retention]:
+        """Drop logs that ended longer ago than the retention, and empty logs nobody has waited on for that long (a
+        subscriber creates its Run's log so the first event can wake it, see `subscribe`); called under the lock."""
+        for key in [k for k, log in self._runs.items()
+                    if (log.ended_at is not None and now - log.ended_at > self.retention)
+                    or (log.ended_at is None and not log.entries and not log.waiters
+                        and now - log.created_at > self.retention)]:
             del self._runs[key]
 
     def _wake(self, log: _RunLog) -> None:
@@ -146,14 +151,15 @@ class MemoryBus:
                 # leaves the flag set, so no wake-up is ever lost.
                 flag.clear()
                 with self._lock:
-                    log = self._runs.get(key)
-                    if log is not None and (loop, flag) not in log.waiters:
+                    # The log is created here when the Run has not published yet: a waiter can only be woken
+                    # through its log, so a viewer connecting before the first event would otherwise sleep until
+                    # the next heartbeat (15 s by default).
+                    log = self._log(key)
+                    if (loop, flag) not in log.waiters:
                         log.waiters.append((loop, flag))
-                    pending = []
-                    earliest = log.entries[0][0] if log and log.entries else None
-                    if log is not None:
-                        pending = [(i, e) for i, e in log.entries if i > cursor]
-                    latest = log.next_id - 1 if log else 0
+                    earliest = log.entries[0][0] if log.entries else None
+                    pending = [(i, e) for i, e in log.entries if i > cursor]
+                    latest = log.next_id - 1
                 if earliest is not None and cursor + 1 < earliest and not gap_reported and cursor > 0:
                     gap_reported = True
                     yield StreamGap(str(cursor), str(earliest), str(latest))

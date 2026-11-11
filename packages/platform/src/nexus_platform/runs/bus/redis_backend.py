@@ -38,6 +38,8 @@ BREAKER_SECONDS = 5.0
 SOCKET_TIMEOUT = 0.5
 _STREAM_ID = re.compile(r"[0-9]+(-[0-9]+)?")
 _XREAD_COUNT = 64
+#: Events one subscriber may leave unread before it is cut off (a viewer whose connection stalled).
+_SUBSCRIBER_BACKLOG = 2048
 _MAX_RETRIES = 3
 
 #: XADD only while the caller still holds the producer token.
@@ -61,6 +63,59 @@ def _text(value: Any) -> str:
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
+class _Reader:
+    """One blocking ``XREAD`` per (event loop, Run), fanned out to every subscriber of this process.
+
+    Without it each viewer of a Run would hold its own Redis connection in a blocking read, so a hundred viewers
+    cost a hundred connections and a hundred decodes of every event. The reader stops when its last subscriber
+    leaves or the Run's end marker has been delivered.
+    """
+
+    def __init__(self, bus: "RedisBus", run_id: str, key: str, cursor: str, heartbeat: float) -> None:
+        self.bus, self.run_id, self.key, self.cursor, self.heartbeat = bus, run_id, key, cursor, heartbeat
+        self.queues: list[asyncio.Queue] = []
+        self.task: asyncio.Task | None = None
+
+    def push(self, item: Any) -> None:
+        """Hand `item` to every subscriber. One that has fallen `_SUBSCRIBER_BACKLOG` events behind is dropped from the
+        reader and told the bus is unavailable to it, which makes the stream pipeline continue from the database: a
+        stalled viewer must neither grow memory without bound nor slow the others."""
+        for queue in list(self.queues):
+            if queue.full():
+                self.queues.remove(queue)
+                while not queue.empty():
+                    queue.get_nowait()
+                queue.put_nowait(BusUnavailable("subscriber too slow for the live channel"))
+                logger.warning("Dropped a slow subscriber of a Run stream", extra={"run_id": self.run_id})
+                continue
+            queue.put_nowait(item)
+
+    async def run(self) -> None:
+        client, failures = self.bus._client(), 0
+        while self.queues:
+            try:
+                response = await client.xread({self.key: self.cursor}, count=_XREAD_COUNT,
+                                              block=max(1, int(self.heartbeat * 1000)))
+                failures = 0
+            except RedisError as exc:
+                failures += 1
+                if failures > _MAX_RETRIES:
+                    self.push(BusUnavailable(f"redis bus unavailable: {type(exc).__name__}"))
+                    return
+                await asyncio.sleep(min(self.heartbeat, 0.2 * 2 ** failures))
+                continue
+            if not response:
+                self.push(HEARTBEAT)
+                continue
+            for _stream, entries in response:
+                for entry_id, fields in entries:
+                    self.cursor = _text(entry_id)
+                    item = self.bus._to_event(self.run_id, self.cursor, fields)
+                    self.push(item)
+                    if item is END:
+                        return
+
+
 class RedisBus:
     """Run events on Redis Streams."""
 
@@ -76,6 +131,7 @@ class RedisBus:
                                                          socket_connect_timeout=SOCKET_TIMEOUT)
         self._async_factory = async_client_factory or (lambda: aredis.Redis.from_url(url))
         self._async_clients: dict[int, Any] = {}
+        self._readers: dict[tuple[int, str], _Reader] = {}
         self._fenced_xadd = self._sync.register_script(_FENCED_XADD)
         self._renew = self._sync.register_script(_RENEW)
         self._delete_if = self._sync.register_script(_DELETE_IF)
@@ -232,31 +288,63 @@ class RedisBus:
         client = self._client()
         cursor = after if after and _STREAM_ID.fullmatch(after) else "0-0"
         failures = 0
-        try:
-            first = await client.xrange(key, count=1)
-        except RedisError as exc:
-            raise BusUnavailable(f"redis bus unavailable: {type(exc).__name__}") from exc
-        if first and cursor != "0-0" and self._id_lt(cursor, _text(first[0][0])):
-            # The window moved past the cursor: events between were trimmed, so say so rather than skip silently.
-            last = await client.xrevrange(key, count=1)
-            yield StreamGap(cursor, _text(first[0][0]), _text(last[0][0]) if last else None)
-        while True:
+        if cursor != "0-0":
+            # Only a resuming viewer can have fallen behind the retained window. A new one starts at the beginning, and
+            # skipping this check for it keeps a burst of viewers from opening a connection each just to ask.
             try:
-                response = await client.xread({key: cursor}, count=_XREAD_COUNT, block=max(1, int(heartbeat * 1000)))
-                failures = 0
+                first = await client.xrange(key, count=1)
             except RedisError as exc:
-                failures += 1
-                if failures > _MAX_RETRIES:
+                raise BusUnavailable(f"redis bus unavailable: {type(exc).__name__}") from exc
+            if first and self._id_lt(cursor, _text(first[0][0])):
+                # The window moved past the cursor: events between were trimmed, so say so rather than skip silently.
+                last = await client.xrevrange(key, count=1)
+                yield StreamGap(cursor, _text(first[0][0]), _text(last[0][0]) if last else None)
+        loop_id = id(asyncio.get_running_loop())
+        queue: asyncio.Queue = asyncio.Queue(maxsize=_SUBSCRIBER_BACKLOG)
+        reader = self._readers.get((loop_id, rid))
+        if reader is None or reader.task is None or reader.task.done():
+            reader = self._readers[(loop_id, rid)] = _Reader(self, rid, key, cursor, heartbeat)
+            reader.queues.append(queue)
+            reader.task = asyncio.get_running_loop().create_task(reader.run())
+            floor = cursor
+        else:
+            # Joining a running reader: it is already past this subscriber's cursor, so the events in between are
+            # read once from the stream, and live ones at or before that point are skipped as duplicates.
+            floor = reader.cursor if self._id_lt(cursor, reader.cursor) else cursor
+            reader.queues.append(queue)
+            if floor != cursor:
+                try:
+                    backlog = await client.xrange(key, min=cursor, max=floor)
+                except RedisError as exc:
+                    self._leave(loop_id, rid, reader, queue)
                     raise BusUnavailable(f"redis bus unavailable: {type(exc).__name__}") from exc
-                await asyncio.sleep(min(heartbeat, 0.2 * 2 ** failures))
-                continue
-            if not response:
-                yield HEARTBEAT
-                continue
-            for _stream, entries in response:
-                for entry_id, fields in entries:
-                    cursor = _text(entry_id)
-                    item = self._to_event(rid, cursor, fields)
+                for entry_id, fields in backlog:
+                    if not self._id_lt(cursor, _text(entry_id)):
+                        continue
+                    item = self._to_event(rid, _text(entry_id), fields)
                     yield item
                     if item is END:
+                        self._leave(loop_id, rid, reader, queue)
                         return
+        try:
+            while True:
+                item = await queue.get()
+                if isinstance(item, Exception):
+                    raise item
+                if isinstance(item, BusEvent) and not self._id_lt(floor, item.cursor):
+                    continue  # already delivered from the backlog
+                yield item
+                if item is END:
+                    return
+        finally:
+            self._leave(loop_id, rid, reader, queue)
+
+    def _leave(self, loop_id: int, rid: str, reader: _Reader, queue: asyncio.Queue) -> None:
+        """Detach a subscriber; the last one out stops the reader."""
+        if queue in reader.queues:
+            reader.queues.remove(queue)
+        if not reader.queues:
+            if reader.task is not None and not reader.task.done():
+                reader.task.cancel()
+            if self._readers.get((loop_id, rid)) is reader:
+                del self._readers[(loop_id, rid)]

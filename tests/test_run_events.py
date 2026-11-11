@@ -128,6 +128,40 @@ def test_memory_bus_wakes_a_subscriber_from_another_thread_and_beats_when_idle()
     assert HEARTBEAT in seen and seen[-1].payload["text"] == "hi"
 
 
+def test_memory_bus_wakes_a_subscriber_that_attached_before_the_first_event():
+    """A viewer can connect before the Run publishes anything. It must be woken by the first event, not by the
+    next heartbeat (15 s by default)."""
+    bus, run = MemoryBus(), uuid4()
+
+    async def scenario():
+        async def reader():
+            async for item in bus.subscribe(run, after=None, heartbeat=30.0):
+                if isinstance(item, BusEvent):
+                    return time.monotonic()
+
+        task = asyncio.create_task(reader())
+        await asyncio.sleep(0.2)
+        sent = time.monotonic()
+        threading.Thread(target=lambda: bus.publish(event(run, "message.delta", text="first"))).start()
+        return (await asyncio.wait_for(task, 3)) - sent
+
+    assert asyncio.run(scenario()) < 1.0
+
+
+def test_memory_bus_drops_the_empty_log_a_subscriber_created_for_a_run_that_never_published():
+    bus, run = MemoryBus(retention_seconds=0.05), uuid4()
+
+    async def scenario():
+        gen = bus.subscribe(run, after=None, heartbeat=0.02)
+        await gen.__anext__()            # a heartbeat: the subscriber is attached
+        await gen.aclose()
+
+    asyncio.run(scenario())
+    time.sleep(0.1)
+    bus.publish(event(uuid4(), "message.delta", text="other"))   # any publish purges
+    assert str(run) not in bus._runs
+
+
 def test_memory_producer_lease_and_control_and_marker():
     bus, run, session = MemoryBus(), uuid4(), uuid4()
     lease = bus.start_producer(run, "w")
@@ -536,6 +570,58 @@ def test_redis_bus_goes_quiet_after_a_failure_instead_of_stalling_the_producer(r
     with pytest.raises(BusUnavailable):
         redis_bus.publish(event(run, "tool.started", 2))   # skipped during back-off, no second network attempt
     assert time.monotonic() - started < 0.1
+
+
+def test_redis_bus_shares_one_reader_and_backfills_a_late_joiner_without_duplicates(redis_bus):
+    run = uuid4()
+    for index in range(1, 6):
+        redis_bus.publish(event(run, "tool.started", index))
+
+    async def scenario():
+        async def read(after, count, out, ready=None):
+            async for item in redis_bus.subscribe(run, after=after, heartbeat=0.2):
+                if isinstance(item, BusEvent):
+                    out.append(item.sequence)
+                    if ready is not None and len(out) == 5:
+                        ready.set()
+                if item is END or len(out) >= count:
+                    return
+
+        early, late, ready = [], [], asyncio.Event()
+        first = asyncio.create_task(read(None, 7, early, ready))
+        await asyncio.wait_for(ready.wait(), 3)          # the first subscriber has read all five
+        second = asyncio.create_task(read(None, 7, late))   # joins from the start: events 1-5 come from the backlog
+        await asyncio.sleep(0.3)
+        assert len(redis_bus._readers) == 1               # one reader serves both
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: [redis_bus.publish(event(run, "tool.started", n)) for n in (6, 7)])
+        await asyncio.wait_for(asyncio.gather(first, second), 5)
+        return early, late
+
+    early, late = asyncio.run(scenario())
+    assert early == late == [1, 2, 3, 4, 5, 6, 7]
+    assert redis_bus._readers == {}                       # the last subscriber out stopped the reader
+
+
+def test_redis_bus_reader_ends_every_subscriber_at_the_end_marker(redis_bus):
+    run = uuid4()
+
+    async def scenario():
+        async def read(out):
+            async for item in redis_bus.subscribe(run, after=None, heartbeat=0.2):
+                out.append(item)
+
+        a, b = [], []
+        tasks = [asyncio.create_task(read(a)), asyncio.create_task(read(b))]
+        await asyncio.sleep(0.2)
+        redis_bus.publish(event(run, "tool.started", 1))
+        redis_bus.publish_end(run)
+        await asyncio.wait_for(asyncio.gather(*tasks), 5)
+        return a, b
+
+    a, b = asyncio.run(scenario())
+    assert a[-1] is END and b[-1] is END
+    assert [i.sequence for i in a if isinstance(i, BusEvent)] == [1] == [i.sequence for i in b if isinstance(i, BusEvent)]
 
 
 def test_redis_control_marker_and_limiter(redis_bus):
