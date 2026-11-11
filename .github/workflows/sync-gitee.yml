@@ -40,8 +40,10 @@ jobs:
             elif git merge-base --is-ancestor FETCH_HEAD HEAD; then
               git push gitee HEAD:refs/heads/main
             else
-              echo "::error::两端 main 已分叉，请先合并两端提交后再同步。"
-              exit 1
+              # GitHub 为权威源：两端分叉时以 GitHub 为准强制覆盖 Gitee。
+              # lease 绑定刚 fetch 到的 Gitee 提交，期间 Gitee 若又有新提交则拒绝推送。
+              echo "::warning::两端 main 已分叉，以 GitHub 为准强制覆盖 Gitee（被覆盖的 Gitee 提交：$(git rev-parse FETCH_HEAD)）。"
+              git push --force-with-lease=main:"$(git rev-parse FETCH_HEAD)" gitee HEAD:refs/heads/main
             fi
           else
             git push gitee HEAD:refs/heads/main
