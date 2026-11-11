@@ -197,3 +197,65 @@ def test_the_host_file_store_lists_regular_output_files_only(tmp_path):
     found = store.output_files()
     assert [(virtual, size) for virtual, _, size in found] == [('/outputs/sub/a.txt', 2)]
     assert found[0][1] == tmp_path / 'outputs' / 'sub' / 'a.txt'
+
+
+# ---------------------------------------------------------------- the library view (search, latest versions, delete all)
+
+def _make_files(ctx, **files):
+    for name, content in files.items():
+        (ctx['outputs'] / name.replace('__', '.')).write_text(content, encoding='utf-8')
+
+
+def test_search_filters_by_name_and_extension_and_counts(run_of):
+    ctx = run_of
+    _make_files(ctx, report__pdf='p', Notes__MD='n', data__csv='d', **{'100%_done__txt': 'x'})
+    register(ctx)
+    factory, tenant_id = ctx['factory'], ctx['tenant_id']
+
+    def names(**kw):
+        with factory() as db:
+            found = service.search_artifacts(db, MEMBER, tenant_id, **kw)
+        return sorted(i['name'] for i in found['items']), found['total']
+
+    assert names() == (['100%_done.txt', 'Notes.MD', 'data.csv', 'report.pdf'], 4)
+    assert names(q='NOTES') == (['Notes.MD'], 1)
+    assert names(extensions=['.pdf', '.md']) == (['Notes.MD', 'report.pdf'], 2)
+    assert names(q='%') == (['100%_done.txt'], 1), 'wildcards in the query are literal'
+    assert names(q='_') == (['100%_done.txt'], 1)
+    assert names(q='nothing') == ([], 0)
+    with factory() as db:
+        page = service.search_artifacts(db, MEMBER, tenant_id, limit=2, offset=0)
+        rest = service.search_artifacts(db, MEMBER, tenant_id, limit=2, offset=2)
+    assert page['total'] == 4 and len(page['items']) == 2 and len(rest['items']) == 2
+    assert {i['id'] for i in page['items']}.isdisjoint({i['id'] for i in rest['items']})
+    assert all(i['session_title'] == 'Work' for i in page['items'])
+
+
+def test_latest_collapses_versions_of_one_file_and_delete_can_remove_them_all(run_of):
+    ctx = run_of
+    factory, tenant_id, root = ctx['factory'], ctx['tenant_id'], ctx['root']
+    _make_files(ctx, a__txt='one', b__txt='bee')
+    register(ctx)
+    (ctx['outputs'] / 'a.txt').write_text('two', encoding='utf-8')
+    register(ctx, run_id=_next_run(ctx))
+    (ctx['outputs'] / 'a.txt').write_text('three', encoding='utf-8')
+    register(ctx, run_id=_next_run(ctx, 'k3'))
+    with factory() as db:
+        everything = service.search_artifacts(db, MEMBER, tenant_id)
+        library = service.search_artifacts(db, MEMBER, tenant_id, latest=True)
+    assert everything['total'] == 4  # a x3 and b x1
+    assert library['total'] == 2
+    by_name = {i['name']: i for i in library['items']}
+    assert by_name['a.txt']['version_count'] == 3 and by_name['b.txt']['version_count'] == 1
+    with factory() as db:
+        newest = service.open_artifact(db, MEMBER, tenant_id, UUID(by_name['a.txt']['id']), root)[1]
+    assert newest.read_text() == 'three', 'the library row is the newest version'
+
+    with factory() as db:
+        assert service.delete_artifact(db, MEMBER, tenant_id, UUID(by_name['a.txt']['id']), root, all_versions=True) == 3
+    with factory() as db:
+        left = service.search_artifacts(db, MEMBER, tenant_id)
+    assert [i['name'] for i in left['items']] == ['b.txt']
+    assert len(list((root / str(tenant_id)).iterdir())) == 1, 'every copy of a.txt is gone'
+    with factory() as db:  # deleting one version alone still works and reports one
+        assert service.delete_artifact(db, MEMBER, tenant_id, UUID(by_name['b.txt']['id']), root) == 1

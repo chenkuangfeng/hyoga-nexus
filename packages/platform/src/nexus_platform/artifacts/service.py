@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Iterable
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
@@ -51,10 +51,15 @@ def _mime(path: str) -> str:
     return _MIME.get(suffix) or mimetypes.guess_type(path)[0] or 'application/octet-stream'
 
 
-def _view(row: ArtifactRecord) -> dict:
-    return {'id': str(row.id), 'session_id': str(row.session_id), 'run_id': str(row.run_id), 'name': row.name,
+def _view(row: ArtifactRecord, *, session_title: str | None = None, version_count: int | None = None) -> dict:
+    view = {'id': str(row.id), 'session_id': str(row.session_id), 'run_id': str(row.run_id), 'name': row.name,
             'path': row.path, 'size': row.size, 'sha256': row.sha256, 'mime': row.mime,
             'created_at': row.created_at.isoformat()}
+    if session_title is not None:
+        view['session_title'] = session_title
+    if version_count is not None:
+        view['version_count'] = version_count
+    return view
 
 
 def _copy(source: Path, destination: Path) -> tuple[str, int]:
@@ -167,19 +172,62 @@ def _one(db: Session, tenant_id: UUID, user_id: UUID, manager: bool, artifact_id
     return row
 
 
-def list_artifacts(db: Session, principal: Principal, tenant_id: UUID, *, session_id: UUID | None = None,
-                   run_id: UUID | None = None, limit: int = 50, offset: int = 0) -> list[dict]:
-    """Artifacts the caller may see, newest first, optionally of one session or Run."""
+def _like(text: str) -> str:
+    return text.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
+def search_artifacts(db: Session, principal: Principal, tenant_id: UUID, *, session_id: UUID | None = None,
+                     run_id: UUID | None = None, q: str = '', extensions: Iterable[str] = (), latest: bool = False,
+                     limit: int = 50, offset: int = 0) -> dict:
+    """Artifacts the caller may see, newest first: ``{'items': [...], 'total': n}``.
+
+    ``q`` matches the file name (case-insensitive substring), ``extensions`` (such as ``.pdf``) keeps files that end
+    with one of them. With ``latest`` a file that was registered several times in one session (same path) appears once,
+    as its newest version, and carries ``version_count``. Every item carries ``session_title``.
+    """
     with db.begin():
         user_id, manager = _reader(db, principal, tenant_id)
-        query = _visible(tenant_id, user_id, manager)
+        query = select(ArtifactRecord, SessionRecord.title).join(
+            SessionRecord, SessionRecord.id == ArtifactRecord.session_id).where(
+            ArtifactRecord.tenant_id == tenant_id, ArtifactRecord.deleted_at.is_(None))
+        if not manager:
+            query = query.where(SessionRecord.owner_user_id == user_id)
         if session_id is not None:
             query = query.where(ArtifactRecord.session_id == session_id)
         if run_id is not None:
             query = query.where(ArtifactRecord.run_id == run_id)
-        rows = db.scalars(query.order_by(ArtifactRecord.created_at.desc(), ArtifactRecord.path)
+        if q.strip():
+            query = query.where(func.lower(ArtifactRecord.name).like(f'%{_like(q.strip().lower())}%', escape='\\'))
+        wanted = [e.lower() for e in extensions if e and len(e) <= 16]
+        if wanted:
+            query = query.where(or_(*[func.lower(ArtifactRecord.name).like(f'%{_like(e)}', escape='\\') for e in wanted]))
+        if latest:
+            newest = select(ArtifactRecord.session_id.label('s'), ArtifactRecord.path.label('p'),
+                            func.max(ArtifactRecord.created_at).label('m')).where(
+                ArtifactRecord.tenant_id == tenant_id, ArtifactRecord.deleted_at.is_(None)).group_by(
+                ArtifactRecord.session_id, ArtifactRecord.path).subquery()
+            query = query.join(newest, and_(newest.c.s == ArtifactRecord.session_id, newest.c.p == ArtifactRecord.path,
+                                            newest.c.m == ArtifactRecord.created_at))
+        total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+        rows = db.execute(query.order_by(ArtifactRecord.created_at.desc(), ArtifactRecord.path)
                           .limit(max(1, min(limit, LIST_MAX))).offset(max(0, offset))).all()
-        return [_view(row) for row in rows]
+        counts: dict[tuple[UUID, str], int] = {}
+        if latest and rows:
+            for sid, path, count in db.execute(select(ArtifactRecord.session_id, ArtifactRecord.path, func.count()).where(
+                    ArtifactRecord.tenant_id == tenant_id, ArtifactRecord.deleted_at.is_(None),
+                    ArtifactRecord.session_id.in_({row.session_id for row, _ in rows})).group_by(
+                    ArtifactRecord.session_id, ArtifactRecord.path)):
+                counts[(sid, path)] = count
+        items = [_view(row, session_title=title or '', version_count=counts.get((row.session_id, row.path), 1) if latest else None)
+                 for row, title in rows]
+        return {'items': items, 'total': total}
+
+
+def list_artifacts(db: Session, principal: Principal, tenant_id: UUID, *, session_id: UUID | None = None,
+                   run_id: UUID | None = None, limit: int = 50, offset: int = 0) -> list[dict]:
+    """Artifacts the caller may see, newest first, optionally of one session or Run."""
+    return search_artifacts(db, principal, tenant_id, session_id=session_id, run_id=run_id, limit=limit,
+                            offset=offset)['items']
 
 
 def get_artifact(db: Session, principal: Principal, tenant_id: UUID, artifact_id: UUID) -> dict:
@@ -203,14 +251,27 @@ def open_artifact(db: Session, principal: Principal, tenant_id: UUID, artifact_i
 
 
 def delete_artifact(db: Session, principal: Principal, tenant_id: UUID, artifact_id: UUID,
-                    root: Path | None = None) -> None:
-    """Remove an artifact the caller may see: the row is marked deleted and the stored copy is deleted."""
+                    root: Path | None = None, *, all_versions: bool = False) -> int:
+    """Remove an artifact the caller may see: the row is marked deleted and the stored copy is deleted.
+
+    With ``all_versions`` every earlier registration of the same file (same session and path) goes too, which is what
+    the library page means by deleting a file. Returns how many artifacts were removed.
+    """
     root = (root or artifacts_root()).resolve()
+    stored_paths: list[Path] = []
     with db.begin():
         user_id, manager = _reader(db, principal, tenant_id)
         row = _one(db, tenant_id, user_id, manager, artifact_id)
-        row.deleted_at = utc_now()
-        stored = (root / row.storage_key).resolve()
-        audit(db, tenant_id, user_id, 'artifact.deleted', 'artifact', str(row.id), {'run_id': str(row.run_id)})
-    if root in stored.parents:
-        stored.unlink(missing_ok=True)
+        rows = [row]
+        if all_versions:
+            rows = list(db.scalars(_visible(tenant_id, user_id, manager).where(
+                ArtifactRecord.session_id == row.session_id, ArtifactRecord.path == row.path)))
+        now = utc_now()
+        for item in rows:
+            item.deleted_at = now
+            stored_paths.append((root / item.storage_key).resolve())
+            audit(db, tenant_id, user_id, 'artifact.deleted', 'artifact', str(item.id), {'run_id': str(item.run_id)})
+    for stored in stored_paths:
+        if root in stored.parents:
+            stored.unlink(missing_ok=True)
+    return len(stored_paths)

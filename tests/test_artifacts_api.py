@@ -87,3 +87,27 @@ def test_validation_and_a_missing_copy(api):
     artifact = make(api)
     (api.ctx['root'] / str(api.ctx['tenant_id']) / artifact['id']).unlink()
     assert api.get(f"{api.base}/{artifact['id']}/download").status_code == 404
+
+
+def test_the_library_parameters_and_totals(api):
+    make(api, 'plan.pdf', 'p')
+    make(api, 'notes.md', 'n')
+    everything = api.get(api.base).json()
+    assert everything['total'] == 2 and {i['session_title'] for i in everything['items']} == {'Work'}
+    only_pdf = api.get(f'{api.base}?extensions=.pdf,.docx').json()
+    assert [i['name'] for i in only_pdf['items']] == ['plan.pdf'] and only_pdf['total'] == 1
+    assert [i['name'] for i in api.get(f'{api.base}?q=NOTE').json()['items']] == ['notes.md']
+    latest = api.get(f'{api.base}?latest=true').json()['items']
+    assert all(item['version_count'] == 1 for item in latest)
+    assert api.get(f"{api.base}?q={'x' * 201}").status_code == 422
+
+
+def test_delete_with_all_versions(api):
+    first = make(api, 'a.txt', 'one')
+    from test_artifacts import _next_run
+    (api.ctx['outputs'] / 'a.txt').write_text('two', encoding='utf-8')
+    register(api.ctx, run_id=_next_run(api.ctx))
+    assert api.get(f'{api.base}?latest=true').json()['total'] == 1
+    assert api.get(api.base).json()['total'] == 2
+    assert api.delete(f"{api.base}/{first['id']}?all_versions=true").status_code == 204
+    assert api.get(api.base).json()['total'] == 0

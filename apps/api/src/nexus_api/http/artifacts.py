@@ -32,11 +32,14 @@ def _root() -> Path:
 
 @router.get('')
 def list_artifacts(tenant_id: UUID, session_id: UUID | None = None, run_id: UUID | None = None,
-                   limit: int = Query(50, ge=1, le=service.LIST_MAX), offset: int = Query(0, ge=0),
+                   q: str = Query('', max_length=200), extensions: str = Query('', max_length=400),
+                   latest: bool = False, limit: int = Query(50, ge=1, le=service.LIST_MAX), offset: int = Query(0, ge=0),
                    principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    """Artifacts the caller may see, newest first; filter by session or Run."""
-    return {'items': service.list_artifacts(db, principal, tenant_id, session_id=session_id, run_id=run_id,
-                                            limit=limit, offset=offset)}
+    """Artifacts the caller may see, newest first, with the total. Filter by session, Run, file name (`q`) and a
+    comma-separated list of extensions; `latest` keeps only the newest version of each file of a session."""
+    return service.search_artifacts(db, principal, tenant_id, session_id=session_id, run_id=run_id, q=q,
+                                    extensions=[e.strip() for e in extensions.split(',') if e.strip()], latest=latest,
+                                    limit=limit, offset=offset)
 
 
 @router.get('/{artifact_id}')
@@ -55,7 +58,8 @@ def download_artifact(tenant_id: UUID, artifact_id: UUID, principal: Principal =
 
 
 @router.delete('/{artifact_id}', status_code=204)
-def delete_artifact(tenant_id: UUID, artifact_id: UUID, principal: Principal = Depends(get_principal),
-                    db: Session = Depends(get_database_session)) -> Response:
-    service.delete_artifact(db, principal, tenant_id, artifact_id, _root())
+def delete_artifact(tenant_id: UUID, artifact_id: UUID, all_versions: bool = False,
+                    principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)) -> Response:
+    """Delete an artifact; with `all_versions` also every earlier registration of the same file in its session."""
+    service.delete_artifact(db, principal, tenant_id, artifact_id, _root(), all_versions=all_versions)
     return Response(status_code=204)
