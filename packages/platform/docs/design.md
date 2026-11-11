@@ -89,3 +89,7 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 ## Run 事件通道（runs/bus）
 
 `config.py` 读取 `[run_events]` 与 `[deployment]`；`memory.py`、`redis_backend.py`、`database.py` 实现 `nexus_core.run_events` 的端口；`factory.py` 管理进程级通道；`hook.py` 在 `after_commit` 发布持久事件并在取消请求时发控制信号；`stream.py` 是订阅管线（数据库重放、通道消费、去重、补读、`resync`）。`control.py` 为 Redis 与数据库后端的控制唤醒与活动标记。配额在 `runs/quotas.py`，按模型限流在 `runs/model_limits.py`。
+
+## 知识库共享（shared_spaces/kb_shares）
+
+`knowledge_base_shares` 记录库共享到共享空间的级别；`kb_shares.shared_levels` 按「共享级别、成员空间在共享空间的角色、本人在本空间的角色上限」取最小得到每个库的有效级别，`knowledge/access.py` 的 `can_read` 与 `readable_bases` 把它并入读取判定（与租户级 `resource_grants` 并列）。写入、设置与共享管理仍只属于所属空间。有效级别规则与智能体共享共用 `agent_shares.effective_level`。

@@ -1,4 +1,8 @@
 import { get, post, put, del } from '@/utils/request'
+import { knowledgePath } from '@/api/knowledge-base/nexusKnowledgeApi'
+import {
+  toNexusShareBody, toOrganizationList, toWeKnoraShare, toWeKnoraShareList, toWeKnoraSharedBase,
+} from './nexusKnowledgeShares'
 
 // Organization types
 export interface Organization {
@@ -357,9 +361,10 @@ export async function getOrganization(id: string): Promise<ApiResponse<Organizat
  * List my organizations
  */
 export async function listMyOrganizations(): Promise<ApiResponse<ListOrganizationsResponse>> {
+  // Nexus calls WeKnora's organizations "shared spaces" (openspec 2026-11-06-knowledge-base K1.9c).
   try {
-    const response = await get('/api/v1/organizations')
-    return response as unknown as ApiResponse<ListOrganizationsResponse>
+    const spaces = await get('/api/v1/shared-spaces')
+    return { success: true, data: toOrganizationList(spaces) as unknown as ListOrganizationsResponse }
   } catch (error: any) {
     return { success: false, message: error.message || 'Failed to list organizations' }
   }
@@ -576,8 +581,8 @@ export async function reviewJoinRequest(orgId: string, requestId: string, req: R
  */
 export async function shareKnowledgeBase(kbId: string, req: ShareKnowledgeBaseRequest): Promise<ApiResponse<KnowledgeBaseShare>> {
   try {
-    const response = await post(`/api/v1/knowledge-bases/${kbId}/shares`, req)
-    return response as unknown as ApiResponse<KnowledgeBaseShare>
+    const response = await post(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/shares`, toNexusShareBody(req))
+    return { success: true, data: toWeKnoraShare(response, kbId) as unknown as KnowledgeBaseShare }
   } catch (error: any) {
     return { success: false, message: error.message || 'Failed to share knowledge base' }
   }
@@ -588,8 +593,8 @@ export async function shareKnowledgeBase(kbId: string, req: ShareKnowledgeBaseRe
  */
 export async function listKBShares(kbId: string): Promise<ApiResponse<ListSharesResponse>> {
   try {
-    const response = await get(`/api/v1/knowledge-bases/${kbId}/shares`)
-    return response as unknown as ApiResponse<ListSharesResponse>
+    const response: any = await get(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/shares`)
+    return { success: true, data: toWeKnoraShareList(response?.items, kbId) as unknown as ListSharesResponse }
   } catch (error: any) {
     return { success: false, message: error.message || 'Failed to list shares' }
   }
@@ -599,9 +604,11 @@ export async function listKBShares(kbId: string): Promise<ApiResponse<ListShares
  * Update share permission
  */
 export async function updateSharePermission(kbId: string, shareId: string, req: UpdateSharePermissionRequest): Promise<ApiResponse<void>> {
+  // Sharing again with another level changes the share; `shareId` is the shared space id (see nexusKnowledgeShares.ts).
   try {
-    const response = await put(`/api/v1/knowledge-bases/${kbId}/shares/${shareId}`, req)
-    return response as unknown as ApiResponse<void>
+    await post(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/shares`,
+      toNexusShareBody({ organization_id: shareId, permission: req.permission }))
+    return { success: true }
   } catch (error: any) {
     return { success: false, message: error.message || 'Failed to update share permission' }
   }
@@ -612,8 +619,8 @@ export async function updateSharePermission(kbId: string, shareId: string, req: 
  */
 export async function removeShare(kbId: string, shareId: string): Promise<ApiResponse<void>> {
   try {
-    const response = await del(`/api/v1/knowledge-bases/${kbId}/shares/${shareId}`)
-    return response as unknown as ApiResponse<void>
+    await del(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/shares/${encodeURIComponent(shareId)}`)
+    return { success: true }
   } catch (error: any) {
     return { success: false, message: error.message || 'Failed to remove share' }
   }
@@ -624,8 +631,9 @@ export async function removeShare(kbId: string, shareId: string): Promise<ApiRes
  */
 export async function listSharedKnowledgeBases(): Promise<ApiResponse<SharedKnowledgeBase[]>> {
   try {
-    const response = await get('/api/v1/shared-knowledge-bases')
-    return response as unknown as ApiResponse<SharedKnowledgeBase[]>
+    const response: any = await get(`${knowledgePath()}/shared-bases`)
+    const rows: any[] = Array.isArray(response?.items) ? response.items : []
+    return { success: true, data: rows.map(toWeKnoraSharedBase) as unknown as SharedKnowledgeBase[] }
   } catch (error: any) {
     return { success: false, message: error.message || 'Failed to list shared knowledge bases' }
   }

@@ -46,8 +46,9 @@
   - 追加（2026-11-11，用户确认方案：知识库共享目标为共享空间，与智能体共享一致；企业空间提案「知识库共享（`knowledge_base_shares`）」在此落地）：
     - [x] K1.9a 后端：`knowledge_base_shares` 表与迁移（`kb_id`、`shared_space_id`、`level` viewer|editor|admin，唯一 `(kb_id, shared_space_id)`）；`nexus_platform/shared_spaces/kb_shares.py` 仿 `agent_shares`（共享 / 改级别 / 取消 / 有效级别 = min(共享级别, 成员空间在共享空间的角色, 调用者上限)）；`access.can_read` / `readable_bases` 纳入共享空间路径（任一有效级别可读，写仍只限所属空间）；接口 `POST/GET /knowledge/bases/{kb_id}/shares`（`shared_space_id` + `level`）、`DELETE /knowledge/bases/{kb_id}/shares/{shared_space_id}`、`GET /knowledge/shared-bases`；旧的租户授权共享接口 `/shares/{grant_id}` 移除，平台资源授权机制本身不动；审计。
     - [x] K1.9b 后端测试：共享 / 改级别 / 取消、越权（非所属空间管理员、非成员空间）、检索与列表可见性、撤销后不可读、旧接口移除。
-    - [ ] K1.9c 前端：`api/organization` 的知识库共享函数接 Nexus（适配层纯函数 + 单测）；`plannedEndpoints.ts` 去掉共享条目并改准解析引擎与图谱抽取的说明；共享设置页与「共享给我的知识库」列表可用。
-    - [ ] K1.9d 文档：`packages/platform` 文档、`docs/architecture.md` 共享部分、规格。
+    - [x] K1.9c 前端：`api/organization` 的知识库共享函数接 Nexus（适配层纯函数 + 单测）；`plannedEndpoints.ts` 去掉共享条目并改准解析引擎与图谱抽取的说明；共享设置页与「共享给我的知识库」列表可用。
+      - 实施说明（2026-11-11）：`api/organization/nexusKnowledgeShares.ts` 纯映射（单测 6 项）；`api/organization/index.ts` 的 `listMyOrganizations`（改读共享空间）、`shareKnowledgeBase`、`listKBShares`、`updateSharePermission`、`removeShare`、`listSharedKnowledgeBases` 接 Nexus，共享的 `id` 即共享空间 id；`plannedEndpoints.ts` 去掉共享条目，解析引擎只拦 `check` / `docreader`，图谱抽取预览改为无阶段的待实现说明。「共享空间内知识库浏览」（`/organizations/{id}/shared-knowledge-bases`）与 `listOrgShares` 仍待实现。**未在浏览器里验证**，也未跑 `vue-tsc` 与 `pnpm build`（本机内存不足），仅 `tsc --strict` 检查新增映射模块并用故意出错探针确认检查有效。父任务 K1.9 与 K0.4 因此保持未勾选。
+    - [x] K1.9d 文档：`packages/platform` 文档、`docs/architecture.md` 共享部分、规格。
 - [x] K1.10 `evals/knowledge/` 与包文档（README、requirements、design）。
   - 评估门禁 `tests/test_knowledge_eval.py`（关键词通道命中率 ≥ 0.85、越权泄漏 0、引用解析）；向量与混合通道指标待真实 Embedding 模型。
 

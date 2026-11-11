@@ -300,6 +300,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 **Wiki 库（K6）**：开启 `indexing.wiki` 的库（`type=wiki` 恒开启）在文档 ready 后由 worker 的 `wiki` 任务用创建者的 Key 合成页面：摘要页 `summary/*`、实体页 `entity/*`、概念页 `concept/*`，并维护 `index` 简介页；页面以 slug 为键，`[[slug|名]]` 链接在写入时校验并派生入/出链，每次写入保留修订并带乐观锁；目录（文件夹）由一次分类规划调用复用已有文件夹生成，用户的归类不被覆盖。页面作为索引行（页面 id 充当“版本”）进入库的向量库，与文档共用 Pre-Filter、混合检索与重排；删除文档触发撤回（无来源页面删除，共享页面重写）。接口在 `/knowledge/bases/{id}/wiki`，实现见 `nexus_platform/knowledge/wiki.py`、`wiki_ingest.py` 与 `nexus_knowledge/wiki/`。
 
+**库共享（K1.9）**：库属于所属空间；owner / admin 可把库共享到自己所在的共享空间（`knowledge_base_shares`，级别 viewer / editor / admin，与智能体共享同一套有效级别规则：共享级别、成员空间在共享空间的角色、本人角色上限三者取最小）。成员空间通过 `access.readable_bases` 读取与检索共享来的库（原有的租户级 `resource_grants` 路径保留，供智能体绑定使用）；修改库、文档与共享仍只属于所属空间，因此 editor / admin 目前只记录和显示。接口：`/knowledge/bases/{kb_id}/shares`（列表、共享或改级别、`DELETE …/{shared_space_id}`）与 `/knowledge/shared-bases`（共享给我的库）。
+
 **功能范围**：完整保留 WeKnora 知识库功能。后端能力目录逐项返回已实现（附是否经过真实环境验证）或待实现及所属阶段；前端不隐藏任何入口，待实现项标记并禁止提交，后端对选择待实现能力的写请求返回 `capability_planned`。
 
 **存储**：关系数据库保存知识库、文档、不可变文档版本、作业、文本块定位与引用关系；原文件走可注册的存储后端（首批本地目录）。向量与关键词索引走可注册的向量库（`VectorIndex` 端口），每个知识库选择一个：首批实现 SQLite（本地开发，已测试）、PostgreSQL pgvector、Qdrant、Elasticsearch、Milvus（后四种待真实环境验收），其余引擎待实现。每个引擎必须把 Pre-Filter 的范围作为服务端过滤条件。图谱走可注册的图存储（`GraphStore` 端口）：内置（实体、关系、社区、社区报告存关系表，参考 RAGFlow）或 Neo4j（参考 WeKnora）。
