@@ -1106,7 +1106,7 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
         overflow: hidden;
 
         .logo-wordmark {
-            font-size: 22px;
+            font-size: var(--app-text-3xl);
             font-weight: 700;
             line-height: 1;
             letter-spacing: -0.02em;
@@ -1119,7 +1119,7 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
             margin-left: 2px;
             align-self: flex-start;
             margin-top: 2px;
-            font-size: 9px;
+            font-size: var(--app-text-2xs);
             font-weight: 600;
             color: var(--td-text-color-placeholder);
             user-select: none;

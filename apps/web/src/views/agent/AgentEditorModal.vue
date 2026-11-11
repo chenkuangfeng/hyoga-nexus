@@ -6079,7 +6079,7 @@ const handleSave = async () => {
 }
 
 .tool-card-name {
-  font-size: 13.5px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   color: var(--td-text-color-primary);
   line-height: 1.4;
@@ -6092,7 +6092,7 @@ const handleSave = async () => {
 
 .tool-card-badge {
   flex: 0 0 auto;
-  font-size: 10.5px;
+  font-size: var(--app-text-2xs);
   line-height: 1;
   padding: 3px 6px;
   color: var(--td-warning-color);
