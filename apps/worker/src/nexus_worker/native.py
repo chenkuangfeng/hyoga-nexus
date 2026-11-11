@@ -22,6 +22,7 @@ from nexus_platform.errors import PlatformError
 from nexus_runtimes.native.models.network import provider_client
 from nexus_runtimes.native.models.factory import create_model
 from nexus_platform.runs.dbexec import run_db
+from .artifacts import register_outputs
 from nexus_platform.runs.execution import DurableRuntimeStore, prepare_execution
 from nexus_platform.runs.tool_gates import deployment_gate_facts, hidden_groups
 from .sandbox_runtime import session_for
@@ -258,6 +259,8 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             # Background commands belong to the Run that started them (openspec 2026-11-07-tool-expansion 4.7).
             with suppress(Exception):
                 await sandbox.close_jobs()
+            # Files under /outputs become downloadable artifacts, also when the Run failed or was cancelled.
+            await run_db(register_outputs, factory, context, sandbox)
         monitor_task.cancel()
         with suppress(asyncio.CancelledError):
             await monitor_task

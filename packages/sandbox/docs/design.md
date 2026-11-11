@@ -6,7 +6,7 @@
 | --- | --- |
 | `settings` | 读取 `[sandbox]`；非法值只报键名，不回显值 |
 | `paths` | 虚拟路径解析：拒绝 `..`、NUL、其他根；按真实路径判断符号链接是否越界 |
-| `files` | `HostFileStore`：宿主目录上的文件读、分页读、原子写、唯一匹配编辑、搜索、配额、产物收集 |
+| `files` | `HostFileStore`：宿主目录上的文件读、分页读、原子写、唯一匹配编辑、搜索、配额、产物收集（`output_files()` 给出 `/outputs` 下普通文件的宿主路径，供平台在 Run 结束时登记，符号链接不收） |
 | `backends/docker` | 每个（租户，会话）一个容器；`docker exec` 执行；`timeout` 带进程组；取消时按命令标记杀进程组 |
 | `backends/bwrap` | 每条命令一个 bubblewrap 隔离环境：宿主 `/usr` 等只读、仅 `/workspace` 与 `/outputs` 可写、独立 user/pid/ipc/uts/cgroup/net 命名空间；不依赖守护进程与镜像 |
 | `backends/local` | 开发替身，不隔离 |

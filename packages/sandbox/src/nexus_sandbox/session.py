@@ -107,6 +107,11 @@ class SandboxSession:
         collect = getattr(self.files, 'collect_outputs', None)
         return collect() if collect else []
 
+    def output_files(self) -> list:
+        """(virtual path, host path, size) of the files under `/outputs`, for artifact registration."""
+        collect = getattr(self.files, 'output_files', None)
+        return collect() if collect else []
+
     # ------------------------------------------------------------------ background jobs
 
     async def exec_async(self, command: str, *, cwd: str, timeout_seconds: float) -> str:

@@ -142,6 +142,8 @@ from nexus_api.http.mcp import router as mcp_router
 app.include_router(mcp_router)
 from nexus_api.http.schedules import router as schedules_router
 app.include_router(schedules_router)
+from nexus_api.http.artifacts import router as artifacts_router
+app.include_router(artifacts_router)
 # Stateless outbound MCP endpoint: bearer-token auth (endpoint long-lived token) runs ahead of the
 # global session Auth, so external MCP clients reach the read-only tool face without a user session.
 from nexus_platform.mcp.http import endpoint_app  # noqa: E402

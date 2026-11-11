@@ -196,3 +196,22 @@ class HostFileStore:
                 if not host.is_symlink():
                     found.append((paths.virtual_of(host, self.roots), host.stat().st_size))
         return found
+
+    def output_files(self) -> list[tuple[str, Path, int]]:
+        """(virtual path, host path, size) of every regular file under `/outputs`; symlinks are left out.
+
+        The host path is for the platform's artifact registration, which copies the bytes when a Run ends. Models never
+        see it.
+        """
+        found = []
+        base = self.roots['/outputs']
+        for directory, _, names in os.walk(base, followlinks=False):
+            for name in sorted(names):
+                host = Path(directory, name)
+                try:
+                    if host.is_symlink() or not host.is_file():
+                        continue
+                    found.append((paths.virtual_of(host, self.roots), host, host.stat().st_size))
+                except OSError:
+                    continue
+        return found

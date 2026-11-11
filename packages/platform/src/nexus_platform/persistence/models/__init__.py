@@ -18,6 +18,7 @@ from .run import RunRecord, NativeRunStateRecord, RunDirectiveRecord, NativePref
 from .event import RunEventRecord
 from .invocation import ToolInvocationRecord
 from .tool_output import ToolOutputRecord
+from .artifact import ArtifactRecord
 from .queue import OutboxRecord
 from .ledger import RuntimeEpochRecord, SessionAdmissionRecord
 from .audit import AuditRecord
@@ -123,6 +124,7 @@ __all__ = [
     'RunEventRecord',
     'ToolInvocationRecord',
     'ToolOutputRecord',
+    'ArtifactRecord',
     'OutboxRecord',
     'AuditRecord',
     'WorkingCheckpointRecord',

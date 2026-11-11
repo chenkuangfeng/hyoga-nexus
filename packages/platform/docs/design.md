@@ -97,3 +97,7 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 ## 定时任务（schedule）
 
 `schedule/rules.py` 校验三种规则（每 N 分钟、每天、每周一天，IANA 时区），`schedule/service.py` 是唯一的业务入口，`cronjob_*` 工具与 REST（`apps/api/.../http/schedules.py`）共用它：创建（工具按会话的智能体版本，REST 按智能体当前已发布版本）、更新（改规则或时区重算下次时间，改提示词重新扫描，挂起的任务仍需恢复）、暂停 / 恢复 / 删除、立即运行（不改 `next_run_at`，60 秒节流）、任务会话的运行列表、触发预览，以及到点触发 `fire_due`。他人的任务对普通成员一律是「不存在」；空间 owner / admin 可列出全部并读取、暂停，其余操作仍只限所有者。`ScheduleError` 由 API 的统一处理转成 `{error: {code, message}}`（404 / 403 / 409 / 429 / 422）。
+
+## 沙箱产物（artifacts）
+
+`artifacts/service.py` 在 Run 结束时登记沙箱 `/outputs` 下的文件：先在事务外流式复制并计算 `sha256`（`O_NOFOLLOW`，只收普通文件，复制中超限即放弃），再在一个事务里写 `artifacts` 行、`artifacts.registered` 事件与审计；上限与跳过原因见 `docs/architecture.md` 沙箱部分。读取与删除一律经会话授权：会话所有者或空间 owner / admin，其余按「不存在」处理。下载前再次确认副本位于产物根目录内、不是符号链接，副本缺失时报告不存在而不是出错。worker 侧入口是 `nexus_worker.artifacts.register_outputs`，在 Run 收尾调用且从不抛出，失败只记日志。
