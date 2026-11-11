@@ -49,7 +49,7 @@ def wiki_enabled(kb: KnowledgeBaseRecord) -> bool:
 
 
 def _base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, *, write: bool) -> KnowledgeBaseRecord:
-    kb = (access.writable_base if write else access.readable_base)(db, kb_id, tenant_id, user_id)
+    kb = (access.maintainable_base if write else access.readable_base)(db, kb_id, tenant_id, user_id)
     if not wiki_enabled(kb):
         raise NotFound('Wiki is not enabled for this knowledge base')
     return kb

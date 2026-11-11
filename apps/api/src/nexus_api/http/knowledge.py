@@ -135,7 +135,7 @@ def generate_profile(tenant_id: UUID, kb_id: UUID, principal: Principal = Depend
     from nexus_platform.knowledge import enrich
     with db.begin():
         user = _user(db, principal, tenant_id)
-        kb = access.writable_base(db, kb_id, tenant_id, user.id)
+        kb = access.maintainable_base(db, kb_id, tenant_id, user.id)
         enrich.request_profile(db, kb)
     return {'queued': True}
 
@@ -239,7 +239,7 @@ def rebuild_graph(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(g
     from nexus_platform.knowledge.graph import views
     with db.begin():
         user = _user(db, principal, tenant_id)
-        kb = access.writable_base(db, kb_id, tenant_id, user.id)
+        kb = access.maintainable_base(db, kb_id, tenant_id, user.id)
         build = views.request_rebuild(db, kb, user.id)
     return build
 
@@ -295,7 +295,7 @@ async def upload_document(tenant_id: UUID, kb_id: UUID, file: UploadFile = File(
     db.rollback()  # end the read transaction before the (possibly slow) file write; do not touch kb after this
     await blob.put(key, data)
     with db.begin():
-        kb = access.writable_base(db, kb_id, tenant_id, user.id)
+        kb = access.maintainable_base(db, kb_id, tenant_id, user.id)
         doc, _ = service.add_version(db, kb, user.id, name, digest, len(data), document_id, version_id)
     return {'document': service.document_view(db, doc), 'deduplicated': False}
 

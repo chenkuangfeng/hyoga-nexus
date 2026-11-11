@@ -32,6 +32,7 @@ from nexus_knowledge.ingest.parse import SUPPORTED_SUFFIXES, suffix_of
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import register_resource, deactivate_resource
 from nexus_platform.errors import Conflict, NotFound
+from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.identity.service import require_membership
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
@@ -74,7 +75,12 @@ def base_view(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UU
         'embedding_dimension': kb.embedding_dimension,
         'chunking_config': {'chunk_size': kb.chunk_size, 'chunk_overlap': kb.chunk_overlap},
         'settings': dict(kb.settings), 'shared': kb.tenant_id != tenant_id,
-        'can_edit': kb.tenant_id == tenant_id and access.can_write(db, kb, user_id),
+        'ownership': kb.ownership, 'owned_by_me': kb.created_by == user_id,
+        # can_edit keeps the copied WeKnora pages working: it gates content editing, which maintainers may do.
+        'can_edit': kb.tenant_id == tenant_id and access.can_maintain(db, kb, user_id),
+        'can_maintain': kb.tenant_id == tenant_id and access.can_maintain(db, kb, user_id),
+        'can_manage': kb.tenant_id == tenant_id and access.can_manage(db, kb, user_id),
+        'can_govern': kb.tenant_id == tenant_id and access.can_govern(db, kb, user_id),
         'knowledge_count': counts, 'chunk_count': chunks, 'processing_count': processing,
         'is_processing': processing > 0, 'creator_id': str(kb.created_by),
         'creator_name': getattr(creator, 'display_name', None) or '',
@@ -182,9 +188,15 @@ def _check_settings(db: Session, tenant_id: UUID, *, kb_type: str, indexing: dic
 def create_base(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, description: str = '',
                 kb_type: str = 'document', indexing: dict[str, Any] | None = None, vector_store_id: str | None = None,
                 storage_backend_id: str | None = None, embedding_model_id: UUID | None = None,
-                chunk_size: int = 800, chunk_overlap: int = 120, settings: dict[str, Any] | None = None
-                ) -> KnowledgeBaseRecord:
+                chunk_size: int = 800, chunk_overlap: int = 120, settings: dict[str, Any] | None = None,
+                ownership: str = access.PERSONAL) -> KnowledgeBaseRecord:
+    """Create a base. ``ownership`` comes from the entry point, never from the request body: the workspace creates
+    ``personal`` bases, the enterprise admin API creates ``enterprise`` bases (needs ``enterprise_kbs:manage``)."""
+    if ownership not in access.OWNERSHIPS:
+        raise ValueError('Unknown knowledge base ownership')
     require_membership(db, tenant_id, user_id)
+    if ownership == access.ENTERPRISE:
+        require_api_permission(db, tenant_id, user_id, access.MANAGE_ENTERPRISE_KBS)
     name = (name or '').strip()
     if not name or len(name) > 160:
         raise ValueError('name must be 1-160 characters')
@@ -198,7 +210,7 @@ def create_base(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, descr
     now = utc_now()
     kb = KnowledgeBaseRecord(
         id=new_id(), tenant_id=tenant_id, name=name, description=(description or '')[:2000], kb_type=kb_type,
-        indexing=normalized, vector_store_id=store.id if store else None,
+        ownership=ownership, indexing=normalized, vector_store_id=store.id if store else None,
         storage_backend_id=backend.id if backend else None, embedding_model_version_id=embedding_model_id,
         chunk_size=chunk_size, chunk_overlap=chunk_overlap, settings=dict(settings or {}), status='active',
         created_by=user_id, created_at=now, updated_at=now)
@@ -206,7 +218,7 @@ def create_base(db: Session, tenant_id: UUID, user_id: UUID, *, name: str, descr
     db.flush()
     register_resource(db, tenant_id=tenant_id, kind=access.KIND, resource_id=str(kb.id), version_id=None)
     audit(db, tenant_id, user_id, 'knowledge_base.created', access.KIND, str(kb.id),
-          {'type': kb_type, 'engine': store.engine if store else 'sqlite'})
+          {'type': kb_type, 'engine': store.engine if store else 'sqlite', 'ownership': ownership})
     return kb
 
 
@@ -280,7 +292,7 @@ def update_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, change
     Changing the embedding model or chunking does not rebuild existing documents by itself; ``rebuild_base``
     re-indexes every document (a full rebuild also resets the embedding dimension).
     """
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.manageable_base(db, kb_id, tenant_id, user_id)
     if 'name' in changes:
         name = (changes['name'] or '').strip()
         if not name or len(name) > 160:
@@ -337,7 +349,7 @@ def list_bases(db: Session, tenant_id: UUID, user_id: UUID) -> list[KnowledgeBas
 
 
 def delete_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> None:
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.governable_base(db, kb_id, tenant_id, user_id)
     kb.status, kb.updated_at = 'deleting', utc_now()
     cancel_graph_builds(db, kb.id)
     deactivate_resource(db, tenant_id=tenant_id, kind=access.KIND, resource_id=str(kb.id), version_id=None)
@@ -347,7 +359,7 @@ def delete_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> Non
 
 def rebuild_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> int:
     """Re-index the current or latest version of every document (new chunking, new embedding model)."""
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     kb.embedding_dimension = None
     from .graph.build import schedule
     schedule(db, kb, user_id)
@@ -377,7 +389,7 @@ def _queue(db: Session, kb: KnowledgeBaseRecord, *, kind: str, document_id: UUID
 def prepare_upload(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, filename: str, data: bytes,
                    max_bytes: int) -> tuple[KnowledgeBaseRecord, str, KnowledgeDocumentRecord | None]:
     """Validate an upload; returns ``(kb, sha256, duplicate_document_or_None)``. No rows are written."""
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     filename = (filename or '').strip().replace('\\', '/').rsplit('/', 1)[-1]
     if not filename or len(filename) > 255:
         raise ValueError('filename must be 1-255 characters')
@@ -492,7 +504,7 @@ def reindex_version(db: Session, kb: KnowledgeBaseRecord, version: KnowledgeDocu
 
 def retry_document(db: Session, tenant_id: UUID, user_id: UUID, document_id: UUID) -> KnowledgeDocumentVersionRecord:
     kb, doc = readable_document(db, tenant_id, user_id, document_id)
-    kb = access.writable_base(db, kb.id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb.id, tenant_id, user_id)
     version = db.get(KnowledgeDocumentVersionRecord, doc.latest_version_id) if doc.latest_version_id else None
     if version is None or version.state not in ('failed', 'ready'):
         raise Conflict('Only a failed or indexed version can be re-indexed')
@@ -503,7 +515,7 @@ def retry_document(db: Session, tenant_id: UUID, user_id: UUID, document_id: UUI
 
 def delete_document(db: Session, tenant_id: UUID, user_id: UUID, document_id: UUID) -> None:
     kb, doc = readable_document(db, tenant_id, user_id, document_id)
-    kb = access.writable_base(db, kb.id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb.id, tenant_id, user_id)
     doc.status, doc.updated_at = 'deleting', utc_now()
     _queue(db, kb, kind='cleanup', document_id=doc.id)
     from .graph.build import schedule

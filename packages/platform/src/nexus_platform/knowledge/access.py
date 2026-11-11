@@ -3,8 +3,15 @@
 - Read: an active member of the base's space, or an active member of a space the base is shared with through
   ``resource_grants`` (kind ``knowledge_base``, not revoked), or through a shared space the base is shared into
   (``knowledge_base_shares``; any effective level reads, see ``shared_spaces.kb_shares``).
-- Write (settings, uploads, deletion, retries): an owner or admin of the base's space, or the base's creator
-  while still an active member.
+- Write follows ownership (openspec 2026-11-11-enterprise-saas decision 2), always for an active member of the
+  base's own space:
+
+  - *manage* (settings, pin, shares, maintainers): the creator of a ``personal`` base; a holder of
+    ``enterprise_kbs:manage`` for an ``enterprise`` base (owners and admins hold it by default);
+  - *maintain content* (documents, chunks, FAQ, tags, folders, wiki, rebuilds): whoever may manage, plus the
+    members listed in ``knowledge_base_maintainers`` of an enterprise base;
+  - *govern* (delete, convert to enterprise): whoever may manage, plus the space's owners and admins, so they can
+    act on a member's personal base without editing it.
 
 Unknown, deleted or unreadable bases all raise the same ``NotFound``, so callers cannot probe for ids.
 Every search path calls :func:`readable_bases` at the moment of the search, so revocation and deletion take
@@ -17,13 +24,19 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from nexus_platform.authz.permissions import effective_permissions
 from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.orgs.access import membership_is_active
-from nexus_platform.persistence.models import (KnowledgeBaseRecord, MembershipRecord, ResourceGrantRecord)
+from nexus_platform.persistence.models import (KnowledgeBaseMaintainerRecord, KnowledgeBaseRecord, MembershipRecord,
+                                               ResourceGrantRecord)
 from nexus_platform.shared_spaces import kb_shares
 from nexus_platform.tenants.service import ADMIN_ROLES
 
 KIND = 'knowledge_base'
+PERSONAL = 'personal'
+ENTERPRISE = 'enterprise'
+OWNERSHIPS = frozenset({PERSONAL, ENTERPRISE})
+MANAGE_ENTERPRISE_KBS = 'enterprise_kbs:manage'
 
 
 def _membership(db: Session, tenant_id: UUID, user_id: UUID) -> MembershipRecord | None:
@@ -49,11 +62,34 @@ def can_read(db: Session, kb: KnowledgeBaseRecord, tenant_id: UUID, user_id: UUI
         db, tenant_id, user_id)
 
 
-def can_write(db: Session, kb: KnowledgeBaseRecord, user_id: UUID) -> bool:
-    membership = _membership(db, kb.tenant_id, user_id)
-    if kb.status != 'active' or membership is None:
+def can_manage(db: Session, kb: KnowledgeBaseRecord, user_id: UUID) -> bool:
+    """Settings, pin, shares and maintainers of the base, according to its ownership."""
+    if kb.status != 'active' or _membership(db, kb.tenant_id, user_id) is None:
         return False
-    return membership.role in ADMIN_ROLES or kb.created_by == user_id
+    if kb.ownership == PERSONAL:
+        return kb.created_by == user_id
+    return effective_permissions(db, kb.tenant_id, user_id).allows_api(MANAGE_ENTERPRISE_KBS)
+
+
+def is_maintainer(db: Session, kb: KnowledgeBaseRecord, user_id: UUID) -> bool:
+    """True when the user is a designated maintainer of an enterprise base (membership is checked by callers)."""
+    return kb.ownership == ENTERPRISE and db.get(KnowledgeBaseMaintainerRecord, (kb.id, user_id)) is not None
+
+
+def can_maintain(db: Session, kb: KnowledgeBaseRecord, user_id: UUID) -> bool:
+    """Documents, chunks, FAQ entries, tags, folders, wiki pages and rebuilds of the base."""
+    if can_manage(db, kb, user_id):
+        return True
+    return (kb.status == 'active' and _membership(db, kb.tenant_id, user_id) is not None
+            and is_maintainer(db, kb, user_id))
+
+
+def can_govern(db: Session, kb: KnowledgeBaseRecord, user_id: UUID) -> bool:
+    """Delete or convert the base: its managers, plus the space's owners and admins."""
+    if can_manage(db, kb, user_id):
+        return True
+    membership = _membership(db, kb.tenant_id, user_id)
+    return kb.status == 'active' and membership is not None and membership.role in ADMIN_ROLES
 
 
 def readable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
@@ -63,12 +99,27 @@ def readable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> K
     return kb
 
 
-def writable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
-    """A base of the caller's current space that the caller may change. Shared bases are read-only here."""
+def _own_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID, allowed, message: str
+              ) -> KnowledgeBaseRecord:
     kb = readable_base(db, kb_id, tenant_id, user_id)
-    if kb.tenant_id != tenant_id or not can_write(db, kb, user_id):
-        raise Forbidden('You cannot change this knowledge base')
+    if kb.tenant_id != tenant_id or not allowed(db, kb, user_id):
+        raise Forbidden(message)
     return kb
+
+
+def manageable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
+    """A base of the caller's current space whose settings the caller may change. Shared bases are read-only here."""
+    return _own_base(db, kb_id, tenant_id, user_id, can_manage, 'You cannot change this knowledge base')
+
+
+def maintainable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
+    """A base of the caller's current space whose content the caller may maintain."""
+    return _own_base(db, kb_id, tenant_id, user_id, can_maintain, 'You cannot maintain this knowledge base')
+
+
+def governable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
+    """A base of the caller's current space that the caller may delete or convert."""
+    return _own_base(db, kb_id, tenant_id, user_id, can_govern, 'You cannot delete this knowledge base')
 
 
 def readable_bases(db: Session, tenant_id: UUID, user_id: UUID, kb_ids: list[UUID] | None = None

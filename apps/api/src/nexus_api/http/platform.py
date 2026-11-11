@@ -16,7 +16,7 @@ from nexus_core.run_events import BusEvent
 from nexus_platform.agents import service as agents
 from nexus_platform.auth import accounts
 from nexus_platform.memory import snapshots
-from nexus_platform.agents.access import require_agent_permission, set_agent_grants, visible_agent_ids
+from nexus_platform.agents.access import can_maintain_agent, require_agent_permission, set_agent_grants, visible_agent_ids
 from nexus_platform.errors import NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models import service as models
@@ -327,7 +327,7 @@ def create_agent(
         bindings=bindings_data(body.resource_bindings, tenant_id),
     )
     _, binding_rows = agents.get_agent(db, tenant_id, row.id)
-    return agent_view(row, binding_rows)
+    return agent_view(row, binding_rows, user_id=row.created_by, can_maintain=True)
 
 
 @router.get("/tenants/{tenant_id}/agents", response_model=list[AgentView])
@@ -347,25 +347,30 @@ def list_agents(
             from nexus_platform.models.provider_settings import authorize_model
             from nexus_platform.errors import NotFound
             version = db.get(AgentVersionRecord, row.published_version_id) if row.published_version_id else None
-            model_id = row.draft_model_profile_version_id if membership.role in ADMIN_ROLES else (version.model_profile_version_id if version else None)
+            maintains = can_maintain_agent(db, tenant_id, user.id, row)
+            # Drafts are shown to maintainers and, for governance, to owners and admins; others see the published
+            # version only.
+            sees_draft = maintains or membership.role in ADMIN_ROLES
+            model_id = row.draft_model_profile_version_id if sees_draft else (version.model_profile_version_id if version else None)
             if model_id:
                 try:
                     authorize_model(db, tenant_id, user.id, model_id)
                 except NotFound:
                     continue
-            if membership.role in ADMIN_ROLES:
+            if sees_draft:
                 bindings = list(db.scalars(
                     select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == row.id)
                 ))
-                output.append((row, bindings, None))
+                output.append((row, bindings, None, maintains))
             elif row.published_version_id is not None:
                 version = db.get(AgentVersionRecord, row.published_version_id)
                 bindings = list(db.scalars(
                     select(ResourceBindingRecord).where(ResourceBindingRecord.agent_version_id == version.id)
                 )) if version else []
                 if version is not None:
-                    output.append((row, bindings, version))
-    return [agent_view(row, bindings, public_version) for row, bindings, public_version in output]
+                    output.append((row, bindings, version, maintains))
+    return [agent_view(row, bindings, public_version, user_id=user.id, can_maintain=maintains)
+            for row, bindings, public_version, maintains in output]
 
 
 @router.get("/tenants/{tenant_id}/agents/{agent_id}", response_model=AgentView)
@@ -382,10 +387,12 @@ def get_agent(
         row, bindings = agents.get_agent(db, tenant_id, agent_id)
         require_agent_permission(db, tenant_id, user.id, row, "view")
         public_version = None
+        maintains = can_maintain_agent(db, tenant_id, user.id, row)
+        sees_draft = maintains or membership.role in ADMIN_ROLES
         from nexus_platform.models.provider_settings import authorize_model
-        if membership.role in ADMIN_ROLES and row.draft_model_profile_version_id:
+        if sees_draft and row.draft_model_profile_version_id:
             authorize_model(db, tenant_id, user.id, row.draft_model_profile_version_id)
-        if membership.role not in ADMIN_ROLES:
+        if not sees_draft:
             public_version = db.get(AgentVersionRecord, row.published_version_id) if row.published_version_id else None
             if public_version is None:
                 from nexus_platform.errors import NotFound
@@ -394,7 +401,7 @@ def get_agent(
             bindings = list(db.scalars(
                 select(ResourceBindingRecord).where(ResourceBindingRecord.agent_version_id == public_version.id)
             ))
-    return agent_view(row, bindings, public_version)
+    return agent_view(row, bindings, public_version, user_id=user.id, can_maintain=maintains)
 
 
 @router.put("/tenants/{tenant_id}/agents/{agent_id}", response_model=AgentView)
@@ -412,7 +419,7 @@ def update_agent(
         bindings=bindings_data(body.resource_bindings, tenant_id),
     )
     _, bindings = agents.get_agent(db, tenant_id, agent_id)
-    return agent_view(row, bindings)
+    return agent_view(row, bindings, can_maintain=True)
 
 
 @router.post(
@@ -708,7 +715,9 @@ def model_version_view(row) -> ModelProfileVersionView:
     return ModelProfileVersionView.model_validate(row, from_attributes=True)
 
 
-def agent_view(row, bindings, public_version=None) -> AgentView:
+def agent_view(row, bindings, public_version=None, *, user_id: UUID | None = None, can_maintain: bool = False
+               ) -> AgentView:
+    """Serialize an agent: the published version when ``public_version`` is given, otherwise the draft."""
     version = public_version
     return AgentView(
         id=row.id, tenant_id=row.tenant_id, name=version.name if version else row.name,
@@ -725,7 +734,8 @@ def agent_view(row, bindings, public_version=None) -> AgentView:
             "resource_version_id": binding.resource_version_id or None,
             "source_tenant_id": binding.source_tenant_id, "config": binding.binding_config,
         } for binding in bindings],
-        created_at=row.created_at, updated_at=row.updated_at,
+        ownership=row.ownership, owned_by_me=user_id is not None and row.created_by == user_id,
+        can_maintain=can_maintain, created_at=row.created_at, updated_at=row.updated_at,
     )
 
 

@@ -2,7 +2,7 @@
 
 Same rules as :mod:`nexus_platform.shared_spaces.agent_shares` (WeKnora ``kbshare.go``):
 
-- The owning space's owner or admin shares a base into a shared space at a level (viewer, editor, admin). The owning
+- The base's managers (openspec 2026-11-11-enterprise-saas decision 2) share it into a shared space at a level (viewer, editor, admin). The owning
   space must itself be a member of that shared space. Sharing again changes the level.
 - Members of a member space reach the base through that space. Per person the effective level is
   ``min(share level, the member space's role in the shared space, the person's own cap)``.
@@ -49,15 +49,20 @@ def _owned_base(db: Session, tenant_id: UUID, kb_id: UUID) -> KnowledgeBaseRecor
     return kb
 
 
-def _require_manager(db: Session, principal: Principal, tenant_id: UUID) -> UUID:
+def _require_share_actor(db: Session, principal: Principal, tenant_id: UUID, kb_id: UUID, *,
+                         governance: bool) -> tuple[UUID, KnowledgeBaseRecord]:
+    """Sharing needs management of the base (its creator, or ``enterprise_kbs:manage`` for an enterprise base);
+    listing and removing shares (``governance=True``) is also open to the space's owners and admins."""
+    from nexus_platform.knowledge.access import can_manage
     actor = resolve_user(db, principal)
     space = require_tenant(db, tenant_id)
     if space.kind != 'enterprise':
         raise NotFound('Knowledge base sharing is available in enterprise spaces only')
     require_membership(db, tenant_id, actor.id)
-    if not is_space_manager(db, tenant_id, actor.id):
-        raise Forbidden('Only a space owner or admin can share knowledge bases')
-    return actor.id
+    kb = _owned_base(db, tenant_id, kb_id)
+    if not (can_manage(db, kb, actor.id) or (governance and is_space_manager(db, tenant_id, actor.id))):
+        raise Forbidden("Only the knowledge base's managers can share it")
+    return actor.id, kb
 
 
 def _view(share: KnowledgeBaseShareRecord, shared: SharedSpaceRecord, owner: TenantRecord) -> dict:
@@ -73,8 +78,7 @@ def share_base(db: Session, principal: Principal, tenant_id: UUID, kb_id: UUID, 
         raise ValueError('Level must be viewer, editor or admin')
     now = utc_now()
     with db.begin():
-        actor_id = _require_manager(db, principal, tenant_id)
-        kb = _owned_base(db, tenant_id, kb_id)
+        actor_id, kb = _require_share_actor(db, principal, tenant_id, kb_id, governance=False)
         shared = _live_shared(db, shared_space_id)
         if db.get(SharedSpaceTenantMemberRecord, (shared.id, tenant_id)) is None:
             raise Forbidden('Your space must be a member of the shared space before sharing into it')
@@ -99,8 +103,7 @@ def share_base(db: Session, principal: Principal, tenant_id: UUID, kb_id: UUID, 
 
 def list_base_shares(db: Session, principal: Principal, tenant_id: UUID, kb_id: UUID) -> list[dict]:
     with db.begin():
-        _require_manager(db, principal, tenant_id)
-        _owned_base(db, tenant_id, kb_id)
+        _require_share_actor(db, principal, tenant_id, kb_id, governance=True)
         owner = db.get(TenantRecord, tenant_id)
         rows = db.execute(
             select(KnowledgeBaseShareRecord, SharedSpaceRecord)
@@ -112,8 +115,7 @@ def list_base_shares(db: Session, principal: Principal, tenant_id: UUID, kb_id: 
 
 def unshare_base(db: Session, principal: Principal, tenant_id: UUID, kb_id: UUID, shared_space_id: UUID) -> None:
     with db.begin():
-        actor_id = _require_manager(db, principal, tenant_id)
-        kb = _owned_base(db, tenant_id, kb_id)
+        actor_id, kb = _require_share_actor(db, principal, tenant_id, kb_id, governance=True)
         share = db.scalar(select(KnowledgeBaseShareRecord).where(
             KnowledgeBaseShareRecord.kb_id == kb.id, KnowledgeBaseShareRecord.shared_space_id == shared_space_id))
         if share is None:

@@ -71,7 +71,7 @@ def _clean_name(name: str) -> str:
 
 def create_tag(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, *, name: str, color: str = '',
                sort_order: int = 0) -> KnowledgeTagRecord:
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     name = _clean_name(name)
     if db.scalar(select(func.count()).select_from(KnowledgeTagRecord).where(KnowledgeTagRecord.kb_id == kb.id)) >= MAX_TAGS:
         raise Conflict(f'at most {MAX_TAGS} tags per knowledge base')
@@ -94,7 +94,7 @@ def _tag(db: Session, kb: KnowledgeBaseRecord, tag_id: UUID) -> KnowledgeTagReco
 
 def update_tag(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, tag_id: UUID, changes: Mapping[str, Any]
                ) -> KnowledgeTagRecord:
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     tag = _tag(db, kb, tag_id)
     if 'name' in changes and changes['name'] is not None:
         name = _clean_name(changes['name'])
@@ -113,7 +113,7 @@ def update_tag(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, tag_id:
 
 def delete_tag(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, tag_id: UUID, *, force: bool = False) -> int:
     """Delete a tag; without ``force`` a tag still in use is refused. Returns how many items lost the tag."""
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     tag = _tag(db, kb, tag_id)
     used = 0
     docs = [d for d in db.scalars(select(KnowledgeDocumentRecord).where(KnowledgeDocumentRecord.kb_id == kb.id))
@@ -154,7 +154,7 @@ def clean_metadata(value: Mapping[str, Any] | None) -> dict[str, str]:
 def organize_documents(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, ids: Sequence[UUID],
                        changes: Mapping[str, Any]) -> int:
     """Set tags, folder and/or metadata on documents of the base. Only keys present in ``changes`` change."""
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     tags = None
     if 'tag_ids' in changes:
         wanted = [str(t) for t in changes['tag_ids'] or []]
@@ -223,7 +223,7 @@ def folder_tree(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> dic
 
 def rename_folder(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, source: str, target: str) -> int:
     """Rename or move a folder with everything below it."""
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     source, target = clean_folder(source), clean_folder(target)
     if not source:
         raise ValueError('the top level cannot be renamed')
@@ -241,7 +241,7 @@ def rename_folder(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, sour
 
 
 def toggle_pin(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> bool:
-    kb = access.writable_base(db, kb_id, tenant_id, user_id)
+    kb = access.manageable_base(db, kb_id, tenant_id, user_id)
     kb.pinned = not kb.pinned
     kb.pinned_at = utc_now() if kb.pinned else None
     return kb.pinned

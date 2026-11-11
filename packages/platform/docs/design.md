@@ -64,11 +64,11 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 
 有效权限为成员的全部角色授权并集；owner 与 admin 隐式拥有完整目录。非活跃成员没有任何权限。管理角色需要 `roles:manage`，且只能授予操作者自己拥有的菜单与 API 权限，防止越权。API 位于 `/api/v1/tenants/{id}/roles`、`/members/{id}/roles/{role}`、`/me/permissions`、`/role-assignments` 与 `/agent-grants`（后两者供管理界面回显）。
 
-成员管理、模型配置与凭据、工具启用、审计查询分别要求 `members:manage`、`models:manage`、`tools:manage`、`audit:read`（owner/admin 隐式拥有）。创建智能体需要 `agents:write`。
+成员管理、模型配置与凭据、工具启用、审计查询分别要求 `members:manage`、`models:manage`、`tools:manage`、`audit:read`（owner/admin 隐式拥有）。创建个人智能体需要 `agents:write`，创建企业智能体与企业知识库分别需要 `enterprise_agents:manage`、`enterprise_kbs:manage`（owner、admin 默认持有）。
 
 ## 智能体授权
 
-`agents/access.py` 与 `tenant_agent_grants`（迁移 `b7d1e5c3a9f2`）按角色授予智能体级权限：`view`、`run`、`edit`、`publish`、`manage`。`manage` 蕴含全部，`publish` 蕴含 `edit` 与 `view`，`edit` 蕴含 `view`，规则见 `authz/catalog.py`。owner、admin 与智能体创建者保留原有完整权限。无 `view` 的成员看不到智能体（返回 404），其他缺失权限返回 403。智能体列表只返回可见智能体。创建会话需要 `run`；修改草稿需要 `edit`；发布需要 `publish`。角色管理者只能授予自己持有的智能体权限。
+`agents/access.py` 按归属判断智能体权限（提案 2026-11-11-enterprise-saas 决定 2，迁移 `e5f6a7b8c9d0`）。`agents.ownership` 为 `personal` 或 `enterprise`：个人智能体只有创建者（仍是有效成员时）能编辑、发布、管理；企业智能体只有持有 `enterprise_agents:manage` 的成员能维护（owner、admin 默认持有，可授予自定义角色），与创建者无关。`tenant_agent_grants` 按角色只授予使用权 `view`、`run`（迁移把旧的 `manage` 改为 `view` + `run`，`edit`、`publish` 改为 `view`）。owner、admin 能看到全部智能体，并对他人的个人智能体保留治理权（查看、归档、转为企业智能体），但不能编辑、发布或运行。无 `view` 的成员看不到智能体（返回 404），其他缺失权限返回 403。草稿只对维护者与 owner、admin 可见，其余成员只看到已发布版本。创建会话需要 `run`；修改草稿需要 `edit`；发布需要 `publish`。工作台入口 `POST /tenants/{id}/agents` 创建个人智能体（需 `agents:write`），管理入口 `POST /tenants/{id}/admin/agents` 创建企业智能体（需 `enterprise_agents:manage`），归属不由请求参数决定。绑定检查：企业智能体不能绑定个人知识库，个人智能体只能绑定创建者本人的个人知识库与企业知识库；转为企业智能体前须先转换其绑定的个人知识库。角色管理者只能授予自己持有的使用权，因此 owner、admin 不能把他人的个人智能体分配给别人。共享到共享空间需要维护权，列出与撤销共享另对 owner、admin 开放。
 
 智能体绑定的工具、技能与知识库沿用已有的资源绑定（`ResourceBindingRecord`），使用时按智能体配置执行，不逐用户重新检查。每次提交 Run 时复核调用者的成员身份与该智能体的 `run` 权限（`runs/submission_access.py`），撤权后下一次提交被拒绝。
 
@@ -94,7 +94,9 @@ Redis 后端每个（事件循环，Run）一个共享的阻塞读取器，再�
 
 ## 知识库共享（shared_spaces/kb_shares）
 
-`knowledge_base_shares` 记录库共享到共享空间的级别；`kb_shares.shared_levels` 按「共享级别、成员空间在共享空间的角色、本人在本空间的角色上限」取最小得到每个库的有效级别，`knowledge/access.py` 的 `can_read` 与 `readable_bases` 把它并入读取判定（与租户级 `resource_grants` 并列）。写入、设置与共享管理仍只属于所属空间。有效级别规则与智能体共享共用 `agent_shares.effective_level`。
+`knowledge_base_shares` 记录库共享到共享空间的级别；`kb_shares.shared_levels` 按「共享级别、成员空间在共享空间的角色、本人在本空间的角色上限」取最小得到每个库的有效级别，`knowledge/access.py` 的 `can_read` 与 `readable_bases` 把它并入读取判定（与租户级 `resource_grants` 并列）。写入、设置与共享管理仍只属于所属空间，并按归属区分（见下一段）。有效级别规则与智能体共享共用 `agent_shares.effective_level`。
+
+知识库按归属区分写权限（提案 2026-11-11-enterprise-saas 决定 2）。`knowledge_bases.ownership` 为 `personal` 或 `enterprise`。`knowledge/access.py` 提供三级判断：管理（设置、置顶、共享、维护人员）`can_manage`——个人库为创建者，企业库为 `enterprise_kbs:manage` 的持有者；内容维护（文档、分块、问答、标签、目录、Wiki、重建）`can_maintain`——管理者加上企业库在 `knowledge_base_maintainers` 中指定的知识库管理员；治理（删除、转为企业库）`can_govern`——管理者加上空间 owner、admin。对应的取库函数为 `manageable_base`、`maintainable_base`、`governable_base`。`base_view` 返回 `ownership`、`owned_by_me`、`can_manage`、`can_maintain`、`can_govern`，`can_edit` 等同 `can_maintain`，供沿用的 WeKnora 页面使用。`knowledge/ownership.py` 管理知识库管理员（只用于企业库，须是有效成员）与个人库转为企业库（只限 owner、admin）。管理入口位于 `apps/api/.../http/admin_resources.py`：`POST /tenants/{id}/admin/knowledge/bases` 创建企业库，`/admin/knowledge/bases/{kb}/maintainers` 增删查知识库管理员，`/admin/knowledge/bases/{kb}/convert-to-enterprise` 与 `/admin/agents/{agent}/convert-to-enterprise` 转换归属。
 
 ## 定时任务（schedule）
 

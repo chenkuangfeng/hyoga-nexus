@@ -1,10 +1,14 @@
 """Agent-level authorization: who may view, run, edit, publish or manage one agent.
 
-Access to an agent is granted when the caller is an owner or admin of the tenant, is the agent's
-creator, or holds a role whose agent grants (expanded through the implication rules in
-`authz/catalog.py`) include the requested permission. Owners, admins and creators keep the
-access they had before roles existed. Missing view access reports NotFound so agents are not
-revealed; other denials report Forbidden.
+Maintenance follows ownership (openspec 2026-11-11-enterprise-saas, decision 2):
+
+- a ``personal`` agent is edited, published and managed only by its creator, while still an active member;
+- an ``enterprise`` agent only by members holding the ``enterprise_agents:manage`` API permission (owners and admins
+  hold it by default).
+
+Everyone else gets use permissions only: ``view`` and ``run`` assigned through role grants. Owners and admins
+also see every agent and may ``manage`` (archive) someone else's personal agent as governance, but cannot edit,
+publish or run it. Missing view access reports NotFound so agents are not revealed; other denials report Forbidden.
 """
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ from sqlalchemy.orm import Session
 from nexus_core.platform import Principal, TenantRole
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.catalog import AGENT_PERMISSIONS, expand_agent_permissions, validate_agent_permissions
+from nexus_platform.authz.permissions import effective_permissions
 from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.orgs.access import membership_is_active
@@ -30,26 +35,57 @@ from nexus_platform.tenants.roles import require_role_manager
 from nexus_platform.tenants.service import lock_tenant
 
 FULL_ROLES = {TenantRole.OWNER.value, TenantRole.ADMIN.value}
+PERSONAL = "personal"
+ENTERPRISE = "enterprise"
+OWNERSHIPS = frozenset({PERSONAL, ENTERPRISE})
+MANAGE_ENTERPRISE_AGENTS = "enterprise_agents:manage"
+#: What owners and admins hold on another member's personal agent: see it and archive it, nothing else.
+GOVERNANCE_PERMISSIONS = frozenset({"view", "manage"})
+
+
+def _active_membership(session: Session, tenant_id: UUID, user_id: UUID) -> MembershipRecord | None:
+    membership = session.get(MembershipRecord, (tenant_id, user_id))
+    return membership if membership_is_active(session, membership) else None
+
+
+def can_maintain_agent(session: Session, tenant_id: UUID, user_id: UUID, agent: AgentRecord) -> bool:
+    """True when the user may edit, publish and manage the agent, according to its ownership."""
+    if agent.tenant_id != tenant_id or _active_membership(session, tenant_id, user_id) is None:
+        return False
+    if agent.ownership == PERSONAL:
+        return agent.created_by == user_id
+    return effective_permissions(session, tenant_id, user_id).allows_api(MANAGE_ENTERPRISE_AGENTS)
+
+
+def _granted(session: Session, tenant_id: UUID, user_id: UUID, agent_id: UUID) -> frozenset[str]:
+    role_ids = select(TenantUserRoleRecord.role_id).where(
+        TenantUserRoleRecord.tenant_id == tenant_id, TenantUserRoleRecord.user_id == user_id
+    )
+    return expand_agent_permissions(session.scalars(
+        select(TenantAgentGrantRecord.permission).where(
+            TenantAgentGrantRecord.tenant_id == tenant_id,
+            TenantAgentGrantRecord.agent_id == agent_id,
+            TenantAgentGrantRecord.role_id.in_(role_ids),
+        )
+    ))
 
 
 def agent_permissions(session: Session, tenant_id: UUID, user_id: UUID, agent: AgentRecord) -> frozenset[str]:
     """Return the effective agent permissions of an active member for one agent."""
-    membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if not membership_is_active(session, membership):
+    membership = _active_membership(session, tenant_id, user_id)
+    if membership is None or agent.tenant_id != tenant_id:
         return frozenset()
-    if membership.role in FULL_ROLES or agent.created_by == user_id:
+    if can_maintain_agent(session, tenant_id, user_id, agent):
         return AGENT_PERMISSIONS
-    role_ids = select(TenantUserRoleRecord.role_id).where(
-        TenantUserRoleRecord.tenant_id == tenant_id, TenantUserRoleRecord.user_id == user_id
-    )
-    granted = set(session.scalars(
-        select(TenantAgentGrantRecord.permission).where(
-            TenantAgentGrantRecord.tenant_id == tenant_id,
-            TenantAgentGrantRecord.agent_id == agent.id,
-            TenantAgentGrantRecord.role_id.in_(role_ids),
-        )
-    ))
-    return expand_agent_permissions(granted)
+    granted = set(_granted(session, tenant_id, user_id, agent.id))
+    if membership.role in FULL_ROLES:
+        granted |= GOVERNANCE_PERMISSIONS
+    return frozenset(granted)
+
+
+def can_use_agent(session: Session, tenant_id: UUID, user_id: UUID, agent: AgentRecord) -> bool:
+    """True when the user may start Runs with the agent (maintainers, or a ``run`` grant)."""
+    return "run" in agent_permissions(session, tenant_id, user_id, agent)
 
 
 def require_agent_permission(
@@ -66,8 +102,8 @@ def require_agent_permission(
 
 def visible_agent_ids(session: Session, tenant_id: UUID, user_id: UUID) -> set[UUID] | None:
     """Return agent ids the user may view, or None when every agent is visible (owner/admin)."""
-    membership = session.get(MembershipRecord, (tenant_id, user_id))
-    if not membership_is_active(session, membership):
+    membership = _active_membership(session, tenant_id, user_id)
+    if membership is None:
         return set()
     if membership.role in FULL_ROLES:
         return None
@@ -83,16 +119,21 @@ def visible_agent_ids(session: Session, tenant_id: UUID, user_id: UUID) -> set[U
     for agent_id, permission in granted_rows:
         by_agent.setdefault(agent_id, set()).add(permission)
     visible = {agent_id for agent_id, perms in by_agent.items() if "view" in expand_agent_permissions(perms)}
-    visible |= set(session.scalars(
-        select(AgentRecord.id).where(AgentRecord.tenant_id == tenant_id, AgentRecord.created_by == user_id)
-    ))
+    visible |= set(session.scalars(select(AgentRecord.id).where(
+        AgentRecord.tenant_id == tenant_id, AgentRecord.ownership == PERSONAL, AgentRecord.created_by == user_id
+    )))
+    if effective_permissions(session, tenant_id, user_id).allows_api(MANAGE_ENTERPRISE_AGENTS):
+        visible |= set(session.scalars(select(AgentRecord.id).where(
+            AgentRecord.tenant_id == tenant_id, AgentRecord.ownership == ENTERPRISE
+        )))
     return visible
 
 
 def set_agent_grants(
     session: Session, principal: Principal, tenant_id: UUID, role_id: UUID, agent_id: UUID, permissions
 ) -> frozenset[str]:
-    """Replace one role's grants on one agent. The actor must hold each permission it grants."""
+    """Replace one role's use grants (``view``, ``run``) on one agent. The actor must hold each permission it grants,
+    so owners and admins cannot hand out use of another member's personal agent."""
     permission_set = validate_agent_permissions(permissions)
     with session.begin():
         actor_id, actor_perms = require_role_manager(session, principal, tenant_id)
@@ -136,6 +177,6 @@ def require_agent_access_for_principal(
 
 
 __all__ = [
-    "agent_permissions", "require_agent_permission", "require_agent_access_for_principal",
-    "set_agent_grants", "visible_agent_ids",
+    "ENTERPRISE", "PERSONAL", "agent_permissions", "can_maintain_agent", "can_use_agent",
+    "require_agent_permission", "require_agent_access_for_principal", "set_agent_grants", "visible_agent_ids",
 ]

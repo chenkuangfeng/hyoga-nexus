@@ -2,7 +2,7 @@
 
 Rules (openspec 2026-11-03, section 4; WeKnora `kbshare.go` takes the minimum of three values):
 
-- The owning space's owner or admin shares an agent into a shared space at a level: `viewer`, `editor` or `admin`.
+- The agent's maintainers (decision 2 of openspec 2026-11-11-enterprise-saas) share it into a shared space at a level: `viewer`, `editor` or `admin`.
   The owning space must itself be a member of that shared space.
 - A member space of the shared space sees the agent only through its own active members. For each person:
   effective level = min(share level, the member space's role in the shared space, the person's own cap), where
@@ -87,15 +87,24 @@ def _live_shared(session: Session, shared_id: UUID) -> SharedSpaceRecord:
     return shared
 
 
-def _require_owner_manager(session: Session, principal: Principal, tenant_id: UUID) -> UUID:
+def _require_share_actor(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID, *,
+                         governance: bool) -> tuple[UUID, AgentRecord]:
+    """Who may manage an agent's shares (openspec 2026-11-11-enterprise-saas decision 2).
+
+    Sharing needs maintenance of the agent: its creator for a personal agent, ``enterprise_agents:manage`` for an
+    enterprise agent. Listing and removing shares (``governance=True``) is also open to the space's owners and admins.
+    """
+    from nexus_platform.agents.access import can_maintain_agent
     actor = resolve_user(session, principal)
     space = require_tenant(session, tenant_id)
     if space.kind != "enterprise":
         raise NotFound("Agent sharing is available in enterprise spaces only")
     require_membership(session, tenant_id, actor.id)
-    if not is_space_manager(session, tenant_id, actor.id):
-        raise Forbidden("Only a space owner or admin can share agents")
-    return actor.id
+    agent = _owned_agent(session, tenant_id, agent_id)
+    if not (can_maintain_agent(session, tenant_id, actor.id, agent)
+            or (governance and is_space_manager(session, tenant_id, actor.id))):
+        raise Forbidden("Only the agent's maintainers can share it")
+    return actor.id, agent
 
 
 def share_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID,
@@ -105,8 +114,7 @@ def share_agent(session: Session, principal: Principal, tenant_id: UUID, agent_i
         raise ValueError("Level must be viewer, editor or admin")
     now = utc_now()
     with session.begin():
-        actor_id = _require_owner_manager(session, principal, tenant_id)
-        agent = _owned_agent(session, tenant_id, agent_id)
+        actor_id, agent = _require_share_actor(session, principal, tenant_id, agent_id, governance=False)
         shared = _live_shared(session, shared_space_id)
         if session.get(SharedSpaceTenantMemberRecord, (shared.id, tenant_id)) is None:
             raise Forbidden("Your space must be a member of the shared space before sharing agents into it")
@@ -130,8 +138,7 @@ def share_agent(session: Session, principal: Principal, tenant_id: UUID, agent_i
 
 def list_agent_shares(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID) -> list[dict]:
     with session.begin():
-        _require_owner_manager(session, principal, tenant_id)
-        _owned_agent(session, tenant_id, agent_id)
+        _require_share_actor(session, principal, tenant_id, agent_id, governance=True)
         owner = session.get(TenantRecord, tenant_id)
         rows = session.execute(
             select(AgentShareRecord, SharedSpaceRecord)
@@ -145,8 +152,7 @@ def list_agent_shares(session: Session, principal: Principal, tenant_id: UUID, a
 def unshare_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID,
                   shared_space_id: UUID) -> None:
     with session.begin():
-        actor_id = _require_owner_manager(session, principal, tenant_id)
-        agent = _owned_agent(session, tenant_id, agent_id)
+        actor_id, agent = _require_share_actor(session, principal, tenant_id, agent_id, governance=True)
         share = session.scalar(select(AgentShareRecord).where(
             AgentShareRecord.agent_id == agent.id, AgentShareRecord.shared_space_id == shared_space_id))
         if share is None:

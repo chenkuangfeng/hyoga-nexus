@@ -152,6 +152,12 @@ class AgentView(BaseModel):
     model_profile_version_id: UUID | None
     budgets: dict[str, Any]
     resource_bindings: list[dict[str, Any]]
+    #: ``personal`` or ``enterprise`` (openspec 2026-11-11-enterprise-saas decision 2).
+    ownership: str = "enterprise"
+    #: The caller created the agent.
+    owned_by_me: bool = False
+    #: The caller may edit, publish and manage the agent (its creator, or an enterprise agent manager).
+    can_maintain: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -269,7 +275,7 @@ class PermissionCatalogView(BaseModel):
 
 
 class AgentGrantsInput(BaseModel):
-    permissions: list[Literal["view", "run", "edit", "publish", "manage"]] = Field(default_factory=list, max_length=5)
+    permissions: list[Literal["view", "run"]] = Field(default_factory=list, max_length=2)
 
 
 class AgentGrantsView(BaseModel):

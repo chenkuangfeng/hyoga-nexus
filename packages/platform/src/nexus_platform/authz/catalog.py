@@ -23,32 +23,36 @@ API_PERMISSIONS: frozenset[str] = frozenset({
     "org:manage",
     "tools:manage",
     "skills:submit",
+    # Maintain enterprise-owned agents / knowledge bases (openspec 2026-11-11-enterprise-saas decision 2).
+    # Not governance keys: owners and admins hold them by default and may grant them to custom roles.
+    "enterprise_agents:manage",
+    "enterprise_kbs:manage",
 })
 
 
-# Agent-level permissions granted through roles. `manage` implies every other permission and
-# `publish` implies `edit`, which implies `view`; grants are stored explicitly as written.
+# Agent-level permissions. ``edit``, ``publish`` and ``manage`` come only from ownership (the creator of a personal
+# agent, or a holder of ``enterprise_agents:manage`` for an enterprise agent); see ``agents.access``. Roles may grant
+# only the use permissions in ``GRANTABLE_AGENT_PERMISSIONS`` (openspec 2026-11-11-enterprise-saas decision 2).
 AGENT_PERMISSIONS: frozenset[str] = frozenset({"view", "run", "edit", "publish", "manage"})
+GRANTABLE_AGENT_PERMISSIONS: frozenset[str] = frozenset({"view", "run"})
 AGENT_IMPLIED: dict[str, frozenset[str]] = {
-    "manage": AGENT_PERMISSIONS,
-    "publish": frozenset({"publish", "edit", "view"}),
-    "edit": frozenset({"edit", "view"}),
     "view": frozenset({"view"}),
     "run": frozenset({"run"}),
 }
 
 
 def expand_agent_permissions(granted) -> frozenset[str]:
-    """Return every agent permission implied by the explicitly granted set."""
+    """Return the use permissions of stored grants as written. Unknown (pre-migration) values grant nothing."""
     expanded: set[str] = set()
     for permission in granted:
-        expanded |= AGENT_IMPLIED[permission]
+        expanded |= AGENT_IMPLIED.get(permission, frozenset())
     return frozenset(expanded)
 
 
 def validate_agent_permissions(permissions) -> frozenset[str]:
+    """Normalize the permissions a role assignment grants; only ``view`` and ``run`` are assignable."""
     permission_set = frozenset(permissions)
-    unknown = permission_set - AGENT_PERMISSIONS
+    unknown = permission_set - GRANTABLE_AGENT_PERMISSIONS
     if unknown:
         raise InvalidConfiguration(f"Unknown agent permission: {', '.join(sorted(unknown))}")
     return permission_set

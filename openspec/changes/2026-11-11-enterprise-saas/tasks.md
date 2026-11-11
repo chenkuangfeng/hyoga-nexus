@@ -4,12 +4,13 @@
 
 ## E0 资源归属与维护权
 
-- [ ] E0.1 迁移：`agents.ownership`、`knowledge_bases.ownership`（现有数据设为 `enterprise`）；`knowledge_base_maintainers`；`tenant_agent_grants` 中的 `edit`、`publish`、`manage` 降为 `run`。
-- [ ] E0.2 权限：`enterprise_agents:manage`、`enterprise_kbs:manage`；`can_maintain_agent`、`can_use_agent`、`can_manage_kb`、`can_maintain_kb_content`（`design.md` 2.2）；`AGENT_PERMISSIONS` 收窄为 `view`、`run`。
-- [ ] E0.3 接口：工作台的创建接口写入 `personal`，管理后台的创建接口写入 `enterprise`；知识库管理员的增删查；个人资源治理（查看、停用、删除、转为企业资源，视需要确认的项 1）；列表与详情返回 `ownership`、`can_maintain`。
-- [ ] E0.4 绑定检查：企业智能体不能绑定个人知识库；绑定范围覆盖检查。
-- [ ] E0.5 测试：两种归属的维护权矩阵；共享只授予使用；知识库管理员只能维护内容；绑定方向；审计 detail。
-- [ ] E0.6 文档：`docs/architecture.md` 2.10、2.11 与相关模块文档。
+- [x] E0.1 迁移：`agents.ownership`、`knowledge_bases.ownership`（现有数据设为 `enterprise`）；`knowledge_base_maintainers`；`tenant_agent_grants` 中的 `edit`、`publish`、`manage` 降为 `run`。
+- [x] E0.2 权限：`enterprise_agents:manage`、`enterprise_kbs:manage`；`can_maintain_agent`、`can_use_agent`、`can_manage_kb`、`can_maintain_kb_content`（`design.md` 2.2）；`AGENT_PERMISSIONS` 收窄为 `view`、`run`。
+- [x] E0.3 接口：工作台的创建接口写入 `personal`，管理后台的创建接口写入 `enterprise`；知识库管理员的增删查；个人资源治理（查看、停用、删除、转为企业资源，视需要确认的项 1）；列表与详情返回 `ownership`、`can_maintain`。
+- [x] E0.4 绑定检查：企业智能体不能绑定个人知识库；绑定范围覆盖检查。
+- [x] E0.5 测试：两种归属的维护权矩阵；共享只授予使用；知识库管理员只能维护内容；绑定方向；审计 detail。
+- [x] E0.6 文档：`docs/architecture.md` 2.10、2.11 与相关模块文档。
+- 实施说明（2026-11-12）：迁移 `e5f6a7b8c9d0_resource_ownership`（现有智能体与知识库设为 `enterprise`，角色授权 `manage` → `view` + `run`，`edit`、`publish` → `view`）。判断函数在 `agents/access.py`（`can_maintain_agent`、`can_use_agent`）与 `knowledge/access.py`（`can_manage`、`can_maintain`、`can_govern` 及对应的 `manageable_base`、`maintainable_base`、`governable_base`）。管理入口 `apps/api/.../http/admin_resources.py`（`/tenants/{id}/admin/agents`、`/admin/knowledge/bases`、知识库管理员、转为企业资源）。共享到共享空间改为需要维护权，列出与撤销另对 owner、admin 开放。草稿对维护者可见（此前只对 owner、admin）。owner、admin 对他人的个人智能体持有 `view` + `manage`（归档），不能编辑、发布、运行，也不能把它分配给别人。测试 `tests/test_resource_ownership.py`（8 项）；全量 pytest 通过（分三批运行，共约 1700 项）。前端入口按计划在 E2 实现。
 
 ## E1 租户与个人区
 

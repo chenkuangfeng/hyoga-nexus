@@ -58,7 +58,7 @@ def view(entry: FaqEntryRecord) -> dict[str, Any]:
 
 
 def _faq_base(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, *, write: bool) -> KnowledgeBaseRecord:
-    kb = (access.writable_base if write else access.readable_base)(db, kb_id, tenant_id, user_id)
+    kb = (access.maintainable_base if write else access.readable_base)(db, kb_id, tenant_id, user_id)
     if kb.kb_type != 'faq':
         raise Conflict('This knowledge base is not a FAQ base')
     return kb

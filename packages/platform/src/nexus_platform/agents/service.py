@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import GLOBAL_BUILTIN_KINDS, SYSTEM_TENANT_ID, Principal, new_id, utc_now
-from nexus_platform.errors import Conflict, InvalidConfiguration, NotFound
+from nexus_platform.errors import Conflict, Forbidden, InvalidConfiguration, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.models.service import clean_public_options, content_hash
 from nexus_platform.models.provider_settings import authorize_model
@@ -17,12 +17,15 @@ from nexus_platform.persistence.models import (
     AgentRecord,
     AgentVersionRecord,
     CredentialReferenceRecord,
+    KnowledgeBaseRecord,
     ModelProfileRecord,
     ModelProfileVersionRecord,
     PlatformResourceRecord,
     ResourceBindingRecord,
 )
-from nexus_platform.agents.access import require_agent_permission
+from nexus_platform.agents.access import (
+    ENTERPRISE, FULL_ROLES, MANAGE_ENTERPRISE_AGENTS, OWNERSHIPS, PERSONAL, require_agent_permission,
+)
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
@@ -46,7 +49,16 @@ def create_agent(
     model_profile_version_id: UUID,
     budgets: dict[str, Any],
     bindings: list[dict[str, Any]],
+    ownership: str = PERSONAL,
 ) -> AgentRecord:
+    """Create a draft agent.
+
+    ``ownership`` is decided by the entry point, never by the request body: the workspace creates ``personal``
+    agents (needs ``agents:write``), the enterprise admin API creates ``enterprise`` agents (needs
+    ``enterprise_agents:manage``).
+    """
+    if ownership not in OWNERSHIPS:
+        raise ValueError("Unknown agent ownership")
     now = utc_now()
     clean_public_options(budgets, "budgets")
     validate_generation(budgets)
@@ -60,19 +72,22 @@ def create_agent(
         user = resolve_user(session, principal)
         require_tenant(session, tenant_id)
         require_membership(session, tenant_id, user.id)
-        require_api_permission(session, tenant_id, user.id, "agents:write")
+        require_api_permission(
+            session, tenant_id, user.id, MANAGE_ENTERPRISE_AGENTS if ownership == ENTERPRISE else "agents:write"
+        )
         verify_model_version(session, tenant_id, model_profile_version_id)
         authorize_model(session, tenant_id, user.id, model_profile_version_id)
         agent = AgentRecord(
             id=new_id(), tenant_id=tenant_id, name=name.strip(), description=description.strip(),
-            status="draft", draft_runtime_type=runtime_type, draft_instructions=instructions,
+            status="draft", ownership=ownership, draft_runtime_type=runtime_type, draft_instructions=instructions,
             draft_model_profile_version_id=model_profile_version_id, draft_budgets=budgets,
             published_version_id=None, version_counter=0, created_by=user.id, created_at=now, updated_at=now,
         )
         session.add(agent)
         session.flush()
         replace_draft_bindings(session, agent, bindings)
-        audit(session, tenant_id, user.id, "agent.created", "agent", str(agent.id))
+        check_knowledge_ownership(session, agent, bindings)
+        audit(session, tenant_id, user.id, "agent.created", "agent", str(agent.id), {"ownership": ownership})
     return agent
 
 
@@ -122,6 +137,7 @@ def update_agent_draft(
         agent.status = "draft"
         agent.updated_at = now
         replace_draft_bindings(session, agent, bindings)
+        check_knowledge_ownership(session, agent, bindings)
         audit(session, tenant_id, user.id, "agent.draft_updated", "agent", str(agent.id))
     return agent
 
@@ -176,6 +192,7 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
             )
         check_skill_dependencies(session, tenant_id, draft_bindings)
         check_knowledge_dependencies(draft_bindings)
+        check_knowledge_ownership(session, agent, [binding_snapshot(row) for row in draft_bindings])
         version_number = agent.version_counter + 1
         snapshot = {
             "agent_id": str(agent.id), "version": version_number, "name": agent.name,
@@ -272,9 +289,11 @@ def archive_agent(session: Session, principal: Principal, tenant_id: UUID, agent
 
 
 def copy_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID, *, name: str) -> AgentRecord:
-    """Copy an agent's draft into a new, unpublished agent owned by the caller.
+    """Copy an agent's draft into a new, unpublished agent created by the caller.
 
-    Shares, grants and published versions are not copied. Every binding and the model are
+    The copy keeps the source's ownership: copying needs ``edit``, which only the source's maintainers hold, and
+    they are exactly the people allowed to create an agent of that ownership. Shares, grants and published versions
+    are not copied. Every binding and the model are
     re-authorized for the caller, so a copy never widens access.
     """
     with session.begin():
@@ -291,6 +310,7 @@ def copy_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id
             select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == source.id)
         )]
         model_id = source.draft_model_profile_version_id
+        ownership = source.ownership
         runtime_type, instructions = source.draft_runtime_type, source.draft_instructions
         description, budgets = source.description, dict(source.draft_budgets or {})
     for binding in bindings:
@@ -300,6 +320,7 @@ def copy_agent(session: Session, principal: Principal, tenant_id: UUID, agent_id
     return create_agent(
         session, principal, tenant_id, name=name[:160], description=description, runtime_type=runtime_type,
         instructions=instructions, model_profile_version_id=model_id, budgets=budgets, bindings=bindings,
+        ownership=ownership,
     )
 
 
@@ -387,6 +408,59 @@ def check_skill_dependencies(session: Session, tenant_id: UUID, bindings: list[A
         for tool in version.tools:
             if tool not in bound_tools:
                 raise InvalidConfiguration(f"skill_dependency_missing:{tool}")
+
+
+def check_knowledge_ownership(session: Session, agent: AgentRecord, bindings: list[dict[str, Any]]) -> None:
+    """Keep agents from depending on someone else's personal knowledge base (openspec 2026-11-11 decision 2).
+
+    An enterprise agent may bind only enterprise bases; a personal agent may bind enterprise bases and its own
+    creator's personal bases. Bases that do not exist are left to the other binding checks.
+    """
+    for raw in bindings:
+        if str(raw.get("kind")) != "knowledge_base":
+            continue
+        try:
+            kb = session.get(KnowledgeBaseRecord, UUID(str(raw.get("resource_id"))))
+        except ValueError:
+            continue
+        if kb is None or kb.ownership != PERSONAL:
+            continue
+        if agent.ownership == ENTERPRISE or kb.created_by != agent.created_by or kb.tenant_id != agent.tenant_id:
+            raise InvalidConfiguration(f"knowledge_binding_ownership:{kb.name}")
+
+
+def convert_agent_to_enterprise(session: Session, principal: Principal, tenant_id: UUID, agent_id: UUID) -> AgentRecord:
+    """Turn a member's personal agent into an enterprise agent (owner or admin only; decision 2).
+
+    The creator loses maintenance; enterprise managers gain it. Refused while the agent still binds personal
+    knowledge bases, because an enterprise agent may not depend on them: convert those bases first.
+    """
+    with session.begin():
+        user = resolve_user(session, principal)
+        require_tenant(session, tenant_id)
+        membership = require_membership(session, tenant_id, user.id)
+        if membership.role not in FULL_ROLES:
+            raise Forbidden("Only an enterprise owner or admin can convert a personal agent")
+        agent = session.scalar(select(AgentRecord).where(
+            AgentRecord.id == agent_id, AgentRecord.tenant_id == tenant_id).with_for_update())
+        if agent is None or agent.status == ARCHIVED:
+            raise NotFound("Agent not found")
+        if agent.ownership == ENTERPRISE:
+            raise Conflict("The agent is already an enterprise agent")
+        draft = [binding_snapshot(row) for row in session.scalars(
+            select(AgentDraftBindingRecord).where(AgentDraftBindingRecord.agent_id == agent.id))]
+        published = [binding_snapshot(row) for row in session.scalars(
+            select(ResourceBindingRecord).where(ResourceBindingRecord.agent_version_id == agent.published_version_id)
+        )] if agent.published_version_id else []
+        agent.ownership = ENTERPRISE
+        try:
+            check_knowledge_ownership(session, agent, draft + published)
+        except InvalidConfiguration as exc:
+            raise Conflict(f"Convert the bound personal knowledge base first ({exc})") from None
+        agent.updated_at = utc_now()
+        audit(session, tenant_id, user.id, "agent.converted_to_enterprise", "agent", str(agent.id),
+              {"creator_id": str(agent.created_by)})
+    return agent
 
 
 def check_knowledge_dependencies(bindings: list[AgentDraftBindingRecord]) -> None:

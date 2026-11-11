@@ -31,6 +31,7 @@ class AgentRecord(Base):
             ondelete="RESTRICT", name="fk_agents_draft_model_profile_tenant",
         ),
         CheckConstraint("status IN ('draft', 'published', 'archived')", name="ck_agents_status"),
+        CheckConstraint("ownership IN ('personal', 'enterprise')", name="ck_agents_ownership"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
@@ -38,6 +39,10 @@ class AgentRecord(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
+    #: ``personal``: created in the employee workspace and maintained only by its creator; ``enterprise``: created by
+    #: enterprise administrators and maintained only by holders of ``enterprise_agents:manage``
+    #: (openspec 2026-11-11-enterprise-saas, decision 2).
+    ownership: Mapped[str] = mapped_column(String(16), nullable=False, default="personal")
     draft_runtime_type: Mapped[str] = mapped_column(String(48), nullable=False, default="native")
     draft_instructions: Mapped[str] = mapped_column(Text, nullable=False, default="")
     draft_model_profile_version_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))

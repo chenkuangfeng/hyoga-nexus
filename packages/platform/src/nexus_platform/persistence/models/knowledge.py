@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import (JSON, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text,
+from sqlalchemy import (JSON, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text,
                         UniqueConstraint, Uuid, false, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,6 +61,8 @@ class KnowledgeBaseRecord(Base):
     __tablename__ = 'knowledge_bases'
     __table_args__ = (
         CheckConstraint("status IN ('active','deleting')", name='ck_knowledge_bases_status'),
+        CheckConstraint("ownership IN ('personal','enterprise')", name='ck_knowledge_bases_ownership'),
+        UniqueConstraint('id', 'tenant_id', name='uq_knowledge_bases_id_tenant'),
         Index('ix_knowledge_bases_tenant', 'tenant_id', 'status'),
         Index('uq_knowledge_bases_name', 'tenant_id', 'name', unique=True,
               sqlite_where=text("status = 'active'"), postgresql_where=text("status = 'active'")),
@@ -70,6 +72,9 @@ class KnowledgeBaseRecord(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default='')
     kb_type: Mapped[str] = mapped_column(String(16), nullable=False, default='document')
+    #: ``personal`` (maintained by its creator) or ``enterprise`` (managed by holders of ``enterprise_kbs:manage``;
+    #: content also by the members in ``knowledge_base_maintainers``). openspec 2026-11-11-enterprise-saas decision 2.
+    ownership: Mapped[str] = mapped_column(String(16), nullable=False, default='personal')
     #: ``{"vector": bool, "keyword": bool, "graph": bool, "wiki": bool}`` (WeKnora IndexingStrategy).
     indexing: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     #: NULL selects the builtin SQLite store.
@@ -89,6 +94,27 @@ class KnowledgeBaseRecord(Base):
     created_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class KnowledgeBaseMaintainerRecord(Base):
+    """A member who may maintain the content of an enterprise knowledge base (documents, chunks, FAQ entries).
+
+    Only meaningful for ``ownership = 'enterprise'``; settings, visibility, deletion and sharing stay with
+    ``enterprise_kbs:manage``. The composite keys keep the base and the member inside one enterprise.
+    """
+    __tablename__ = 'knowledge_base_maintainers'
+    __table_args__ = (
+        ForeignKeyConstraint(['kb_id', 'tenant_id'], ['knowledge_bases.id', 'knowledge_bases.tenant_id'],
+                             ondelete='CASCADE', name='fk_kb_maintainers_kb_tenant'),
+        ForeignKeyConstraint(['tenant_id', 'user_id'], ['tenant_memberships.tenant_id', 'tenant_memberships.user_id'],
+                             ondelete='CASCADE', name='fk_kb_maintainers_membership'),
+        Index('ix_kb_maintainers_user', 'tenant_id', 'user_id'),
+    )
+    kb_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    granted_by: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class KnowledgeDocumentRecord(Base):

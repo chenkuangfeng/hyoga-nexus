@@ -169,25 +169,31 @@ def _grant_agent(factory, owner, tid, agent_id, perms, *, menus=("agents",), api
     return role_id
 
 
-def test_agent_permissions_follow_implication_and_visibility(database):
+def test_role_grants_give_use_only_and_visibility(database):
+    """Roles assign use (view, run) only; maintenance comes from ownership (openspec 2026-11-11 decision 2)."""
     owner_principal = Principal(id="agent-owner", issuer="test")
     tenant, _, _, agent, _, _ = create_agent_stack(database, owner_principal)
     tid = tenant.id
     with database() as db:
         add_member(db, owner_principal, tid, MEMBER, TenantRole.CONTRIBUTOR)
-    _grant_agent(database, owner_principal, tid, agent.id, ["edit"])
+    with database() as db:
+        role = roles.create_role(db, owner_principal, tid, "would-edit", ["agents"], ["agents:read"])
+    for forbidden in ("edit", "publish", "manage"):
+        with database() as db:
+            with pytest.raises(_InvalidConfiguration):
+                agent_access.set_agent_grants(db, owner_principal, tid, role.id, agent.id, [forbidden])
+    _grant_agent(database, owner_principal, tid, agent.id, ["view"])
     with database() as db:
         record = db.get(AgentRecord, agent.id)
         granted = agent_access.agent_permissions(db, tid, _uid(database, MEMBER), record)
-        assert granted == {"edit", "view"}
-        assert "run" not in granted
+        assert granted == {"view"}
         assert agent_access.visible_agent_ids(db, tid, _uid(database, MEMBER)) == {agent.id}
     with database() as db:
         with pytest.raises(Forbidden):
             agent_access.require_agent_permission(db, tid, _uid(database, MEMBER), db.get(AgentRecord, agent.id), "run")
     with database() as db:
-        assert expand_agent_permissions(["publish"]) == {"publish", "edit", "view"}
-        assert expand_agent_permissions(["manage"]) == agent_access.AGENT_PERMISSIONS
+        # Rows written before the narrowing (migration e5f6a7b8c9d0 rewrites them) grant nothing.
+        assert expand_agent_permissions(["publish", "manage"]) == frozenset()
 
 
 def test_agent_without_grant_is_hidden_and_run_requires_run_permission(database):
@@ -226,7 +232,7 @@ def test_edit_and_publish_need_agent_permission_and_manager_cannot_over_grant(da
     with database() as db:
         with pytest.raises(Forbidden):
             publish_agent(db, MEMBER, tid, agent.id)
-    # A member whose role may only view cannot grant edit on the agent to another role.
+    # A member whose role may only view cannot grant run on the agent to another role.
     member = _uid(database, MEMBER)
     with database() as db:
         viewer_role = roles.create_role(db, owner_principal, tid, "viewer-manager", ["roles"],
@@ -236,7 +242,7 @@ def test_edit_and_publish_need_agent_permission_and_manager_cannot_over_grant(da
         target = roles.create_role(db, owner_principal, tid, "target", [], [])
     with database() as db:
         with pytest.raises(Forbidden):
-            agent_access.set_agent_grants(db, MEMBER, tid, target.id, agent.id, ["edit"])
+            agent_access.set_agent_grants(db, MEMBER, tid, target.id, agent.id, ["run"])
     with database() as db:
         with pytest.raises(_InvalidConfiguration):
             agent_access.set_agent_grants(db, owner_principal, tid, target.id, agent.id, ["teleport"])
@@ -281,7 +287,7 @@ def test_agent_grants_listed_for_managers(database):
     tenant, _, _, agent, _, _ = create_agent_stack(database, owner_principal)
     with database() as db:
         add_member(db, owner_principal, tenant.id, MEMBER, TenantRole.CONTRIBUTOR)
-    role_id = _grant_agent(database, owner_principal, tenant.id, agent.id, ["edit"])
+    role_id = _grant_agent(database, owner_principal, tenant.id, agent.id, ["view"])
     with database() as db:
         rows = roles.list_agent_grants(db, owner_principal, tenant.id)
-    assert {"role_id": role_id, "agent_id": agent.id, "permission": "edit"} in rows
+    assert {"role_id": role_id, "agent_id": agent.id, "permission": "view"} in rows

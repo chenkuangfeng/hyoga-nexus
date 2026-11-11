@@ -97,4 +97,4 @@ def copy_agent(tenant_id: UUID, agent_id: UUID, body: AgentCopyInput | None = No
             name = f"{source.name} (copy)"
     row = agents.copy_agent(db, principal, tenant_id, agent_id, name=name)
     _, bindings = agents.get_agent(db, tenant_id, row.id)
-    return agent_view(row, bindings)
+    return agent_view(row, bindings, user_id=row.created_by, can_maintain=True)
