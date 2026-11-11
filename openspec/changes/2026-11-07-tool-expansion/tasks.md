@@ -48,6 +48,11 @@
   - 代码与参数测试已写，未在真实 bwrap 上验证（待用户验证）；进程数限制缺失，验收的进程数探测预计不通过。
 - [ ] 3.6 `acceptance` 全部探测项与迁移 `sandbox_acceptance`；worker 启动自检与 `sandbox-check` 命令；验收报告输出到文件。
   - 部分完成：验收模块 12 项探测与按指纹失效的报告已实现；`--sandbox-check` 命令已加入 worker（调整：用参数而非子命令）。调整：报告保存在 `workspace_root/acceptance.json`，不建 `sandbox_acceptance` 表——工作区里有未提交的知识库迁移，新迁移无法稳定接在链上；迁移链稳定后再改表。
+  - 结果入库（追加，待用户确认 design.md 2.3.1 后实施）：
+    - [ ] 3.6.1 `ReportStore` 端口与文件实现；`acceptance.run` / `passed` 经端口读写，`nexus_sandbox` 不依赖平台包。
+    - [ ] 3.6.2 `sandbox_acceptance` 模型与 Alembic 迁移（空库、升降级往返）。
+    - [ ] 3.6.3 平台数据库实现、`profile_facts` 读取（短会话 + 30 秒缓存，读失败按未验收）、旧文件退回。
+    - [ ] 3.6.4 worker `--sandbox-check` 与启动自检写表；测试与文档（`packages/sandbox/docs`、`configs/README.md`）同步。
 - [ ] 3.7 在真实 Docker 上跑通验收并保存报告；无 Docker 的环境相关测试跳过并说明。
   - 未做：需要有 Docker 权限的环境运行 `--sandbox-check`。
 
