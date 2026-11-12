@@ -3203,21 +3203,6 @@ export default {
     upload: 'Upload File'
   },
   manualEditor: {
-    assistant: {
-      button: 'Assistant',
-      tooltip: 'Let the assistant help you write',
-      continue: 'Continue writing',
-      outline: 'Draft an outline',
-      polish: 'Polish the text',
-      summarize: 'Summarize',
-      open: 'Open assistant',
-      prompts: {
-        continue: 'Continue the text from its end with one more paragraph that follows on from it.',
-        outline: 'Draft a clearly structured outline for this document from its title and current text, and put it at the start of the text.',
-        polish: 'Polish the text: fix typos and awkward sentences without changing the meaning, section by section.',
-        summarize: 'Summarize the key points of this document in the chat. Do not change the text.'
-      }
-    },
     placeholders: {
       heading: 'Heading {level}',
       listItem: 'List item',
@@ -6085,57 +6070,7 @@ export default {
       videoNotSupported: 'Your browser does not support video playback'
     },
     assistant: {
-      title: 'Nexus Assistant',
-      newConversation: 'New conversation',
-      history: 'Conversation history',
-      untitledConversation: 'Untitled conversation',
-      historyEmpty: 'No conversations yet',
-      historyFailed: 'Failed to load conversation history',
-      loadMore: 'Load more',
-      resize: 'Resize assistant',
-      layout: {
-        dock: 'Dock to the side',
-        float: 'Float over the page',
-      },
-      welcomeTitle: 'How can I help?',
-      agentWelcomeDesc: 'Check this agent’s configuration, change its model or see which knowledge bases it can search.',
-      welcomeDesc: 'Ask how Nexus works, or have me check and handle document parsing, knowledge base activity and Wiki issues in your workspace, or create and configure agents. Whether I ask before a change depends on the access level below the input box.',
-      startFailed: 'Failed to start the assistant. Please try again.',
-      askAboutDocument: 'Ask {name}',
-      askAboutAnswer: 'Ask {name} about this answer',
-      selection: {
-        label: 'Selected',
-        lines: '{count} lines selected',
-        detach: 'Don’t include the selection',
-        tip: 'Your selection goes with the message: {text}',
-        tipField: 'Your selection in “{field}” goes with the message: {text}'
-      },
-      bubble: {
-        label: 'Assistant actions',
-        ask: 'Ask assistant',
-        polish: 'Polish',
-        rewrite: 'Rewrite',
-        translate: 'Translate',
-        continue: 'Continue',
-        prompts: {
-          polish: 'Polish the selected text: fix typos and awkward phrasing without changing the meaning, and replace it in place.',
-          rewrite: 'Rewrite the selected text to be clearer and more concise, and replace it in place.',
-          translate: 'Translate the selected text, Chinese into English and other languages into Chinese, and replace it in place.',
-          continue: 'Continue writing after the selected text with one more paragraph that fits the context, placed right after it.'
-        }
-      },
-      fillNotice: {
-        title: 'Assistant filled {count} field(s)',
-        undo: 'Undo',
-        dismiss: 'Dismiss'
-      },
       access: {
-        title: 'Access level',
-        capped: 'Not allowed by your workspace admin',
-        page: {
-          label: 'See and fill the current page',
-          desc: 'Reads the page on the left and can fill in forms. Never clicks buttons or saves.'
-        },
         levels: {
         read_only: {
           label: 'Read only',
@@ -6151,75 +6086,6 @@ export default {
         }
       }
     },
-    context: {
-      detachedLabel: 'Page excluded',
-      currentPage: 'Current page',
-      detach: 'Don\'t include the current page',
-      attachedTip: 'Including the current page: {path}',
-      detachedTip: 'Click to include the current page: {path}',
-      chatMessage: 'This answer',
-      pages: {
-        knowledge_base: 'Knowledge base',
-        wiki: 'Wiki',
-        agent_editor: 'Agent editor',
-        settings_models: 'Models',
-        mcp_services: 'MCP services',
-        chat: 'Chat'
-      }
-    },
-    starters: {
-      agentConfig: 'Check this agent’s configuration',
-      agentModel: 'Change its model',
-      agentKnowledge: 'Which knowledge bases can it search?',
-      wikiIssues: 'What issues are open on this page?',
-      wikiSummary: 'Summarize this Wiki page',
-      documentStatus: 'How did this document parse?',
-      documentSummary: 'Summarize this document',
-      failedDocuments: 'Which documents in this knowledge base failed to parse?',
-      recentActivity: 'What changed in this knowledge base recently?',
-      formats: 'Which document formats does Nexus support?',
-      createWiki: 'How do I create a Wiki knowledge base?',
-      agents: 'Which agents do I have, and which models do they use?',
-      messageSources: 'What is this answer based on?',
-      messageCheck: 'Is anything in this answer wrong?',
-      modelCheck: 'Check this model\'s configuration',
-      modelUsage: 'Which agents and knowledge bases use these models?',
-      mcpTools: 'Which tools does this MCP service offer?',
-      mcpCheck: 'Why can\'t it connect?',
-      modelSetup: 'Which models do I still need to set up?',
-      mcpSetup: 'How do I connect an MCP service?'
-    }
-  },
-  assistantSettings: {
-    title: 'Assistant',
-    description: 'Choose where {name} opens from, how it opens and how far it may act.',
-    introTitle: 'The assistant can only do what you can',
-    introDescription: 'It acts as you, so it sees and changes exactly what your workspace role allows. The access level only narrows that further; it never widens it.',
-    personalGroup: 'Your preferences',
-    accessLabel: 'Access level',
-    accessDescription: 'Whether the assistant asks you before it changes anything. You can also switch it below the assistant input box.',
-    accessCeilingHint: 'Your workspace admin capped it at "{level}".',
-    entryLabel: 'Entry point',
-    entryDescription: 'Whichever you pick, the command palette ({shortcut}) can always open the assistant.',
-    entries: {
-      sidebar: 'Sidebar',
-      launcher: 'Page edge',
-      palette: 'Command palette only'
-    },
-    layoutLabel: 'Layout',
-    layoutDescription: 'Docked narrows the page beside it; floating hovers over it. Narrow windows always float.',
-    layouts: {
-      docked: 'Docked',
-      floating: 'Floating'
-    },
-    workspaceGroup: 'Workspace',
-    adminOnly: 'Admins only',
-    nameLabel: 'Assistant name',
-    nameDescription: 'The name every member sees. Leave it empty for the default.',
-    ceilingLabel: 'Highest access level',
-    ceilingDescription: 'The highest level members may pick. With "Read only" the assistant changes nothing in this workspace.',
-    saved: 'Saved',
-    saveFailed: 'Could not save: {message}'
   },
   commandPalette: {
     placeholder: 'Search knowledge bases, files, conversations…',
@@ -6251,7 +6117,6 @@ export default {
       organizations: 'Open shared spaces',
       settings: 'Open settings',
       productTour: 'Product tour',
-      assistant: 'Open {name}'
     },
     empty: {
       noResults: 'No matches found',

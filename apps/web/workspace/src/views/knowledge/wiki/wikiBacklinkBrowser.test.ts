@@ -53,8 +53,7 @@ async function fixture() {
       if (name === 'vue' || name === 'marked') return require(name)
       if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ query: {} }) }
       if (name === 'vue-i18n') return { useI18n: () => ({ t: (key: string) => key }) }
-      if (name === '@/stores/assistant') return { useAssistantStore: () => ({ visible: false }) }
-      if (name === '@/composables/useAssistantPageContext') return { useAssistantPageContext() {} }
+
       if (name === '@nexus-web/core/utils/assistantDataChange') return { useAssistantDataChange() {} }
       if (name === '@/stores/settings') return { useSettingsStore: () => ({}) }
       if (name === '@nexus-web/core/api/wiki/index') return api

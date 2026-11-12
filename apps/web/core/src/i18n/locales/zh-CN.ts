@@ -2818,57 +2818,7 @@ export default {
     askUser: '向用户提问'
   },
   assistant: {
-    title: 'Nexus 助手',
-    newConversation: '新对话',
-    history: '历史对话',
-    untitledConversation: '未命名对话',
-    historyEmpty: '暂无历史对话',
-    historyFailed: '加载历史对话失败',
-    loadMore: '加载更多',
-    resize: '调整助手宽度',
-    layout: {
-      dock: '固定在右侧',
-      float: '改为悬浮',
-    },
-    welcomeTitle: '有什么可以帮你？',
-    agentWelcomeDesc: '可以检查这个智能体的配置、调整模型或查看它能检索的知识库。',
-    welcomeDesc: '我可以解答 Nexus 的用法，也可以查看和处理你空间里的文档解析、知识库动态和 Wiki 问题，还能帮你创建和配置智能体。改动前是否先请你确认，由输入框下方的权限等级决定。',
-    startFailed: '启动助手失败，请重试',
-    askAboutDocument: '问 {name}',
-    askAboutAnswer: '就这条回答问 {name}',
-    selection: {
-      label: '已选中',
-      lines: '已选 {count} 行',
-      detach: '不带上选中内容',
-      tip: '发送时会带上选中的内容：{text}',
-      tipField: '发送时会带上「{field}」中选中的内容：{text}'
-    },
-    bubble: {
-      label: '助手快捷操作',
-      ask: '问助手',
-      polish: '润色',
-      rewrite: '改写',
-      translate: '翻译',
-      continue: '续写',
-      prompts: {
-        polish: '润色选中的内容：修正错别字和不通顺的地方，不改变原意，直接在原处替换。',
-        rewrite: '改写选中的内容，让表达更清晰简洁，直接在原处替换。',
-        translate: '翻译选中的内容：中文译成英文，其他语言译成中文，直接在原处替换。',
-        continue: '接着选中的内容往下续写一段，与上下文衔接，写在选中内容之后。'
-      }
-    },
-    fillNotice: {
-      title: '助手已填写 {count} 处',
-      undo: '撤销',
-      dismiss: '关闭'
-    },
     access: {
-      title: '权限等级',
-      capped: '空间管理员未开放这一等级',
-      page: {
-        label: '查看和填写当前页面',
-        desc: '读取左侧页面，并可代为填写表单；不会点击按钮或保存'
-      },
       levels: {
         read_only: {
           label: '只读',
@@ -2884,75 +2834,6 @@ export default {
         }
       }
     },
-    context: {
-      detachedLabel: '未附带页面',
-      currentPage: '当前页面',
-      detach: '不附带当前页面',
-      attachedTip: '已附带当前页面：{path}',
-      detachedTip: '点击附带当前页面：{path}',
-      chatMessage: '这条回答',
-      pages: {
-        knowledge_base: '知识库',
-        wiki: 'Wiki',
-        agent_editor: '智能体编辑',
-        settings_models: '模型管理',
-        mcp_services: 'MCP 服务',
-        chat: '对话'
-      }
-    },
-    starters: {
-      agentConfig: '检查这个智能体的配置',
-      agentModel: '给它换个模型',
-      agentKnowledge: '它能检索哪些知识库？',
-      wikiIssues: '这个页面有哪些待处理的问题？',
-      wikiSummary: '总结一下这个 Wiki 页面',
-      documentStatus: '这个文档的解析状态怎么样？',
-      documentSummary: '总结一下这个文档',
-      failedDocuments: '这个知识库有哪些解析失败的文档？',
-      recentActivity: '这个知识库最近有哪些变动？',
-      formats: 'Nexus 支持哪些文档格式？',
-      createWiki: '怎样创建 Wiki 知识库？',
-      agents: '我有哪些智能体？分别用的什么模型？',
-      messageSources: '这个回答的依据是什么？',
-      messageCheck: '这个回答有没有说错？',
-      modelCheck: '检查这个模型的配置',
-      modelUsage: '哪些智能体和知识库在用这些模型？',
-      mcpTools: '这个 MCP 服务提供哪些工具？',
-      mcpCheck: '它为什么连不上？',
-      modelSetup: '我还需要配置哪些模型？',
-      mcpSetup: '怎样接入一个 MCP 服务？'
-    }
-  },
-  assistantSettings: {
-    title: '助手',
-    description: '设置 {name} 的入口、打开方式和权限等级。',
-    introTitle: '助手只能做你本人有权限做的事',
-    introDescription: '助手以你的身份操作，能看到和修改的范围与你在空间里的角色一致。权限等级只会在此基础上进一步收紧，不会放宽。',
-    personalGroup: '个人偏好',
-    accessLabel: '权限等级',
-    accessDescription: '决定助手修改内容前是否先请你确认。也可以在助手输入框下方随时切换。',
-    accessCeilingHint: '空间管理员将最高等级设为「{level}」。',
-    entryLabel: '入口位置',
-    entryDescription: '无论选哪种，都可以在命令面板（{shortcut}）中打开助手。',
-    entries: {
-      sidebar: '侧边栏',
-      launcher: '页面右侧',
-      palette: '仅命令面板'
-    },
-    layoutLabel: '打开方式',
-    layoutDescription: '固定在右侧时会挤压页面内容，悬浮时盖在页面上方。窗口较窄时总是悬浮。',
-    layouts: {
-      docked: '固定在右侧',
-      floating: '悬浮'
-    },
-    workspaceGroup: '空间设置',
-    adminOnly: '仅管理员可修改',
-    nameLabel: '助手名称',
-    nameDescription: '空间内所有成员看到的名称，留空使用默认名称。',
-    ceilingLabel: '最高权限等级',
-    ceilingDescription: '成员能选择的最高等级。设为「只读」后，助手在这个空间里不会做任何修改。',
-    saved: '已保存',
-    saveFailed: '保存失败：{message}'
   },
   commandPalette: {
     placeholder: '搜索知识库、文件、对话…',
@@ -2978,7 +2859,6 @@ export default {
       organizations: '打开共享空间',
       settings: '打开设置',
       productTour: '新手引导',
-      assistant: '打开 {name}'
     },
     match: {
       vector: '向量',
@@ -5763,21 +5643,6 @@ export default {
     }
   },
   manualEditor: {
-    assistant: {
-      button: '助手',
-      tooltip: '让助手帮你写',
-      continue: '续写',
-      outline: '生成大纲',
-      polish: '润色全文',
-      summarize: '总结要点',
-      open: '打开助手',
-      prompts: {
-        continue: '接着正文末尾续写一段，与前文衔接。',
-        outline: '根据标题和现有内容，为这篇文档拟一份结构清晰的大纲，写在正文开头。',
-        polish: '润色正文：修正错别字和不通顺的句子，不改变原意，分段修改。',
-        summarize: '总结这篇文档的要点，在对话里回复，不要修改正文。'
-      }
-    },
     defaultTitlePrefix: '新建文档',
     noDocumentKnowledgeBases: '暂无可用的文档型知识库，请先创建一个文档型知识库',
     actions: {

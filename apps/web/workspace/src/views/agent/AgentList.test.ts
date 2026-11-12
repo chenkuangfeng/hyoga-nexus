@@ -25,7 +25,7 @@ function setup(t: TestContext) {
     '@/composables/useTenantModelReadiness': { useTenantModelReadiness: () => ({ loaded: vue.ref(true), isReadyForAgent: vue.ref(true) }) },
     '@/composables/useListUrlState': { useListUrlState: () => ({ scope: vue.ref('all'), creator: vue.ref('all'), query: vue.ref('') }) },
     '@/composables/useResourcePins': { useResourcePins: () => ({ favorites: vue.ref([]), recents: vue.ref([]) }) },
-    '@/composables/useAssistantPageContext': { useAssistantPageContext() {} },
+
     '@nexus-web/core/api/agent/index': {}, '@nexus-web/core/api/chat/index': {}, '@nexus-web/core/api/organization/index': {},
     '@/config/contextualGuides': {}, '@/config/settingsRoute': {},
     '@/utils/resourceListSearch': {}, '@/utils/card-list-badge': {}, '@/utils/resourceSorting': sorting,

@@ -134,10 +134,10 @@
                                     :follow-up-loading="Boolean(session.suggestionLoading && !session.suggestionSet?.questions?.length)"
                                     :can-fork="!embeddedMode && forkAffordanceOf(session.id).canFork"
                                     :can-rewind="canRewindMessage(session.id)"
-                                    :can-ask-assistant="!embeddedMode"
+
                                     @fork="handleFork"
                                     @rewind="handleRewind"
-                                    @ask-assistant="handleAskAssistant"
+
                                     @render-complete-change="(ready) => handleAnswerRenderComplete(session, ready)">
                                 </botmsg>
                                 <FollowUpSuggestions v-if="!isAutomationSession && session.answerFullyRendered && !session.steerForked && !session.suggestionsDismissed"
@@ -271,8 +271,6 @@ import {
 import { provideChatReferencesDrawer } from '@/composables/useChatReferencesDrawer';
 import { provideChatAttachmentPreviewDrawer } from '@/composables/useChatAttachmentPreviewDrawer';
 import { useSessionActivityStore } from '@/stores/sessionActivity';
-import { useAssistantStore } from '@/stores/assistant';
-import { useAssistantPageContext } from '@/composables/useAssistantPageContext';
 import { respondToPageAction } from '@/utils/pageActionResponder';
 import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
 import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
@@ -454,20 +452,6 @@ provide(childAgentTaskLookupKey, task => findChildAgentTask(messagesList, task))
 const promptDock = providePromptDock(messagesList);
 watch(promptDock.focusRequest, () => childTabs.select(''), { flush: 'sync' });
 watch(promptDock.prompts, prompts => { childTabs.attention.value = prompts.length > 0; }, { immediate: true });
-
-// The answer the user asked the assistant about, until they leave the session.
-const assistant = useAssistantStore();
-const askedMessage = ref({ sessionId: '', messageId: '' });
-useAssistantPageContext(() => {
-    const asked = askedMessage.value;
-    if (props.embeddedMode || !asked.messageId || asked.sessionId !== props.session_id) return null;
-    return { page: 'chat', chatSessionId: asked.sessionId, messageId: asked.messageId };
-});
-function handleAskAssistant(messageId) {
-    askedMessage.value = { sessionId: props.session_id, messageId };
-    assistant.restorePageContext();
-    assistant.open();
-}
 
 const backgroundWorkStamp = computed(() => messagesList.map((message) => {
     const work = message?.background_work;
@@ -759,7 +743,6 @@ watch([composerElement, scrollContainer], ([element, scroller], _, onCleanup) =>
 }, { flush: 'post' })
 const userHasScrolledUp = ref(false)
 const SCROLL_BOTTOM_THRESHOLD = 80
-
 
 const jumpToQuestion = (id) => {
     const root = scrollContainer.value
@@ -1071,7 +1054,7 @@ const {
     onError: (msg) => MessagePlugin.error(msg),
     onPageAction: (prompt) => void respondToPageAction(
         prompt,
-        !props.embeddedMode ? 'unavailable' : assistant.pageAccess ? 'enabled' : 'disabled',
+        'unavailable',
         { current: () => router.currentRoute.value.fullPath, push: (location) => router.push(location) },
     ),
     preserveIncompleteStreamReactive: true,
@@ -1795,24 +1778,6 @@ const resumeSuspendedRun = async (pendingId) => {
     }
 };
 provide(resumeSuspendedRunKey, resumeSuspendedRun);
-
-// The assistant panel's conversation takes messages asked from the page (the
-// selection bubble, the editor toolbar) once its history is in.
-if (props.embeddedMode) {
-    watch([() => assistant.queuedMessage, historyLoading], ([message, pending]) => {
-        if (!message || pending) return;
-        assistant.takeQueuedMessage();
-        if (isReplying.value || loading.value) {
-            // Mid-reply it waits in the input box for the user to send.
-            inputFieldRef.value?.prefill?.(message.query);
-            return;
-        }
-        sendMsg(message.query, inputFieldRef.value?.getComposerModelId?.() || props.modelId);
-    }, { immediate: true });
-    watch(() => assistant.focusRequest, () => {
-        inputFieldRef.value?.focusInput?.();
-    });
-}
 
 watch(error, (newError) => {
     if (!newError) return;

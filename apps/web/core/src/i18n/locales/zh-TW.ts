@@ -2675,57 +2675,7 @@ export default {
     askUser: '向使用者提問'
   },
   assistant: {
-    title: 'Nexus 助手',
-    newConversation: '新對話',
-    history: '歷史對話',
-    untitledConversation: '未命名對話',
-    historyEmpty: '尚無歷史對話',
-    historyFailed: '無法載入歷史對話',
-    loadMore: '載入更多',
-    resize: '調整助手寬度',
-    layout: {
-      dock: '固定在右側',
-      float: '改為懸浮',
-    },
-    welcomeTitle: '有什麼可以幫你？',
-    agentWelcomeDesc: '可以檢查這個智慧代理的設定、調整模型或查看它能檢索的知識庫。',
-    welcomeDesc: '我可以解答 Nexus 的用法，也可以檢視和處理你空間裡的文件解析、知識庫動態和 Wiki 問題，還能幫你建立和設定智慧代理。變更前是否先請你確認，由輸入框下方的權限等級決定。',
-    startFailed: '啟動助手失敗，請重試',
-    askAboutDocument: '問 {name}',
-    askAboutAnswer: '就這則回答問 {name}',
-    selection: {
-      label: '已選取',
-      lines: '已選 {count} 行',
-      detach: '不帶上選取內容',
-      tip: '傳送時會帶上選取的內容：{text}',
-      tipField: '傳送時會帶上「{field}」中選取的內容：{text}'
-    },
-    bubble: {
-      label: '助手快捷操作',
-      ask: '問助手',
-      polish: '潤飾',
-      rewrite: '改寫',
-      translate: '翻譯',
-      continue: '續寫',
-      prompts: {
-        polish: '潤飾選取的內容：修正錯字和不通順的地方，不改變原意，直接在原處取代。',
-        rewrite: '改寫選取的內容，讓表達更清楚簡潔，直接在原處取代。',
-        translate: '翻譯選取的內容：中文譯成英文，其他語言譯成中文，直接在原處取代。',
-        continue: '接著選取的內容往下續寫一段，與上下文銜接，寫在選取內容之後。'
-      }
-    },
-    fillNotice: {
-      title: '助手已填寫 {count} 處',
-      undo: '復原',
-      dismiss: '關閉'
-    },
     access: {
-      title: '權限等級',
-      capped: '空間管理員未開放這一等級',
-      page: {
-        label: '查看和填寫目前頁面',
-        desc: '讀取左側頁面，並可代為填寫表單；不會點擊按鈕或儲存'
-      },
       levels: {
         read_only: {
           label: '唯讀',
@@ -2741,75 +2691,6 @@ export default {
         }
       }
     },
-    context: {
-      detachedLabel: '未附帶頁面',
-      currentPage: '目前頁面',
-      detach: '不附帶目前頁面',
-      attachedTip: '已附帶目前頁面：{path}',
-      detachedTip: '點擊附帶目前頁面：{path}',
-      chatMessage: '這則回答',
-      pages: {
-        knowledge_base: '知識庫',
-        wiki: 'Wiki',
-        agent_editor: '智能體編輯',
-        settings_models: '模型管理',
-        mcp_services: 'MCP 服務',
-        chat: '對話'
-      }
-    },
-    starters: {
-      agentConfig: '檢查這個智慧代理的設定',
-      agentModel: '幫它換個模型',
-      agentKnowledge: '它能檢索哪些知識庫？',
-      wikiIssues: '這個頁面有哪些待處理的問題？',
-      wikiSummary: '總結一下這個 Wiki 頁面',
-      documentStatus: '這個文件的解析狀態如何？',
-      documentSummary: '總結一下這個文件',
-      failedDocuments: '這個知識庫有哪些解析失敗的文件？',
-      recentActivity: '這個知識庫最近有哪些變動？',
-      formats: 'Nexus 支援哪些文件格式？',
-      createWiki: '怎樣建立 Wiki 知識庫？',
-      agents: '我有哪些智慧代理？分別用的什麼模型？',
-      messageSources: '這則回答的依據是什麼？',
-      messageCheck: '這則回答有沒有說錯？',
-      modelCheck: '檢查這個模型的設定',
-      modelUsage: '哪些智能體和知識庫在用這些模型？',
-      mcpTools: '這個 MCP 服務提供哪些工具？',
-      mcpCheck: '它為什麼連不上？',
-      modelSetup: '我還需要設定哪些模型？',
-      mcpSetup: '怎樣接入一個 MCP 服務？'
-    }
-  },
-  assistantSettings: {
-    title: '助手',
-    description: '設定 {name} 的入口、開啟方式和權限等級。',
-    introTitle: '助手只能做你本人有權限做的事',
-    introDescription: '助手以你的身分操作，能看到和變更的範圍與你在空間裡的角色一致。權限等級只會在此基礎上進一步收緊，不會放寬。',
-    personalGroup: '個人偏好',
-    accessLabel: '權限等級',
-    accessDescription: '決定助手變更內容前是否先請你確認。也可以在助手輸入框下方隨時切換。',
-    accessCeilingHint: '空間管理員將最高等級設為「{level}」。',
-    entryLabel: '入口位置',
-    entryDescription: '無論選哪種，都可以在命令面板（{shortcut}）中開啟助手。',
-    entries: {
-      sidebar: '側邊欄',
-      launcher: '頁面右側',
-      palette: '僅命令面板'
-    },
-    layoutLabel: '開啟方式',
-    layoutDescription: '固定在右側時會擠壓頁面內容，懸浮時蓋在頁面上方。視窗較窄時總是懸浮。',
-    layouts: {
-      docked: '固定在右側',
-      floating: '懸浮'
-    },
-    workspaceGroup: '空間設定',
-    adminOnly: '僅管理員可修改',
-    nameLabel: '助手名稱',
-    nameDescription: '空間內所有成員看到的名稱，留空使用預設名稱。',
-    ceilingLabel: '最高權限等級',
-    ceilingDescription: '成員能選擇的最高等級。設為「唯讀」後，助手在這個空間裡不會做任何變更。',
-    saved: '已儲存',
-    saveFailed: '儲存失敗：{message}'
   },
   commandPalette: {
     placeholder: '搜尋知識庫、檔案、對話…',
@@ -2835,7 +2716,6 @@ export default {
       organizations: '打開共享空間',
       settings: '打開設定',
       productTour: '新手引導',
-      assistant: '開啟 {name}'
     },
     match: {
       vector: '向量',
@@ -5624,21 +5504,6 @@ export default {
     }
   },
   manualEditor: {
-    assistant: {
-      button: '助手',
-      tooltip: '讓助手幫你寫',
-      continue: '續寫',
-      outline: '產生大綱',
-      polish: '潤飾全文',
-      summarize: '總結重點',
-      open: '開啟助手',
-      prompts: {
-        continue: '接著正文結尾續寫一段，與前文銜接。',
-        outline: '根據標題和現有內容，為這篇文件擬一份結構清楚的大綱，寫在正文開頭。',
-        polish: '潤飾正文：修正錯字和不通順的句子，不改變原意，分段修改。',
-        summarize: '總結這篇文件的重點，在對話裡回覆，不要修改正文。'
-      }
-    },
     defaultTitlePrefix: '新建文件',
     noDocumentKnowledgeBases: '暫無可用的文件型知識庫，請先建立一個文件型知識庫',
     actions: {

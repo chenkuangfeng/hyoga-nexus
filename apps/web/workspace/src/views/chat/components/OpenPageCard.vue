@@ -29,7 +29,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useAssistantStore } from '@/stores/assistant'
+import { usePageDraftStore } from '@/stores/pageDrafts'
 import {
   pageLinkDraft,
   pageLinkEndpoint,
@@ -42,7 +42,7 @@ const props = defineProps<{ link: AssistantPageLink }>()
 
 const { t } = useI18n()
 const router = useRouter()
-const assistant = useAssistantStore()
+const pageDrafts = usePageDraftStore()
 
 const location = computed(() => pageLinkLocation(props.link))
 const draft = computed(() => pageLinkDraft(props.link))
@@ -86,7 +86,7 @@ const icon = computed(() => {
 function open() {
   if (!location.value) return
   if (!atTarget.value) openedFrom.value = router.currentRoute.value.fullPath
-  assistant.setPageDraft(draft.value)
+  pageDrafts.setPageDraft(draft.value)
   void router.push(location.value)
 }
 

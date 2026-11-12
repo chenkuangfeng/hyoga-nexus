@@ -26,7 +26,7 @@ export function isIntegrationSection(section: string): boolean {
 }
 
 const REMOVED_SETTINGS_SECTIONS = new Set([
-  'system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log',
+  'assistant', 'system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log',
 ])
 
 function isBareIntegrationTab(section: string): section is IntegrationTab {

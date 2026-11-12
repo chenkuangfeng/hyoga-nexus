@@ -37,7 +37,7 @@ async function setup(t: TestContext) {
     '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({}) },
     '@/stores/uploadTasks': { useUploadTasksStore: () => ({}) },
     '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({}) },
-    '@/composables/useAssistantPageContext': { useAssistantPageContext() {} },
+
     '@/utils/kbPermission': {}, '@/utils/knowledgeDeletion': { waitForKnowledgeDeletion }, '@/utils/knowledgeTrace': {},
     '@/utils/knowledgeProcessingStall': stall, '@nexus-web/core/api/wiki/index': {}, '@nexus-web/core/api/knowledge-base/index': {},
     '@nexus-web/core/api/knowledge-base/index': {

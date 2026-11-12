@@ -1,8 +1,8 @@
 import type {
-  AssistantMcpServiceDraft,
-  AssistantModelDraft,
-  AssistantPageDraft,
-} from '@/stores/assistant'
+  McpServiceFormDraft,
+  ModelFormDraft,
+  PageDraft,
+} from '@/stores/pageDrafts'
 
 /** The open_page tool's result: a checked link, optionally with a form to fill in. */
 export interface AssistantPageLink {
@@ -22,9 +22,9 @@ export interface AssistantPageLink {
   /** A tab inside a settings section, e.g. system-global's users. */
   panel?: string
   model_id?: string
-  model_draft?: AssistantModelDraft
+  model_draft?: ModelFormDraft
   mcp_service_id?: string
-  mcp_service_draft?: AssistantMcpServiceDraft
+  mcp_service_draft?: McpServiceFormDraft
   /** The assistant opened the page itself; return_path is where the user was. */
   navigated?: boolean
   return_path?: string
@@ -109,7 +109,7 @@ export function pageLinkLocation(link: AssistantPageLink): PageLinkLocation | nu
 }
 
 /** The form the link's page should open filled in, if any. */
-export function pageLinkDraft(link: AssistantPageLink): AssistantPageDraft | null {
+export function pageLinkDraft(link: AssistantPageLink): PageDraft | null {
   if (link.page === 'settings_models' && link.model_draft && !link.model_id) {
     return { kind: 'model', draft: { ...link.model_draft } }
   }

@@ -4,11 +4,7 @@
         <div v-if="isRouterAlive" class="platform-route-outlet">
             <RouterView />
         </div>
-        <!-- Nexus 助手：停靠时作为布局右栏挤压页面，悬浮时浮在页面上；都不加遮罩，
-             跨页面保留会话，从侧栏、右侧边缘按钮或命令面板唤出（设置里可选） -->
-        <AssistantPanel />
-        <AssistantLauncher />
-        <AssistantPageBridge />
+
         <div class="upload-mask" v-show="ismask">
             <UploadMask></UploadMask>
         </div>
@@ -29,9 +25,6 @@ import { useRoute, useRouter } from 'vue-router'
 import UploadMask from '@/components/upload-mask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
-import AssistantPanel from '@/components/assistant/AssistantPanel.vue'
-import AssistantLauncher from '@/components/assistant/AssistantLauncher.vue'
-import AssistantPageBridge from '@/components/assistant/AssistantPageBridge.vue'
 import UploadTasksPanel from '@/components/upload-tasks/UploadTasksPanel.vue'
 import NewUserGuide from '@/components/NewUserGuide.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
@@ -75,16 +68,16 @@ const isChatDropRoute = () => {
 // 检查知识库初始化状态
 const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
     const currentKbId = getCurrentKbId();
-    
+
     if (!currentKbId) {
         MessagePlugin.error(t('knowledgeBase.missingId'));
         return false;
     }
-    
+
     try {
         const kbResponse = await getKnowledgeBaseById(currentKbId);
         const kb = kbResponse.data;
-        
+
         if (!kb.summary_model_id) {
             MessagePlugin.warning(t('knowledgeBase.notInitialized'));
             return false;
@@ -101,7 +94,6 @@ const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
         return false;
     }
 }
-
 
 // isFileDrag distinguishes an OS file drag (the only thing the global upload
 // drop zone cares about) from an in-app element drag such as the wiki
@@ -172,7 +164,7 @@ const handleGlobalDrop = async (event: DragEvent) => {
         }));
         return;
     }
-    
+
     const isInitialized = await checkKnowledgeBaseInitialization();
     if (!isInitialized) {
         return;

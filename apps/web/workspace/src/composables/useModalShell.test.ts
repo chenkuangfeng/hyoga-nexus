@@ -77,7 +77,7 @@ function fixture() {
     })
     return exports
   }
-  modules['@/composables/useAssistantPageContext'] = { useAssistantPageContext() {} }
+
   modules['@/composables/useModalShell'] = evaluate(readFileSync(new URL('./useModalShell.ts', import.meta.url), 'utf8'))
   modules['@nexus-web/core/utils/assistantDataChange'] = evaluate(readFileSync(new URL('../../../core/src/utils/assistantDataChange.ts', import.meta.url), 'utf8'))
   function mount(path: string, props: Record<string, any>) {

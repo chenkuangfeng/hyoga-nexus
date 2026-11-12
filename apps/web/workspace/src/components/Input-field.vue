@@ -2811,8 +2811,7 @@ const handleStop = async () => {
 }
 
 onBeforeRouteUpdate((to, from, next) => {
-  // The route belongs to the page behind an embedded assistant. Its draft
-  // and uploads belong to the assistant session, which the host manages.
+  // 嵌入容器的路由由宿主管理，草稿和上传内容由该容器的会话生命周期管理。
   if (!props.embeddedMode) {
     clearvalue()
     clearPendingUploads()

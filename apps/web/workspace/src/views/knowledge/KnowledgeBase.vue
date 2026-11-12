@@ -85,7 +85,6 @@ import {
 } from './documentSorting';
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/hooks/useMarqueeSelect';
-import { useAssistantPageContext } from '@/composables/useAssistantPageContext';
 import type { ParserEngineInfo } from '@nexus-web/core/api/system/index';
 const route = useRoute();
 const { t } = useI18n();
@@ -438,18 +437,6 @@ const onCardMoreVisibleChange = (visible: boolean, item: KnowledgeCard) => {
   }
 };
 let isCardDetails = ref(false);
-useAssistantPageContext(() => {
-  if (!kbId.value) return null;
-  const docOpen = isCardDetails.value && !!details.id;
-  return {
-    page: 'knowledge_base',
-    knowledgeBaseId: kbId.value,
-    knowledgeBaseName: kbInfo.value?.id === kbId.value ? kbInfo.value?.name : undefined,
-    chatModelId: kbInfo.value?.id === kbId.value ? kbInfo.value?.summary_model_id || undefined : undefined,
-    knowledgeId: docOpen ? details.id : undefined,
-    knowledgeTitle: docOpen ? details.title : undefined,
-  };
-});
 let timeout: ReturnType<typeof setTimeout> | null = null;
 let knowledgeScroll = ref()
 let page = 1;
@@ -629,7 +616,6 @@ const confirmBatchReparse = async () => {
     batchReparsing.value = false;
   }
 };
-
 
 const selectedTagIds = ref<string[]>([]);
 const selectedTagNames = ref<Record<string, string>>({});
@@ -1287,7 +1273,6 @@ const handleFileUploaded = (event: CustomEvent) => {
   }
 };
 
-
 // 监听从菜单触发的URL导入事件
 const handleOpenURLImportDialog = (event: CustomEvent) => {
   const eventKbId = event.detail.kbId;
@@ -1534,7 +1519,6 @@ const updateStatus = (analyzeList: KnowledgeCard[], delay = 1500) => {
     });
   }, delay);
 };
-
 
 // 恢复文档处理状态（用于刷新后恢复）
 
@@ -3422,8 +3406,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
     }
   }
 }
-
-
 
 .kb-settings-button {
   width: 30px;

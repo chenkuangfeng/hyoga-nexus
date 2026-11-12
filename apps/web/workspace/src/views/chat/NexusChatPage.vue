@@ -1,6 +1,6 @@
 <template>
   <!--
-    Platform chat page (/platform/creatChat and /platform/chat/:chatid, and the assistant panel in compact mode).
+    Platform chat page (/platform/creatChat and /platform/chat/:chatid, and narrow containers in compact mode).
     Structure, components and styles copy WeKnora `views/chat/index.vue` (conversation) and
     `views/creatChat/creatChat.vue` (welcome). Data comes only from the platform Native API.
     Entries without a platform backend stay visible and show "not available yet"
@@ -118,8 +118,8 @@
               <div v-else class="message-row" :data-message-id="row.id">
                 <botmsg :content="row.content" :session="row" :session-id="activeSessionId" :user-query="userQueryBefore(index)"
                   :is-first-enter="isFirstEnter" :embedded-mode="compact" :can-fork="!compact" :can-rewind="!compact"
-                  :can-ask-assistant="!compact" @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
-                  @rewind="planned('rewind')" @ask-assistant="planned('askAssistant')" />
+                  @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
+                  @rewind="planned('rewind')" />
                 <KnowledgeCitations v-if="row.citations?.length" :citations="row.citations" />
                 <RunArtifactCards v-if="row.run_id && artifactsByRun.get(row.run_id)?.length"
                   :items="artifactsByRun.get(row.run_id)!" />
@@ -216,7 +216,7 @@ const route = useRoute()
 const props = withDefaults(defineProps<{
   /** Current session; empty shows the welcome state. */
   sessionId?: string
-  /** Narrow container (assistant panel): WeKnora's embedded layout, no header or minimap. */
+  /** Narrow container: WeKnora's embedded layout, no header or minimap. */
   compact?: boolean
   /** Allow choosing the agent in the welcome state (standalone page). */
   allowAgentSelect?: boolean
@@ -680,7 +680,7 @@ onBeforeUnmount(() => {
   composerObserver?.disconnect()
 })
 
-// Parents (the assistant panel) send through this: to the session, or create one from the welcome state.
+// Parent containers send through this: to the session, or create one from the welcome state.
 defineExpose({ sendText })
 </script>
 
@@ -1383,7 +1383,6 @@ defineExpose({ sendText })
     }
 }
 </style>
-
 
 <style lang="less" scoped>
 /* Request errors (load or stream failures) shown above the messages. */

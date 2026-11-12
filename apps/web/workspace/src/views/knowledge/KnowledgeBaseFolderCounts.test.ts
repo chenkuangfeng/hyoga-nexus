@@ -78,7 +78,7 @@ async function setup(t: TestContext, tree: unknown) {
     '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({}) },
     '@/stores/uploadTasks': { useUploadTasksStore: () => ({}) },
     '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({}) },
-    '@/composables/useAssistantPageContext': { useAssistantPageContext() {} },
+
     '@/utils/kbPermission': {}, '@/utils/knowledgeDeletion': {}, '@/utils/knowledgeTrace': {},
     '@/utils/knowledgeProcessingStall': stall, '@nexus-web/core/api/wiki/index': {}, '@nexus-web/core/api/knowledge-base/index': {},
     '@nexus-web/core/api/knowledge-base/index': { listKnowledgeFolders, listKnowledgeTags: async () => ({ data: { data: [], total: 0 } }) },

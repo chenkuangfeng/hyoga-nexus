@@ -303,8 +303,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon, PlayCircleIcon } from 'tdesign-icons-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { useAssistantPageContext } from '@/composables/useAssistantPageContext'
-import { useAssistantStore, type AssistantModelDraft } from '@/stores/assistant'
+import { usePageDraftStore, type ModelFormDraft } from '@/stores/pageDrafts'
 import ModelEditorDialog from '@/components/ModelEditorDialog.vue'
 import ModelDebugDrawer from '@/components/ModelDebugDrawer.vue'
 import {
@@ -345,7 +344,7 @@ const chatResources = useChatResourcesStore()
 const providersStore = useModelProvidersStore()
 const router = useRouter()
 const route = useRoute()
-const assistant = useAssistantStore()
+const pageDrafts = usePageDraftStore()
 type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm' | 'asr'
 type FilterType = 'all' | ModelType
 
@@ -515,14 +514,6 @@ const modelDisplayName = (model: any) => {
   const displayName = typeof model.displayName === 'string' ? model.displayName.trim() : ''
   return displayName || model.name
 }
-
-useAssistantPageContext(() => {
-  const model = showDialog.value ? editingModel.value : null
-  return {
-    page: 'settings_models',
-    ...(model?.id ? { modelId: model.id, modelName: modelDisplayName(model) } : {}),
-  }
-})
 
 const contextWindowTitle = (tokens?: number) => {
   if (isDefaultContextWindow(tokens)) {
@@ -913,7 +904,7 @@ function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' |
   return typeMap[type]
 }
 
-// The assistant links here to edit a model (?model_id=) or to add one it
+// Tool cards link here to edit a model (?model_id=) or to add one they
 // filled in; the user enters the key and saves.
 const openRequestedModel = () => {
   const id = typeof route.query.model_id === 'string' ? route.query.model_id : ''
@@ -925,7 +916,7 @@ const openRequestedModel = () => {
   else MessagePlugin.warning(t('modelSettings.toasts.linkedModelMissing'))
 }
 
-const openModelDraft = (draft: AssistantModelDraft) => {
+const openModelDraft = (draft: ModelFormDraft) => {
   if (!authStore.hasRole('admin')) return
   currentModelType.value = draft.type
   editingModel.value = null
@@ -939,8 +930,8 @@ const openModelDraft = (draft: AssistantModelDraft) => {
   showDialog.value = true
 }
 
-watch(() => assistant.pageDraft, () => {
-  const draft = assistant.takePageDraft('model')
+watch(() => pageDrafts.pageDraft, () => {
+  const draft = pageDrafts.takePageDraft('model')
   if (draft) openModelDraft(draft)
 }, { immediate: true })
 watch(showDialog, (open) => {

@@ -3127,21 +3127,6 @@ export default {
     upload: 'ファイルをアップロード'
   },
   manualEditor: {
-    assistant: {
-      button: 'アシスタント',
-      tooltip: 'アシスタントに書いてもらう',
-      continue: '続きを書く',
-      outline: 'アウトラインを作成',
-      polish: '全文を推敲',
-      summarize: '要点をまとめる',
-      open: 'アシスタントを開く',
-      prompts: {
-        continue: '本文の末尾から、前の内容に続く段落を一つ書き足してください。',
-        outline: 'タイトルと現在の内容をもとに、この文書の構成がわかるアウトラインを作り、本文の先頭に書いてください。',
-        polish: '本文を推敲してください。誤字や不自然な文を直し、意味は変えずに段落ごとに修正してください。',
-        summarize: 'この文書の要点をチャットでまとめてください。本文は変更しないでください。'
-      }
-    },
     placeholders: {
       heading: '見出し{level}',
       listItem: 'リスト項目',
@@ -6013,57 +5998,7 @@ export default {
       videoNotSupported: 'お使いのブラウザは動画再生に対応していません'
     },
     assistant: {
-      title: 'Nexus アシスタント',
-      newConversation: '新しい会話',
-      history: '会話履歴',
-      untitledConversation: '無題の会話',
-      historyEmpty: '会話履歴はありません',
-      historyFailed: '会話履歴を読み込めませんでした',
-      loadMore: 'さらに読み込む',
-      resize: 'アシスタントの幅を調整',
-      layout: {
-        dock: '右側に固定',
-        float: 'フローティング表示にする',
-      },
-      welcomeTitle: '何をお手伝いしましょうか？',
-      agentWelcomeDesc: 'このエージェントの設定を確認したり、モデルを変更したり、検索可能なナレッジベースを確認できます。',
-      welcomeDesc: 'Nexus の使い方にお答えするほか、ワークスペースのドキュメント解析、ナレッジベースの履歴、Wiki の問題を確認・対応し、エージェントの作成や設定もお手伝いできます。変更の前に確認するかどうかは、入力欄の下の権限レベルで決まります。',
-      startFailed: 'アシスタントを起動できませんでした。もう一度お試しください。',
-      askAboutDocument: '{name}に聞く',
-      askAboutAnswer: 'この回答について{name}に聞く',
-      selection: {
-        label: '選択中',
-        lines: '{count} 行を選択',
-        detach: '選択内容を含めない',
-        tip: '送信時に選択内容を含めます：{text}',
-        tipField: '送信時に「{field}」の選択内容を含めます：{text}'
-      },
-      bubble: {
-        label: 'アシスタントの操作',
-        ask: 'アシスタントに聞く',
-        polish: '推敲',
-        rewrite: '書き直し',
-        translate: '翻訳',
-        continue: '続きを書く',
-        prompts: {
-          polish: '選択したテキストを推敲してください。誤字や不自然な表現を直し、意味は変えずにその場で置き換えてください。',
-          rewrite: '選択したテキストを、より明確で簡潔な表現に書き直し、その場で置き換えてください。',
-          translate: '選択したテキストを翻訳してください。中国語は英語に、その他の言語は中国語にして、その場で置き換えてください。',
-          continue: '選択したテキストの後に、文脈に合う段落を一つ書き足してください。'
-        }
-      },
-      fillNotice: {
-        title: 'アシスタントが {count} か所に入力しました',
-        undo: '元に戻す',
-        dismiss: '閉じる'
-      },
       access: {
-        title: '権限レベル',
-        capped: 'ワークスペース管理者が許可していません',
-        page: {
-          label: '現在のページの確認と入力',
-          desc: '左側のページを読み取り、フォームに入力できます。ボタンのクリックや保存はしません。'
-        },
         levels: {
         read_only: {
           label: '読み取り専用',
@@ -6079,75 +6014,6 @@ export default {
         }
       }
     },
-    context: {
-      detachedLabel: 'ページ未添付',
-      currentPage: '現在のページ',
-      detach: '現在のページを含めない',
-      attachedTip: '現在のページを含めています：{path}',
-      detachedTip: 'クリックして現在のページを含める：{path}',
-      chatMessage: 'この回答',
-      pages: {
-        knowledge_base: 'ナレッジベース',
-        wiki: 'Wiki',
-        agent_editor: 'エージェント編集',
-        settings_models: 'モデル管理',
-        mcp_services: 'MCP サービス',
-        chat: 'チャット'
-      }
-    },
-    starters: {
-      agentConfig: 'このエージェントの設定を確認して',
-      agentModel: 'モデルを変更して',
-      agentKnowledge: 'どのナレッジベースを検索できる？',
-      wikiIssues: 'このページの未対応の問題は？',
-      wikiSummary: 'この Wiki ページを要約して',
-      documentStatus: 'このドキュメントの解析状況は？',
-      documentSummary: 'このドキュメントを要約して',
-      failedDocuments: 'このナレッジベースで解析に失敗したドキュメントは？',
-      recentActivity: 'このナレッジベースの最近の変更は？',
-      formats: 'Nexus はどのドキュメント形式に対応していますか？',
-      createWiki: 'Wiki ナレッジベースの作り方は？',
-      agents: 'どんなエージェントがあり、それぞれどのモデルを使っていますか？',
-      messageSources: 'この回答の根拠は何ですか？',
-      messageCheck: 'この回答に誤りはありますか？',
-      modelCheck: 'このモデルの設定を確認して',
-      modelUsage: 'どのエージェントとナレッジベースがこれらのモデルを使っていますか？',
-      mcpTools: 'この MCP サービスにはどんなツールがありますか？',
-      mcpCheck: 'なぜ接続できないのですか？',
-      modelSetup: 'ほかにどのモデルを設定する必要がありますか？',
-      mcpSetup: 'MCP サービスを接続するには？'
-    }
-  },
-  assistantSettings: {
-    title: 'アシスタント',
-    description: '{name}の入口、開き方、権限レベルを設定します。',
-    introTitle: 'アシスタントはあなたに許可された操作しかできません',
-    introDescription: 'アシスタントはあなたとして操作するため、見られる範囲と変更できる範囲はワークスペースでのロールと同じです。権限レベルはそれをさらに絞るだけで、広げることはありません。',
-    personalGroup: '個人設定',
-    accessLabel: '権限レベル',
-    accessDescription: 'アシスタントが変更する前に確認するかどうか。アシスタントの入力欄の下でもいつでも切り替えられます。',
-    accessCeilingHint: 'ワークスペース管理者が上限を「{level}」に設定しています。',
-    entryLabel: '入口',
-    entryDescription: 'どれを選んでも、コマンドパレット（{shortcut}）からアシスタントを開けます。',
-    entries: {
-      sidebar: 'サイドバー',
-      launcher: '画面の右端',
-      palette: 'コマンドパレットのみ'
-    },
-    layoutLabel: '開き方',
-    layoutDescription: '右側に固定するとページが狭まり、フローティングではページの上に重なります。ウィンドウが狭いときは常にフローティングです。',
-    layouts: {
-      docked: '右側に固定',
-      floating: 'フローティング'
-    },
-    workspaceGroup: 'ワークスペース',
-    adminOnly: '管理者のみ変更できます',
-    nameLabel: 'アシスタント名',
-    nameDescription: 'ワークスペースの全メンバーに表示される名前です。空欄なら既定の名前を使います。',
-    ceilingLabel: '最高権限レベル',
-    ceilingDescription: 'メンバーが選べる最高レベルです。「読み取り専用」にすると、このワークスペースでアシスタントは何も変更しません。',
-    saved: '保存しました',
-    saveFailed: '保存できませんでした：{message}'
   },
   commandPalette: {
     placeholder: 'ナレッジベース、ファイル、会話を検索…',
@@ -6179,7 +6045,6 @@ export default {
       organizations: '共有スペースを開く',
       settings: '設定を開く',
       productTour: 'プロダクトツアー',
-      assistant: '{name}を開く'
     },
     empty: {
       noResults: '一致する項目がありません',

@@ -2673,57 +2673,7 @@ export default {
     askUser: '사용자에게 질문'
   },
   assistant: {
-    title: 'Nexus 어시스턴트',
-    newConversation: '새 대화',
-    history: '대화 기록',
-    untitledConversation: '제목 없는 대화',
-    historyEmpty: '아직 대화 기록이 없습니다',
-    historyFailed: '대화 기록을 불러오지 못했습니다',
-    loadMore: '더 불러오기',
-    resize: '어시스턴트 너비 조정',
-    layout: {
-      dock: '오른쪽에 고정',
-      float: '떠 있는 창으로 전환',
-    },
-    welcomeTitle: '무엇을 도와드릴까요?',
-    agentWelcomeDesc: '이 에이전트의 설정을 확인하고, 모델을 변경하거나 검색할 수 있는 지식 베이스를 확인할 수 있습니다.',
-    welcomeDesc: 'Nexus 사용법을 안내하고, 워크스페이스의 문서 파싱, 지식 베이스 활동, Wiki 문제를 확인하고 처리하며, 에이전트를 만들고 설정할 수도 있습니다. 변경 전에 확인을 요청할지는 입력창 아래의 권한 수준에 따라 정해집니다.',
-    startFailed: '어시스턴트를 시작하지 못했습니다. 다시 시도해 주세요.',
-    askAboutDocument: '{name}에게 묻기',
-    askAboutAnswer: '이 답변에 대해 {name}에게 묻기',
-    selection: {
-      label: '선택됨',
-      lines: '{count}줄 선택됨',
-      detach: '선택한 내용 빼기',
-      tip: '보낼 때 선택한 내용을 함께 보냅니다: {text}',
-      tipField: '보낼 때 「{field}」에서 선택한 내용을 함께 보냅니다: {text}'
-    },
-    bubble: {
-      label: '어시스턴트 빠른 작업',
-      ask: '어시스턴트에게 묻기',
-      polish: '다듬기',
-      rewrite: '다시 쓰기',
-      translate: '번역',
-      continue: '이어 쓰기',
-      prompts: {
-        polish: '선택한 내용을 다듬어 주세요. 오타와 어색한 표현을 고치되 의미는 바꾸지 말고 그 자리에서 바꿔 주세요.',
-        rewrite: '선택한 내용을 더 명확하고 간결하게 다시 써서 그 자리에서 바꿔 주세요.',
-        translate: '선택한 내용을 번역해 주세요. 중국어는 영어로, 다른 언어는 중국어로 옮겨 그 자리에서 바꿔 주세요.',
-        continue: '선택한 내용 뒤에 문맥에 맞는 문단을 하나 이어 써 주세요.'
-      }
-    },
-    fillNotice: {
-      title: '어시스턴트가 {count}곳을 입력했습니다',
-      undo: '되돌리기',
-      dismiss: '닫기'
-    },
     access: {
-      title: '권한 수준',
-      capped: '워크스페이스 관리자가 허용하지 않았습니다',
-      page: {
-        label: '현재 페이지 보기 및 입력',
-        desc: '왼쪽 페이지를 읽고 양식을 대신 입력할 수 있습니다. 버튼을 누르거나 저장하지 않습니다.'
-      },
       levels: {
         read_only: {
           label: '읽기 전용',
@@ -2739,75 +2689,6 @@ export default {
         }
       }
     },
-    context: {
-      detachedLabel: '페이지 제외됨',
-      currentPage: '현재 페이지',
-      detach: '현재 페이지 포함하지 않기',
-      attachedTip: '현재 페이지 포함됨: {path}',
-      detachedTip: '클릭하여 현재 페이지 포함: {path}',
-      chatMessage: '이 답변',
-      pages: {
-        knowledge_base: '지식베이스',
-        wiki: 'Wiki',
-        agent_editor: '에이전트 편집',
-        settings_models: '모델 관리',
-        mcp_services: 'MCP 서비스',
-        chat: '대화'
-      }
-    },
-    starters: {
-      agentConfig: '이 에이전트의 설정 확인하기',
-      agentModel: '모델 변경하기',
-      agentKnowledge: '어떤 지식 베이스를 검색할 수 있나요?',
-      wikiIssues: '이 페이지에 처리할 문제가 있나요?',
-      wikiSummary: '이 Wiki 페이지를 요약해 줘',
-      documentStatus: '이 문서의 파싱 상태는 어떤가요?',
-      documentSummary: '이 문서를 요약해 줘',
-      failedDocuments: '이 지식 베이스에서 파싱에 실패한 문서는?',
-      recentActivity: '이 지식 베이스에 최근 어떤 변경이 있었나요?',
-      formats: 'Nexus는 어떤 문서 형식을 지원하나요?',
-      createWiki: 'Wiki 지식 베이스는 어떻게 만드나요?',
-      agents: '어떤 에이전트가 있고, 각각 어떤 모델을 쓰나요?',
-      messageSources: '이 답변의 근거는 무엇인가요?',
-      messageCheck: '이 답변에 틀린 내용이 있나요?',
-      modelCheck: '이 모델의 설정을 확인해 줘',
-      modelUsage: '어떤 에이전트와 지식베이스가 이 모델들을 쓰나요?',
-      mcpTools: '이 MCP 서비스는 어떤 도구를 제공하나요?',
-      mcpCheck: '왜 연결되지 않나요?',
-      modelSetup: '어떤 모델을 더 설정해야 하나요?',
-      mcpSetup: 'MCP 서비스는 어떻게 연결하나요?'
-    }
-  },
-  assistantSettings: {
-    title: '어시스턴트',
-    description: '{name}의 진입점, 열기 방식, 권한 수준을 설정합니다.',
-    introTitle: '어시스턴트는 내가 할 수 있는 일만 합니다',
-    introDescription: '어시스턴트는 내 계정으로 동작하므로, 볼 수 있고 변경할 수 있는 범위가 워크스페이스 역할과 같습니다. 권한 수준은 이 범위를 더 좁힐 뿐 넓히지 않습니다.',
-    personalGroup: '개인 설정',
-    accessLabel: '권한 수준',
-    accessDescription: '어시스턴트가 무언가를 변경하기 전에 확인을 요청할지 정합니다. 어시스턴트 입력창 아래에서도 언제든 바꿀 수 있습니다.',
-    accessCeilingHint: '워크스페이스 관리자가 최고 수준을 "{level}"(으)로 제한했습니다.',
-    entryLabel: '진입점',
-    entryDescription: '어느 것을 선택해도 명령 팔레트({shortcut})에서 어시스턴트를 열 수 있습니다.',
-    entries: {
-      sidebar: '사이드바',
-      launcher: '화면 오른쪽',
-      palette: '명령 팔레트만'
-    },
-    layoutLabel: '열기 방식',
-    layoutDescription: '오른쪽에 고정하면 페이지가 좁아지고, 플로팅이면 페이지 위에 겹쳐 표시됩니다. 창이 좁으면 항상 플로팅으로 열립니다.',
-    layouts: {
-      docked: '오른쪽에 고정',
-      floating: '플로팅'
-    },
-    workspaceGroup: '워크스페이스',
-    adminOnly: '관리자만 변경할 수 있습니다',
-    nameLabel: '어시스턴트 이름',
-    nameDescription: '워크스페이스의 모든 멤버에게 보이는 이름입니다. 비워 두면 기본 이름을 사용합니다.',
-    ceilingLabel: '최고 권한 수준',
-    ceilingDescription: '멤버가 선택할 수 있는 최고 수준입니다. "읽기 전용"으로 설정하면 이 워크스페이스에서 어시스턴트는 아무것도 변경하지 않습니다.',
-    saved: '저장했습니다',
-    saveFailed: '저장하지 못했습니다: {message}'
   },
   commandPalette: {
     placeholder: '지식베이스, 파일, 대화 검색…',
@@ -2833,7 +2714,6 @@ export default {
       organizations: '공유 공간 열기',
       settings: '설정 열기',
       productTour: '사용 가이드',
-      assistant: '{name} 열기'
     },
     match: {
       vector: '벡터',
@@ -5623,21 +5503,6 @@ export default {
     }
   },
   manualEditor: {
-    assistant: {
-      button: '어시스턴트',
-      tooltip: '어시스턴트에게 글쓰기 맡기기',
-      continue: '이어 쓰기',
-      outline: '개요 만들기',
-      polish: '전체 다듬기',
-      summarize: '요점 정리',
-      open: '어시스턴트 열기',
-      prompts: {
-        continue: '본문 끝에서 앞 내용에 이어지는 문단을 하나 써 주세요.',
-        outline: '제목과 현재 내용을 바탕으로 이 문서의 구조가 잘 드러나는 개요를 만들어 본문 맨 앞에 써 주세요.',
-        polish: '본문을 다듬어 주세요. 오타와 어색한 문장을 고치되 의미는 바꾸지 말고 문단별로 고쳐 주세요.',
-        summarize: '이 문서의 요점을 대화에서 정리해 주세요. 본문은 수정하지 마세요.'
-      }
-    },
     defaultTitlePrefix: '새 문서',
     noDocumentKnowledgeBases: '사용 가능한 문서형 지식베이스가 없습니다. 먼저 문서형 지식베이스를 생성해주세요',
     actions: {

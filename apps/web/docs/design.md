@@ -10,7 +10,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 采用现有主色、语义 token、系统字体与 TDesign 组件；按钮与标签提供可读名称，窄屏卡片与操作换行。
 
-主对话页（`/platform/creatChat` 新建对话；`/platform/chat/:chatid` 会话与运行，路由入口 `views/chat/NexusChatRoutePage.vue`，对话核心 `views/chat/NexusChatPage.vue` 由 `sessionId` 属性驱动）按 WeKnora 复制：会话态的结构与样式取自 `views/chat/index.vue`（`chat-topbar`、`chat_thread`、`chat_scroll_box`、`msg_list`、悬浮的 `chat_composer`、`chat_overlays`），欢迎态取自 `views/creatChat/creatChat.vue`（标题、推荐问题区、输入框垂直居中）；侧边助手面板（`compact`）使用 WeKnora 的嵌入布局。数据只来自平台 Run API，不调用 WeKnora 对话接口。旧的 `/platform/native` 地址重定向到上述页面。`/platform/knowledge-bases/:kbId/creatChat` 同样重定向到新建对话页（会话不挂载知识库）。
+主对话页（`/platform/creatChat` 新建对话；`/platform/chat/:chatid` 会话与运行，路由入口 `views/chat/NexusChatRoutePage.vue`，对话核心 `views/chat/NexusChatPage.vue` 由 `sessionId` 属性驱动）按 WeKnora 复制：会话态的结构与样式取自 `views/chat/index.vue`（`chat-topbar`、`chat_thread`、`chat_scroll_box`、`msg_list`、悬浮的 `chat_composer`、`chat_overlays`），欢迎态取自 `views/creatChat/creatChat.vue`（标题、推荐问题区、输入框垂直居中）；窄容器（`compact`）使用 WeKnora 的嵌入布局。数据只来自平台 Run API，不调用 WeKnora 对话接口。旧的 `/platform/native` 地址重定向到上述页面。`/platform/knowledge-bases/:kbId/creatChat` 同样重定向到新建对话页（会话不挂载知识库）。
 
 - `api/native-run-types.ts`：Run、事件、会话等类型与运行时校验，不依赖网络或 i18n，便于测试。
 - `api/native-runs.ts`：类型化的请求封装；事件流使用 `@microsoft/fetch-event-source`，携带与 axios 相同的认证头，并从 `Last-Event-ID` 续读。
@@ -28,7 +28,6 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 - 智能体选择与 WeKnora 一致：输入框左侧的 `agent-mode-btn` 打开 `components/NexusAgentSelector.vue`（按 WeKnora `AgentSelector.vue` 的模板、定位与样式复制，只列平台已发布的智能体，归入「自定义智能体」；不读取 WeKnora 的 store 与接口）。会话已绑定智能体，会话内点击该按钮为占位。
 - 已去掉 Nexus 自加的元素：运行状态标签、运行停滞告警条（`NativeWatchdogBanner.vue` 保留但不再挂载）、失败与排队提示行。运行失败时与 WeKnora 处理运行级错误相同：错误说明作为回答写入时间线，并弹出错误提示。因此对话页目前没有「继续等待 / 发送提示」与排队位置的入口；取消用输入框的停止按钮，追加指令用运行中的发送。
 - 与 WeKnora 仍不同之处：欢迎页不显示宿主沙箱的项目目录条（WeKnora 仅桌面端显示）。
-- 助手面板（`components/assistant/AssistantPanel.vue`）的对话区直接使用 `NexusChatPage`（`compact` 窄布局，会话由 `assistant.sessionId` 决定，空值即欢迎态），历史列表读取平台会话，智能体取第一个已发布的智能体。页面上下文芯片、选区、访问级别选择与子智能体标签页已移除，平台 Run 接口不携带这些上下文；历史列表也不删除会话（平台暂无删除接口）。
 - 尚未完成（见 `openspec/changes/2026-11-04-weknora-chat-dialog/tasks.md`）：完整 `vue-tsc` 与 `pnpm build` 未在受内存限制的环境中验证；浏览器用例未执行。
 - 智能体与模型设置页（`2026-11-05-weknora-agent-tool-model-settings`）：已通过 SFC 编译、LESS 编译与针对新文件的 `vue-tsc` 检查；完整 `pnpm build` 与浏览器验证需在内存充足的环境执行。
 
@@ -38,8 +37,10 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API 的传递依赖闭包抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
 
-`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、路由和专用模型目录适配器已删除，Wails 与自动初始化入口已移除；工作台仍包含待移除的助手及旧集成，管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
+`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、路由和专用模型目录适配器已删除，Wails 与自动初始化入口已移除；工作台仍包含待移除的旧集成，管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
 
 认证恢复只使用已有令牌，不尝试桌面自动初始化。注册表单按是否持有邀请令牌分流：自助注册发送企业名称与编码，邀请注册只发送邀请与账号字段。两应用共用 404 页面，已删除的平台管理路由不再挂载应用页面；旧设置参数归一到 `general` 并移除旧 `panel` 参数。工作台改密路由先经过认证，临时密码账号先改密，避免初始化豁免绕过认证。
 
 管理应用只承载本应用的路由；邀请与无企业身份的开户入口以原始 `fullPath` 转交员工应用，保留邀请参数。两个应用的未知路径使用共用 404 组件。
+
+独立浮动助手及页面上下文桥已移除，普通聊天的工具结果卡片和资源刷新通知继续沿用原契约。`workspace/src/stores/pageDrafts.ts` 只管理 `open_page` 结果交给模型/MCP 编辑器的一次性草稿；不存储会话、面板布局或凭据，账号/企业切换时同步清空。同一身份的令牌刷新不丢弃待编辑草稿。智能体和自动化使用的写入授权级别契约保留，助手专用名称、布局、页面授权和个人设置已删除。

@@ -84,8 +84,7 @@ test('refreshes Wiki pages, selected content and statistics for its own KB only'
     'vue-router': { useRouter: () => ({}), useRoute: () => ({ query: {} }) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     'tdesign-vue-next': { MessagePlugin: { error: assert.fail } },
-    '@/stores/assistant': { useAssistantStore: () => ({ visible: false }) },
-    '@/composables/useAssistantPageContext': { useAssistantPageContext() {} },
+
     '@/stores/settings': { useSettingsStore: () => ({}) },
     '@nexus-web/core/api/wiki/index': {
       getWikiPage, getWikiIndex, getWikiStats,

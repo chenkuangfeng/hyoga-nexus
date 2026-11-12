@@ -137,8 +137,7 @@ import McpServiceDialog from './components/McpServiceDialog.vue'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { matchesResourceQuery } from '@/utils/resourceListSearch'
-import { useAssistantPageContext } from '@/composables/useAssistantPageContext'
-import { useAssistantStore, type AssistantMcpServiceDraft } from '@/stores/assistant'
+import { usePageDraftStore, type McpServiceFormDraft } from '@/stores/pageDrafts'
 import { useAssistantDataChange } from '@nexus-web/core/utils/assistantDataChange'
 
 const emit = defineEmits<{ count: [value: number] }>()
@@ -147,7 +146,7 @@ const authStore = useAuthStore()
 const confirmDelete = useConfirmDelete()
 const route = useRoute()
 const router = useRouter()
-const assistant = useAssistantStore()
+const pageDrafts = usePageDraftStore()
 
 const services = ref<MCPService[]>([])
 const loading = ref(false)
@@ -161,14 +160,6 @@ const query = ref('')
 const filteredServices = computed(() => services.value.filter((service) =>
   matchesResourceQuery({ name: service.name, description: serviceUsage(service) }, query.value),
 ))
-
-useAssistantPageContext(() => {
-  const service = dialogVisible.value && dialogMode.value === 'edit' ? currentService.value : null
-  return {
-    page: 'mcp_services',
-    ...(service?.id ? { mcpServiceId: service.id, mcpServiceName: service.name } : {}),
-  }
-})
 
 // Load MCP services
 const loadServices = async () => {
@@ -269,7 +260,7 @@ const getTransportTypeLabel = (transportType: string) => {
   }
 }
 
-// The assistant links here to edit a service (?service_id=) or to add one it
+// Tool cards link here to edit a service (?service_id=) or to add one they
 // filled in; the user enters any key or signs in, and saves.
 const openRequestedService = () => {
   const id = typeof route.query.service_id === 'string' ? route.query.service_id : ''
@@ -281,7 +272,7 @@ const openRequestedService = () => {
   else MessagePlugin.warning(t('mcpSettings.toasts.linkedServiceMissing'))
 }
 
-const openServiceDraft = (draft: AssistantMcpServiceDraft) => {
+const openServiceDraft = (draft: McpServiceFormDraft) => {
   if (!authStore.hasRole('admin')) return
   currentService.value = {
     id: '',
@@ -301,8 +292,8 @@ const openServiceDraft = (draft: AssistantMcpServiceDraft) => {
   dialogVisible.value = true
 }
 
-watch(() => assistant.pageDraft, () => {
-  const draft = assistant.takePageDraft('mcp_service')
+watch(() => pageDrafts.pageDraft, () => {
+  const draft = pageDrafts.takePageDraft('mcp_service')
   if (draft) openServiceDraft(draft)
 }, { immediate: true })
 watch(() => route.query.service_id, openRequestedService)

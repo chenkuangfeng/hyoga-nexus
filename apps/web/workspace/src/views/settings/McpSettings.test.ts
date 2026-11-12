@@ -25,7 +25,6 @@ async function fixture(
   const errors: string[] = []
   const deletes: unknown[] = []
   const service = reactive({ id: 'one', name: 'Logs', enabled: true, is_builtin: false })
-  let pageContext: () => unknown = () => null
   const route = reactive({ path: '/platform/toolbox/mcp', query: { ...(options.query || {}) } as Record<string, string> })
   const replaced: unknown[] = []
   const warnings: string[] = []
@@ -49,10 +48,7 @@ async function fixture(
         useRoute: () => route,
         useRouter: () => ({ replace: (to: any) => { replaced.push(to); route.query = { ...to.query } } }),
       }
-      if (name === '@/stores/assistant') return { useAssistantStore: () => assistant }
-      if (name === '@/composables/useAssistantPageContext') return {
-        useAssistantPageContext: (source: () => unknown) => { pageContext = source },
-      }
+      if (name === '@/stores/pageDrafts') return { usePageDraftStore: () => assistant }
       if (name === 'vue') return require('vue')
       if (name === 'vue-i18n') return { useI18n: () => ({ t: (key: string) => key }) }
       if (name === '@nexus-web/core/stores/auth') return { useAuthStore: () => ({ hasRole: () => admin }) }
@@ -85,7 +81,6 @@ async function fixture(
   await nextTick()
   return {
     vm, service, calls, errors, deletes, route, replaced, warnings, assistant,
-    pageContext: () => JSON.parse(JSON.stringify(pageContext())),
     lists: () => lists, dataChange: () => dataChange,
     close: () => app.unmount(),
   }
@@ -219,20 +214,7 @@ test('a failed MCP save keeps the row in the search results', async () => {
   } finally { f.close() }
 })
 
-test('the assistant sees the MCP page and the service open for editing', async () => {
-  const f = await fixture()
-  try {
-    assert.deepEqual(f.pageContext(), { page: 'mcp_services' })
-    f.vm.handleAdd()
-    assert.deepEqual(f.pageContext(), { page: 'mcp_services' }, 'a service being created has no id yet')
-    f.vm.handleEdit(f.service)
-    assert.deepEqual(f.pageContext(), { page: 'mcp_services', mcpServiceId: 'one', mcpServiceName: 'Logs' })
-    f.vm.dialogVisible = false
-    assert.deepEqual(f.pageContext(), { page: 'mcp_services' })
-  } finally { f.close() }
-})
-
-test('an assistant draft opens a filled-in new service without credentials', async () => {
+test('a tool-result draft opens a filled-in new service without credentials', async () => {
   const draft = {
     name: 'Jira', transport_type: 'http-streamable', url: 'https://mcp.example.com/mcp',
     auth_type: 'api_key', api_key_header: 'X-Jira-Key', usage_instructions: 'Tickets',
@@ -247,7 +229,6 @@ test('an assistant draft opens a filled-in new service without credentials', asy
       auth_type: 'api_key', api_key_header: 'X-Jira-Key',
     }))
     assert.equal(f.assistant.pageDraft, null, 'the draft is used once')
-    assert.deepEqual(f.pageContext(), { page: 'mcp_services' }, 'a new service has no id to report')
   } finally { f.close() }
   const viewer = await fixture(undefined, false, { draft })
   try {

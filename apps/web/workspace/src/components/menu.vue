@@ -7,12 +7,7 @@
                 <span class="logo-wordmark" aria-label="Nexus">Nexus</span>
             </div>
             <div class="logo_actions">
-                <t-tooltip v-if="assistantStore.entry === 'sidebar'" :content="assistantName" placement="bottom">
-                    <div class="header-icon-btn" :class="{ 'is-active': assistantStore.visible }"
-                        :aria-label="assistantName" @click="assistantStore.toggle()">
-                        <t-icon name="compass" size="18px" />
-                    </div>
-                </t-tooltip>
+
                 <t-tooltip placement="bottom">
                     <template #content>
                         <span class="cmdk-tip">
@@ -83,16 +78,7 @@
                         </div>
                     </div>
                 </t-tooltip>
-                <t-tooltip v-if="assistantStore.entry === 'sidebar'" :content="assistantName" placement="right">
-                    <div class="menu_item menu_item--cmdk" :class="{ 'menu_item_active': assistantStore.visible }"
-                        :aria-label="assistantName" @click="assistantStore.toggle()">
-                        <div class="menu_item-box">
-                            <div class="menu_icon">
-                                <t-icon name="compass" size="18px" />
-                            </div>
-                        </div>
-                    </div>
-                </t-tooltip>
+
             </div>
             <div class="menu_box" :class="{ 'menu_box--sticky': item.children && !uiStore.sidebarCollapsed }"
                 v-for="(item, index) in topMenuItems" :key="index">
@@ -258,7 +244,6 @@ import { useBrowserConnectionStore } from '@/stores/browserConnection';
 import { useOrganizationStore } from '@nexus-web/core/stores/organization';
 import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
-import { useAssistantStore } from '@/stores/assistant';
 import { MessagePlugin } from "tdesign-vue-next";
 import UserMenu from '@/components/UserMenu.vue';
 import TenantSelector from '@/components/TenantSelector.vue';
@@ -318,8 +303,6 @@ watch(() => uiStore.sidebarBrowserStatus && toolboxPreview.value.some((tool) => 
     if (visible && !browserConnection.loaded) browserConnection.refresh().catch(() => {});
 }, { immediate: true });
 const commandPaletteStore = useCommandPaletteStore();
-const assistantStore = useAssistantStore();
-const assistantName = computed(() => assistantStore.displayName || t('assistant.title'));
 
 // Platform-aware label for the ⌘K hint. navigator.platform is deprecated but
 // the alternatives (userAgentData.platform) aren't universally available yet;
@@ -780,7 +763,6 @@ onMounted(async () => {
 
     window.addEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
 
-
     await loadCurrentKbInfo((route.params as any)?.kbId as string)
 
     await getMessageList();
@@ -977,7 +959,6 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
         uiStore.resizeSidebar(sidebarResizeStartWidth + delta)
     }
 }
-
 
 </script>
 <style lang="less" scoped>
@@ -1181,7 +1162,6 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
             background: var(--td-bg-color-sidebar);
         }
     }
-
 
     .active-upload {
         color: var(--td-brand-color);

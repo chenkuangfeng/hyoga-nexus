@@ -33,7 +33,7 @@ function setup(link: unknown, initialPath = '/platform/knowledge-bases') {
       vue,
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
       'vue-router': { useRouter: () => router },
-      '@/stores/assistant': { useAssistantStore: () => ({ setPageDraft: (d: unknown) => drafts.push(d) }) },
+      '@/stores/pageDrafts': { usePageDraftStore: () => ({ setPageDraft: (d: unknown) => drafts.push(d) }) },
       '@/utils/assistantPageLink': pageLink,
     } as Record<string, unknown>)[name],
   })

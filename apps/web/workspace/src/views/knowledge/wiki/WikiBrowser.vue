@@ -450,11 +450,7 @@
                                 })
                                 }}</span>
                               </div>
-                              <t-button v-if="props.canEdit" size="small" theme="primary" variant="base"
-                                @click="triggerAutoFix">
-                                <template #icon><t-icon name="tools" /></template>
-                                {{ $t('knowledgeEditor.wikiBrowser.issueFixBtn') }}
-                              </t-button>
+
                             </div>
                             <div class="wiki-issue-popup-list">
                               <div v-for="issue in pageIssues" :key="issue.id" class="wiki-issue-popup-item">
@@ -485,11 +481,7 @@
                                         }) }}
                                     </span>
                                     <div v-if="props.canEdit" class="wiki-issue-popup-actions">
-                                      <span class="wiki-issue-popup-action" @click="triggerFixIssue(issue)"
-                                        style="margin-right: 12px; font-weight: 500;">
-                                        <t-icon name="tools" style="margin-right: 4px;" />{{
-                                          $t('knowledgeEditor.wikiBrowser.issueFixSingle') }}
-                                      </span>
+
                                       <span class="wiki-issue-popup-action"
                                         style="color: var(--td-text-color-placeholder);"
                                         @click="handleIssueIgnore(issue.id)">{{
@@ -833,8 +825,6 @@ import {
 import { resolveWikiBacklinkTitle } from './wikiBacklinkTitles'
 import { buildGraphLayout, graphNodeRadius, stepGraphLayout, visibleGraphLabels, graphPointBounds, initialGraphViewport, graphClusterOutline, graphLandmarkTitle, type GraphBounds, type GraphCluster } from './wikiGraphLayout'
 import { getKnowledgeDetails } from '@nexus-web/core/api/knowledge-base/index'
-import { useAssistantStore } from '@/stores/assistant'
-import { useAssistantPageContext } from '@/composables/useAssistantPageContext'
 import {
   listWikiPages,
   listWikiFolders,
@@ -863,7 +853,6 @@ import {
 
 const router = useRouter()
 const route = useRoute()
-const assistant = useAssistantStore()
 const settingsStore = useSettingsStore()
 
 ensureLiteralSingleTildeOnGlobalMarked()
@@ -1004,17 +993,6 @@ const activeSystemView = ref<'' | 'index'>('')
 const searchResults = ref<WikiPage[] | null>(null)
 const pageIssues = ref<WikiPageIssue[]>([])
 const showIssuesBox = ref(false)
-useAssistantPageContext(() => {
-  const page = selectedPage.value
-  if (!page) return null
-  return {
-    page: 'wiki',
-    knowledgeBaseId: props.knowledgeBaseId,
-    wikiSlug: page.slug,
-    wikiTitle: page.title,
-    wikiIssueIds: pageIssues.value.map(issue => issue.id),
-  }
-})
 const showGlobalIssuesDrawer = ref(false)
 const globalIssues = ref<WikiPageIssue[]>([])
 const stats = ref<WikiStats | null>(null)
@@ -3703,31 +3681,6 @@ async function handleIssueIgnore(issueId: string) {
     console.error('Failed to update issue status:', e)
   }
 }
-
-function triggerFixIssue(issue: WikiPageIssue) {
-  if (!selectedPage.value) return
-  showIssuesBox.value = false
-  assistant.open({
-    query: t('knowledgeEditor.wikiBrowser.issueFixPromptSingle', { description: issue.description }),
-    focus: { wikiIssueIds: [issue.id] },
-  })
-}
-
-function triggerAutoFix() {
-  if (!selectedPage.value || pageIssues.value.length === 0) return
-  showIssuesBox.value = false
-  assistant.open({
-    query: t('knowledgeEditor.wikiBrowser.issueFixPromptAll', { count: pageIssues.value.length }),
-    focus: { wikiIssueIds: pageIssues.value.map(issue => issue.id) },
-  })
-}
-
-// The assistant may have rewritten the page or resolved its issues.
-watch(() => assistant.visible, (visible, wasVisible) => {
-  if (!wasVisible || visible || editingPage.value) return
-  void refreshSelectedPage()
-  void loadStats()
-})
 
 async function doSearch() {
   if (!searchQuery.value.trim()) {
