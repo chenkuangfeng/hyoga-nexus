@@ -76,7 +76,7 @@ hyoga-nexus/
 ├── apps/
 │   ├── api/src/nexus_api/           # FastAPI 入口、http、schemas、dependencies
 │   ├── worker/src/nexus_worker/     # 后台入口、jobs、Native 装配
-│   └── web/src/                     # Vue 3 + Element Plus 工作台
+│   └── web/                         # Vue 3 + TDesign，pnpm workspace（core、workspace、admin）
 ├── packages/
 │   ├── core/src/nexus_core/         # 公共协议、runtime、events、tools、tasks
 │   ├── platform/src/nexus_platform/ # identity、tenants、authz、agents、sessions、runs、
@@ -478,9 +478,10 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 ### 2.15 Web 工作台
 
-借鉴：自研。
+借鉴：WeKnora 固定版本 `e1f9a6166` 的 Vue 前端，按 Nexus 身份、企业与 Runtime 契约适配。
 
-- **技术**：Vue 3 + TypeScript + Element Plus，Node.js 22.12+。
+- **技术**：Vue 3 + TypeScript + TDesign、Pinia、vue-router、vue-i18n，Node.js 22.12+，pnpm 10。
+- **工程**：`apps/web` 是 pnpm workspace，包含公共源码包 `core`、员工工作台 `workspace` 与企业管理后台 `admin`。API、认证、语言和主题基础逻辑已抽取；管理后台已有独立登录与入口状态骨架，业务页面及共用编辑器仍按 E2 迁移。两个应用独立构建，管理应用 base 为 `/admin/`；公共包不依赖应用，应用互不依赖。当前尚未完成工作台移除管理代码的产物门禁。
 - **界面约定**：浅色、扁平卡片、青绿色主色、系统字体，适配桌面与窄屏；键盘焦点可见、对比度达标、加载与错误有反馈、减少动态效果。规划中的功能显示为"待接入"，不显示虚构的运行数据。
 - **信息结构**：智能体管理、会话工作台、技能/工具/MCP 资源、知识库、渠道、设置、观澜工作台。类型标签展示能力来源；资源绑定同时显示兼容状态与版本。
 - **安全**：模型输出按纯文本渲染，不作为 HTML 执行。

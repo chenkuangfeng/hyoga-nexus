@@ -9,7 +9,8 @@ import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const require = createRequire(import.meta.url)
+// 预览依赖随员工应用安装，配置工厂从该项目解析，避免 workspace 根的幽灵依赖。
+const require = createRequire(resolve(__dirname, 'workspace/package.json'))
 
 const pkg = require('./package.json') as { version?: string }
 const FRONTEND_VERSION = pkg.version ?? 'unknown'
@@ -88,127 +89,136 @@ function pdfJsWasmAssets(): Plugin {
   }
 }
 
-export default defineConfig({
-  define: {
-    __FRONTEND_VERSION__: JSON.stringify(FRONTEND_VERSION),
-    __FRONTEND_COMMIT__: JSON.stringify(FRONTEND_COMMIT),
-  },
-  build: {
-    modulePreload: {
-      resolveDependencies(_filename, deps, { hostId }) {
-        // Embed iframe bootstraps with token exchange only; defer heavy chat chunks.
-        if (hostId?.includes('embed')) {
-          return deps.filter((dep) => !(
-            dep.includes('vendor-mermaid')
-            || dep.includes('vendor-highlight')
-            || dep.includes('vendor-markdown')
-            || dep.includes('vendor-tdesign')
-            || dep.includes('botmsg')
-            || dep.includes('usermsg')
-            || dep.includes('EmbedBotMessage')
-            || dep.includes('EmbedUserMessage')
-            || dep.includes('AgentStreamDisplay')
-            || dep.includes('EmbedChatCore')
-            || dep.includes('vendor-markdown')
-            || dep.includes('fonts-')
-          ))
-        }
-        return deps
-      },
+/** 创建共享构建配置，保持两个应用的独立入口、部署路径和相同的 API 代理行为。 */
+export function createWebConfig(app: 'workspace' | 'admin') {
+  const appRoot = resolve(__dirname, app)
+  return defineConfig({
+    root: appRoot,
+    base: app === 'admin' ? '/admin/' : '/',
+    publicDir: resolve(__dirname, 'workspace/public'),
+    optimizeDeps: { exclude: ['@nexus-web/core'] },
+    define: {
+      __FRONTEND_VERSION__: JSON.stringify(FRONTEND_VERSION),
+      __FRONTEND_COMMIT__: JSON.stringify(FRONTEND_COMMIT),
     },
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        embed: resolve(__dirname, 'embed.html'),
+    build: {
+      modulePreload: {
+        resolveDependencies(_filename, deps, { hostId }) {
+          // Embed iframe bootstraps with token exchange only; defer heavy chat chunks.
+          if (hostId?.includes('embed')) {
+            return deps.filter((dep) => !(
+              dep.includes('vendor-mermaid')
+              || dep.includes('vendor-highlight')
+              || dep.includes('vendor-markdown')
+              || dep.includes('vendor-tdesign')
+              || dep.includes('botmsg')
+              || dep.includes('usermsg')
+              || dep.includes('EmbedBotMessage')
+              || dep.includes('EmbedUserMessage')
+              || dep.includes('AgentStreamDisplay')
+              || dep.includes('EmbedChatCore')
+              || dep.includes('vendor-markdown')
+              || dep.includes('fonts-')
+            ))
+          }
+          return deps
+        },
       },
-      output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return
-          if (id.includes('mermaid') || id.includes('/dagre') || id.includes('cytoscape')) {
-            return 'vendor-mermaid'
-          }
-          if (id.includes('marked') || id.includes('katex')) {
-            return 'vendor-markdown'
-          }
-          if (id.includes('highlight.js')) {
-            return 'vendor-highlight'
-          }
+      rollupOptions: {
+        input: app === 'workspace' ? {
+          main: resolve(appRoot, 'index.html'),
+          embed: resolve(appRoot, 'embed.html'),
+        } : { main: resolve(appRoot, 'index.html') },
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (id.includes('mermaid') || id.includes('/dagre') || id.includes('cytoscape')) {
+              return 'vendor-mermaid'
+            }
+            if (id.includes('marked') || id.includes('katex')) {
+              return 'vendor-markdown'
+            }
+            if (id.includes('highlight.js')) {
+              return 'vendor-highlight'
+            }
+          },
         },
       },
     },
-  },
-  plugins: [
-    vue(),
-    vueJsx(),
-    embedHtmlDevFallback(),
-    pdfJsWasmAssets(),
-  ],
-  resolve: {
-    dedupe: ['vue', 'vue-demi'],
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@vue-office/pptx': resolveVueOfficePptxEntry(),
+    plugins: [
+      vue(),
+      vueJsx(),
+      embedHtmlDevFallback(),
+      pdfJsWasmAssets(),
+    ],
+    resolve: {
+      dedupe: ['vue', 'vue-demi'],
+      alias: {
+        '@': resolve(appRoot, 'src'),
+        '@nexus-web/core': resolve(__dirname, 'core/src'),
+        '@vue-office/pptx': resolveVueOfficePptxEntry(),
+      },
     },
-  },
-  server: {
-    port: 5173,
-    host: true,
-    // 代理配置，用于开发环境
-    proxy: {
-      '/mcp/': {
-        target: DEV_PROXY_TARGET,
-        changeOrigin: true,
-        secure: false,
-        // Streamable HTTP may keep an SSE response open for long-running tools.
-        timeout: 3_600_000,
-        proxyTimeout: 3_600_000,
-      },
-      '/api': {
-        target: DEV_PROXY_TARGET,
-        changeOrigin: true,
-        secure: false,
-        // 沙箱终端等 WebSocket 升级请求也走 /api，必须开启 WS 转发，
-        // 否则浏览器侧握手失败、前端表现为"一直正在连接"。
-        ws: true,
-        // Cube fork snapshots pause a live MicroVM; 30s axios/proxy defaults
-        // abort the POST and the backend then 500s on a canceled persist.
-        timeout: 180_000,
-        proxyTimeout: 180_000,
-      },
-      '/files': {
-        target: DEV_PROXY_TARGET,
-        changeOrigin: true,
-        secure: false,
+    server: {
+      port: app === 'admin' ? 5174 : 5173,
+      host: true,
+      // 代理配置，用于开发环境
+      proxy: {
+        '/mcp/': {
+          target: DEV_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+          // Streamable HTTP may keep an SSE response open for long-running tools.
+          timeout: 3_600_000,
+          proxyTimeout: 3_600_000,
+        },
+        '/api': {
+          target: DEV_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+          // 沙箱终端等 WebSocket 升级请求也走 /api，必须开启 WS 转发，
+          // 否则浏览器侧握手失败、前端表现为"一直正在连接"。
+          ws: true,
+          // Cube fork snapshots pause a live MicroVM; 30s axios/proxy defaults
+          // abort the POST and the backend then 500s on a canceled persist.
+          timeout: 180_000,
+          proxyTimeout: 180_000,
+        },
+        '/files': {
+          target: DEV_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+        }
+      }
+    },
+    // `vite preview` 用生产构建产物(dist)本地起服务，是最接近 release 镜像的环境：
+    // 同样的压缩 / 拆包 / CSS 加载顺序，可提前暴露只在生产构建出现的问题
+    // （如主题变量被打包顺序覆盖）。用法：npm run build && npm run preview
+    preview: {
+      port: app === 'admin' ? 4174 : 4173,
+      host: true,
+      proxy: {
+        '/mcp/': {
+          target: DEV_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+          timeout: 3_600_000,
+          proxyTimeout: 3_600_000,
+        },
+        '/api': {
+          target: DEV_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          timeout: 180_000,
+          proxyTimeout: 180_000,
+        },
+        '/files': {
+          target: DEV_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+        }
       }
     }
-  },
-  // `vite preview` 用生产构建产物(dist)本地起服务，是最接近 release 镜像的环境：
-  // 同样的压缩 / 拆包 / CSS 加载顺序，可提前暴露只在生产构建出现的问题
-  // （如主题变量被打包顺序覆盖）。用法：npm run build && npm run preview
-  preview: {
-    port: 4173,
-    host: true,
-    proxy: {
-      '/mcp/': {
-        target: DEV_PROXY_TARGET,
-        changeOrigin: true,
-        secure: false,
-        timeout: 3_600_000,
-        proxyTimeout: 3_600_000,
-      },
-      '/api': {
-        target: DEV_PROXY_TARGET,
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-        timeout: 180_000,
-        proxyTimeout: 180_000,
-      },
-      '/files': {
-        target: DEV_PROXY_TARGET,
-        changeOrigin: true,
-        secure: false,
-      }
-    }
-  }
-})
+  })
+}

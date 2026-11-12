@@ -1,0 +1,2 @@
+import { createWebConfig } from '../vite.config'
+export default createWebConfig('workspace')

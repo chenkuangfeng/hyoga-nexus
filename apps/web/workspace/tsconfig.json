@@ -1,0 +1,22 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "../env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.vue"
+  ],
+  "exclude": [
+    "src/**/*.test.*",
+    "src/**/__tests__/*"
+  ],
+  "compilerOptions": {
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@nexus-web/core/*": [
+        "../core/src/*"
+      ]
+    }
+  }
+}

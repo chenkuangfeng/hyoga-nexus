@@ -1,0 +1,47 @@
+{
+  "name": "@nexus-web/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "type-check": "vue-tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "@microsoft/fetch-event-source": "catalog:",
+    "axios": "catalog:"
+  },
+  "exports": {
+    "./*.vue": "./src/*.vue",
+    "./*.ts": "./src/*.ts",
+    "./*": "./src/*.ts",
+    "./utils": "./src/utils/index.ts",
+    "./api/initialization": "./src/api/initialization/index.ts",
+    "./api/auth": "./src/api/auth/index.ts",
+    "./api/system": "./src/api/system/index.ts",
+    "./api/agent": "./src/api/agent/index.ts",
+    "./api/datasource": "./src/api/datasource/index.ts",
+    "./api/agent-share": "./src/api/agent-share/index.ts",
+    "./api/image-gallery": "./src/api/image-gallery/index.ts",
+    "./api/skill": "./src/api/skill/index.ts",
+    "./api/shared-space": "./src/api/shared-space/index.ts",
+    "./api/chunker": "./src/api/chunker/index.ts",
+    "./api/model": "./src/api/model/index.ts",
+    "./api/knowledge-base": "./src/api/knowledge-base/index.ts",
+    "./api/chat": "./src/api/chat/index.ts",
+    "./api/wiki": "./src/api/wiki/index.ts",
+    "./api/organization": "./src/api/organization/index.ts",
+    "./api/knowledge-base-share": "./src/api/knowledge-base-share/index.ts",
+    "./api/embed": "./src/api/embed/index.ts",
+    "./api/tenant": "./src/api/tenant/index.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./i18n/locales/embed": "./src/i18n/locales/embed/index.ts"
+  },
+  "peerDependencies": {
+    "vue": "catalog:",
+    "tdesign-vue-next": "catalog:",
+    "pinia": "catalog:",
+    "vue-router": "catalog:",
+    "vue-i18n": "catalog:"
+  }
+}

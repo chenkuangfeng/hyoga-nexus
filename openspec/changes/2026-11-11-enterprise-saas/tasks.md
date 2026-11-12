@@ -28,7 +28,7 @@
 
 ## E2 前端重构
 
-- [ ] E2.1 建立 pnpm workspace：根 `package.json`、`pnpm-workspace.yaml`（含 catalog）、`tsconfig.base.json`；`core`、`workspace`、`admin` 骨架；边界检查测试。
+- [x] E2.1 建立 pnpm workspace：根 `package.json`、`pnpm-workspace.yaml`（含 catalog）、`tsconfig.base.json`；`core`、`workspace`、`admin` 骨架；边界检查测试。
 - [ ] E2.2 删除清单（`design.md` 4.5），含连带的依赖、文案与测试。
 - [ ] E2.3 抽取 `core`：请求层与接口、store、composables、directives、utils、types、i18n、样式与主题、共用组件（登录与扫码登录、改密、企业切换、布局骨架、空状态、错误页、文档预览、Markdown、智能体编辑器、知识库编辑器、IM 渠道面板）。
 - [ ] E2.4 员工工作台：对话、我的智能体、我的知识库、我维护的企业知识库、企业分配、技能、记忆、产物、自动化、共享空间、个人设置；单智能体模式；`embed.html` 第二入口；手机宽度布局。
@@ -38,7 +38,10 @@
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
 - [ ] E2.9 文档：`AGENTS.md` 前端命令（并更正其中“Element Plus”的旧描述）；`apps/web` 父模块文档与三个项目的 `README.md`；`docs/architecture.md` 1.4 与 2.15；反向代理示例。
-- 暂缓说明（2026-11-12）：E2.1–E2.5、E2.8、E2.9 未开始。本机内存约 1.8GB（可用约 780MB），`pnpm build` 与 `vue-tsc` 都需要 2GB 以上，无法构建或做类型检查；拆分要移动约 900 个 Vue/TS 文件并改写导入，在无法验证的情况下进行风险过高，等用户确认做法（在内存充足的机器或 CI 上进行，或接受只做语法检查）后再开始。前端所需的后端接口均已就绪：`/auth/me` 的 `entries`、`/admin/agents`、`/admin/knowledge/bases`（含知识库管理员、转为企业资源）、`/admin/policy`、`/admin/wecom`、`/admin/channels`、`/agents/{id}/channels`、`/agents/{id}/audience`、`/knowledge/bases/{id}/audience`、`/admin/usage`、`/usage/me`、`/admin/usage/limits`、`/admin/audit/export`。
+- 实施进度（2026-11-12，继续 E2）：已建立三个项目、catalog、唯一锁文件、严格类型配置、独立 Vite 入口和依赖方向检查。原应用迁入 `workspace`；API 及认证、缓存、主题基础逻辑的传递依赖、语言包、登录与改密组件抽到 `core`。管理入口读取当前企业成员身份的 `entries`；管理应用当前只有登录、强制改密及明确标注未接入的首页骨架。E2.3、E2.9 部分完成，均未整体勾选。尚未删除 E2.2 清单、迁移管理业务页或完成工作台导航重构，不能宣称工作台产物已隔离管理代码。
+- 本批验证：锁文件安装通过；公共包 165 项测试、工程边界/PDF 复制 4 项测试、迁移失败涉及的 54 项工作台回归复测通过；公共包、管理应用与 Vite 配置类型检查通过。291 个 Vue SFC 脚本编译和 2438 个本地导入解析通过。工作台初次全量运行 2010 项（1975 通过、30 失败、5 跳过），30 项迁移路径/替身/权限文案问题已修复并包含在上述 54 项复测中，修复后尚未重新执行全量。
+- 验证条件：本机约 1.9GB RAM、4GB Swap。构建被系统以 137 终止，降低堆限制后完整工作台类型检查触及 Node 堆上限；完整双应用构建、工作台类型检查与浏览器验收仍未通过。继续保留 E2.8 未完成状态。边界、SFC 编译、公共包与迁移回归结果见本次提交说明，不能替代完整验收。
+
 
 ## E3 企业微信：企业、多应用与登录
 

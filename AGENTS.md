@@ -1,6 +1,6 @@
 # 开发规范
 
-本文件是 hyoga-nexus 的仓库级工作入口。后端、Runtime、连接器和领域逻辑使用 Python 3.11+；Web 使用 Vue 3、TypeScript 和 Element Plus。
+本文件是 hyoga-nexus 的仓库级工作入口。后端、Runtime、连接器和领域逻辑使用 Python 3.11+；Web 使用 Vue 3、TypeScript 和 TDesign。
 
 ## 沟通语言
 
@@ -46,10 +46,12 @@
 使用 Node.js 22.12+ 与 pnpm 10（`corepack enable` 后按 `package.json` 的 `packageManager` 自动使用）。以下命令在 `apps/web/` 目录执行：
 
 - **安装依赖**：`pnpm install --frozen-lockfile`
-- **启动开发服务**：`pnpm dev`
-- **类型检查与生产构建**：`pnpm build`
+- **启动开发服务**：`pnpm dev:workspace`（员工工作台）或 `pnpm dev:admin`（企业管理后台）
+- **类型检查**：`pnpm type-check`
+- **生产构建**：`pnpm build`（串行产出 `workspace/dist` 和 `admin/dist`）
+- **单元与边界测试**：`pnpm test`
 - **预览生产构建**：`pnpm preview`
-- **浏览器测试**：`pnpm test:browser`（需先安装 Playwright Chromium 并启动 Vite，详见 [Web 使用说明](apps/web/README.md)）
+- **浏览器测试**：E2.8 尚待接入 Playwright 命令与两个应用的用例，当前不能以静态测试代替浏览器验收，详见 [Web 使用说明](apps/web/README.md)。
 
 ### 本地运行（换一台电脑时）
 

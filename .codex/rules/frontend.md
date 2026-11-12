@@ -5,7 +5,7 @@
 ## 技术栈与组织
 
 - 使用 Vue 3、TypeScript、TDesign（`tdesign-vue-next`）、pinia、vue-router、vue-i18n、axios 和 Vite 工具链，与 WeKnora 前端一致（2026-11-03 确认）。新组件优先使用 `<script setup lang="ts">` 与 Composition API；避免无必要引入第二套组件库或状态方案。
-- 页面放在 `src/views/`，可复用组件放在 `src/components/`，请求封装放在 `src/api/`，跨页面组合逻辑放在 `src/composables/`，共享类型放在 `src/types/`。目录边界按实际规模渐进建立，不为占位而复制业务逻辑。
+- `apps/web` 为 pnpm workspace：公共基础能力在 `core/src/`，员工工作台在 `workspace/src/`，企业管理后台在 `admin/src/`。公共包不得导入应用，两个应用不得互相导入。各项目页面放在 `src/views/`，可复用组件放在 `src/components/`，请求封装放在 `src/api/`，跨页面组合逻辑放在 `src/composables/`，共享类型放在 `src/types/`。目录边界按实际规模渐进建立，不为占位而复制业务逻辑。
 - 单文件组件保持单一职责。页面负责组合和导航；复杂交互拆到 composable；纯展示组件通过 props/emits 交互，不直接调用全局 API 或持有隐式跨页面状态。
 - 后端 API 通过类型化客户端/模块封装。组件不得自行拼接重复 URL、定义与服务端冲突的 DTO，或绕过统一错误处理。
 
@@ -42,7 +42,7 @@
 - **WeKnora 是首要的平台 Web 参考**。对照固定版本 `e1f9a6166` 的 Vue 3 前端，重点看 Agent、聊天、知识库、集成、工具箱、组织/设置等页面，以及流式进度、工具结果卡片、引用和产物呈现。Nexus 的前端同样采用 Vue 3，可优先借鉴其页面组织与交互细节；要保留参考实现中与平台能力相关的有效行为，并按 Nexus 的身份、空间和 Runtime 契约做兼容扩展。源码：[WeKnora frontend](https://github.com/Tencent/WeKnora/tree/e1f9a6166/frontend)。
 - **GenericAgent 是 Native 使用流程参考**。对照固定版本 `a9a36b4` 的 `frontends/stapp.py`、`stapp2.py`、`conductor.py`、终端与桌面入口，保留并扩展其对话连续性、会话/模型切换、运行进度、后台任务、停止控制、工具结果和多入口复用等用户可见能力。其界面与单机 Agent 状态耦合，迁移到 Nexus 时通过平台 API 和 Run/Event 契约实现，不把单机状态边界带入多用户 Web。源码：[GenericAgent frontends](https://github.com/lsdefine/GenericAgent/tree/a9a36b4/frontends)。
 - **Dify** 适合参考平台导航、Agent/应用配置、知识库与运行记录的整体信息架构；**LibreChat** 适合参考 Agent 配置、工具/Skills/MCP 选择和聊天工作台；**Open WebUI** 适合参考 Workspace 资源管理；**Langflow** 适合参考节点画布和流程编辑器。**Flowise** 仅作为画布交互案例，仓库已归档，不作为活跃依赖。参考：[Dify](https://github.com/langgenius/dify)、[LibreChat](https://github.com/LibreChat-AI/LibreChat)、[Open WebUI](https://github.com/open-webui/open-webui)、[Langflow](https://github.com/langflow-ai/langflow)、[Flowise](https://github.com/FlowiseAI/Flowise)。
-- 以上项目用于核对可观察行为和交互模式，不要求采用其 React、Svelte、Streamlit 或桌面技术栈。采用不同实现时不得删减已确认的核心流程；把流程和能力映射到 Vue 3/TypeScript/Element Plus，并补齐兼容行为。
+- 以上项目用于核对可观察行为和交互模式，不要求采用其 React、Svelte、Streamlit 或桌面技术栈。采用不同实现时不得删减已确认的核心流程；把流程和能力映射到 Vue 3/TypeScript/TDesign，并补齐兼容行为。
 
 ## 安全边界
 

@@ -31,3 +31,11 @@ Vue 3、TypeScript、Element Plus、vue-router（history 模式）。外壳位�
 - 助手面板（`components/assistant/AssistantPanel.vue`）的对话区直接使用 `NexusChatPage`（`compact` 窄布局，会话由 `assistant.sessionId` 决定，空值即欢迎态），历史列表读取平台会话，智能体取第一个已发布的智能体。页面上下文芯片、选区、访问级别选择与子智能体标签页已移除，平台 Run 接口不携带这些上下文；历史列表也不删除会话（平台暂无删除接口）。
 - 尚未完成（见 `openspec/changes/2026-11-04-weknora-chat-dialog/tasks.md`）：完整 `vue-tsc` 与 `pnpm build` 未在受内存限制的环境中验证；浏览器用例未执行。
 - 智能体与模型设置页（`2026-11-05-weknora-agent-tool-model-settings`）：已通过 SFC 编译、LESS 编译与针对新文件的 `vue-tsc` 检查；完整 `pnpm build` 与浏览器验证需在内存充足的环境执行。
+
+## pnpm workspace
+
+`core`、`workspace`、`admin` 使用唯一锁文件与 `pnpm-workspace.yaml` 的 catalog。`tsconfig.base.json` 开启严格类型检查；两个 Vite 配置调用根 `createWebConfig` 工厂，统一 API 代理、PDF WASM 复制和依赖拆包。工作台保留主页面和 embed 两个入口，管理应用 base 为 `/admin/`。
+
+原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API 的传递依赖闭包抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
+
+`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。当前工作台仍包含待移除的平台管理等旧页面，管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
