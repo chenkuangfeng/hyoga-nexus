@@ -71,7 +71,7 @@
           </div>
         </div>
 
-        <div v-if="userName && !authStore.isLiteMode" ref="tenantMenuItemRef" class="dropdown-tenant-panel" :class="{
+        <div v-if="userName" ref="tenantMenuItemRef" class="dropdown-tenant-panel" :class="{
           'is-open': tenantSubmenuOpen,
           'is-clickable': showTenantSwitcher,
         }" @mouseenter="showTenantSwitcher && showTenantSubmenu()"
@@ -91,26 +91,16 @@
             :title="$t('tenant.switcher.menuLabel')" />
         </div>
         <div class="menu-divider"></div>
-        <!-- 菜单只保留：用户信息（上方）、切换空间（上方）、设置、平台管理（仅系统管理员）、退出。 -->
+        <!-- 菜单只保留：用户信息（上方）、切换空间（上方）、设置、退出。 -->
         <div class="menu-item" @click="handleSettings">
           <t-icon name="setting" class="menu-icon" />
           <span>{{ $t('general.settings') }}</span>
         </div>
-        <!--
-          平台管理：整页替换主界面（独立路由 /platform-admin，见 router/index.ts）。
-          仅 is_system_admin 可见；真正的授权在后端 RequireSystemAdmin 中间件，这里只做界面门禁。
-        -->
-        <div v-if="authStore.isSystemAdmin" class="menu-item" @click="handlePlatformAdmin">
-          <t-icon name="server" class="menu-icon" />
-          <span>{{ $t('general.platformAdmin') }}</span>
-        </div>
-        <template v-if="!authStore.isLiteMode">
-          <div class="menu-divider"></div>
-          <div class="menu-item danger" @click="handleLogout">
+        <div class="menu-divider"></div>
+        <div class="menu-item danger" @click="handleLogout">
             <t-icon name="logout" class="menu-icon" />
             <span>{{ $t('auth.logout') }}</span>
-          </div>
-        </template>
+        </div>
       </div>
     </Transition>
 
@@ -213,9 +203,8 @@ const currentRoleIcon = computed(() => roleIcon(authStore.currentTenantRole))
 
 // 单空间用户（memberships <= 1 且非 superuser）= 永远 home + owner，第三
 // 行就是 user-email 信息的重复，没必要占视觉空间；只对多空间 / superuser
-// 渲染。Lite 模式下没有 RBAC 概念，统一隐藏。
+// 渲染。
 const showTenantIdentityLine = computed(() => {
-  if (authStore.isLiteMode) return false
   if (authStore.canAccessAllTenants) return true
   return (authStore.memberships ?? []).length > 1
 })
@@ -259,12 +248,6 @@ const handleQuickNav = (section: string) => {
 const handleSettings = () => {
   menuVisible.value = false
   router.push('/platform/settings')
-}
-
-// 平台管理：不在设置弹窗中打开，而是整页跳转到独立路由（替换主界面，顶部有返回按钮）。
-const handlePlatformAdmin = () => {
-  menuVisible.value = false
-  router.push('/platform-admin')
 }
 
 // Hover-driven submenu controls. A small hide delay tolerates the pointer

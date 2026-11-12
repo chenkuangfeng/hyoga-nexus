@@ -88,13 +88,6 @@ test('closing settings preserves a known in-app previous route', () => {
   }
 })
 
-test('closing system settings retains its explicit knowledge-base destination', () => {
-  for (const section of ['model-catalog', 'system-global', 'runtime-queues', 'platform-api-keys', 'system-audit-log']) {
-    assert.deepEqual(closeSettings('/platform/chat/session-123', section), [
-      'blur', 'close', 'push:/platform/knowledge-bases',
-    ])
-  }
-})
 
 test('closing an overlaid settings panel leaves the underlying route alone', () => {
   assert.deepEqual(closeSettings(null, 'general', '/platform/chat/session-123'), ['blur', 'close'])

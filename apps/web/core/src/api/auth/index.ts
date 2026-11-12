@@ -73,8 +73,8 @@ export interface RegisterRequest {
   username: string
   email: string
   password: string
-  /** 个人空间（默认）或企业空间；企业空间需要名称与唯一的企业编码。 */
-  space_kind?: 'personal' | 'enterprise'
+  /** 自助注册只创建企业；兼容后端当前仍接受的 enterprise 字段。 */
+  space_kind?: 'enterprise'
   space_name?: string
   company_code?: string
 }
@@ -132,16 +132,8 @@ export interface UserInfo {
 /**
  * 把后端返回的 user JSON 规范化成前端 UserInfo。
  *
- * 历史上有 4 处独立的 setUser 调用（Login、autoSetup、token rehydrate、
- * /auth/me 主动 refresh）各自手写字段白名单，每加一个 user 字段都要在
- * 4 处同步——否则该字段就被悄悄过滤掉。is_system_admin 上线时就因为
- * 漏拷一处而看不到「系统管理」入口；这个工厂存在的目的就是杜绝同类
- * 漏拷再发生。**新增 user 字段请只改这里**。
- *
- * fallbackTenantId 是 tenant_id 缺失时的兜底来源——
- *   - autoSetup 响应顶层有 tenant.id，但 user 对象上没有 tenant_id
- *   - /auth/me 偶发只返回 user 不带 tenant 时也走兜底
- * 调用方按需传入；不传则保持空字符串（与历史行为一致）。
+ * 登录、令牌恢复与 /auth/me 共用同一份字段映射，新增用户字段只在此维护。
+ * fallbackTenantId 用于后端未返回 user.tenant_id 时补入当前企业标识。
  *
  * 字段读取统一走 `=== true` 而不是 `|| false`，对偶发非 boolean
  * 类型（后端某天传 1/0 或字符串）做严格收敛，避免把 truthy 字符串
@@ -319,39 +311,6 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
       message: error.message || t('error.auth.registerFailed')
     }
   }
-}
-
-/**
- * Lite 版自动初始化（创建默认用户/空间 + 签发令牌）
- */
-let autoSetupPromise: Promise<LoginResponse> | null = null
-
-export function autoSetup(): Promise<LoginResponse> {
-  if (autoSetupPromise) return autoSetupPromise
-
-  const request = (async () => {
-    try {
-      const nativeApp = (window as any).go?.main?.App
-      if (!nativeApp?.GetAutoSetupToken) return { success: false, message: 'Desktop authentication required' }
-      const token = await nativeApp.GetAutoSetupToken()
-      const response = await post('/api/v1/auth/auto-setup', {}, {
-        headers: { 'X-WeKnora-Desktop-Token': token },
-      })
-      return response as unknown as LoginResponse
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || 'Auto-setup unavailable'
-      }
-    }
-  })()
-
-  autoSetupPromise = request
-  void request.then(
-    () => { if (autoSetupPromise === request) autoSetupPromise = null },
-    () => { if (autoSetupPromise === request) autoSetupPromise = null },
-  )
-  return request
 }
 
 /**

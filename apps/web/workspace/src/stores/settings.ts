@@ -27,7 +27,6 @@ interface Settings {
   conversationModels: ConversationModels;
   selectedAgentId: string;  // 当前选中的智能体ID
   selectedAgentSourceTenantId: string | null;  // 当使用共享智能体时，来源空间 ID（用于后端 model/KB/MCP 解析）
-  autoCheckUpdate?: boolean; // 是否自动检查并下载更新
 }
 
 // Agent 配置接口
@@ -108,7 +107,6 @@ const defaultSettings: Settings = {
   },
   selectedAgentId: BUILTIN_QUICK_ANSWER_ID,  // 默认选中快速问答模式
   selectedAgentSourceTenantId: null as string | null,  // 共享智能体来源空间 ID
-  autoCheckUpdate: true,
 };
 
 export const useSettingsStore = defineStore("settings", {
@@ -173,9 +171,6 @@ export const useSettingsStore = defineStore("settings", {
     isLocalBrowserEnabled: (state) => state.settings.localBrowserEnabled === true,
     isWebSearchEnabled: (state) => state.settings.webSearchEnabled || false,
     
-    // 是否自动检查并下载更新
-    isAutoCheckUpdateEnabled: (state) => state.settings.autoCheckUpdate ?? true,
-
     // 当前选中的智能体ID
     selectedAgentId: (state) => state.settings.selectedAgentId || BUILTIN_QUICK_ANSWER_ID,
     // 共享智能体来源空间 ID（可选）
@@ -336,12 +331,6 @@ export const useSettingsStore = defineStore("settings", {
 
     toggleWebSearch(enabled: boolean) {
       this.settings.webSearchEnabled = enabled;
-      localStorage.setItem("WeKnora_settings", JSON.stringify(this.settings));
-    },
-
-    // 启用/禁用自动检查更新
-    toggleAutoCheckUpdate(enabled: boolean) {
-      this.settings.autoCheckUpdate = enabled;
       localStorage.setItem("WeKnora_settings", JSON.stringify(this.settings));
     },
 

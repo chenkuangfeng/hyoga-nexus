@@ -46,11 +46,3 @@ export const SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE = {
   members: 'owner',
   models: 'admin',
 } as const satisfies Record<string, SettingsRoleKey>
-
-export const SYSTEM_ADMIN_SETTINGS_SECTIONS = new Set([
-  'system-global',
-  'model-catalog',
-  'runtime-queues',
-  'platform-api-keys',
-  'system-audit-log',
-])

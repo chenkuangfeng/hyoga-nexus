@@ -1,4 +1,9 @@
 export default {
+  navigationErrors: {
+    notFoundTitle: '頁面不存在',
+    notFoundDescription: '此頁面已移除或網址有誤。',
+    backWorkspace: '返回工作台',
+  },
   permissionCatalog: {
     menus: {
       chat: '會話',
@@ -28,131 +33,6 @@ export default {
       'tools:manage': '管理工具',
       'skills:submit': '提交技能到空間庫',
     },
-  },
-  modelCatalog: {
-    "title": "模型目錄",
-    "description": "模型目錄決定新增模型時可選的模型清單，以及脈絡視窗、是否支持思考等預設參數。在這裡修改後，所有空間立即生效。",
-    "howItWorks": "設定如何生效",
-    "layers": {
-      "builtin": "內建目錄：隨版本發布的預設模型清單。",
-      "deployment": "部署檔案：伺服器上的 models.json，可覆蓋內建目錄。",
-      "console": "管理員修改：在本頁所做的修改，優先於以上兩者。",
-      "explicit": "各空間在模型設定中填寫的參數始終優先；修改目錄不會改寫已儲存的模型。",
-    },
-    "add": "新增模型",
-    "more": "更多",
-    "jsonEditor": "JSON 編輯",
-    "history": "版本歷史",
-    "import": "匯入 JSON",
-    "export": "匯出修改",
-    "search": "搜尋模型 ID 或名稱",
-    "allProviders": "全部廠商",
-    "allTypes": "全部類型",
-    "onlyModified": "只看已修改",
-    "summary": "{count} 個模型 · 版本 {version}",
-    "columns": {
-      "model": "模型",
-      "provider": "廠商",
-      "type": "類型",
-      "tokens": "脈絡 / 輸出",
-      "capabilities": "能力",
-      "source": "來源",
-    },
-    "capability": {
-      "reasoning": "思考",
-      "image": "影像",
-      "audio": "音訊",
-      "video": "影片",
-    },
-    "source": {
-      "builtin": "內建",
-      "deployment": "部署檔案",
-      "console": "管理員修改",
-    },
-    "rule": "比對規則",
-    "ruleTip": "按名稱模式比對一組模型，只提供預設參數，不會出現在候選清單中。",
-    "hidden": "已隱藏",
-    "edit": "編輯",
-    "view": "查看",
-    "empty": "沒有比對的模型",
-    "editDescription": "{provider} · {type}",
-    "ruleNotice": "這是一條比對規則，為名稱符合該模式的模型提供預設參數。如需修改，請使用「更多 → JSON 編輯」。",
-    "fieldsSection": "預設參數",
-    "nameDesc": "在模型選擇清單中顯示的名稱。",
-    "dimension": "向量維度",
-    "dimensionDesc": "新增該向量模型時預填的維度，需與模型實際輸出一致。",
-    "inputDesc": "模型可接收的輸入類型；勾選影像後可作為視覺模型使用。",
-    "thinkingLevels": "思考等級",
-    "thinkingLevelsDesc": "對話中可選的思考強度。未勾選「關閉」表示該模型始終思考。",
-    "levelsNeedReasoning": "開啟「支持思考」後可設定。",
-    "levelsUnsupported": "該廠商介面不支持分級思考。",
-    "textOnly": "僅文字",
-    "noLevels": "無",
-    "sourceLink": "廠商文件",
-    "customHint": "這是管理員在本頁新增的模型，參數均來自這裡的設定。",
-    "fieldsHint": "各空間在模型設定中填寫的參數仍然優先。輸入框留空即復原預設值。",
-    "context": "脈絡視窗",
-    "contextDesc": "模型一次可處理的最大 token 數。",
-    "output": "最大輸出",
-    "outputDesc": "單次回覆最多生成的 token 數。",
-    "reasoning": "支持思考",
-    "reasoningDesc": "模型能否輸出思考過程。",
-    "hide": "在候選清單中隱藏",
-    "hideDesc": "隱藏後新增模型時不再出現，已設定的模型不受影響。",
-    "inputModes": "輸入模態",
-    "inherited": "預設：{value}",
-    "notSet": "未設定",
-    "optional": "可選",
-    "yes": "是",
-    "no": "否",
-    "modified": "已修改",
-    "layersSection": "各層取值",
-    "layerField": "參數",
-    "layerBuiltin": "內建目錄",
-    "layerDeployment": "部署檔案",
-    "layerEffective": "當前生效",
-    "save": "儲存並生效",
-    "restore": "復原預設",
-    "restoreConfirm": "移除對該模型的全部管理員修改，並立即生效？",
-    "restored": "已復原，其他實例約 5 秒內同步",
-    "remove": "刪除模型",
-    "removeConfirm": "從目錄中刪除這個由管理員新增的模型，並立即生效？",
-    "removed": "已刪除，其他實例約 5 秒內同步",
-    "published": "已生效，其他實例約 5 秒內同步",
-    "conflict": "目錄已被其他管理員更新，已重新整理到最新版本，請重新操作。",
-    "loadFailed": "模型目錄載入失敗",
-    "deploymentError": "部署檔案 models.json 載入失敗，當前只使用內建目錄：{error}",
-    "syncError": "最新版本同步失敗，頁面顯示的可能不是當前生效的設定：{error}",
-    "addDescription": "為廠商補充目錄中沒有的模型，新增後可在模型設定中直接選擇。",
-    "modelId": "模型 ID",
-    "modelIdPlaceholder": "與廠商 API 中的模型名一致，如 gpt-5-mini",
-    "displayName": "顯示名稱",
-    "required": "請選擇廠商並填寫模型 ID",
-    "exists": "該模型已在目錄中，請直接編輯",
-    "jsonDescription": "用 models.json 格式直接編輯全部管理員修改，適合批次調整或遷移。",
-    "jsonHint": "只寫需要修改的欄位，刪除欄位即復原預設。憑據、請求頭和環境變數引用請在模型設定或部署檔案中維護；圖示僅支持行內 SVG；最大 1 MiB。",
-    "jsonClear": "清空全部修改",
-    "jsonCheck": "檢查變更",
-    "jsonPublish": "發布 {count} 項變更",
-    "jsonUnchanged": "與當前生效的設定一致，無需發布。",
-    "changesTitle": "將要生效的變更",
-    "change": {
-      "added": "新增",
-      "removed": "移除",
-      "updated": "修改",
-      "provider": "廠商",
-    },
-    "publishHint": "發布後本實例立即生效，其他實例約 5 秒內同步。",
-    "invalid": "請輸入包含 providers 物件的 models.json。",
-    "tooLarge": "檔案不能超過 1 MiB。",
-    "historyDescription": "保留最近 20 個版本，復原後立即生效。",
-    "historyVersion": "版本 {version}",
-    "historyCurrent": "當前",
-    "historyRestore": "復原",
-    "historyRestoreConfirm": "復原到版本 {version} 的設定，並立即對所有空間生效？",
-    "historyEmpty": "暫無歷史版本",
-    "historyModels": "修改了 {count} 個模型",
-    "historyNoOverrides": "無管理員修改",
   },
   automation: {
     nexus: {
@@ -3923,7 +3803,6 @@ export default {
     title: '常規設定',
     allSettings: '全部設定',
     backToMain: '返回主介面',
-    platformAdmin: '平台管理',
     personalSettings: '個人設定',
     helpAndDocs: '幫助與文件',
     description: '設定語言、外觀等基礎選項',
@@ -4216,20 +4095,6 @@ export default {
     graphDatabaseEngineDescription: '當前使用的圖資料庫引擎',
     unknown: '未知',
     globalSettings: {
-      title: '系統設定',
-      description: '平台級運行時設定，儲存後立即對所有空間生效。僅系統管理員可見可改。',
-      loading: '載入中...',
-      empty: '暫無可設定的系統設定',
-      saving: '儲存中',
-      saved: '已儲存',
-      saveAnnouncement: '{label} 已儲存',
-      badgeRequiresRestart: '需重啟',
-      badgeSecret: '敏感',
-      badgeHighRisk: '高風險',
-      badgeOverride: '已覆蓋',
-      badgeOverrideTooltip: '該值已由管理員儲存到資料庫，覆蓋了環境變數與預設值',
-      modifiedAt: '上次修改：{value}',
-      tagInputPlaceholder: 'Enter新增條目，例：example.com / *.foo.com / 10.0.0.0/8',
       audit: {
         tabLabel: '稽核日誌',
         description: '記錄平台級操作：系統設定變更、系統管理員授予/回收、配額批次同步等。按時間倒序展示。',
@@ -4295,445 +4160,6 @@ export default {
           generic: '載入稽核日誌失敗'
         }
       },
-      bulkApply: {
-        label: '應用到所有現有空間',
-        tooltip: '儲存的值預設只對之後新建的空間生效；點擊此按鈕將當前值同步寫入所有現有空間。',
-        confirmBtn: '應用',
-        confirmBody: '將把所有現有空間的存儲配額覆蓋為 {value} GB。如有空間被運維單獨調整過的配額，也會一併被覆蓋。是否繼續？',
-        success: '已將 {count} 個空間的存儲配額更新為 {gb} GB',
-        failed: '應用到所有空間失敗'
-      },
-      userList: {
-        title: '平台使用者列表',
-        rowLabel: '使用者管理',
-        rowDesc: '檢視平台上的全部註冊使用者（跨空間），支援分頁與依使用者名稱/郵箱篩選。',
-        searchPlaceholder: '依使用者名稱或郵箱篩選（目前頁面）',
-        refresh: '重新整理',
-        active: '正常',
-        inactive: '已停用',
-        colUsername: '使用者名稱',
-        colStatus: '狀態',
-        colRole: '角色',
-        colCreated: '建立日期',
-        colAction: '操作',
-        prev: '上一頁',
-        next: '下一頁',
-        pageCount: '{shown} 筆 / 本頁 {total}',
-        enable: '啟用',
-        disable: '停用',
-        resetPassword: '重設密碼',
-        confirmDisable: '確定停用帳號 {name} 嗎？將立即撤銷其登入狀態。',
-        confirmEnable: '確定啟用帳號 {name} 嗎？',
-        enabledMsg: '已啟用 {name}',
-        disabledMsg: '已停用 {name}',
-        actionFailed: '操作失敗',
-        loadFailed: '載入使用者列表失敗',
-        roleAdmin: '系統管理員',
-        roleUser: '一般使用者',
-        confirmRevoke: '確定撤銷 {name} 的系統管理員權限嗎？',
-        confirmPromote: '確定將 {name} 提升為系統管理員嗎？',
-        revokeBtn: '撤銷',
-        promoteBtn: '提升',
-        revokedMsg: '已撤銷 {name} 的管理員權限',
-        promotedMsg: '已將 {name} 提升為系統管理員',
-        roleFailed: '修改角色失敗',
-      },
-      passwordReset: {
-        dialogTitle: '重設其他使用者的密碼',
-        warning: '這是高風險操作。請核對使用者電子信箱；出於安全考慮，不能在這裡重設自己的密碼。',
-        emailLabel: '使用者電子信箱',
-        newPasswordLabel: '新密碼',
-        newPasswordPlaceholder: '請輸入新密碼',
-        confirmPasswordLabel: '確認新密碼',
-        confirmPasswordPlaceholder: '再次輸入新密碼',
-        confirmBtn: '重設',
-        success: '密碼已重設，該使用者的現有會話已失效',
-        failed: '重設密碼失敗',
-      },
-      createUser: {
-        action: '建立使用者',
-        dialogTitle: '建立新使用者',
-        warning: '這是高風險操作。請仔細核對使用者名和電子信箱──它們將作為該使用者登入的唯一憑據。',
-        usernameLabel: '使用者名',
-        usernamePlaceholder: '2-50 個字符',
-        emailLabel: '電子信箱',
-        emailPlaceholder: '請輸入有效的電子信箱地址',
-        autoGenerateLabel: '自動生成隨機密碼',
-        newPasswordLabel: '新密碼',
-        newPasswordPlaceholder: '8-32 個字符，包含字母和數字',
-        confirmPasswordLabel: '確認新密碼',
-        confirmPasswordPlaceholder: '再次輸入新密碼',
-        confirmBtn: '建立使用者',
-        success: '使用者已建立',
-        successIdempotent: '使用者已存在，未做任何更改',
-        missingPassword: '使用者已建立，但未返回生成的密碼。請使用重設密碼來復原存取。',
-        failed: '建立使用者失敗',
-        validation: {
-          usernameRequired: '請輸入使用者名',
-          usernameLength: '使用者名長度必須為 2-50 個字符',
-          emailRequired: '請輸入電子信箱',
-          emailInvalid: '請輸入有效的電子信箱地址',
-          confirmRequired: '請再次輸入新密碼',
-          passwordMismatch: '兩次輸入的密碼不一致'
-        },
-        generated: {
-          successTitle: '使用者已建立',
-          successBody: '已為該使用者生成一個隨機密碼。此密碼只會顯示一次。',
-          usernameLabel: '使用者名',
-          emailLabel: '電子信箱',
-          passwordLabel: '生成的密碼',
-          copyBtn: '複製帳號資訊',
-          copySuccess: '帳號資訊已複製到剪貼簿',
-          acknowledgeBtn: '我已儲存密碼'
-        }
-      },
-      reset: {
-        label: '重設',
-        tooltip: '清除當前 UI 覆蓋，復原使用環境變數或內建預設值',
-        confirmBtn: '重設',
-        confirmBody: '確定要重設「{label}」嗎？該操作會刪除資料庫中的覆蓋值，回退到環境變數或內建預設值。',
-        success: '已重設為預設值',
-        failed: '重設失敗'
-      },
-      messages: {
-        loadFailed: '載入系統設定失敗',
-        saveSuccess: '已儲存',
-        saveFailed: '儲存失敗'
-      },
-      listConfirm: {
-        ssrf: {
-          whitelist: {
-            remove: {
-              header: '移除 SSRF 白名單條目',
-              body: '確認從 SSRF 白名單中移除 {entry}？移除後該條目將重新受 SSRF 防護攔截。',
-              confirmBtn: '移除'
-            },
-            add: {
-              header: '新增 SSRF 白名單條目',
-              body: '確認把 {entry} 加入 SSRF 白名單？該條目比對到的主機 / IP / 網段會繞過 SSRF 防護，可能讓 Agent 存取內網服務，請僅在確知用途時新增。',
-              confirmBtn: '新增'
-            }
-          }
-        }
-      },
-      confirm: {
-        confirmBtn: '確認儲存',
-        cancelBtn: '取消',
-        emptyValue: '（空）',
-        bodyAuthRegistrationMode: '即將把「{label}」改為：{value}\n\n如果切到 self_serve，公網任何人都可以註冊帳號 — 務必確認是預期行為。',
-        bodySandboxDockerEnabled: '打開後，空間管理員可以把沙箱指到本機 Docker。本機 docker.sock 等同宿主機 root，只適合已掛載 daemon 或配了 TLS 遠程 tcp:// 的私有化單機。'
-      },
-      enumLabels: {
-        auth: {
-          default_tenant_mode: {
-            create_personal: '自動建立個人空間',
-            tenantless: '不自動建立空間'
-          },
-          registration_mode: {
-            self_serve: '自助註冊（任何人可註冊）',
-            invite_register: '僅限邀請註冊（需有效邀請連結）',
-            invite_only: '禁止註冊（已有帳號仍可接受邀請）'
-          }
-        }
-      },
-      keyDescriptions: {
-        model: {
-          max_concurrency: '後台任務（文件入庫/富化）對單個模型的預設併發上限，按模型 ID 全副本共享。每次呼叫實時讀取，修改後立即生效、無需重啟。0 或負數表示關閉預設限制（各模型仍會尊重自身在模型管理裡設定的上限）。僅影響後台任務，不影響交互式對話。'
-        },
-        asynq: {
-          core_concurrency: '文件解析與手工重解析的每實例保底併發，可額外借用共享彈性池；修改後需重啟。',
-          postprocess_concurrency: '解析完成後的輕量收尾和富化扇出專用併發；修改後需重啟。',
-          enrichment_concurrency: '摘要、圖片、圖譜與問題生成的每實例保底併發，可額外借用共享彈性池；修改後需重啟。',
-          maintenance_concurrency: '資料源同步、批處理和清理任務的每實例併發，與使用者面流水線硬隔離；修改後需重啟。',
-          shared_concurrency: '核心解析與內容富化共同使用的每實例彈性併發，由有積壓的一側自動借用；修改後需重啟。',
-          wiki_concurrency: '每個服務實例的 Wiki 專用 Worker 併發數，與上遊任務池相互隔離。最小值為 1；修改後需重啟服務行程方可生效。'
-        },
-        tenant: {
-          max_owned_per_user: '每個非超管使用者透過自助建立可擁有的最大空間數。每次建立空間時實時讀取，修改後立即生效。0 表示使用內建預設值 10；負數表示完全關閉限制（不建議在公開部署使用）。',
-          self_service_creation_enabled: '是否允許非超管使用者主動建立空間。關閉後，普通使用者只能透過邀請加入已有空間；跨空間超管仍可建立。修改後立即生效。',
-          default_storage_quota_gb: '新建空間時預設分配的存儲配額（GB），包含向量、原文、文字、索引等。僅在建立時讀取，修改後只對之後新建的空間生效，不會回寫已存在的空間。0 或負數表示使用內建預設值 10GB。',
-          auto_create_api_key: '為新空間自動生成 full_access API Key，並在建立回應中返回明文 token。僅用於相容依賴舊行為的集成；預設關閉，建議透過 API Key 管理顯式建立。',
-          auto_accept_invitation: '開啟後，空間管理員透過電子信箱邀請已註冊使用者時，對方會立即成為成員，不再經過收件匣確認。關閉時保持「發出邀請 → 被邀請人確認」流程。修改後立即生效。'
-        },
-        ssrf: {
-          whitelist: 'SSRF 防護白名單。可填入 example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1。修改後立即生效。SSRF_WHITELIST_EXTRA 環境變數仍由部署方維護，不在此處覆蓋。'
-        },
-        sandbox: {
-          docker_enabled: '是否允許 Docker 沙箱後端。本機 docker.sock 等同宿主機 root，預設關閉。僅系統管理員可打開；打開後立即生效，無需重啟。私有化單機且已掛載 daemon socket，或設定了帶 TLS 的遠程 tcp:// 時再啟用。'
-        },
-        auth: {
-          registration_mode: '註冊模式。開放註冊允許任何人建立帳號；僅限邀請註冊要求有效邀請連結；禁止註冊不允許建立帳號，但已有帳號仍可接受邀請。儲存後立即生效。',
-          default_tenant_mode: '公開註冊後的空間初始化策略。create_personal 會自動建立個人空間並授予 Owner；tenantless 僅建立帳戶，使用者需要接受邀請或主動建立空間。只影響之後註冊的使用者。',
-          complex_password_enabled: '是否啟用複雜密碼。開啟後密碼必須包含大小寫字母、數字和特殊字符。修改後立即生效，只影響新註冊使用者或新密碼修改/重設操作。特殊字符包含：{specialChars}'
-        }
-      },
-      keyLabels: {
-        model: {
-          max_concurrency: '模型預設併發上限'
-        },
-        asynq: {
-          core_concurrency: '核心解析保底併發數',
-          postprocess_concurrency: '後處理編排併發數',
-          enrichment_concurrency: '內容富化保底併發數',
-          maintenance_concurrency: '維護與同步併發數',
-          shared_concurrency: '共享彈性併發數',
-          wiki_concurrency: 'Wiki Worker 併發數'
-        },
-        tenant: {
-          max_owned_per_user: '每使用者最大空間數',
-          self_service_creation_enabled: '允許使用者自助建立空間',
-          default_storage_quota_gb: '新空間預設存儲配額 (GB)',
-          auto_create_api_key: '建立空間時自動生成 API Key',
-          auto_accept_invitation: '邀請已註冊使用者時自動加入'
-        },
-        ssrf: {
-          whitelist: 'SSRF 防護白名單'
-        },
-        sandbox: {
-          docker_enabled: '啟用 Docker 沙箱'
-        },
-        auth: {
-          registration_mode: '註冊模式',
-          default_tenant_mode: '註冊預設空間策略',
-          complex_password_enabled: '啟用複雜密碼'
-        }
-      },
-      runtime: {
-        title: '任務佇列運行時',
-        description: '後台任務佇列的實時負載，以及各獨立 worker 池的每實例併發設定。支持查看任務明細和安全管理，每 5 秒自動重新整理。',
-        refresh: '重新整理',
-        autoRefresh: '自動重新整理（每 5 秒）',
-        loading: '載入中...',
-        retry: '重試',
-        unavailableTitle: '任務佇列不可用',
-        unavailable: '當前部署未啟用 Redis / asynq 佇列（Lite 模式），無佇列可展示。',
-        empty: '暫無佇列資料',
-        detailsTitle: '佇列明細',
-        detailsDescription: '各處理通道的實時負載與等待情況。「最終失敗」表示任務超過重試上限，已停止自動執行。',
-        poolsTitle: 'Worker 池',
-        poolsDescription: '各階段擁有保底容量，核心解析與內容富化還可借用共享彈性池。',
-        perInstance: '卡片主值為叢集運行中/容量',
-        poolConfigured: '單實例設定 {value}',
-        poolInstances: '{value} 個實例',
-        poolUtilization: '利用率 {value}%',
-        queueCount: '{value} 個佇列',
-        weightShort: '權重 {value}',
-        footnote: '卡片主值為叢集運行中/實時容量；單實例設定修改後需重啟。共享彈性池只消費核心解析和內容富化佇列。',
-        updatedAt: '更新於 {value}',
-        models: {
-          title: '模型併發佔用',
-          description: '觀察後台任務實際進入模型服務時的併發佔用；上方是任務調度，這裡是模型服務限流，兩者處於不同處理階段。',
-          scope: '佔用為叢集全局 · 等待為當前實例',
-          disabled: '模型後台併發治理未啟用。可在全局設定中設定模型預設併發上限。',
-          empty: '暫無模型呼叫資料；模型首次執行後台任務後會出現在這裡。',
-          backgroundOnly: '僅統計後台任務，不包含交互式對話',
-          status: {
-            queued: '限流中',
-            full: '已滿載'
-          },
-          columns: {
-            model: '模型 ID',
-            active: '呼叫中',
-            waiting: '限流等待',
-            usage: '併發用量'
-          }
-        },
-        tasks: {
-          title: '任務明細 · {queue}',
-          description: '查看各狀態任務及其安全管理動作。定時、重試任務按最近執行時間優先，其餘狀態按時間倒序。',
-          listTitle: '{state}任務',
-          openAria: '查看{queue}中 {count} 個{state}任務',
-          unavailable: '當前部署不支持查看任務明細',
-          empty: '這個佇列當前沒有{state}任務',
-          loadError: '獲取任務明細失敗',
-          loadMore: '載入更多',
-          loadedSummary: '已載入 {count} 條，繼續下滑或點擊載入',
-          loadedAll: '已全部載入，共 {count} 條',
-          loadingMore: '正在載入更多…',
-          attempts: '執行 {current}/{max}',
-          unknownTarget: '未識別到關聯物件',
-          knowledgeBaseLabel: '知識庫 ID',
-          knowledgeLabel: '文件 ID',
-          taskIDLabel: '業務任務 ID',
-          tenantLabel: '空間 ID',
-          sourceLabel: '來源 ID',
-          targetLabel: '目標 ID',
-          sourceKBLabel: '來源知識庫',
-          targetKBLabel: '目標知識庫',
-          dataSourceLabel: '資料源 ID',
-          syncLogLabel: '同步記錄 ID',
-          knowledgeCountLabel: '文件數量',
-          enqueuedAt: '入隊時間',
-          startedAt: '開始時間',
-          nextProcessAt: '下次執行',
-          lastFailedAt: '最後失敗',
-          completedAt: '完成時間',
-          deadline: '執行截止',
-          worker: '執行實例',
-          health: '運行健康',
-          orphaned: '執行實例已失聯，等待復原',
-          cancel: '終止任務',
-          cancelConfirm: '將透過業務取消流程終止該任務及同一文件的相關佇列任務。確認終止？',
-          runNow: '立即執行',
-          runNowConfirm: '該任務將立即進入待執行佇列，重試次數不會重設。確認繼續？',
-          deleteRecord: '清除記錄',
-          deleteConfirm: '僅從當前佇列移除這條失敗記錄，不會執行或完成原任務，歷史日誌仍會保留。確認清除？',
-          purgeArchived: '清除全部失敗任務',
-          purgeArchivedConfirm: '將從當前佇列免洗移除全部 {count} 條失敗記錄，僅清理佇列裡的失敗任務，不影響運行中或排隊中的任務，也不會回滾已失敗文件的業務狀態。確認清除？',
-          purgeArchivedSuccess: '已清除 {count} 條失敗任務',
-          purgeArchivedError: '清除失敗任務失敗',
-          stateFilter: '按任務狀態篩選',
-          actionError: {
-            cancel: '終止任務失敗',
-            run_now: '立即執行任務失敗',
-            delete: '清除失敗記錄失敗'
-          },
-          actionSuccess: {
-            cancel: '任務已終止',
-            run_now: '任務已進入待執行佇列',
-            delete: '失敗記錄已清除'
-          },
-          guides: {
-            active: '運行中任務可查看執行實例、開始時間和截止時間。只有具備完整業務取消語義的任務才允許終止。',
-            pending: '排隊任務尚未被 worker 領取。終止操作會同步更新業務狀態，而不是只刪除 Redis 記錄。',
-            scheduled: '定時任務可提前立即執行；支持業務取消的文件任務也可以安全終止。',
-            retry: '請結合最後錯誤、重試次數和下次執行時間判斷是否立即執行或終止。',
-            archived: '請先修復失敗原因再立即執行。清除記錄不會完成原業務任務。',
-            completed: '這裡只展示設定了結果保留時間的近期完成任務，不提供管理動作。'
-          },
-          states: {
-            active: '運行中',
-            pending: '排隊中',
-            scheduled: '定時執行',
-            retry: '重試中',
-            archived: '最終失敗',
-            completed: '已完成'
-          },
-          taskTypes: {
-            documentProcess: '文件解析',
-            manualProcess: '手工重新處理',
-            temporaryDocumentProcess: '聊天附件解析',
-            postProcess: '文件後處理',
-            summary: '摘要生成',
-            tableSummary: '表格摘要生成',
-            question: '問題生成',
-            multimodal: '圖片多模態處理',
-            graph: '知識圖譜抽取',
-            sync: '資料源同步',
-            faqImport: 'FAQ 匯入',
-            batchReparse: '批次重新解析',
-            batchDelete: '批次刪除',
-            move: '文件移動',
-            indexDelete: '索引刪除',
-            kbClone: '知識庫複製',
-            kbDelete: '知識庫刪除',
-            wikiIngest: 'Wiki 內容生成',
-            wikiFinalize: 'Wiki 收尾處理'
-          }
-        },
-        failedNotice: {
-          title: '{count} 個任務待處理',
-          description: '點擊下方表中紅色「最終失敗」數字查看原因，修復後可手動重試。'
-        },
-        status: {
-          working: '處理中',
-          waiting: '等待中',
-          idle: '空閒',
-          actionRequired: '需處理',
-          retrying: '重試中',
-          paused: '已暫停'
-        },
-        columns: {
-          queue: '佇列',
-          active: '運行中',
-          pending: '排隊',
-          scheduled: '定時',
-          retry: '重試',
-          archived: '最終失敗',
-          completed: '已完成',
-          latency: '最早等待',
-          status: '狀態'
-        },
-        summary: {
-          title: '運行概覽',
-          active: '運行中',
-          pending: '排隊中',
-          retry: '重試中',
-          archived: '最終失敗'
-        },
-        pools: {
-          core: '核心解析',
-          postprocess: '後處理編排',
-          enrichment: '內容富化',
-          maintenance: '維護與同步',
-          shared: '共享彈性',
-          wiki: 'Wiki 池'
-        },
-        poolDescriptions: {
-          core: '文件解析與手工重解析的保底容量',
-          postprocess: '解析完成後的收尾與富化扇出',
-          enrichment: '摘要、圖片、圖譜與問題生成',
-          maintenance: '資料源同步、批處理與刪除清理',
-          shared: '由核心解析與內容富化按積壓借用',
-          wiki: 'Wiki 內容生成與全局收尾'
-        },
-        queueNames: {
-          default: '文件解析',
-          chat_attachment: '對話附件解析',
-          postprocess: '後處理編排',
-          summary: '摘要生成',
-          sync: '資料源同步',
-          low: '維護與批處理',
-          multimodal: '多模態處理',
-          graph: '圖譜抽取',
-          question: '問題生成',
-          wiki: 'Wiki 處理'
-        },
-        queueDescriptions: {
-          default: '文件解析、手工重解析',
-          chat_attachment: '會話內上傳附件解析',
-          postprocess: '解析收尾、富化扇出',
-          summary: '文件摘要、表格摘要',
-          sync: '手動與定時同步',
-          low: 'FAQ 匯入、批次重解析、刪除清理',
-          multimodal: '圖片 OCR、視覺描述',
-          graph: '切塊圖譜抽取',
-          question: '切塊問題生成',
-          wiki: '內容生成、索引收尾'
-        },
-        errors: {
-          generic: '獲取佇列狀態失敗'
-        }
-      },
-      sections: {
-        other: {
-          title: '其他設定',
-          description: '當前部署中未歸入標準分組的設定項。'
-        },
-        security: {
-          title: '網路安全',
-          description: '管理 SSRF 白名單，以及是否允許 Docker 沙箱（本機 docker.sock 等同宿主機 root）。'
-        },
-        runtime: {
-          title: '運行與併發',
-          description: '設定後台任務池與模型服務的併發容量。',
-          restartHint: 'Worker 設定需重啟生效'
-        },
-        tenant: {
-          title: '空間預設值',
-          description: '設定新空間的初始配額與相容性行為，不會自動改寫已有空間。'
-        },
-        access: {
-          title: '註冊與存取',
-          description: '管理註冊方式、密碼要求及使用者建立空間的規則。'
-        }
-      },
-      priorityHint: {
-        disclosure: '設定來源與優先級',
-        tier1: '在此頁面儲存過的項（帶「已覆蓋」徽章）— 始終以這裡的值為準，環境變數會被忽略。',
-        tier2: '未在此處儲存過的項 — 如果環境變數裡有就用環境變數，否則用程式內建預設值。',
-        tier3: '若想讓某項重新由環境變數控制，點擊該行的「重設」按鈕即可清除當前 UI 設定。'
-      }
     },
     messages: {
       fetchFailed: '獲取系統資訊失敗',
@@ -6336,6 +5762,7 @@ export default {
     back: '返回'
   },
   common: {
+    moreActions: "更多",
     add: '新增',
     me: '我',
     confirm: '確認',
@@ -6472,9 +5899,6 @@ export default {
       help: '你現在可以建立空間，也可以稍後回來接受邀請。',
       inviteOnlyHelp: '還沒有邀請？請把你的註冊電子信箱提供給空間管理員，由管理員向你傳送邀請。'
     },
-    spaceKind: "空間類型",
-    personalSpace: "個人空間",
-    enterpriseSpace: "企業空間",
     enterpriseName: "企業名稱",
     enterpriseNameRequired: "請輸入企業名稱",
     enterpriseNamePlaceholder: "請輸入企業名稱",
@@ -6922,8 +6346,6 @@ export default {
   settings: {
     modelManagement: '模型管理',
     webSearchConfig: '網路搜尋',
-    autoCheckUpdate: '自動下載更新',
-    autoCheckUpdateDesc: '開啟後自動檢查並在後台下載最新版本安裝包。',
     vectorStoreEngine: '向量資料庫引擎',
     parserEngine: '解析引擎',
     storageEngine: '存儲引擎',
@@ -7446,10 +6868,8 @@ export default {
     },
     mcpService: 'MCP服務',
     versionInfo: '版本資訊',
-    taskQueue: '任務佇列',
     tenantInfo: '空間資訊',
     workspaceSettings: '空間設定',
-    system: '系統設定',
     storage: {
       title: '存儲引擎',
       description: '設定文件與圖片的存儲方式。此處設定各引擎參數，知識庫中僅選擇使用哪個引擎。',
@@ -7692,7 +7112,6 @@ export default {
       workspace: '空間',
       modelsRuntime: '模型',
       dataExtensions: '資料與擴展',
-      systemAdministration: '系統管理',
       platform: '平台'
     }
   },

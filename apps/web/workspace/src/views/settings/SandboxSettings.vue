@@ -114,7 +114,7 @@
                     @click="(data: any) => onMenuAction(data.value, record)"
                   >
                     <t-button variant="text" shape="square" size="small" class="sandbox-card__more"
-                      :aria-label="$t('modelCatalog.more')">
+                      :aria-label="$t('common.moreActions')">
                       <t-icon name="ellipsis" />
                     </t-button>
                   </t-dropdown>

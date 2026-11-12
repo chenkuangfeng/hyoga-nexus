@@ -1,8 +1,8 @@
 # Web 设计
 
-Vue 3、TypeScript、Element Plus、vue-router（history 模式）。外壳位于 `layouts/AppLayout.vue`：左侧 `layouts/AppSidebar.vue`（空间选择器、分组导航、当前空间的会话列表、用户区），右侧为路由页面。导航分组与旧 hash 页面映射位于 `router/navigation.ts`；路由定义位于 `router/index.ts`，`/#name` 旧链接由 `redirectLegacyHash` 改写为新路径。平台管理路由带 `requiresAdmin`，非管理员会被重定向到 `/chat`。登录不是路由：`App.vue` 在未登录时显示登录表单，错误信息来自 `/login?error=`。
+Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n 与 Vite。`apps/web` 是 pnpm workspace，公共包与两个应用的边界见下文。下文页面、组件与业务状态路径相对 `workspace/src`，API、认证与语言路径相对 `core/src`。
 
-当前空间保存在 `stores/workspace.ts`（localStorage 记住选择），对话、空间组织、角色、模型与 Native 页面都从它读取，不再各自放置空间下拉。会话 URL 为 `/chat/:sessionId`。部署需要为 history 模式配置回退到 `index.html`，否则直接打开深层路径会返回 404。
+员工工作台外壳为 `views/platform/index.vue`，左侧为 `components/menu.vue`，右侧为业务路由与共享的设置、上传任务、命令面板等组件。路由在 `workspace/src/router/index.ts`，登录入口为 `/login`，会话地址为 `/platform/chat/:chatid`。认证与当前企业由 `core/src/stores/auth.ts` 统一管理，布局偏好由工作台 `stores/ui.ts` 管理。平台管理路由已删除，未知地址使用公共 404 页面。部署需为两个应用分别配置 history 回退。
 
 模型设置（设置 → 模型管理，`views/settings/NexusModelSettings.vue` 与 `NexusModelEditorDialog.vue`）沿用 WeKnora `ModelSettings.vue`、`ModelEditorDialog.vue` 的布局与样式（类型标签页与计数、搜索、卡片网格、添加卡片、居中编辑抽屉、底部测试连接），数据来自 `api/nexus-models.ts`（`/tenants/{id}/model-settings`）。WeKnora 的一条模型对应 Nexus 的「供应商 + 模型档案」：`views/settings/nexusModelCards.ts`（纯函数，有单元测试）把供应商下的模型展开为卡片，并决定保存时复用已有供应商还是先建供应商（失败重试复用已建供应商）。服务商下拉列出调用者可管理的供应商与「自定义（OpenAI 兼容接口）」；编辑时修改 Key 会轮换整个供应商的 Key，界面提示受影响的模型数。默认模型在卡片菜单中按作用域设置（个人默认；空间共享模型且调用者为管理员时还可设空间默认），卡片显示默认标签。Key 只在提交时发送，提交后清空，不写入浏览器存储。省略 WeKnora 的内置模型、模型目录、调试抽屉、用量对话框、Ollama 与云服务来源。
 
@@ -38,4 +38,8 @@ Vue 3、TypeScript、Element Plus、vue-router（history 模式）。外壳位�
 
 原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API 的传递依赖闭包抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
 
-`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。当前工作台仍包含待移除的平台管理等旧页面，管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
+`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、路由和专用模型目录适配器已删除，Wails 与自动初始化入口已移除；工作台仍包含待移除的助手及旧集成，管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
+
+认证恢复只使用已有令牌，不尝试桌面自动初始化。注册表单按是否持有邀请令牌分流：自助注册发送企业名称与编码，邀请注册只发送邀请与账号字段。两应用共用 404 页面，已删除的平台管理路由不再挂载应用页面；旧设置参数归一到 `general` 并移除旧 `panel` 参数。工作台改密路由先经过认证，临时密码账号先改密，避免初始化豁免绕过认证。
+
+管理应用只承载本应用的路由；邀请与无企业身份的开户入口以原始 `fullPath` 转交员工应用，保留邀请参数。两个应用的未知路径使用共用 404 组件。

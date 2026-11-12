@@ -5,7 +5,6 @@
             <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
                 <!-- 项目名字标：文字而非图片，便于跟随主题色；class 不用 .logo，避免套用深色模式的反色滤镜 -->
                 <span class="logo-wordmark" aria-label="Nexus">Nexus</span>
-                <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
             </div>
             <div class="logo_actions">
                 <t-tooltip v-if="assistantStore.entry === 'sidebar'" :content="assistantName" placement="bottom">
@@ -368,7 +367,6 @@ const hasAnySession = computed(() =>
 type MenuItem = { title: string; icon: string; path: string; childrenPath?: string; children?: any[] };
 const { menuArr, visibleMenuArr } = storeToRefs(usemenuStore);
 let activeSubmenu = ref<string>('');
-const isLiteEdition = ref(false);
 
 // 是否可以访问所有空间
 const canAccessAllTenants = computed(() => authStore.canAccessAllTenants);
@@ -782,13 +780,6 @@ onMounted(async () => {
 
     window.addEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
 
-    isLiteEdition.value = authStore.isLiteMode
-    editorResources.ensureSystemInfo().then(() => {
-        if (editorResources.systemInfo?.edition === 'lite') {
-            isLiteEdition.value = true
-            authStore.setLiteMode(true)
-        }
-    }).catch(() => { })
 
     await loadCurrentKbInfo((route.params as any)?.kbId as string)
 

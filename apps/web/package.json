@@ -10,7 +10,7 @@
     "dev:admin": "pnpm --filter @nexus-web/admin dev",
     "build": "pnpm --filter @nexus-web/workspace build && pnpm --filter @nexus-web/admin build",
     "type-check": "pnpm --filter @nexus-web/core type-check && pnpm --filter @nexus-web/workspace type-check && pnpm --filter @nexus-web/admin type-check",
-    "test": "tsx --test --test-concurrency=1 scripts/*.test.* && pnpm --filter @nexus-web/core test && pnpm --filter @nexus-web/workspace test",
+    "test": "tsx --test --test-concurrency=1 scripts/*.test.* && pnpm --filter @nexus-web/core test && pnpm --filter @nexus-web/workspace test && pnpm --filter @nexus-web/admin test",
     "preview": "pnpm --filter @nexus-web/workspace preview",
     "check-i18n": "pnpm --filter @nexus-web/core exec tsx --test src/i18n/localeKeyAudit.test.ts",
     "scan-i18n-gaps": "pnpm --filter @nexus-web/core exec tsx src/i18n/localeGapScan.ts",

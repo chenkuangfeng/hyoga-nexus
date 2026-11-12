@@ -1,4 +1,9 @@
 export default {
+  navigationErrors: {
+    notFoundTitle: 'ページが見つかりません',
+    notFoundDescription: 'ページが削除されたか、アドレスが正しくありません。',
+    backWorkspace: 'ワークスペースに戻る',
+  },
   permissionCatalog: {
     menus: {
       chat: 'チャット',
@@ -28,131 +33,6 @@ export default {
       'tools:manage': 'ツールの管理',
       'skills:submit': 'スキルをライブラリに提出',
     },
-  },
-  modelCatalog: {
-    "title": "モデルカタログ",
-    "description": "モデルカタログは、モデル追加時に選べるモデル一覧と、コンテキスト長や思考対応などの既定値を定義します。ここでの変更はすべてのワークスペースに即時反映されます。",
-    "howItWorks": "設定の適用順序",
-    "layers": {
-      "builtin": "組み込みカタログ：リリースに同梱される既定のモデル一覧。",
-      "deployment": "デプロイファイル：サーバー上の models.json。組み込みカタログを上書きします。",
-      "console": "管理者による変更：このページでの変更。上記の両方より優先されます。",
-      "explicit": "各ワークスペースのモデル設定で指定した値が常に優先され、保存済みモデルは書き換えられません。",
-    },
-    "add": "モデルを追加",
-    "more": "その他",
-    "jsonEditor": "JSON 編集",
-    "history": "バージョン履歴",
-    "import": "JSON をインポート",
-    "export": "変更をエクスポート",
-    "search": "モデル ID または名前で検索",
-    "allProviders": "すべてのプロバイダー",
-    "allTypes": "すべての種類",
-    "onlyModified": "変更済みのみ",
-    "summary": "{count} 件のモデル · バージョン {version}",
-    "columns": {
-      "model": "モデル",
-      "provider": "プロバイダー",
-      "type": "種類",
-      "tokens": "コンテキスト / 出力",
-      "capabilities": "機能",
-      "source": "ソース",
-    },
-    "capability": {
-      "reasoning": "思考",
-      "image": "画像",
-      "audio": "音声",
-      "video": "動画",
-    },
-    "source": {
-      "builtin": "組み込み",
-      "deployment": "デプロイ",
-      "console": "管理者変更",
-    },
-    "rule": "パターン",
-    "ruleTip": "名前のパターンで一群のモデルに既定値を提供します。候補一覧には表示されません。",
-    "hidden": "非表示",
-    "edit": "編集",
-    "view": "表示",
-    "empty": "一致するモデルはありません",
-    "editDescription": "{provider} · {type}",
-    "ruleNotice": "このパターンは名前が一致するモデルに既定値を提供します。変更するには「その他 → JSON 編集」を使用してください。",
-    "fieldsSection": "既定値",
-    "nameDesc": "モデル選択一覧に表示する名前。",
-    "dimension": "ベクトル次元",
-    "dimensionDesc": "この埋め込みモデルを追加するときに事前入力される次元。モデルの実際の出力と一致させてください。",
-    "inputDesc": "モデルが受け付ける入力の種類。画像を選ぶとビジョンモデルとして使用できます。",
-    "thinkingLevels": "思考レベル",
-    "thinkingLevelsDesc": "チャットで選べる思考の強さ。「オフ」を選ばない場合、モデルは常に思考します。",
-    "levelsNeedReasoning": "「思考対応」をオンにすると設定できます。",
-    "levelsUnsupported": "このプロバイダーの API は段階的な思考に対応していません。",
-    "textOnly": "テキストのみ",
-    "noLevels": "なし",
-    "sourceLink": "プロバイダーのドキュメント",
-    "customHint": "このモデルは管理者がこのページで追加したもので、すべての値はここでの設定です。",
-    "fieldsHint": "各ワークスペースのモデル設定で指定した値が引き続き優先されます。入力を空にすると既定値に戻ります。",
-    "context": "コンテキストウィンドウ",
-    "contextDesc": "モデルが一度に処理できる最大トークン数。",
-    "output": "最大出力",
-    "outputDesc": "1 回の応答で生成される最大トークン数。",
-    "reasoning": "思考対応",
-    "reasoningDesc": "モデルが思考過程を出力できるかどうか。",
-    "hide": "候補から非表示",
-    "hideDesc": "非表示にするとモデル追加時に表示されません。設定済みのモデルには影響しません。",
-    "inputModes": "入力モダリティ",
-    "inherited": "既定：{value}",
-    "notSet": "未設定",
-    "optional": "任意",
-    "yes": "はい",
-    "no": "いいえ",
-    "modified": "変更済み",
-    "layersSection": "レイヤーごとの値",
-    "layerField": "項目",
-    "layerBuiltin": "組み込み",
-    "layerDeployment": "デプロイ",
-    "layerEffective": "適用中",
-    "save": "保存して適用",
-    "restore": "既定に戻す",
-    "restoreConfirm": "このモデルに対する管理者の変更をすべて削除し、即時に適用しますか？",
-    "restored": "戻しました。他のインスタンスには約 5 秒で同期されます。",
-    "remove": "モデルを削除",
-    "removeConfirm": "管理者が追加したこのモデルをカタログから削除し、即時に適用しますか？",
-    "removed": "削除しました。他のインスタンスには約 5 秒で同期されます。",
-    "published": "適用しました。他のインスタンスには約 5 秒で同期されます。",
-    "conflict": "別の管理者がカタログを更新しました。最新の状態に更新したので、もう一度操作してください。",
-    "loadFailed": "モデルカタログを読み込めませんでした",
-    "deploymentError": "デプロイファイル models.json を読み込めなかったため、組み込みカタログのみを使用しています：{error}",
-    "syncError": "最新バージョンの同期に失敗しました。表示内容が現在の設定と異なる可能性があります：{error}",
-    "addDescription": "カタログにないモデルを追加します。追加後はモデル設定で直接選択できます。",
-    "modelId": "モデル ID",
-    "modelIdPlaceholder": "プロバイダー API のモデル名（例：gpt-5-mini）",
-    "displayName": "表示名",
-    "required": "プロバイダーを選択し、モデル ID を入力してください",
-    "exists": "このモデルはすでにカタログにあります。編集してください",
-    "jsonDescription": "管理者の変更全体を models.json 形式で直接編集します。一括変更や移行に便利です。",
-    "jsonHint": "変更するフィールドのみ記述し、フィールドを削除すると既定値に戻ります。認証情報、ヘッダー、環境変数の参照はモデル設定またはデプロイファイルで管理してください。アイコンはインライン SVG のみ、最大 1 MiB です。",
-    "jsonClear": "すべての変更をクリア",
-    "jsonCheck": "変更を確認",
-    "jsonPublish": "{count} 件の変更を公開",
-    "jsonUnchanged": "現在の設定と同じため、公開は不要です。",
-    "changesTitle": "適用される変更",
-    "change": {
-      "added": "追加",
-      "removed": "削除",
-      "updated": "変更",
-      "provider": "プロバイダー",
-    },
-    "publishHint": "このインスタンスには即時に反映され、他のインスタンスには約 5 秒で同期されます。",
-    "invalid": "providers オブジェクトを含む models.json を入力してください。",
-    "tooLarge": "ファイルは 1 MiB 以下にしてください。",
-    "historyDescription": "直近 20 バージョンを保持します。復元すると即時に適用されます。",
-    "historyVersion": "バージョン {version}",
-    "historyCurrent": "現在",
-    "historyRestore": "復元",
-    "historyRestoreConfirm": "バージョン {version} の設定に戻し、すべてのワークスペースに即時適用しますか？",
-    "historyEmpty": "過去のバージョンはありません",
-    "historyModels": "{count} 件のモデルを変更",
-    "historyNoOverrides": "管理者の変更なし",
   },
   automation: {
     nexus: {
@@ -1875,8 +1755,6 @@ export default {
   settings: {
     modelManagement: 'モデル管理',
     webSearchConfig: 'Web検索',
-    autoCheckUpdate: '更新の自動ダウンロード',
-    autoCheckUpdateDesc: '有効にすると、バックグラウンドで最新バージョンを自動的に確認・ダウンロードします。',
     vectorStoreEngine: 'ベクトルDBエンジン',
     parserEngine: '解析エンジン',
     storageEngine: 'ストレージエンジン',
@@ -2399,7 +2277,6 @@ export default {
     },
     mcpService: 'MCPサービス',
     versionInfo: 'バージョン情報',
-    taskQueue: 'タスクキュー',
     tenantInfo: 'ワークスペース情報',
     workspaceSettings: 'ワークスペース設定',
     navGroups: {
@@ -2407,7 +2284,6 @@ export default {
       workspace: 'ワークスペース',
       modelsRuntime: 'モデル',
       dataExtensions: 'データ・拡張',
-      systemAdministration: 'システム管理',
       platform: 'プラットフォーム'
     },
     roleDenied: {
@@ -2468,7 +2344,6 @@ export default {
         vllm: 'WeKnoraCloud Vision'
       }
     },
-    system: 'システム設定',
     parser: {
       title: '解析エンジン',
       description: 'ドキュメント解析エンジンのステータスと設定です。ここでの設定はサーバの環境変数より優先されます。空欄の場合は環境変数の値が使用されます。',
@@ -3147,9 +3022,6 @@ export default {
       help: '今すぐワークスペースを作成することも、後で戻って招待を承諾することもできます。',
       inviteOnlyHelp: 'まだ招待がありませんか？登録したメールアドレスをワークスペース管理者に伝えて、招待を依頼してください。'
     },
-    spaceKind: "スペースの種類",
-    personalSpace: "個人スペース",
-    enterpriseSpace: "企業スペース",
     enterpriseName: "企業名",
     enterpriseNameRequired: "企業名を入力してください",
     enterpriseNamePlaceholder: "企業名を入力",
@@ -3168,6 +3040,7 @@ export default {
     }
   },
   common: {
+    moreActions: "その他",
     add: '追加',
     me: '自分',
     confirm: '確認',
@@ -4870,459 +4743,6 @@ export default {
       networkError: 'ネットワークエラーです。しばらくしてから再試行してください'
     },
     globalSettings: {
-      title: 'システム設定',
-      description: 'プラットフォーム全体のランタイム設定です。保存するとすべてのワークスペースに即座に反映されます。システム管理者のみが表示・編集できます。',
-      loading: '読み込み中...',
-      empty: '設定可能なシステム設定はありません',
-      saving: '保存中',
-      saved: '保存しました',
-      saveAnnouncement: '{label}を保存しました',
-      badgeRequiresRestart: '再起動が必要',
-      badgeSecret: 'シークレット',
-      badgeHighRisk: '高リスク',
-      badgeOverride: '上書き済み',
-      badgeOverrideTooltip: 'この値は管理者によってデータベースに保存されており、環境変数と組み込みのデフォルト値を上書きしています。',
-      modifiedAt: '最終更新: {value}',
-      tagInputPlaceholder: 'Enterキーで項目を追加します。例: example.com / *.foo.com / 10.0.0.0/8',
-      priorityHint: {
-        disclosure: '設定のソースと優先順位',
-        tier1: 'このページで保存した項目（「上書き済み」表示）が常に優先され、環境変数は無視されます。',
-        tier2: 'ここで保存していない項目は環境変数の値が使われ、環境変数が未設定の場合は組み込みのデフォルト値が使われます。',
-        tier3: '項目を環境変数の管理下に戻すには、その行の「リセット」ボタンをクリックしてください。'
-      },
-      sections: {
-        access: {
-          title: '登録とアクセス',
-          description: '登録方法、パスワード要件、ワークスペース作成のルールを管理します。'
-        },
-        tenant: {
-          title: 'ワークスペースのデフォルト値',
-          description: '既存のワークスペースを変更せずに、新規ワークスペースの初期クォータと互換動作を設定します。'
-        },
-        runtime: {
-          title: 'ランタイムと並列実行',
-          description: 'バックグラウンドのワーカプールとモデルサービスの並列実行数を設定します。',
-          restartHint: 'ワーカ設定の変更には再起動が必要です'
-        },
-        security: {
-          title: 'ネットワークセキュリティ',
-          description: 'SSRF許可リストと、Dockerサンドボックスの利用可否を管理します（ローカルのdocker.sockはホストのroot権限に相当します）。'
-        },
-        other: {
-          title: 'その他の設定',
-          description: 'このデプロイ環境に存在する、標準の製品グループに属さない設定です。'
-        }
-      },
-      runtime: {
-        title: 'タスクキューのランタイム',
-        description: '各ワーカプールのバックグラウンドキューの負荷とプロセスごとの容量をリアルタイムに表示します。タスクの詳細と安全な操作が可能で、5秒ごとに自動更新されます。',
-        refresh: '更新',
-        autoRefresh: '自動更新（5秒ごと）',
-        loading: '読み込み中...',
-        retry: '再試行',
-        unavailableTitle: 'タスクキューを利用できません',
-        unavailable: 'このデプロイ環境にはRedis / asynqキューがありません（Liteモード）。表示できる情報はありません。',
-        empty: 'キューのデータがありません',
-        detailsTitle: 'キューの詳細',
-        detailsDescription: '各処理レーンのリアルタイムな負荷と待ち時間です。「失敗（停止）」はタスクが再試行の上限を超え、自動実行が停止したことを示します。',
-        poolsTitle: 'ワーカプール',
-        poolsDescription: '各ステージには保証容量があり、コア解析とエンリッチメントは共有弾性プールも借用できます。',
-        perInstance: 'カードの値はクラスタ全体の実行中/容量です',
-        poolConfigured: '1プロセスあたり{value}',
-        poolInstances: '{value}インスタンス',
-        poolUtilization: '使用率{value}%',
-        queueCount: '{value}キュー',
-        weightShort: '重み{value}',
-        footnote: 'カードの値はクラスタ全体の実行中/リアルタイムの容量です。プロセスごとの設定は変更後に再起動が必要です。共有弾性プールはコア解析とエンリッチメントのキューのみを処理します。',
-        updatedAt: '更新日時: {value}',
-        errors: {
-          generic: 'キュー統計の読み込みに失敗しました'
-        },
-        summary: {
-          title: 'ランタイム概要',
-          active: '実行中',
-          pending: '保留中',
-          retry: '再試行中',
-          archived: '失敗（停止）'
-        },
-        columns: {
-          queue: 'キュー',
-          active: '実行中',
-          pending: '保留中',
-          scheduled: '予約済み',
-          retry: '再試行',
-          archived: '失敗',
-          completed: '完了',
-          latency: '最長待ち時間',
-          status: 'ステータス'
-        },
-        status: {
-          working: '処理中',
-          waiting: '待機中',
-          idle: 'アイドル',
-          actionRequired: '要対応',
-          retrying: '再試行中',
-          paused: '一時停止'
-        },
-        failedNotice: {
-          title: '{count}件の失敗したタスクに対応が必要です',
-          description: '下の表で赤い「失敗」の件数を開くと原因を確認できます。原因を解消してから再試行してください。'
-        },
-        tasks: {
-          title: 'タスクの詳細 · {queue}',
-          description: 'すべてのタスク状態を確認できます。予約済みと再試行のタスクは次回実行が早い順、その他の状態は新しい順に表示されます。',
-          listTitle: '{state}のタスク',
-          openAria: '{queue}の{state}のタスク{count}件を表示',
-          unavailable: 'このデプロイ環境ではタスクの詳細を利用できません',
-          empty: 'このキューに{state}のタスクはありません',
-          loadError: 'タスク詳細の読み込みに失敗しました',
-          loadMore: 'さらに読み込む',
-          loadedSummary: '{count}件を読み込みました。スクロールまたはタップでさらに読み込みます',
-          loadedAll: '全{count}件を読み込みました',
-          loadingMore: '読み込み中…',
-          attempts: '試行{current}/{max}',
-          unknownTarget: '関連するオブジェクトを特定できません',
-          knowledgeBaseLabel: 'ナレッジベースID',
-          knowledgeLabel: 'ドキュメントID',
-          taskIDLabel: '業務タスクID',
-          tenantLabel: 'ワークスペースID',
-          sourceLabel: 'ソースID',
-          targetLabel: 'ターゲットID',
-          sourceKBLabel: '移動元ナレッジベース',
-          targetKBLabel: '移動先ナレッジベース',
-          dataSourceLabel: 'データソースID',
-          syncLogLabel: '同期ログID',
-          knowledgeCountLabel: 'ドキュメント数',
-          enqueuedAt: 'キュー投入日時',
-          startedAt: '開始日時',
-          nextProcessAt: '次回実行',
-          lastFailedAt: '最終失敗',
-          completedAt: '完了日時',
-          deadline: '実行期限',
-          worker: '実行インスタンス',
-          health: '実行状態',
-          orphaned: '実行インスタンスとの接続が切れています。復旧を待っています',
-          cancel: 'タスクを中止',
-          cancelConfirm: '業務側の中止フローを使用し、同じドキュメントの関連タスクも停止します。中止しますか？',
-          runNow: '今すぐ実行',
-          runNowConfirm: 'このタスクは再試行回数をリセットせずに、すぐ保留中に移動します。続行しますか？',
-          deleteRecord: 'レコードを削除',
-          deleteConfirm: 'このキューからレコードを削除するだけです。元のタスクが実行・完了されることはなく、履歴ログは残ります。削除しますか？',
-          purgeArchived: '失敗したタスクをすべて削除',
-          purgeArchivedConfirm: 'このキューから失敗レコード{count}件をまとめて削除します。キュー内の失敗タスクのみを削除するもので、実行中や保留中のタスクには影響せず、すでに失敗したドキュメントの業務ステータスも戻りません。削除しますか？',
-          purgeArchivedSuccess: '失敗したタスク{count}件を削除しました',
-          purgeArchivedError: '失敗したタスクの削除に失敗しました',
-          stateFilter: 'タスク状態で絞り込み',
-          states: {
-            active: '実行中',
-            pending: '保留中',
-            scheduled: '予約済み',
-            retry: '再試行中',
-            archived: '失敗',
-            completed: '完了'
-          },
-          guides: {
-            active: '実行インスタンス、開始日時、実行期限、接続切れの状態を確認できます。業務ステータスを安全に更新できる場合にのみ中止できます。',
-            pending: '保留中のタスクはまだ取得されていません。中止すると、Redisのデータを削除するだけでなく業務ステータスも更新されます。',
-            scheduled: '予約済みのタスクは前倒しで実行できます。ドキュメント処理のタスクは業務側の安全な中止も利用できます。',
-            retry: '最後のエラー、試行回数、次回実行日時をもとに、今すぐ実行するか中止するかを判断してください。',
-            archived: '再実行する前に根本原因を解消してください。レコードを削除しても元の業務タスクは完了しません。',
-            completed: '結果の保持期間が設定された最近の完了タスクのみを表示します。管理操作は利用できません。'
-          },
-          actionSuccess: {
-            cancel: 'タスクを中止しました',
-            run_now: 'タスクを保留中に移動しました',
-            delete: '失敗レコードを削除しました'
-          },
-          actionError: {
-            cancel: 'タスクの中止に失敗しました',
-            run_now: 'タスクの実行に失敗しました',
-            delete: 'レコードの削除に失敗しました'
-          },
-          taskTypes: {
-            documentProcess: 'ドキュメント解析',
-            manualProcess: '手動での再処理',
-            temporaryDocumentProcess: 'チャット添付ファイルの解析',
-            postProcess: 'ドキュメントの後処理',
-            summary: '要約の生成',
-            tableSummary: '表の要約の生成',
-            question: '質問の生成',
-            multimodal: '画像のマルチモーダル処理',
-            graph: 'ナレッジグラフの抽出',
-            sync: 'データソースの同期',
-            faqImport: 'FAQのインポート',
-            batchReparse: '一括再解析',
-            batchDelete: '一括削除',
-            move: 'ドキュメントの移動',
-            indexDelete: 'インデックスの削除',
-            kbClone: 'ナレッジベースの複製',
-            kbDelete: 'ナレッジベースの削除',
-            wikiIngest: 'Wikiコンテンツの生成',
-            wikiFinalize: 'Wikiの最終処理'
-          }
-        },
-        models: {
-          title: 'モデルの並列実行',
-          description: 'バックグラウンドタスクによるモデルサービスの実際の並列実行数です。上のセクションはタスクのスケジューリング、こちらは別段階のモデルサービスのレート制限を示します。',
-          scope: '実行中はクラスタ全体 · 待機中は現在のインスタンス',
-          disabled: 'バックグラウンドのモデル並列実行の制御は無効です。モデルのデフォルトの並列実行上限はシステム設定で変更できます。',
-          empty: 'モデルの実行データはまだありません。モデルが初めてバックグラウンドで呼び出されると表示されます。',
-          backgroundOnly: 'バックグラウンドタスクのみが対象で、対話型のチャットは含まれません',
-          columns: {
-            model: 'モデルID',
-            active: '実行中',
-            waiting: 'レート制限待ち',
-            usage: '並列実行数'
-          },
-          status: {
-            queued: 'レート制限中',
-            full: '上限に到達'
-          }
-        },
-        pools: {
-          core: 'コア解析',
-          postprocess: '後処理オーケストレーション',
-          enrichment: 'エンリッチメント',
-          maintenance: 'メンテナンスと同期',
-          shared: '共有弾性プール',
-          wiki: 'Wikiプール'
-        },
-        poolDescriptions: {
-          core: 'ドキュメント解析と手動での再解析の保証容量',
-          postprocess: '解析の最終処理とエンリッチメントの振り分け',
-          enrichment: '要約、画像、グラフ、質問の生成',
-          maintenance: 'データソース同期、一括処理、削除のクリーンアップ',
-          shared: 'バックログに応じてコア解析またはエンリッチメントが借用',
-          wiki: 'Wikiコンテンツの生成と全体の最終処理'
-        },
-        queueNames: {
-          default: 'ドキュメント解析',
-          chat_attachment: 'チャット添付ファイル',
-          postprocess: '後処理',
-          summary: '要約',
-          sync: 'データソース同期',
-          low: 'メンテナンスと一括処理',
-          multimodal: 'マルチモーダル',
-          graph: 'グラフ抽出',
-          question: '質問',
-          wiki: 'Wikiパイプライン'
-        },
-        queueDescriptions: {
-          default: 'ドキュメント解析、手動での再解析',
-          chat_attachment: 'セッション内でアップロードされた添付ファイルの解析',
-          postprocess: '解析の最終処理、エンリッチメントの振り分け',
-          summary: 'ドキュメントと表の要約',
-          sync: '手動およびスケジュール同期',
-          low: 'FAQインポート、一括再解析、クリーンアップ',
-          multimodal: '画像のOCR、視覚キャプション',
-          graph: 'チャンク単位のグラフ抽出',
-          question: 'チャンク単位の質問生成',
-          wiki: 'コンテンツ生成、インデックスの最終処理'
-        }
-      },
-      keyLabels: {
-        auth: {
-          registration_mode: '登録モード',
-          default_tenant_mode: 'デフォルトのワークスペース作成方式',
-          complex_password_enabled: '複雑なパスワードを必須にする'
-        },
-        ssrf: {
-          whitelist: 'SSRF保護の許可リスト'
-        },
-        sandbox: {
-          docker_enabled: 'Dockerサンドボックスを有効化'
-        },
-        tenant: {
-          max_owned_per_user: 'ユーザごとの所有ワークスペース数の上限',
-          self_service_creation_enabled: 'ユーザによるワークスペース作成を許可',
-          default_storage_quota_gb: '新規ワークスペースのデフォルトストレージクォータ（GB）',
-          auto_create_api_key: '新規ワークスペースにAPIキーを自動作成',
-          auto_accept_invitation: '招待した登録済みユーザを自動的に参加させる'
-        },
-        asynq: {
-          core_concurrency: 'コア解析の保証並列実行数',
-          postprocess_concurrency: '後処理の並列実行数',
-          enrichment_concurrency: 'エンリッチメントの保証並列実行数',
-          maintenance_concurrency: 'メンテナンスの並列実行数',
-          shared_concurrency: '共有弾性プールの並列実行数',
-          wiki_concurrency: 'Wikiワーカの並列実行数'
-        },
-        model: {
-          max_concurrency: 'モデルごとのデフォルトの並列実行上限'
-        }
-      },
-      keyDescriptions: {
-        auth: {
-          registration_mode: '登録モード。公開登録では誰でもアカウントを作成できます。招待登録には有効な招待リンクが必要です。登録禁止でも既存アカウントは招待を承諾できます。保存後すぐに反映されます。',
-          default_tenant_mode: '公開登録後のワークスペース作成方式です。create_personalはオーナー権限のワークスペースを作成し、tenantlessはアカウントのみを作成して、ユーザが招待を承諾するかワークスペースを作成するまで待ちます。新規ユーザにのみ適用されます。',
-          complex_password_enabled: '複雑なパスワードを必須にするかどうかです。有効にすると、パスワードに大文字・小文字・数字・特殊文字を含める必要があります。変更はすぐに反映され、新規登録ユーザおよび新たなパスワード変更・リセットにのみ適用されます。特殊文字は{specialChars}です'
-        },
-        ssrf: {
-          whitelist: 'SSRF保護の許可リストです。example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1のような項目を指定できます。保存後すぐに反映されます。SSRF_WHITELIST_EXTRA環境変数は引き続きデプロイ担当者が管理し、ここでは上書きされません。'
-        },
-        sandbox: {
-          docker_enabled: 'Dockerサンドボックスのバックエンドを許可します。ローカルのdocker.sockはホストのroot権限に相当するため、デフォルトでは無効です。有効化できるのはシステム管理者のみで、変更はすぐに反映されます。デーモンのソケットをマウントするプライベートな単一ノード環境、またはTLSで保護されたリモートのtcp://エンドポイントを使用する場合にのみ有効にしてください。'
-        },
-        tenant: {
-          max_owned_per_user: 'スーパーユーザ以外がセルフサービスで所有できるワークスペース数の上限です。ワークスペース作成のたびに参照され、保存後すぐに反映されます。0を指定すると組み込みのデフォルト値10が使われ、負の値を指定すると上限が無効になります（公開環境では非推奨）。',
-          self_service_creation_enabled: 'スーパーユーザ以外が自分でワークスペースを作成できるかどうかです。無効にすると、一般ユーザは招待によって既存のワークスペースに参加することしかできません。ワークスペース横断のスーパーユーザは対象外です。すぐに反映されます。',
-          default_storage_quota_gb: '新規ワークスペースの作成時に割り当てられるデフォルトのストレージクォータ（GB）です。ベクトル、原本、テキスト、インデックスなどのデータが対象です。作成時にのみ参照されるため、変更は新規作成のワークスペースにのみ適用され、既存のワークスペースには遡って反映されません。0または負の値の場合は組み込みのデフォルト値10GBが使われます。',
-          auto_create_api_key: '新規ワークスペースにfull_accessのAPIキーを自動作成し、作成レスポンスで平文のトークンを返します。従来の動作に依存する連携でのみ利用してください。デフォルトでは無効で、APIキーは明示的に作成することを推奨します。',
-          auto_accept_invitation: '有効にすると、登録済みユーザをメールで招待した際に、受信確認を待たずにすぐメンバーとして追加されます。無効の場合、招待された側がメールから承諾する必要があります。すぐに反映されます。'
-        },
-        asynq: {
-          core_concurrency: 'ドキュメント解析と手動での再解析のプロセスごとの保証並列実行数です。コア解析は共有弾性プールも借用できます。最小値は1で、サービスの再起動が必要です。',
-          postprocess_concurrency: 'プロセスごとの並列実行数で、解析完了後の軽量な仕上げ処理とエンリッチメントの振り分け専用です。最小値は1で、サービスの再起動が必要です。',
-          enrichment_concurrency: '要約、画像、グラフ、質問の生成のプロセスごとの保証並列実行数です。エンリッチメントは共有弾性プールも借用できます。最小値は1で、サービスの再起動が必要です。',
-          maintenance_concurrency: 'データソース同期、一括処理、クリーンアップのプロセスごとの並列実行数で、ユーザ向けのパイプラインから完全に分離されています。最小値は1で、サービスの再起動が必要です。',
-          shared_concurrency: 'コア解析とエンリッチメントが共有する、プロセスごとの弾性的な並列実行数です。バックログのある側が自動的に借用します。最小値は1で、サービスの再起動が必要です。',
-          wiki_concurrency: 'Wiki専用ワーカプールのプロセスごとの並列実行数で、上流のタスクから分離されています。最小値は1で、サービスの再起動が必要です。'
-        },
-        model: {
-          max_concurrency: '単一モデルへのバックグラウンド（取り込み・エンリッチメント）呼び出しのデフォルトの並列実行上限です。モデルIDごとに管理され、すべてのレプリカで共有されます。呼び出しのたびに参照され、再起動なしですぐに適用されます。0または負の値の場合はデフォルトの上限が無効になります（各モデルはモデル管理で設定した独自の上限に従います）。対象はバックグラウンドタスクのみで、対話型のチャットには影響しません。'
-        }
-      },
-      enumLabels: {
-        auth: {
-          registration_mode: {
-            self_serve: 'セルフサービス（誰でも登録可能）',
-            invite_register: '招待リンクでのみ登録可能',
-            invite_only: '登録禁止（既存アカウントは招待を承諾可能）'
-          },
-          default_tenant_mode: {
-            create_personal: '個人ワークスペースを作成',
-            tenantless: 'ワークスペースを作成しない'
-          }
-        }
-      },
-      confirm: {
-        confirmBtn: '保存を確認',
-        cancelBtn: 'キャンセル',
-        emptyValue: '（空）',
-        bodyAuthRegistrationMode: '「{label}」を次の値に変更します: {value}\n\nself_serveに切り替えると、インターネット上の誰でもアカウントを登録できるようになります。意図した変更かどうか確認してください。',
-        bodySandboxDockerEnabled: '有効にすると、ワークスペース管理者がサンドボックスをローカルのDockerデーモンに接続できるようになります。ローカルのdocker.sockはホストのroot権限に相当します。デーモンをマウントするプライベートな単一ノード環境、またはTLSで保護されたリモートのtcp://エンドポイントを使用する場合にのみ利用してください。'
-      },
-      listConfirm: {
-        ssrf: {
-          whitelist: {
-            add: {
-              header: 'SSRF許可リストに項目を追加',
-              body: '{entry}をSSRF許可リストに追加しますか？この項目に一致するホスト/IP/CIDRはSSRF保護の対象外となり、エージェントが内部サービスにアクセスできる可能性があります。完全に信頼できる項目のみを追加してください。',
-              confirmBtn: '追加'
-            },
-            remove: {
-              header: 'SSRF許可リストから項目を削除',
-              body: '{entry}をSSRF許可リストから削除しますか？削除後、この項目は再びSSRF保護によってブロックされます。',
-              confirmBtn: '削除'
-            }
-          }
-        }
-      },
-      messages: {
-        loadFailed: 'システム設定の読み込みに失敗しました',
-        saveSuccess: '保存しました',
-        saveFailed: '保存に失敗しました'
-      },
-      reset: {
-        label: 'リセット',
-        tooltip: 'UIでの上書きを解除し、環境変数または組み込みのデフォルト値に戻します',
-        confirmBtn: 'リセットを確認',
-        confirmBody: '「{label}」をリセットしますか？データベースの上書き設定を削除し、環境変数または組み込みのデフォルト値に戻します。',
-        success: 'デフォルト値にリセットしました',
-        failed: 'リセットに失敗しました'
-      },
-      userList: {
-        title: 'プラットフォームユーザー一覧',
-        rowLabel: 'ユーザー管理',
-        rowDesc: 'ワークスペース横断の登録ユーザーを、ページ送りとユーザー名/メール絞り込み付きで表示します。',
-        searchPlaceholder: 'ユーザー名またはメールで絞り込み（現在ページ）',
-        refresh: '更新',
-        active: '有効',
-        inactive: '無効',
-        colUsername: 'ユーザー名',
-        colStatus: '状態',
-        colRole: 'ロール',
-        colCreated: '作成日',
-        colAction: '操作',
-        prev: '前へ',
-        next: '次へ',
-        pageCount: '{shown} 件表示 / ページ内 {total}',
-        enable: '有効化',
-        disable: '無効化',
-        resetPassword: 'パスワードリセット',
-        confirmDisable: 'アカウント {name} を無効化しますか？有効なセッションは即時に失効します。',
-        confirmEnable: 'アカウント {name} を有効化しますか？',
-        enabledMsg: '{name} を有効化しました',
-        disabledMsg: '{name} を無効化しました',
-        actionFailed: '操作に失敗しました',
-        loadFailed: 'ユーザー一覧の読み込みに失敗しました',
-        roleAdmin: 'システム管理者',
-        roleUser: '一般ユーザー',
-        confirmRevoke: '{name} のシステム管理者権限を取り消しますか？',
-        confirmPromote: '{name} をシステム管理者に昇格させますか？',
-        revokeBtn: '取り消す',
-        promoteBtn: '昇格',
-        revokedMsg: '{name} の管理者権限を取り消しました',
-        promotedMsg: '{name} をシステム管理者に昇格しました',
-        roleFailed: 'ロールの変更に失敗しました',
-      },
-      passwordReset: {
-        dialogTitle: '他のユーザのパスワードをリセット',
-        warning: 'これは高リスクの操作です。ユーザのメールアドレスをよく確認してください。ここで自分のパスワードをリセットすることはできません。',
-        emailLabel: 'ユーザのメールアドレス',
-        newPasswordLabel: '新しいパスワード',
-        newPasswordPlaceholder: '新しいパスワードを入力してください',
-        confirmPasswordLabel: '新しいパスワード（確認）',
-        confirmPasswordPlaceholder: '新しいパスワードをもう一度入力してください',
-        confirmBtn: 'リセットを確認',
-        success: 'パスワードをリセットし、そのユーザの既存セッションを無効にしました',
-        failed: 'パスワードのリセットに失敗しました',
-      },
-      createUser: {
-        action: 'ユーザを作成',
-        dialogTitle: '新しいユーザを作成',
-        warning: 'これは高リスクの操作です。ユーザ名とメールアドレスをよく確認してください。これらは新しいユーザのログインに使用されます。',
-        usernameLabel: 'ユーザ名',
-        usernamePlaceholder: '2〜50文字',
-        emailLabel: 'メールアドレス',
-        emailPlaceholder: '有効なメールアドレスを入力してください',
-        autoGenerateLabel: 'ランダムなパスワードを自動生成',
-        newPasswordLabel: '新しいパスワード',
-        newPasswordPlaceholder: '英字と数字を含む8〜32文字',
-        confirmPasswordLabel: '新しいパスワード（確認）',
-        confirmPasswordPlaceholder: '新しいパスワードをもう一度入力してください',
-        confirmBtn: 'ユーザを作成',
-        success: 'ユーザを作成しました',
-        successIdempotent: 'ユーザはすでに存在するため、変更はありません',
-        missingPassword: 'ユーザは作成されましたが、生成されたパスワードが返されませんでした。パスワードをリセットしてアクセスを復旧してください。',
-        failed: 'ユーザの作成に失敗しました',
-        validation: {
-          usernameRequired: 'ユーザ名を入力してください',
-          usernameLength: 'ユーザ名は2〜50文字で入力してください',
-          emailRequired: 'メールアドレスを入力してください',
-          emailInvalid: '有効なメールアドレスを入力してください',
-          confirmRequired: '新しいパスワードをもう一度入力してください',
-          passwordMismatch: 'パスワードが一致しません'
-        },
-        generated: {
-          successTitle: 'ユーザを作成しました',
-          successBody: 'このユーザにランダムなパスワードを生成しました。パスワードは一度だけ表示されます。',
-          usernameLabel: 'ユーザ名',
-          emailLabel: 'メールアドレス',
-          passwordLabel: '生成されたパスワード',
-          copyBtn: 'アカウント情報をコピー',
-          copySuccess: 'アカウント情報をクリップボードにコピーしました',
-          acknowledgeBtn: 'パスワードを保存しました'
-        }
-      },
-      bulkApply: {
-        label: '既存のすべてのワークスペースに適用',
-        tooltip: '値を保存してもデフォルトでは新規ワークスペースにのみ適用されます。ここをクリックすると既存のすべてのワークスペースも上書きします。',
-        confirmBtn: '適用を確認',
-        confirmBody: '既存のすべてのワークスペースのストレージクォータを{value}GBに上書きします。運用担当者が個別に調整したワークスペースも上書きされます。続行しますか？',
-        success: '{count}件のワークスペースのストレージクォータを{gb}GBに更新しました',
-        failed: 'すべてのワークスペースへの適用に失敗しました'
-      },
       audit: {
         tabLabel: '監査ログ',
         description: 'プラットフォームレベルのイベントです。システム設定の変更、システム管理者の付与・解除、クォータの一括同期などを新しい順に表示します。',
@@ -5643,7 +5063,6 @@ export default {
       title: '一般設定',
       allSettings: 'すべての設定',
       backToMain: 'メイン画面に戻る',
-      platformAdmin: 'プラットフォーム管理',
       personalSettings: '個人設定',
       helpAndDocs: 'ヘルプとドキュメント',
       description: '言語や外観などの基本オプションを設定します',

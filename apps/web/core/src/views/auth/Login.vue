@@ -113,14 +113,7 @@
           <div class="form-content">
             <t-form ref="registerFormRef" :data="registerData" :rules="registerRules" @submit="handleRegister"
               layout="vertical" label-align="top">
-              <t-form-item :label="$t('auth.spaceKind')" name="spaceKind">
-                <t-radio-group v-model="registerData.spaceKind" :disabled="loading" variant="default-filled">
-                  <t-radio-button value="personal">{{ $t('auth.personalSpace') }}</t-radio-button>
-                  <t-radio-button value="enterprise">{{ $t('auth.enterpriseSpace') }}</t-radio-button>
-                </t-radio-group>
-              </t-form-item>
-
-              <template v-if="registerData.spaceKind === 'enterprise'">
+              <template v-if="!inviteToken">
                 <t-form-item :label="$t('auth.enterpriseName')" name="spaceName">
                   <t-input v-model="registerData.spaceName" :placeholder="$t('auth.enterpriseNamePlaceholder')"
                     size="large" :disabled="loading" />
@@ -183,7 +176,6 @@ import {
   register,
   getOIDCAuthorizationURL,
   getOIDCConfig,
-  autoSetup,
   getAuthConfig,
   devSession,
   userInfoFromApi,
@@ -255,7 +247,6 @@ const formData = reactive<{ [key: string]: any }>({
 
 // Register form data
 const registerData = reactive<{ [key: string]: any }>({
-  spaceKind: 'personal',
   spaceName: '',
   companyCode: '',
   username: '',
@@ -264,12 +255,11 @@ const registerData = reactive<{ [key: string]: any }>({
   confirmPassword: ''
 })
 
-// Clear the register form; the space type goes back to the default (personal).
+// 清空注册字段；邀请注册加入已有企业，自助注册创建新企业。
 const resetRegisterData = () => {
   Object.keys(registerData).forEach(key => {
     (registerData as any)[key] = ''
   })
-  registerData.spaceKind = 'personal'
 }
 
 // Login form validation rules
@@ -289,7 +279,7 @@ const formRules = computed(() => ({
 const registerRules = computed(() => ({
   spaceName: [
     {
-      validator: (val: string) => registerData.spaceKind !== 'enterprise' || !!val?.trim(),
+      validator: (val: string) => !!inviteToken.value || !!val?.trim(),
       message: t('auth.enterpriseNameRequired'),
       type: 'error'
     }
@@ -506,7 +496,7 @@ const acceptAndEnter = async (token: string) => {
   } finally {
     loading.value = false
     await nextTick()
-    router.replace('/platform/knowledge-bases')
+    router.replace(import.meta.env.BASE_URL === '/admin/' ? '/' : '/platform/knowledge-bases')
   }
 }
 
@@ -578,14 +568,13 @@ const handleRegister = async () => {
       return
     }
 
-    const enterprise = registerData.spaceKind === 'enterprise'
     const response = await register({
       username: registerData.username,
       email: registerData.email,
       password: registerData.password,
-      space_kind: enterprise ? 'enterprise' : 'personal',
-      space_name: enterprise ? registerData.spaceName.trim() : '',
-      company_code: enterprise ? registerData.companyCode.trim() : '',
+      space_kind: 'enterprise',
+      space_name: registerData.spaceName.trim(),
+      company_code: registerData.companyCode.trim(),
     })
 
     if (response.success) {
@@ -607,11 +596,11 @@ const handleRegister = async () => {
   }
 }
 
-// Check if already logged in; for lite edition, attempt transparent auto-setup
+// 恢复已有登录和邀请上下文；Web 只使用显式登录或部署允许的开发登录。
 onMounted(async () => {
   // Share-link landing: ?token=xxx switches the form into invite-
   // register mode before any other auto-flow (logged-in redirect /
-  // auto-setup / OIDC) gets a chance to redirect. Resolution failure
+  // OIDC) gets a chance to redirect. Resolution failure
   // surfaces inline; the user can still log in normally if they
   // already have an account. We check this BEFORE the isLoggedIn
   // redirect so an existing session doesn't bounce the user to
@@ -660,18 +649,6 @@ onMounted(async () => {
   if (authStore.isLoggedIn) {
     router.replace('/platform/knowledge-bases')
     return
-  }
-
-  localStorage.removeItem('weknora_auto_setup_failed')
-  try {
-    const response = await autoSetup()
-    if (response.success) {
-      authStore.setLiteMode(true)
-      await persistLoginResponse(response)
-      return
-    }
-  } catch {
-    // Auto-setup may be unavailable outside the native Lite shell.
   }
 
   loadOIDCConfig()

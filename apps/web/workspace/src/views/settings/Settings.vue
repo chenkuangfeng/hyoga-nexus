@@ -62,8 +62,8 @@
     </template>
     <div class="content-wrapper" :class="{
       'content-wrapper--wide': currentSection === 'members',
-      'content-wrapper--resource-list': ['models', 'mymemory', 'platform-api-keys', 'model-catalog', 'members', 'sandbox'].includes(currentSection),
-      'content-wrapper--full': SYSTEM_ADMIN_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
+      'content-wrapper--resource-list': ['models', 'mymemory', 'members', 'sandbox'].includes(currentSection),
+      'content-wrapper--full': isIntegrationSection(currentSection),
     }">
       <!-- 角色不允许访问当前 section（deep-link 进来 / 跨空间切换后角色降级）—— 优先于具体 section 渲染。
            正常导航走 navItems filter 不会到这里，但 watch(navItems) 的 fallback 会在角色降级
@@ -154,28 +154,6 @@
           <SystemInfo />
         </div>
 
-        <!-- 系统管理员可见的全局运行时设置 -->
-        <div v-if="currentSection === 'system-global' && isPhase1Section('system-global')" class="section">
-          <SystemSettings />
-        </div>
-
-        <div v-if="currentSection === 'model-catalog' && isPhase1Section('model-catalog')" class="section">
-          <ModelCatalog />
-        </div>
-
-        <!-- 系统管理员可见的任务队列运行状态 -->
-        <div v-if="currentSection === 'runtime-queues' && isPhase1Section('runtime-queues')" class="section">
-          <RuntimeQueues />
-        </div>
-
-        <div v-if="currentSection === 'platform-api-keys'" class="section">
-          <PlatformAPIKeys />
-        </div>
-
-        <div v-if="currentSection === 'system-audit-log'" class="section">
-          <SystemAuditLog />
-        </div>
-
         <!-- 用户信息（账户基础信息：ID / 用户名 / 邮箱 / 注册时间）。
            用户的基本信息不该跟 owner 权限绑定。 -->
         <div v-if="currentSection === 'userprofile'" class="section">
@@ -225,7 +203,6 @@ import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 // Nexus model settings replace WeKnora's ModelSettings (openspec 2026-11-05-weknora-agent-tool-model-settings).
 import ModelSettings from './NexusModelSettings.vue'
-import ModelCatalog from '../system/ModelCatalog.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import WebSearchSettings from './WebSearchSettings.vue'
 import ChatHistorySettings from './ChatHistorySettings.vue'
@@ -240,20 +217,13 @@ import SandboxSettings from './SandboxSettings.vue'
 import WeKnoraCloudSettings from './WeKnoraCloudSettings.vue'
 import TenantMembers from './TenantMembers.vue'
 import OrgStructure from './OrgStructure.vue'
-import SystemSettings from '@/views/system/SystemSettings.vue'
-import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
-import PlatformAPIKeys from '@/views/system/PlatformAPIKeys.vue'
-import SystemAuditLog from '@/views/system/SystemAuditLog.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
 import {
   INTEGRATION_PREVIEW_ITEMS,
   INTEGRATION_TAB_CAPABILITY,
   INTEGRATION_TAB_MIN_ROLE,
 } from '@/config/integrations'
-import {
-  SETTINGS_SECTION_MIN_ROLE,
-  SYSTEM_ADMIN_SETTINGS_SECTIONS,
-} from '@/config/settingsAccess'
+import { SETTINGS_SECTION_MIN_ROLE } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY, skillSettingsSupported } from '@/config/deploymentCapabilities'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import { hostSkillsOnly } from '@/utils/skillTarget'
@@ -315,7 +285,6 @@ type NavGroup = {
 // - models 列表 viewer 可读，页面内的「+ 添加模型 / 编辑 / 删除」按钮在
 //   ModelSettings.vue 里另用 hasRole('admin') 自己 gate，所以入口保留
 //   viewer 是合理的（contributor 也能浏览模型列表）。
-const SYSTEM_ADMIN_SECTIONS = SYSTEM_ADMIN_SETTINGS_SECTIONS
 
 const normalizeSettingsSection = (section: string) => {
   return normalizeSettingsSectionFromQuery(section, route.query.tab as string | undefined)
@@ -349,9 +318,6 @@ const canSeeSection = (key: string): boolean => {
     if (!min) return true
     if (authStore.canAccessAllTenants) return true
     return authStore.hasRole(min)
-  }
-  if (SYSTEM_ADMIN_SECTIONS.has(key)) {
-    return authStore.isSystemAdmin
   }
   const min = SETTINGS_SECTION_MIN_ROLE[key] ?? 'viewer'
   // canAccessAllTenants（superuser）和路由层一样必须 bypass，否则 cross-tenant
@@ -389,11 +355,6 @@ const navItems = computed(() => {
     { key: 'storage', icon: 'cloud', label: t('settings.storageEngine') },
     { key: 'sandbox', icon: 'code', label: t('settings.sandbox.title') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
-    { key: 'system-global', icon: 'server', label: t('settings.system') },
-    { key: 'model-catalog', icon: 'control-platform', label: t('modelCatalog.title') },
-    { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
-    { key: 'platform-api-keys', icon: 'secured', label: t('platformApiKeys.title') },
-    { key: 'system-audit-log', icon: 'history', label: t('system.globalSettings.audit.tabLabel') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
     { key: 'assistant', icon: 'compass', label: t('assistantSettings.title') },
@@ -415,7 +376,7 @@ const navItems = computed(() => {
 const navGroups = computed<NavGroup[]>(() => {
   const itemMap = new Map(navItems.value.map((item) => [item.key, item]))
   const pickItems = (keys: string[]) => keys.map((key) => itemMap.get(key)).filter(Boolean) as NavItem[]
-  // 分组：账户 → 空间 → 模型 → 发布集成 → 数据与扩展 → 系统管理 → 平台
+  // 分组：账户 → 空间 → 模型 → 发布集成 → 数据与扩展 → 平台
   // 关键调整：把个人偏好(general)和用户信息收进「账户」；
   // 把空间内功能开关(chathistory)从「平台」挪到「空间」；
   // 把检索引擎和外部集成合并为「数据与扩展」，避免两个 2~3 项的窄分组。
@@ -450,11 +411,6 @@ const navGroups = computed<NavGroup[]>(() => {
         'sandbox',
         'websearch',
       ]),
-    },
-    {
-      key: 'system_administration',
-      label: t('settings.navGroups.systemAdministration'),
-      items: pickItems(['system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log']),
     },
     {
       key: 'platform',
@@ -516,16 +472,11 @@ const handleClose = () => {
   uiStore.closeSettings()
   // Only go back when Vue Router knows the previous route is inside the app.
   if (route.path === '/platform/settings') {
-    const sec = route.query.section
-    if (sec === 'model-catalog' || sec === 'system-global' || sec === 'runtime-queues' || sec === 'platform-api-keys' || sec === 'system-audit-log') {
-      router.push('/platform/knowledge-bases')
+    const back = router.options.history.state.back
+    if (typeof back === 'string' && back.startsWith('/platform/')) {
+      router.back()
     } else {
-      const back = router.options.history.state.back
-      if (typeof back === 'string' && back.startsWith('/platform/')) {
-        router.back()
-      } else {
-        router.push('/platform/knowledge-bases')
-      }
+      router.push('/platform/knowledge-bases')
     }
   }
 }

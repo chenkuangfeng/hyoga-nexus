@@ -4,7 +4,6 @@ import test from 'node:test'
 import {
   SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE,
   SETTINGS_SECTION_MIN_ROLE,
-  SYSTEM_ADMIN_SETTINGS_SECTIONS,
 } from './settingsAccess'
 
 test('management shortcuts are stricter than read-only settings pages', () => {
@@ -28,12 +27,5 @@ test('personal skill environment variables are visible to every member', () => {
   assert.equal(
     Object.prototype.hasOwnProperty.call(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE, 'envvars'),
     false,
-  )
-})
-
-test('system administration settings stay explicitly system-admin-only', () => {
-  assert.deepEqual(
-    [...SYSTEM_ADMIN_SETTINGS_SECTIONS],
-    ['system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log'],
   )
 })

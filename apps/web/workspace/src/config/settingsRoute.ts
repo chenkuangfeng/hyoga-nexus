@@ -25,7 +25,9 @@ export function isIntegrationSection(section: string): boolean {
   return (INTEGRATION_TABS as readonly string[]).includes(raw)
 }
 
-const SYSTEM_SETTINGS_PANELS = new Set(['access', 'users', 'tenant', 'runtime', 'security', 'other'])
+const REMOVED_SETTINGS_SECTIONS = new Set([
+  'system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log',
+])
 
 function isBareIntegrationTab(section: string): section is IntegrationTab {
   return (INTEGRATION_TABS as readonly string[]).includes(section)
@@ -37,6 +39,7 @@ function isBareIntegrationTab(section: string): section is IntegrationTab {
  * `api`, and bare tab names remain aliases.
  */
 export function normalizeSettingsSection(section: string, tab?: string | null): string {
+  if (REMOVED_SETTINGS_SECTIONS.has(section)) return 'general'
   if (section === 'integrations') {
     return integrationSectionKey(integrationTabFromSection(tab || 'im'))
   }
@@ -49,7 +52,7 @@ export function normalizeSettingsSection(section: string, tab?: string | null): 
 /**
  * Settings left-nav → URL. Every page, including integrations, is
  * `?section=<navKey>` (e.g. `integration-claw`). `tab` is dropped.
- * `panel` is the tab inside system settings and stays only on that page.
+ * 已删除页面的旧地址归一到常规设置，旧平台管理 panel 参数一律移除。
  */
 export function buildSettingsRouteQuery(
   sectionKey: string,
@@ -60,14 +63,8 @@ export function buildSettingsRouteQuery(
   if (!isIntegrationSection(sectionKey)) {
     delete query.agentId
   }
-  if (sectionKey === 'system-global') {
-    const raw = Array.isArray(query.panel) ? query.panel[0] : query.panel
-    if (typeof raw === 'string' && SYSTEM_SETTINGS_PANELS.has(raw)) query.panel = raw
-    else delete query.panel
-  } else {
-    delete query.panel
-  }
-  query.section = sectionKey
+  delete query.panel
+  query.section = normalizeSettingsSection(sectionKey)
   return query
 }
 

@@ -27,18 +27,6 @@
         </div>
         <div class="model-header-actions">
           <t-button
-            v-if="authStore.isSystemAdmin"
-            type="button"
-            theme="default"
-            variant="text"
-            size="small"
-            class="model-header-action"
-            @click="uiStore.openSettings('model-catalog')"
-          >
-            <template #icon><t-icon name="control-platform" /></template>
-            {{ $t('modelCatalog.title') }}
-          </t-button>
-          <t-button
             v-if="authStore.hasRole('admin')"
             type="button"
             theme="default"

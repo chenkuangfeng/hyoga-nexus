@@ -1,9 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { defineComponent } from 'vue'
-import type { RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
-import { autoSetup, userInfoFromApi } from '@nexus-web/core/api/auth/index'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@nexus-web/core/i18n/index'
@@ -13,30 +11,10 @@ import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 // 主对话页：WeKnora 风格布局 + 平台 Native API（会话、Run、事件）。
 const NexusChatRoutePage = () => import('@/views/chat/NexusChatRoutePage.vue')
 
-/** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
-const LITE_LAST_PATH_KEY = 'weknora_lite_last_path'
-
 // views/platform/index.vue always mounts the settings modal and opens it when
 // the path is /platform/settings, so this route only has to own the URL.
 // Rendering Settings.vue here would mount a second, independent copy.
 const SettingsRouteOutlet = defineComponent({ name: 'SettingsRouteOutlet', render: () => null })
-
-function isLiteEdition(authStore: ReturnType<typeof useAuthStore>) {
-  return authStore.isLiteMode || localStorage.getItem('weknora_lite_mode') === 'true'
-}
-
-function isLiteSpaDefaultEntry(to: RouteLocationNormalized) {
-  return (
-    to.path === '/' ||
-    to.path === '/platform' ||
-    to.path === '/platform/knowledge-bases' ||
-    to.name === 'knowledgeBaseList'
-  )
-}
-
-function isSafeLiteRestoreTarget(path: string) {
-  return path.startsWith('/platform/') && !path.startsWith('/platform/shared-spaces')
-}
 
 function hasPendingOIDCCallback() {
   if (typeof window === 'undefined') return false
@@ -47,6 +25,7 @@ function hasPendingOIDCCallback() {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: "/:pathMatch(.*)*", component: () => import("@nexus-web/core/components/NotFound.vue"), meta: { requiresAuth: false, requiresInit: false } },
     {
       path: "/",
       redirect: "/platform/settings",
@@ -93,13 +72,6 @@ const router = createRouter({
       name: "home",
       component: PlannedPage,
       meta: { requiresInit: true, requiresAuth: true }
-    },
-    // 平台管理：整页替换主界面（不在 /platform 布局之下，因此没有侧栏），由顶部「返回」回到主界面。
-    {
-      path: "/platform-admin",
-      name: "platformAdmin",
-      component: () => import("../views/system/PlatformAdmin.vue"),
-      meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
     },
     {
       path: "/platform",
@@ -222,33 +194,6 @@ const router = createRouter({
           path: "organizations",
           redirect: "/platform/shared-spaces",
         },
-        // Compatibility redirects for /platform/system/* URLs. System
-        // administration surfaces live as dedicated sections inside the
-        // standard Settings modal; keep stable URLs for bookmarks and
-        // external links.
-        {
-          path: "system",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/settings",
-          name: "systemSettings",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/admins",
-          name: "systemAdmins",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/queues",
-          name: "systemQueues",
-          redirect: { path: "/platform/settings", query: { section: "runtime-queues" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
       ],
     },
     // Dev-only markdown rendering test page
@@ -260,33 +205,6 @@ const router = createRouter({
     }] : []),
   ],
 });
-
-// 持久化 auto-setup / login 返回的认证信息到 store
-function persistLoginResponse(authStore: ReturnType<typeof useAuthStore>, response: any) {
-  const activeTenant = response.active_tenant || response.tenant
-  if (response.user && response.token) {
-    const homeTenantId = response.user.tenant_id ?? activeTenant?.id ?? ''
-    authStore.setUser(userInfoFromApi(response.user, homeTenantId))
-    authStore.setToken(response.token)
-    if (response.refresh_token) {
-      authStore.setRefreshToken(response.refresh_token)
-    }
-    if (activeTenant) {
-      authStore.setTenant({
-        id: String(activeTenant.id) || '',
-        name: activeTenant.name || '',
-        owner_id: response.user.id || '',
-        created_at: activeTenant.created_at || new Date().toISOString(),
-        updated_at: activeTenant.updated_at || new Date().toISOString()
-      })
-    } else {
-      authStore.setTenant(null)
-    }
-    if (Array.isArray(response.memberships)) {
-      authStore.setMemberships(response.memberships)
-    }
-  }
-}
 
 async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore>) {
   const token = localStorage.getItem('weknora_token')
@@ -306,9 +224,6 @@ async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore
   return authStore.refreshFromAuthMe()
 }
 
-let autoSetupAttempted = false
-let liteDeepLinkRestoreDone = false
-
 // 路由守卫：检查认证状态和系统初始化状态
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
@@ -325,20 +240,6 @@ router.beforeEach(async (to, from, next) => {
     next({ ...toolboxLocation(to.query.section,
       typeof to.query.sandboxId === 'string' ? to.query.sandboxId : undefined), replace: true })
     return
-  }
-
-  // Lite：硬刷新后若落在默认首页，恢复本次会话中最后访问的 /platform 子路径
-  if (!liteDeepLinkRestoreDone) {
-    liteDeepLinkRestoreDone = true
-    if (isLiteEdition(authStore)) {
-      const saved = sessionStorage.getItem(LITE_LAST_PATH_KEY)
-      if (saved && isSafeLiteRestoreTarget(saved) && isLiteSpaDefaultEntry(to)) {
-        if (saved !== to.fullPath) {
-          next(saved)
-          return
-        }
-      }
-    }
   }
 
   // Tenantless onboarding still requires a valid user token even though it
@@ -360,7 +261,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // 如果访问的是登录页面或初始化页面，直接放行
-  if (to.meta.requiresAuth === false || to.meta.requiresInit === false) {
+  if (to.meta.requiresAuth === false) {
     // 如果已登录用户访问登录页面，重定向到知识库列表页面
     if (to.path === '/login' && authStore.isLoggedIn) {
       next(authStore.hasValidTenant ? '/platform/knowledge-bases' : '/onboarding/workspace')
@@ -382,25 +283,18 @@ router.beforeEach(async (to, from, next) => {
         )
         return
       }
-
-      if (!autoSetupAttempted) {
-        autoSetupAttempted = true
-        localStorage.removeItem('weknora_auto_setup_failed')
-        try {
-          const response = await autoSetup()
-          if (response.success) {
-            persistLoginResponse(authStore, response)
-            authStore.setLiteMode(true)
-            next(to.fullPath)
-            return
-          }
-        } catch {
-          // Auto-setup may be unavailable outside the native Lite shell.
-        }
-      }
       next('/login')
       return
     }
+  }
+
+  if (authStore.user?.must_change_password && to.path !== '/auth/change-password') {
+    next('/auth/change-password')
+    return
+  }
+  if (to.path === '/auth/change-password') {
+    next()
+    return
   }
 
   if (to.meta.requiresTenant !== false && !authStore.hasValidTenant) {
@@ -419,25 +313,7 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  // SystemAdmin gate — checked AFTER auth so a non-admin who's logged
-  // out gets redirected to /login first (consistent with how the rest
-  // of the auth flow works), and only an authenticated non-admin sees
-  // the bounce. This is UI-only; the server enforces the real check.
-  if (to.meta.requiresSystemAdmin === true) {
-    if (!authStore.isSystemAdmin) {
-      next('/platform/knowledge-bases')
-      return
-    }
-  }
-
   next()
-})
-
-router.afterEach((to) => {
-  if (!isLiteEdition(useAuthStore())) return
-  if (to.path === '/login') return
-  if (!to.path.startsWith('/platform')) return
-  sessionStorage.setItem(LITE_LAST_PATH_KEY, to.fullPath)
 })
 
 export default router

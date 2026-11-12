@@ -9,7 +9,7 @@ import {
   settingsQueryUnchanged,
 } from './settingsRoute'
 
-test('settings nav writes section, and keeps a system-settings panel only there', () => {
+test('settings nav drops obsolete platform panels and normalizes removed sections', () => {
   assert.deepEqual(
     buildSettingsRouteQuery('models', {
       section: 'system-global',
@@ -24,11 +24,11 @@ test('settings nav writes section, and keeps a system-settings panel only there'
   )
   assert.deepEqual(
     buildSettingsRouteQuery('runtime-queues', { section: 'system-global' }),
-    { section: 'runtime-queues' },
+    { section: 'general' },
   )
   assert.deepEqual(
     buildSettingsRouteQuery('system-global', { section: 'system-global', panel: 'users', tab: 'im' }),
-    { section: 'system-global', panel: 'users' },
+    { section: 'general' },
   )
   assert.deepEqual(
     buildSettingsRouteQuery('models', { section: 'system-global', panel: 'users' }),
@@ -36,7 +36,7 @@ test('settings nav writes section, and keeps a system-settings panel only there'
   )
   assert.deepEqual(
     buildSettingsRouteQuery('system-global', { section: 'system-global', panel: 'billing' }),
-    { section: 'system-global' },
+    { section: 'general' },
   )
   assert.deepEqual(
     buildSettingsRouteQuery(integrationSectionKey('claw'), {
@@ -66,7 +66,9 @@ test('legacy api / integrations / bare-tab query strings normalize to nav keys',
   assert.equal(normalizeSettingsSection('integrations', 'embed'), 'integration-embed')
   assert.equal(normalizeSettingsSection('integrations'), 'integration-im')
   assert.equal(normalizeSettingsSection('integration-chrome'), 'integration-chrome')
-  assert.equal(normalizeSettingsSection('system-global'), 'system-global')
+  for (const section of ['system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log']) {
+    assert.equal(normalizeSettingsSection(section), 'general')
+  }
   assert.equal(isIntegrationSection('integration-chrome'), true)
   assert.equal(isIntegrationSection('integration-cli'), true)
   assert.equal(isIntegrationSection('models'), false)

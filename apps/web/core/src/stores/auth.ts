@@ -442,15 +442,6 @@ export const useAuthStore = defineStore('auth', () => {
     return selectedTenantId.value
   }
 
-  const setLiteMode = (value: boolean) => {
-    isLiteMode.value = value
-    if (value) {
-      localStorage.setItem('weknora_lite_mode', 'true')
-    } else {
-      localStorage.removeItem('weknora_lite_mode')
-    }
-  }
-
   const logout = () => {
     // 清空状态
     user.value = null
@@ -572,7 +563,9 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    isLiteMode.value = localStorage.getItem('weknora_lite_mode') === 'true'
+    // Web 不恢复桌面 Lite 标记，避免旧缓存隐藏企业切换和退出入口。
+    localStorage.removeItem('weknora_lite_mode')
+    isLiteMode.value = false
   }
 
   // 初始化时从localStorage恢复状态
@@ -626,7 +619,6 @@ export const useAuthStore = defineStore('auth', () => {
     ensureAuthMe,
     acceptInvitationByTokenAndRefresh,
     getSelectedTenant,
-    setLiteMode,
     logout,
     initFromStorage
   }
