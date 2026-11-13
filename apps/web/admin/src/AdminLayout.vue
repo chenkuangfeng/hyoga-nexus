@@ -50,6 +50,7 @@ async function signOut() {
       <aside v-if="auth.currentEntries.includes('admin')" class="admin-sidebar">
         <nav :aria-label="t('adminConsole.navigation')">
           <RouterLink to="/" exact-active-class="is-active">{{ t('adminConsole.overview') }}</RouterLink>
+          <RouterLink v-if="context.can('org:manage')" to="/organization" active-class="is-active">{{ t('adminOrganization.title') }}</RouterLink>
           <RouterLink v-if="context.can('members:manage')" to="/members" active-class="is-active">{{ t('adminMembers.title') }}</RouterLink>
           <RouterLink v-if="context.can('policy:manage')" to="/policy" active-class="is-active">{{ t('adminConsole.policy') }}</RouterLink>
         </nav>

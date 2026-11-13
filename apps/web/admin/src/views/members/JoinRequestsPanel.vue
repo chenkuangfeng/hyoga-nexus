@@ -92,7 +92,7 @@ onBeforeUnmount(() => { invalidate(); emit('busy', false) })
       <p>{{ t('adminApplications.description') }}</p>
       <t-alert v-if="error" theme="error" :message="error" />
       <t-alert v-if="success" theme="success" :message="success" />
-      <t-alert v-if="!loading && !canApprove" theme="info" :message="departmentHint" />
+      <t-alert v-if="!loading && !canApprove" theme="info" :message="departmentHint"><template v-if="hasOrganization" #operation><RouterLink to="/organization">{{ t('adminOrganization.open') }}</RouterLink></template></t-alert>
       <t-table v-if="ready || loading" row-key="id" :data="rows" :columns="columns" :loading="loading" :empty="t(search ? 'adminMembers.noMatch' : 'adminApplications.empty')">
         <template #applicant="{ row }"><strong>{{ name(row) }}</strong><p>{{ row.email || '—' }}</p></template>
         <template #message="{ row }"><p class="request-message">{{ row.message || '—' }}</p></template>

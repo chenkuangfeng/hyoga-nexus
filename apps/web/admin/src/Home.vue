@@ -10,6 +10,7 @@ const { t } = useI18n(), auth = useAuthStore(), context = useAdminContext()
     <p>{{ t('adminConsole.overviewHint') }}</p>
     <article v-if="context.can('policy:manage')"><h2>{{ t('adminConsole.policy') }}</h2><p>{{ t('adminConsole.policyHint') }}</p><RouterLink to="/policy">{{ t('adminConsole.openPolicy') }}</RouterLink></article>
     <article v-if="context.can('members:manage')"><h2>{{ t('adminMembers.title') }}</h2><p>{{ t('adminMembers.description') }}</p><RouterLink to="/members">{{ t('adminMembers.open') }}</RouterLink></article>
+    <article v-if="context.can('org:manage')"><h2>{{ t('adminOrganization.title') }}</h2><p>{{ t('adminOrganization.description') }}</p><RouterLink to="/organization">{{ t('adminOrganization.open') }}</RouterLink></article>
     <t-alert theme="info" :message="t('adminConsole.planned')" />
   </section>
 </template>
