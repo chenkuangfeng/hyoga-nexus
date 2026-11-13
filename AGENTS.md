@@ -34,7 +34,7 @@
 - **构建根应用包**：`uv build`
 - **构建指定包**：`uv build --package hyoga-nexus-core`（按需替换包名）
 - **升级平台数据库**：`uv run alembic -c alembic.ini upgrade head`
-- **启动 API**：`uv run uvicorn nexus_api.main:app --reload`
+- **启动 API**：`uv run uvicorn nexus_api.main:app --reload --reload-dir apps/api --reload-dir packages`
 - **启动 worker**：`uv run python -m nexus_worker`
 - **运行全部测试**：`uv run --locked pytest`
 - **运行指定测试**：`uv run --locked pytest tests/test_api.py`（按需替换测试路径）

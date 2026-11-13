@@ -1,6 +1,6 @@
 # Nexus API
 
-FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型设置 API。`http/` 处理协议，`schemas/` 定义接口，`dependencies/` 注入认证与数据库；业务服务位于 platform。仓库根目录执行 `uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1`，启动前配置数据库/认证并执行 Alembic，见 [项目入口](../../README.md)。
+FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型设置 API。`http/` 处理协议，`schemas/` 定义接口，`dependencies/` 注入认证与数据库；业务服务位于 platform。仓库根目录执行 `uv run uvicorn nexus_api.main:app --reload --reload-dir apps/api --reload-dir packages --host 127.0.0.1`，启动前配置数据库/认证并执行 Alembic，见 [项目入口](../../README.md)。
 
 ## 登录与首个账号
 
@@ -22,3 +22,9 @@ FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型�
 - [模块设计](docs/design.md)
 
 **实时事件**：`GET /tenants/{tenant}/runs/{run}/events`（`Accept: text/event-stream`）为异步 SSE，续连用 `Last-Event-ID`；通道后端、嵌入模式与配置见 `configs/nexus.example.toml` 的 `[run_events]`、`[deployment]` 与 [总体架构 2.12](../../docs/architecture.md)。`GET /tenants/{tenant}/sessions/{session}/live-run` 返回会话正在生成的 Run（无则 204）。
+
+## 开发热重载
+
+在仓库根目录启动，并用 `--reload-dir apps/api --reload-dir packages` 将热重载限定在后端源码目录。直接使用 `--reload` 会默认扫描整个工作目录，包括前端 `apps/web/node_modules`；Windows 下 pnpm 的失效目录链接可能使扫描抛出 `FileNotFoundError: [WinError 3]`。未安装 `watchfiles` 时，`--reload-exclude` 不生效，不能代替限定监听目录。
+
+仅需运行而不需要自动重启时，可使用 `uv run uvicorn nexus_api.main:app --host 127.0.0.1`。修改 `configs/nexus.toml` 后需手动重启。

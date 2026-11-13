@@ -43,7 +43,7 @@ Python 3.11+ / FastAPI / 多包 uv workspace；Vue 3 / TypeScript / Element Plus
 
 ```bash
 # 终端 1：API（仓库根目录）
-uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
+uv run uvicorn nexus_api.main:app --reload --reload-dir apps/api --reload-dir packages --host 127.0.0.1
 
 # 终端 2：worker（仓库根目录，需与 API 使用同一份 configs/nexus.toml）
 uv run python -m nexus_worker
@@ -52,6 +52,8 @@ uv run python -m nexus_worker
 cd apps/web
 pnpm dev
 ```
+
+API 热重载只监听 `apps/api` 和 `packages`，避免扫描前端依赖。Windows 若遇到 `node_modules` 路径的 `WinError 3`，请确认使用上面的完整命令，详见 [API 热重载说明](apps/api/README.md#开发热重载)。
 
 启动后访问 Vite 输出的地址（通常为 `http://localhost:5173`）。API 文档为 `http://127.0.0.1:8000/docs`，数据库连通检查为 `http://127.0.0.1:8000/api/v1/ready`。
 
@@ -67,7 +69,7 @@ uv sync --locked --extra dev
 cp configs/nexus.example.toml configs/nexus.toml
 # 编辑 configs/nexus.toml，填写实际的数据库连接串，并在 `[auth]` 中取消注释 `mode = "development"`（仅本机）后执行：
 uv run alembic -c alembic.ini upgrade head
-uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
+uv run uvicorn nexus_api.main:app --reload --reload-dir apps/api --reload-dir packages --host 127.0.0.1
 ```
 
 API、worker 和 Alembic 自动读取当前工作目录下的 `configs/nexus.toml`，它是全部部署配置的唯一来源（数据库、认证、日志、加密主密钥、模型凭据与网络白名单等）；不读取环境变量和 `.env`。请从仓库根目录启动；安装后部署在部署工作目录提供相同路径的文件。模板见 [configs/nexus.example.toml](configs/nexus.example.toml)，配置规则见 [configs 说明](configs/README.md)。真实配置文件已被 Git 忽略；不要提交数据库密码。PostgreSQL 连接串中用户名或密码的特殊字符需进行 URL 编码。
@@ -79,7 +81,7 @@ Copy-Item configs/nexus.example.toml configs/nexus.toml
 notepad configs/nexus.toml
 # 在 configs/nexus.toml 的 [auth] 中设置 mode = "development"
 uv run alembic -c alembic.ini upgrade head
-uv run uvicorn nexus_api.main:app --reload --host 127.0.0.1
+uv run uvicorn nexus_api.main:app --reload --reload-dir apps/api --reload-dir packages --host 127.0.0.1
 ```
 
 显式传入的数据库连接串优先；否则读取 `[database].url`，缺失或格式错误会明确报错，不回退其他来源。认证模式按 `[auth].mode` 配置（`development`、`session` 或 `external`），开发认证的主体为 `[auth].dev_user_id`（缺省 `local-developer`），不信任请求头中的用户 ID；只用于本机开发，服务应绑定 `127.0.0.1`，不能作为生产登录方案。生产环境接入外部身份提供方后设置 `mode = "external"` 并在 API 组合入口注册 provider。
@@ -107,7 +109,7 @@ source .venv/bin/activate
 # 在 configs/nexus.toml 的 [auth] 中设置 mode = "development"
 python -m pip install --upgrade pip
 python scripts/install_dev.py
-uvicorn nexus_api.main:app --reload
+uvicorn nexus_api.main:app --reload --reload-dir apps/api --reload-dir packages
 ```
 
 另一个终端，切换到 Node.js 22.12+ 后启动前端：
