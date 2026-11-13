@@ -74,3 +74,29 @@ export async function createEnterpriseInviteLink(tenantId: string, nextRole: Inv
 }
 /** 撤销人员邀请或共享邀请链接；调用方须先确认。 */
 export async function revokeEnterpriseInvitation(tenantId: string, id: string): Promise<void> { await del(`${tenantPath(tenantId)}/invitations/${encodeURIComponent(id)}`) }
+
+export interface EnterpriseApplication {
+  id: string; user_id: string; email: string | null; display_name: string | null
+  role: InviteRole; status: 'pending'; unit_id: string | null; message: string | null; created_at: string
+}
+/** 只消费待处理申请；拒绝已审批状态或 owner 等不符合申请契约的响应。 */
+export function applicationFromResponse(value: unknown): EnterpriseApplication {
+  const row = object(value)
+  if (row.status !== 'pending') throw new Error('members_response_invalid')
+  return { id: string(row.id), user_id: string(row.user_id), email: nullable(row.email), display_name: nullable(row.display_name), role: inviteRole(row.role), status: 'pending', unit_id: nullable(row.unit_id), message: nullable(row.message), created_at: string(row.created_at) }
+}
+/** 列出当前企业待审批申请；需要 members:manage，不包含历史审批记录。 */
+export async function listEnterpriseApplications(tenantId: string): Promise<EnterpriseApplication[]> {
+  const data: unknown = await get(`${tenantPath(tenantId)}/join-requests`)
+  if (!Array.isArray(data)) throw new Error('members_response_invalid')
+  return data.map(applicationFromResponse)
+}
+/** 批准到指定部门和基础角色；校验回执用户与角色，避免把不相符的结果展示为批准成功。 */
+export async function approveEnterpriseApplication(tenantId: string, id: string, input: { unit_id: string; role: InviteRole }, expectedUserId: string): Promise<void> {
+  const row = object(await post(`${tenantPath(tenantId)}/join-requests/${encodeURIComponent(id)}/approve`, input))
+  if (row.status !== 'active' || string(row.user_id) !== expectedUserId || inviteRole(row.role) !== input.role) throw new Error('members_response_invalid')
+}
+/** 拒绝必须说明原因；后端记录审核与 7 天重新申请冷却期，调用方应在确认表单中说明。 */
+export async function rejectEnterpriseApplication(tenantId: string, id: string, reason: string): Promise<void> {
+  await post(`${tenantPath(tenantId)}/join-requests/${encodeURIComponent(id)}/reject`, { reason })
+}

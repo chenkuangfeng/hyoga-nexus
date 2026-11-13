@@ -1,14 +1,17 @@
 <script setup lang="ts">
 /** 管理端成员与邀请列表。分页/搜索基于后端完整列表，所有操作交由作用域隔离的控制器。 */
-import { computed, onBeforeUnmount, reactive } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { copyToClipboard } from '@nexus-web/core/utils/clipboard'
 import type { LinkInvitation } from '@nexus-web/core/api/enterprise-members'
+import JoinRequestsPanel from './JoinRequestsPanel.vue'
 import { useMemberAdministration } from './useMemberAdministration'
 const props = withDefaults(defineProps<{ workspaceHref?: string }>(), { workspaceHref: '/' })
 const { t, locale } = useI18n(), auth = useAuthStore()
 const state = reactive(useMemberAdministration(t))
+const applicationsBusy = ref(false), applicationsRefresh = ref(0)
+async function refreshLists() { if (applicationsBusy.value) return; applicationsRefresh.value++; await state.load() }
 const inviteRoles = computed(() => ['admin', 'contributor', 'viewer'].map(value => ({ value, label: t(`tenantMember.role.${value}`) })))
 const memberColumns = computed(() => [{ colKey: 'person', title: t('adminMembers.person'), minWidth: 220 }, { colKey: 'status', title: t('adminMembers.status'), width: 100 }, { colKey: 'joined_at', title: t('adminMembers.joined'), width: 190 }, { colKey: 'actions', title: t('adminMembers.roleActions'), minWidth: 300 }])
 const invitationColumns = computed(() => [{ colKey: 'person', title: t('adminMembers.invitee'), minWidth: 220 }, { colKey: 'role', title: t('adminMembers.role'), width: 120 }, { colKey: 'created_at', title: t('adminMembers.sent'), width: 190 }, { colKey: 'details', title: t('adminMembers.details'), minWidth: 240 }, { colKey: 'actions', title: t('adminMembers.operations'), width: 160 }])
@@ -32,7 +35,7 @@ async function copyLink(row: LinkInvitation) {
 </script>
 <template>
   <section class="members-page">
-    <header><div><h1>{{ t('adminMembers.title') }}</h1><p>{{ t('adminMembers.description') }}</p></div><div class="member-actions"><t-button variant="outline" :disabled="state.busy" :loading="state.loading" @click="state.load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="state.canManage" :disabled="state.busy || state.loading" @click="state.openEditor">{{ t('adminMembers.invite') }}</t-button><t-button v-if="state.canManage" variant="outline" :disabled="state.busy || state.loading" @click="state.openLink">{{ t('adminMembers.createLink') }}</t-button></div></header>
+    <header><div><h1>{{ t('adminMembers.title') }}</h1><p>{{ t('adminMembers.description') }}</p></div><div class="member-actions"><t-button variant="outline" :disabled="state.busy || applicationsBusy" :loading="state.loading" @click="refreshLists">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="state.canManage" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openEditor">{{ t('adminMembers.invite') }}</t-button><t-button v-if="state.canManage" variant="outline" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openLink">{{ t('adminMembers.createLink') }}</t-button></div></header>
     <t-alert v-if="!state.canManage" theme="warning" :message="t('adminMembers.denied')" />
     <template v-else>
       <t-alert v-if="state.error" theme="error" :message="state.error" />
@@ -61,6 +64,7 @@ async function copyLink(row: LinkInvitation) {
           </t-table>
           <t-pagination v-if="state.invitations.length > state.pageSize" v-model="state.invitePage" :page-size="state.pageSize" :total="state.invitations.length" :show-page-size="false" />
         </t-tab-panel>
+        <t-tab-panel value="applications" :label="t('adminApplications.title')"><JoinRequestsPanel v-if="state.tab === 'applications'" :refresh-key="applicationsRefresh" @approved="state.load" @busy="applicationsBusy = $event" /></t-tab-panel>
       </t-tabs>
       <t-alert theme="info" :message="t('adminMembers.limits')" />
     </template>
