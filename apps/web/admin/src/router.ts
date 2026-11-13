@@ -1,5 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
+import { useAdminContext } from './stores/context'
+
+/** 开发时员工应用使用同主机 5173 端口；生产部署保持同源路径并保留查询参数。 */
+function workspaceLocation(path = '/'): string {
+  if (!import.meta.env.DEV) return path
+  const url = new URL(path, window.location.origin)
+  url.port = '5173'
+  return url.href
+}
 
 /** 管理应用只消费服务端 entries；具体操作仍由各接口校验权限。 */
 const router = createRouter({
@@ -14,17 +23,21 @@ const router = createRouter({
       component: { render: () => null },
       meta: { public: true },
       beforeEnter(to: { fullPath: string }) {
-        window.location.replace(to.fullPath)
+        window.location.replace(workspaceLocation(to.fullPath))
         return false
       },
     })),
-    { path: '/', component: () => import('./Home.vue') },
+    { path: '/', component: () => import('./AdminLayout.vue'), props: () => ({ workspaceHref: workspaceLocation() }), children: [
+      { path: '', component: () => import('./Home.vue') },
+      { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },
+    ] },
     { path: '/:pathMatch(.*)*', component: () => import('@nexus-web/core/components/NotFound.vue'), meta: { public: true } },
   ],
 })
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (to.meta.public) return true
+  useAdminContext().invalidate()
   if (!localStorage.getItem('weknora_token')) return '/login'
   try {
     if (!await auth.refreshFromAuthMe()) return '/login'
@@ -32,6 +45,7 @@ router.beforeEach(async (to) => {
     return '/login'
   }
   if (auth.user?.must_change_password && to.path !== '/auth/change-password') return '/auth/change-password'
+  await useAdminContext().load()
   return true
 })
 export default router

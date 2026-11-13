@@ -8,7 +8,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router、vue-i18n 与 Vite。页面�
 | --- | --- | --- |
 | [core](core/README.md) | 公共 API、认证、语言、主题、登录与改密 | 已抽取基础模块，编辑器等共用组件仍待迁移 |
 | [workspace](workspace/README.md) | 员工工作台与 embed 入口 | 现有应用已移入，平台管理、桌面自动登录与旧浮动助手已移除，菜单与资源归属重构仍在实施 |
-| [admin](admin/README.md) | 企业管理后台，部署路径 `/admin/` | 独立入口与认证骨架，业务页面尚未接入 |
+| [admin](admin/README.md) | 企业管理后台，部署路径 `/admin/` | 独立登录、权限导航、企业切换和企业策略；其他管理页待迁移 |
 
 ## 使用
 

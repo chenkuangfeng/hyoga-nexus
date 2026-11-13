@@ -1,21 +1,20 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
-const auth = useAuthStore()
+import { useAdminContext } from './stores/context'
+const { t } = useI18n(), auth = useAuthStore(), context = useAdminContext()
 </script>
 <template>
-  <main class="admin-entry">
-    <template v-if="auth.currentEntries.includes('admin')">
-      <h1>{{ auth.currentTenantName }} · 企业管理</h1>
-      <t-alert theme="info" message="管理后台正在迁移，管理页面尚未接入。" />
-    </template>
-    <template v-else>
-      <h1>无权访问企业管理后台</h1>
-      <p>当前企业未授予你管理入口权限。</p>
-    </template>
-    <t-link href="/" theme="primary">进入员工工作台</t-link>
-  </main>
+  <section class="admin-overview">
+    <h1>{{ auth.currentTenantName }} · {{ t('adminConsole.overview') }}</h1>
+    <p>{{ t('adminConsole.overviewHint') }}</p>
+    <article v-if="context.can('policy:manage')"><h2>{{ t('adminConsole.policy') }}</h2><p>{{ t('adminConsole.policyHint') }}</p><RouterLink to="/policy">{{ t('adminConsole.openPolicy') }}</RouterLink></article>
+    <t-alert theme="info" :message="t('adminConsole.planned')" />
+  </section>
 </template>
 <style scoped>
-.admin-entry { max-width: 960px; margin: 64px auto; padding: 24px; }
-.admin-entry :deep(.t-alert) { margin-bottom: 24px; }
+.admin-overview { max-width: 1000px; }
+h1 { margin-top: 0; font-size: 24px; } p { color: var(--td-text-color-secondary); line-height: 1.6; }
+article { background: var(--td-bg-color-container); border: 1px solid var(--td-component-border); border-radius: var(--td-radius-default); padding: 24px; margin: 24px 0; }
+a { color: var(--td-brand-color); }
 </style>
