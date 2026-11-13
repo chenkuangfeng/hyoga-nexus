@@ -2,9 +2,9 @@
 
 两个 Web 应用共用的源码包，不单独构建或部署。
 
-- `src/api/`：类型化接口与请求契约；`enterprise-admin.ts` 提供企业策略、部门选项校验与差异补丁。
+- `src/api/`：类型化接口与请求契约；`enterprise-admin.ts` 提供企业策略、部门选项校验与差异补丁；`enterprise-members.ts` 校验成员和人员/链接邀请的真实契约。
 - `src/stores/`：认证、企业身份、资源缓存与刷新排序；应用入口来自服务端成员身份的 `entries`。
-- `src/composables/`、`src/utils/`：主题、字体、请求与令牌刷新等基础逻辑。
+- `src/composables/`、`src/utils/`：主题、字体、请求与令牌刷新等基础逻辑；剪贴板统一提供现代 API 和 HTTP 环境降级。
 - `src/i18n/`：公共语言资源与审计、扫描工具。
 - `src/views/auth/`：公共登录与改密组件；自助注册只创建企业，邀请注册加入已有企业。
 - `src/components/IMChannelPanel.vue`：智能体 IM 渠道面板，遵循维护权限、归属与企业策略，二维码在本地生成；接口封装在 `api/enterprise-connections.ts`。
