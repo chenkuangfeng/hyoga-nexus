@@ -1,0 +1,16 @@
+// 企业管理使用设置页已有的标题、列表工具按钮和表格框，统一消费公共 mixin。
+@import (reference) '../../core/src/styles/settings-section.less';
+@import (reference) '../../core/src/styles/settings-table.less';
+.admin-content-wrapper {
+  .section-header { .settings-section-header(); display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+  .section-header--list { margin-bottom: 12px; }
+  .section-header > div > h2 { margin: 0 0 8px; }
+  .section-header > div > p { margin: 0; font-size: var(--app-text-base); line-height: 1.5; color: var(--td-text-color-secondary); }
+  .settings-list-button.t-button { .settings-list-action(); }
+  .data-table-shell { .settings-data-table(); }
+  .t-alert { margin-bottom: 16px; }
+  .t-tabs { background: transparent; }
+  .t-tabs__content { padding: 16px 0 32px; }
+  .t-pagination { margin-top: 16px; }
+  p { overflow-wrap: anywhere; }
+}

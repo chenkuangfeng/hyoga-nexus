@@ -3,12 +3,17 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import TDesign from 'tdesign-vue-next'
 import 'tdesign-vue-next/dist/tdesign.css'
+import '@nexus-web/core/styles/theme.css'
+import '@nexus-web/core/styles/tdesign-overrides.less'
+import './settings.less'
 import i18n from '@nexus-web/core/i18n'
 import { initTheme } from '@nexus-web/core/composables/useTheme'
 import { initFont } from '@nexus-web/core/composables/useFont'
+import { installTDesignIconOfflineGuard } from '@nexus-web/core/utils/tdesign-icon-offline'
 import App from './App.vue'
 import router from './router'
 
+installTDesignIconOfflineGuard()
 initTheme()
 initFont()
 const app = createApp(App)

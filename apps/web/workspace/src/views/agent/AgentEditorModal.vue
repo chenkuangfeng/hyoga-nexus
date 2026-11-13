@@ -1877,7 +1877,7 @@ import { hydrateAgentPromptRefs, serializeAgentPrompts } from '@/utils/agentProm
 import { copyWithToast } from '@/utils/clipboard';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useModalShell } from '@/composables/useModalShell'
-import SettingsModalShell from '@/components/SettingsModalShell.vue'
+import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import {
   createAgent,
   updateAgent,

@@ -13,6 +13,7 @@
   },
   "exports": {
     "./*.vue": "./src/*.vue",
+    "./styles/*": "./src/styles/*",
     "./*.ts": "./src/*.ts",
     "./*": "./src/*.ts",
     "./utils": "./src/utils/index.ts",

@@ -8,6 +8,10 @@
 
 在 `apps/web/` 运行 `pnpm dev:admin`（5174/admin/）、`pnpm --filter @nexus-web/admin build` 、`pnpm --filter @nexus-web/admin test` 或 `pnpm --filter @nexus-web/admin preview`。产物为 `admin/dist`。完整页面与菜单权限实现见企业化提案 E2.5。
 
+## 界面布局
+
+企业管理严格沿用员工工作台当前设置页的布局、组件与样式：两个应用共同使用 `core/src/components/SettingsModalShell.vue` 的整页模式（208px 左侧分组导航、返回入口、右侧滚动内容），共用主题令牌及 TDesign 覆盖样式。企业选择和退出放在侧栏标题区，业务页面使用设置页标题、工具按钮、表格边框和标准设置行；常规内容内边距为 40px/48px，成员列表为 20px/28px。企业策略使用左说明、右控件的设置行，不另建卡片式表单。公共样式和组件由 `core` 提供，两个应用不互相导入。
+
 ## 企业策略
 
 登录后进入概览，有 `policy:manage` 时显示「企业策略」，地址 `/admin/policy`。策略包括个人智能体自建范围、个人模型、对外共享、个人企微机器人、微信与 QQ 渠道以及会话保留天数。保存前需确认；关闭自动清理会显式提交 `retention_days: null`，只发送变化字段。策略收紧可能停用个人渠道，保留天数可能触发不可恢复的内容清理，页面会说明后果。

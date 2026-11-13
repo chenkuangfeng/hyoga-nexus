@@ -93,12 +93,12 @@ onBeforeUnmount(() => { invalidate(); emit('busy', false) })
       <t-alert v-if="error" theme="error" :message="error" />
       <t-alert v-if="success" theme="success" :message="success" />
       <t-alert v-if="!loading && !canApprove" theme="info" :message="departmentHint"><template v-if="hasOrganization" #operation><RouterLink to="/organization">{{ t('adminOrganization.open') }}</RouterLink></template></t-alert>
-      <t-table v-if="ready || loading" row-key="id" :data="rows" :columns="columns" :loading="loading" :empty="t(search ? 'adminMembers.noMatch' : 'adminApplications.empty')">
+      <div class="data-table-shell"><t-table v-if="ready || loading" row-key="id" :data="rows" :columns="columns" :loading="loading" :empty="t(search ? 'adminMembers.noMatch' : 'adminApplications.empty')">
         <template #applicant="{ row }"><strong>{{ name(row) }}</strong><p>{{ row.email || '—' }}</p></template>
         <template #message="{ row }"><p class="request-message">{{ row.message || '—' }}</p></template>
         <template #created_at="{ row }">{{ date(row.created_at) }}</template>
         <template #actions="{ row }"><div class="request-actions"><t-button variant="text" :disabled="busy || loading || !canApprove" @click="open('approve', row)">{{ t('adminApplications.approve') }}</t-button><t-button variant="text" theme="danger" :disabled="busy || loading || !ready" @click="open('reject', row)">{{ t('adminApplications.reject') }}</t-button></div></template>
-      </t-table>
+      </t-table></div>
       <t-pagination v-if="filtered.length > pageSize" v-model="page" :page-size="pageSize" :total="filtered.length" :show-page-size="false" />
     </template>
     <t-dialog :visible="!!mode" :header="t(mode === 'approve' ? 'adminApplications.approveTitle' : 'adminApplications.rejectTitle')" :footer="false" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @close="closeDialog">
@@ -122,9 +122,9 @@ onBeforeUnmount(() => { invalidate(); emit('busy', false) })
   </section>
 </template>
 <style scoped>
-.join-requests { display: grid; gap: 20px; padding-top: 20px; }
-.request-toolbar,.request-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.request-toolbar :deep(.t-input__wrap) { max-width: 420px; }
-p { color: var(--td-text-color-secondary); line-height: 1.6; margin: 4px 0; }
+.join-requests { display: grid; gap: 16px; padding-top: 0; }
+.request-toolbar,.request-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.request-toolbar :deep(.t-input__wrap) { max-width: 320px; }
+p { color: var(--td-text-color-secondary); font-size: var(--app-text-md); line-height: 1.5; margin: 4px 0; }
 .request-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

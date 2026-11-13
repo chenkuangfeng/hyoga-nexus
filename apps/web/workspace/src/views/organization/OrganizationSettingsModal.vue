@@ -756,7 +756,7 @@ import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useModalShell } from '@/composables/useModalShell'
-import SettingsModalShell from '@/components/SettingsModalShell.vue'
+import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import { useI18n } from 'vue-i18n'
 import { copyWithToast } from '@/utils/clipboard'
 import {

@@ -307,7 +307,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import SettingsModalShell from '@/components/SettingsModalShell.vue'
+import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import { useModalShell } from '@/composables/useModalShell'
 import {
   createAutomation,

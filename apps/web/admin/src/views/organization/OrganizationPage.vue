@@ -12,7 +12,7 @@ function refresh() { if (!state.busy && !state.loading) void state.load(state.se
 </script>
 <template>
   <section class="organization-page">
-    <header><div><h1>{{ t('adminOrganization.title') }}</h1><p>{{ t('adminOrganization.description') }}</p></div><div class="organization-actions"><t-button variant="outline" :disabled="state.busy" :loading="state.loading" @click="refresh">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="state.canManage && state.treeReady && !state.units.length" :disabled="state.busy || state.loading" @click="state.openCreate(null)">{{ t('adminOrganization.createRoot') }}</t-button></div></header>
+    <header class="section-header"><div><h2>{{ t('adminOrganization.title') }}</h2><p>{{ t('adminOrganization.description') }}</p></div><div class="organization-actions"><t-button class="settings-list-button" theme="default" variant="outline" :disabled="state.busy" :loading="state.loading" @click="refresh">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="state.canManage && state.treeReady && !state.units.length" :disabled="state.busy || state.loading" @click="state.openCreate(null)">{{ t('adminOrganization.createRoot') }}</t-button></div></header>
     <t-alert v-if="!state.canManage" theme="warning" :message="t('adminOrganization.denied')" />
     <template v-else>
       <t-alert v-if="state.error" theme="error" :message="state.error" />
@@ -33,11 +33,11 @@ function refresh() { if (!state.busy && !state.loading) void state.load(state.se
             <p v-if="state.selected.parent_id === null">{{ t('adminOrganization.rootHint') }}</p>
             <h3>{{ t('adminOrganization.members') }}</h3>
             <t-alert v-if="state.membersError" theme="error" :message="state.membersError"><template #operation><t-button variant="text" :disabled="state.busy" @click="state.selectUnit(state.selected.id)">{{ t('connectionUi.refresh') }}</t-button></template></t-alert>
-            <t-table v-if="state.membersReady || state.membersLoading" row-key="user_id" :data="state.members" :columns="columns" :loading="state.membersLoading" :empty="t('adminOrganization.noMembers')">
+            <div v-if="state.membersReady || state.membersLoading" class="data-table-shell"><t-table row-key="user_id" :data="state.members" :columns="columns" :loading="state.membersLoading" :empty="t('adminOrganization.noMembers')">
               <template #person="{ row }">{{ state.memberName(row) }}</template>
               <template #is_primary="{ row }"><t-tag v-if="row.is_primary" theme="primary">{{ t('adminOrganization.primary') }}</t-tag><span v-else>{{ t('adminOrganization.secondary') }}</span></template>
               <template #actions="{ row }"><div v-if="state.manual" class="organization-actions"><t-button variant="text" :disabled="state.busy || row.is_primary || state.selected.status !== 'active'" @click="state.setPrimary(row)">{{ t('adminOrganization.setPrimary') }}</t-button><t-button theme="danger" variant="text" :disabled="state.busy" @click="state.removeMember(row)">{{ t('adminOrganization.removeMember') }}</t-button></div><span v-else>{{ t('adminOrganization.readOnly') }}</span></template>
-            </t-table>
+            </t-table></div>
             <template v-if="state.manual">
               <t-alert v-if="!state.canReadCandidates" theme="info" :message="t('adminOrganization.candidatePermission')" />
               <t-alert v-else-if="state.candidatesError" theme="warning" :message="t('adminOrganization.candidateFailed')" />
@@ -67,17 +67,18 @@ function refresh() { if (!state.busy && !state.loading) void state.load(state.se
 <style scoped>
 .organization-page { display: grid; gap: 20px; }
 .organization-page header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
-h1 { margin: 0 0 12px; font-size: 24px; } h2,h3 { margin: 0 0 12px; }
+h2,h3 { margin: 0 0 8px; font-size: var(--app-text-xl); font-weight: 600; }
+.organization-tree button:hover { background: var(--td-bg-color-container-hover); }
 p { color: var(--td-text-color-secondary); line-height: 1.6; overflow-wrap: anywhere; }
-.organization-layout { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 24px; }
-.organization-tree { border: 1px solid var(--td-component-border); background: var(--td-bg-color-container); border-radius: var(--td-radius-default); padding: 8px; align-self: start; }
-.organization-tree button { width: 100%; padding: 12px; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--td-text-color-primary); text-align: left; cursor: pointer; border-radius: var(--td-radius-default); }
+.organization-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; }
+.organization-tree { border: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); border-radius: var(--app-radius-lg); padding: 12px; min-height: 320px; align-self: start; }
+.organization-tree button { width: 100%; padding: 6px 8px; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--td-text-color-primary); text-align: left; cursor: pointer; border-radius: var(--app-radius-md); }
 .organization-tree button span { flex: 1; overflow-wrap: anywhere; min-width: 0; }
 .organization-tree button.selected { color: var(--td-brand-color); background: var(--td-brand-color-light); }
 .organization-tree button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .organization-tree button:disabled { cursor: wait; }
-.organization-detail { min-width: 0; display: grid; align-content: start; gap: 20px; }
-.organization-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.assignment-form { padding: 24px; border: 1px solid var(--td-component-border); border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }
+.organization-detail { border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); padding: 12px; min-height: 320px; min-width: 0; display: grid; align-content: start; gap: 16px; }
+.organization-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.assignment-form { margin: 0; padding-top: 16px; border-top: 1px solid var(--td-component-stroke); }
 @media(max-width: 1000px) { .organization-layout { grid-template-columns: 1fr; } }
 </style>

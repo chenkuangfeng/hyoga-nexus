@@ -644,7 +644,7 @@ import { useKnowledgeCapabilitiesStore } from '@/stores/knowledgeCapabilities'
 import { KB_EDITOR_FOCUS_SECTION_EVENT, markContextualGuideDone } from '@/config/contextualGuides'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useModalShell } from '@/composables/useModalShell'
-import SettingsModalShell from '@/components/SettingsModalShell.vue'
+import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import {
   createKnowledgeBase,
   getKnowledgeBaseById,

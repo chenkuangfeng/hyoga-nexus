@@ -35,33 +35,33 @@ async function copyLink(row: LinkInvitation) {
 </script>
 <template>
   <section class="members-page">
-    <header><div><h1>{{ t('adminMembers.title') }}</h1><p>{{ t('adminMembers.description') }}</p></div><div class="member-actions"><t-button variant="outline" :disabled="state.busy || applicationsBusy" :loading="state.loading" @click="refreshLists">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="state.canManage" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openEditor">{{ t('adminMembers.invite') }}</t-button><t-button v-if="state.canManage" variant="outline" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openLink">{{ t('adminMembers.createLink') }}</t-button></div></header>
+    <header class="section-header section-header--list"><div><h2>{{ t('adminMembers.title') }}</h2><p>{{ t('adminMembers.description') }}</p></div><div class="member-actions"><t-button class="settings-list-button" theme="default" variant="outline" :disabled="state.busy || applicationsBusy" :loading="state.loading" @click="refreshLists">{{ t('connectionUi.refresh') }}</t-button><t-button class="settings-list-button" theme="default" variant="outline" v-if="state.canManage" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openEditor">{{ t('adminMembers.invite') }}</t-button><t-button class="settings-list-button" theme="default" v-if="state.canManage" variant="outline" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openLink">{{ t('adminMembers.createLink') }}</t-button></div></header>
     <t-alert v-if="!state.canManage" theme="warning" :message="t('adminMembers.denied')" />
     <template v-else>
       <t-alert v-if="state.error" theme="error" :message="state.error" />
       <t-alert v-if="state.success" theme="success" :message="state.success" />
       <t-tabs v-model="state.tab">
         <t-tab-panel value="members" :label="t('adminMembers.membersCount', { count: state.members.length })">
-          <div class="member-toolbar"><t-input v-model="state.search" :aria-label="t('adminMembers.search')" :placeholder="t('adminMembers.search')" clearable /></div>
+          <div class="member-toolbar"><t-input v-model="state.search" :aria-label="t('adminMembers.search')" :placeholder="t('adminMembers.search')" clearable><template #prefix-icon><t-icon name="search" /></template></t-input></div>
           <t-alert v-if="state.membersError" theme="error" :message="state.membersError" />
-          <t-table row-key="user_id" :data="state.memberRows" :columns="memberColumns" :loading="state.loading" :empty="state.search ? t('adminMembers.noMatch') : t('adminMembers.noMembers')">
+          <div class="data-table-shell"><t-table row-key="user_id" :data="state.memberRows" :columns="memberColumns" :loading="state.loading" :empty="state.search ? t('adminMembers.noMatch') : t('adminMembers.noMembers')">
             <template #person="{ row }"><strong>{{ state.memberName(row) }}</strong> <t-tag v-if="row.user_id === auth.user?.id" size="small">{{ t('common.me') }}</t-tag><p class="person-detail">{{ row.email || row.username || '—' }}</p></template>
             <template #status><t-tag theme="success">{{ t('adminMembers.active') }}</t-tag></template>
             <template #joined_at="{ row }">{{ date(row.joined_at) }}</template>
             <template #actions="{ row }"><div class="member-actions"><t-select v-if="state.canEditMember(row)" class="member-role" :value="row.role" :options="state.roleOptions(row)" :aria-label="t('adminMembers.changeRoleLabel', { name: state.memberName(row) })" :disabled="state.busy || state.loading" @change="(value: unknown) => state.changeRole(row, value)" /><span v-else>{{ t(`tenantMember.role.${row.role}`) }}</span><t-button variant="text" theme="danger" :disabled="state.busy || state.loading || !state.canRemoveMember(row)" @click="state.remove(row)">{{ t('adminMembers.remove') }}</t-button></div><small v-if="row.role === 'owner' && state.ownerCount <= 1">{{ t('adminMembers.lastOwner') }}</small></template>
-          </t-table>
+          </t-table></div>
           <t-pagination v-if="state.filteredMembers.length > state.pageSize" v-model="state.memberPage" :page-size="state.pageSize" :total="state.filteredMembers.length" :show-page-size="false" />
         </t-tab-panel>
         <t-tab-panel value="invitations" :label="t('adminMembers.invitationsCount', { count: state.invitations.length })">
           <p>{{ t('adminMembers.invitationHint') }}</p>
           <t-alert v-if="state.invitationsError" theme="error" :message="state.invitationsError" />
-          <t-table row-key="id" :data="state.invitationRows" :columns="invitationColumns" :loading="state.loading" :empty="t('adminMembers.noInvitations')">
+          <div class="data-table-shell"><t-table row-key="id" :data="state.invitationRows" :columns="invitationColumns" :loading="state.loading" :empty="t('adminMembers.noInvitations')">
             <template #person="{ row }"><strong>{{ state.invitationName(row) }}</strong><p v-if="row.kind === 'person'" class="person-detail">{{ row.email || '—' }}</p><t-tag v-else>{{ t('adminMembers.link') }}</t-tag></template>
             <template #role="{ row }">{{ t(`tenantMember.role.${row.role}`) }}</template>
             <template #created_at="{ row }">{{ date(row.created_at) }}</template>
             <template #details="{ row }"><template v-if="row.kind === 'link'"><p>{{ t('adminMembers.expires', { date: date(row.expires_at) }) }}</p><p>{{ t('adminMembers.acceptedCount', { count: row.accepted_count }) }}</p><t-button variant="text" :disabled="state.busy || state.loading" @click="copyLink(row)">{{ t('adminMembers.copyLink') }}</t-button></template><span v-else>{{ t('adminMembers.pending') }}</span></template>
             <template #actions="{ row }"><t-button variant="text" theme="danger" :disabled="state.busy || state.loading" @click="state.revoke(row)">{{ t('adminMembers.revoke') }}</t-button></template>
-          </t-table>
+          </t-table></div>
           <t-pagination v-if="state.invitations.length > state.pageSize" v-model="state.invitePage" :page-size="state.pageSize" :total="state.invitations.length" :show-page-size="false" />
         </t-tab-panel>
         <t-tab-panel value="applications" :label="t('adminApplications.title')"><JoinRequestsPanel v-if="state.tab === 'applications'" :refresh-key="applicationsRefresh" @approved="state.load" @busy="applicationsBusy = $event" /></t-tab-panel>
@@ -95,14 +95,16 @@ async function copyLink(row: LinkInvitation) {
   </section>
 </template>
 <style scoped>
-.members-page { display: grid; gap: 20px; }
-.members-page header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px; }
-h1 { margin: 0 0 12px; font-size: 24px; } p { color: var(--td-text-color-secondary); line-height: 1.6; }
-.member-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.member-toolbar { margin: 20px 0; max-width: 420px; }
+.members-page { display: flex; flex-direction: column; height: 100%; min-height: 0; width: 100%; min-width: 0; color: var(--td-text-color-primary); }
+.members-page p { color: var(--td-text-color-secondary); font-size: var(--app-text-md); line-height: 1.5; }
+.members-page > .section-header { flex-shrink: 0; }
+.members-page > :deep(.t-tabs) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.members-page :deep(.t-tabs__content) { flex: 1; min-height: 0; overflow: auto; }
+.member-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.member-toolbar { margin: 0 0 16px; max-width: 320px; }
 .member-role { width: 150px; }
-.person-detail { margin: 4px 0; overflow-wrap: anywhere; }
+.person-detail { margin: 2px 0; font-size: var(--app-text-sm); overflow-wrap: anywhere; }
 .members-page :deep(.t-table__content) { overflow-x: auto; }
-.members-page :deep(.t-pagination) { margin: 20px 0; }
+.members-page :deep(.t-pagination) { margin: 16px 0; }
 small { display: block; margin-top: 8px; color: var(--td-text-color-secondary); }
 </style>

@@ -6,6 +6,7 @@ import { DialogPlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { getEnterprisePolicy, listPolicyDepartments, policyChanges, updateEnterprisePolicy, type DepartmentChoice, type EnterprisePolicy } from '@nexus-web/core/api/enterprise-admin'
 import { useAdminContext } from '../stores/context'
+import SettingsRow from '@nexus-web/core/components/SettingsRow.vue'
 const { t } = useI18n()
 const auth = useAuthStore(), context = useAdminContext()
 const form = reactive<EnterprisePolicy>({ self_build_agents: 'none', self_build_org_unit_ids: [], personal_models: false, external_sharing: false, personal_wecom_channels: 'disabled', personal_external_channels: false, retention_days: null })
@@ -67,7 +68,7 @@ onBeforeUnmount(() => { epoch++; confirmation?.hide(); confirmation = undefined;
 </script>
 <template>
   <section class="policy-page">
-    <header><div><h1>{{ t('adminConsole.policy') }}</h1><p>{{ t('adminConsole.policyHint') }}</p></div><t-button variant="outline" :disabled="busy" :loading="loading" @click="load">{{ t('connectionUi.refresh') }}</t-button></header>
+    <header class="section-header"><div><h2>{{ t('adminConsole.policy') }}</h2><p>{{ t('adminConsole.policyHint') }}</p></div><t-button class="settings-list-button" theme="default" variant="outline" :disabled="busy" :loading="loading" @click="load">{{ t('connectionUi.refresh') }}</t-button></header>
     <t-alert v-if="error" theme="error" :message="error" />
     <t-alert v-if="saved" theme="success" :message="t('adminConsole.saved')" />
     <t-alert v-if="snapshot && !canWrite" theme="info" :message="t('adminConsole.readOnly')" />
@@ -75,26 +76,24 @@ onBeforeUnmount(() => { epoch++; confirmation?.hide(); confirmation = undefined;
       <t-form v-if="snapshot" :data="form" layout="vertical" :disabled="!canWrite || busy || loading" @submit="submit">
         <div class="policy-group">
           <h2>{{ t('adminConsole.resources') }}</h2>
-          <t-form-item :label="t('adminConsole.buildScope')"><t-select v-model="form.self_build_agents" :options="modeOptions" /></t-form-item>
-          <p>{{ t('adminConsole.buildHint') }}</p>
+          <SettingsRow :label="t('adminConsole.buildScope')" :description="t('adminConsole.buildHint')"><t-select :aria-label="t('adminConsole.buildScope')" v-model="form.self_build_agents" :options="modeOptions" /></SettingsRow>
           <template v-if="form.self_build_agents === 'org_units'">
-            <t-form-item v-if="canChooseDepartments" :label="t('adminConsole.departments')"><t-select v-model="form.self_build_org_unit_ids" :options="departmentOptions" multiple filterable /></t-form-item>
+            <SettingsRow v-if="canChooseDepartments" :label="t('adminConsole.departments')"><t-select :aria-label="t('adminConsole.departments')" v-model="form.self_build_org_unit_ids" :options="departmentOptions" multiple filterable /></SettingsRow>
             <p v-else>{{ t('adminConsole.departmentCount', { count: form.self_build_org_unit_ids.length }) }}</p>
             <t-alert v-if="!canChooseDepartments" :theme="departmentError ? 'warning' : 'info'" :message="t('adminConsole.departmentUnavailable')" />
           </template>
-          <t-form-item :label="t('adminConsole.personalModels')"><t-switch v-model="form.personal_models" :aria-label="t('adminConsole.personalModels')" /></t-form-item>
-          <t-form-item :label="t('adminConsole.externalSharing')"><t-switch v-model="form.external_sharing" :aria-label="t('adminConsole.externalSharing')" /></t-form-item>
+          <SettingsRow :label="t('adminConsole.personalModels')"><t-switch v-model="form.personal_models" :aria-label="t('adminConsole.personalModels')" /></SettingsRow>
+          <SettingsRow :label="t('adminConsole.externalSharing')"><t-switch v-model="form.external_sharing" :aria-label="t('adminConsole.externalSharing')" /></SettingsRow>
         </div>
         <div class="policy-group">
           <h2>{{ t('adminConsole.channels') }}</h2>
-          <t-form-item :label="t('adminConsole.personalWecom')"><t-select v-model="form.personal_wecom_channels" :options="channelOptions" /></t-form-item>
-          <t-form-item :label="t('adminConsole.personalExternal')"><t-switch v-model="form.personal_external_channels" :aria-label="t('adminConsole.personalExternal')" /></t-form-item>
-          <p>{{ t('adminConsole.channelHint') }}</p>
+          <SettingsRow :label="t('adminConsole.personalWecom')" :description="t('adminConsole.channelHint')"><t-select :aria-label="t('adminConsole.personalWecom')" v-model="form.personal_wecom_channels" :options="channelOptions" /></SettingsRow>
+          <SettingsRow :label="t('adminConsole.personalExternal')"><t-switch v-model="form.personal_external_channels" :aria-label="t('adminConsole.personalExternal')" /></SettingsRow>
         </div>
         <div class="policy-group">
           <h2>{{ t('adminConsole.retention') }}</h2>
-          <t-form-item :label="t('adminConsole.autoPurge')"><t-switch v-model="autoPurge" :aria-label="t('adminConsole.autoPurge')" /></t-form-item>
-          <t-form-item v-if="autoPurge" :label="t('adminConsole.retentionDays')" :status="validDays ? undefined : 'error'" :help="validDays ? undefined : t('adminConsole.daysInvalid')"><t-input-number v-model="days" :min="1" :max="3650" :decimal-places="0" /></t-form-item>
+          <SettingsRow :label="t('adminConsole.autoPurge')"><t-switch v-model="autoPurge" :aria-label="t('adminConsole.autoPurge')" /></SettingsRow>
+          <SettingsRow v-if="autoPurge" :label="t('adminConsole.retentionDays')"><t-form-item :status="validDays ? undefined : 'error'" :help="validDays ? undefined : t('adminConsole.daysInvalid')"><t-input-number :aria-label="t('adminConsole.retentionDays')" v-model="days" :min="1" :max="3650" :decimal-places="0" /></t-form-item></SettingsRow>
           <t-alert theme="warning" :message="t('adminConsole.retentionHint')" />
         </div>
         <div class="policy-actions"><t-button v-if="canWrite" type="submit" theme="primary" :loading="busy" :disabled="!dirty || loading || !validDays">{{ t('common.save') }}</t-button><t-button variant="outline" :disabled="!dirty || busy || loading" @click="reset">{{ t('adminConsole.reset') }}</t-button></div>
@@ -103,10 +102,11 @@ onBeforeUnmount(() => { epoch++; confirmation?.hide(); confirmation = undefined;
   </section>
 </template>
 <style scoped>
-.policy-page { max-width: 1000px; }
-.policy-page header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
-h1 { margin: 0 0 12px; font-size: 24px; } h2 { margin: 0 0 20px; font-size: 18px; } p { color: var(--td-text-color-secondary); line-height: 1.6; }
-.policy-group { margin: 24px 0; padding: 24px; border: 1px solid var(--td-component-border); border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }
-.policy-group :deep(.t-select__wrap) { width: 100%; max-width: 540px; }
-.policy-actions { display: flex; gap: 12px; padding: 8px 0 24px; }
+.policy-page { width: 100%; }
+.policy-group { padding: 8px 0 24px; border-bottom: 1px solid var(--td-component-stroke); }
+.policy-group h2 { margin: 20px 0 0; font-size: var(--app-text-xl); font-weight: 600; }
+.policy-group p { color: var(--td-text-color-secondary); font-size: var(--app-text-md); line-height: 1.5; }
+.policy-group :deep(.setting-control .t-select__wrap) { width: 280px; max-width: 100%; }
+.policy-group :deep(.t-form__item) { margin: 20px 0; }
+.policy-actions { display: flex; gap: 12px; padding: 24px 0; }
 </style>

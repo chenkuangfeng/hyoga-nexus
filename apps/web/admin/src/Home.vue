@@ -2,21 +2,24 @@
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useAdminContext } from './stores/context'
+import SettingsRow from '@nexus-web/core/components/SettingsRow.vue'
 const { t } = useI18n(), auth = useAuthStore(), context = useAdminContext()
 </script>
 <template>
   <section class="admin-overview">
-    <h1>{{ auth.currentTenantName }} · {{ t('adminConsole.overview') }}</h1>
-    <p>{{ t('adminConsole.overviewHint') }}</p>
-    <article v-if="context.can('policy:manage')"><h2>{{ t('adminConsole.policy') }}</h2><p>{{ t('adminConsole.policyHint') }}</p><RouterLink to="/policy">{{ t('adminConsole.openPolicy') }}</RouterLink></article>
-    <article v-if="context.can('members:manage')"><h2>{{ t('adminMembers.title') }}</h2><p>{{ t('adminMembers.description') }}</p><RouterLink to="/members">{{ t('adminMembers.open') }}</RouterLink></article>
-    <article v-if="context.can('org:manage')"><h2>{{ t('adminOrganization.title') }}</h2><p>{{ t('adminOrganization.description') }}</p><RouterLink to="/organization">{{ t('adminOrganization.open') }}</RouterLink></article>
+    <header class="section-header"><div><h2>{{ auth.currentTenantName }} · {{ t('adminConsole.overview') }}</h2><p class="section-description">{{ t('adminConsole.overviewHint') }}</p></div></header>
+    <div class="settings-group">
+      <SettingsRow v-if="context.can('policy:manage')" :label="t('adminConsole.policy')" :description="t('adminConsole.policyHint')"><RouterLink class="settings-entry" to="/policy">{{ t('adminConsole.openPolicy') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
+      <SettingsRow v-if="context.can('members:manage')" :label="t('adminMembers.title')" :description="t('adminMembers.description')"><RouterLink class="settings-entry" to="/members">{{ t('adminMembers.open') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
+      <SettingsRow v-if="context.can('org:manage')" :label="t('adminOrganization.title')" :description="t('adminOrganization.description')"><RouterLink class="settings-entry" to="/organization">{{ t('adminOrganization.open') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
+    </div>
     <t-alert theme="info" :message="t('adminConsole.planned')" />
   </section>
 </template>
 <style scoped>
-.admin-overview { max-width: 1000px; }
-h1 { margin-top: 0; font-size: 24px; } p { color: var(--td-text-color-secondary); line-height: 1.6; }
-article { background: var(--td-bg-color-container); border: 1px solid var(--td-component-border); border-radius: var(--td-radius-default); padding: 24px; margin: 24px 0; }
-a { color: var(--td-brand-color); }
+.admin-overview { width: 100%; }
+.settings-group { margin-bottom: 28px; }
+.settings-entry { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-sm); font-size: var(--app-text-md); }
+a { color: var(--td-brand-color); text-decoration: none; }
+a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 </style>
