@@ -73,6 +73,8 @@ const EXTRA_PREFIXES = [
   'permissionCatalog.',
   // Operation labels use IDs supplied by the backend catalog at runtime.
   'agentStream.operations.names.',
+  // Tool result risk IDs arrive from backend operations, through a computed key.
+  'agentStream.operations.risk.',
   'system.globalSettings.audit.action.',
   'system.globalSettings.audit.actorRole.',
   'knowledgeEditor.activity.detailFields.',
@@ -94,8 +96,6 @@ const EXTRA_PREFIXES = [
   'kbSettings.parser.engines.',
   'model.editor.description.',
   'integrations.tabs.',
-  'integrations.mcpserver.tools.',
-  'integrations.mcpserver.groups.',
   'knowledgeStages.stage.',
   'knowledgeStages.status.',
   'organization.role.',

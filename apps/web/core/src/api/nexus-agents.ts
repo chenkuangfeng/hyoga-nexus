@@ -18,6 +18,9 @@ export interface AgentResourceBinding {
 
 /** `AgentView` returned by the platform API. Admins see the draft; members see the published version. */
 export interface NexusAgent {
+  ownership?: 'personal' | 'enterprise'
+  can_maintain?: boolean
+  owned_by_me?: boolean
   id: string
   tenant_id: string
   name: string

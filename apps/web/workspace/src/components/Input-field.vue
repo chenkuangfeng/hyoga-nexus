@@ -7,9 +7,7 @@ import { onBeforeRouteUpdate } from 'vue-router';
 import { MessagePlugin } from "tdesign-vue-next";
 import type { SendMessageOptions } from '@/utils/questionOrigin';
 import { useSettingsStore } from '@/stores/settings';
-import { useBrowserConnectionStore } from '@/stores/browserConnection';
 import { useUIStore } from '@/stores/ui';
-import BrowserIcon from '@/components/icons/BrowserIcon.vue';
 import { useMenuStore } from '@/stores/menu';
 import { listKnowledgeBases, searchKnowledge, batchQueryKnowledge, listKnowledgeTags } from '@nexus-web/core/api/knowledge-base/index';
 import { listMCPServices, type MCPService } from '@nexus-web/core/api/mcp-service';
@@ -57,13 +55,11 @@ import {
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
 import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
-import { toolboxLocation } from '@/config/toolbox';
 import { supportedLevels, levelLabelKey, levelFromLegacy, clampLevel, type ReasoningLevel } from '@/utils/reasoningEffort';
 
 const route = useRoute();
 const router = useRouter();
 const settingsStore = useSettingsStore();
-const browserConnection = useBrowserConnectionStore();
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
 const menuStore = useMenuStore();
@@ -911,27 +907,6 @@ const isWebSearchConfigured = computed(() => {
 const isWebSearchReadinessKnown = computed(
   () => !settingsStore.selectedAgentSourceTenantId || selectedSharedAgent.value !== undefined
 );
-
-const browserSourceUnavailableHint = computed(() => {
-  if (!browserConnection.enabled) return 'localBrowser.unavailable';
-  if (browserConnection.device) return 'localBrowser.reconnectHint';
-  return 'localBrowser.settingsHint';
-});
-
-const openBrowserConnectionSettings = () => {
-  void router.push(toolboxLocation('browserconnection'));
-};
-
-const toggleBrowserSource = () => {
-  showMention.value = false;
-  showModelSelector.value = false;
-  showAgentModeSelector.value = false;
-  if (browserConnection.knownOffline) {
-    openBrowserConnectionSettings();
-    return;
-  }
-  settingsStore.toggleLocalBrowser(!settingsStore.isLocalBrowserEnabled);
-};
 
 const loadWebSearchConfig = async (force = false) => {
   if (props.nexusMode) return;
@@ -1996,7 +1971,6 @@ onMounted(() => {
     return;
   }
 
-  browserConnection.watchStatus();
 
   // 并行拉取；若 platform 已预取且缓存未过期则直接复用
   initChatModelSelection();
@@ -2069,7 +2043,7 @@ onBeforeUnmount(() => {
 });
 
 onUnmounted(() => {
-  if (!props.embeddedMode) browserConnection.unwatchStatus();
+
   window.removeEventListener(CHAT_FILE_DROP_EVENT, handleChatFileDrop as EventListener);
   document.removeEventListener('click', closeAgentModeSelector);
   document.removeEventListener('click', closeModelSelector);
@@ -2088,15 +2062,6 @@ watch(() => route.params.kbId, (newKbId) => {
   if (props.embeddedMode) return;
   if (newKbId && typeof newKbId === 'string' && !selectedKbIds.value.includes(newKbId)) {
     settingsStore.addKnowledgeBase(newKbId);
-  }
-});
-
-// 模型 / 联网搜索列表由设置页在写操作后直接写回 chatResources
-// （replaceModels / ensureWebSearchProviders(true)），这里读的是同一份快照，
-// 不再靠「设置弹窗关闭」「离开设置路由」两个信号各强刷一次。
-watch(() => uiStore.showSettingsModal, (visible, prevVisible) => {
-  if (prevVisible && !visible && !props.embeddedMode) {
-    void browserConnection.refresh();
   }
 });
 
@@ -2938,30 +2903,7 @@ defineExpose({
             :currentAgentId="selectedAgentId" :agents="enabledAgents" :all-models="allModels"
             @close="closeAgentModeSelector" @select="handleSelectAgent" @not-ready="handleAgentNotReady" />
 
-          <t-tooltip v-if="settingsStore.isAgentStreamMode" placement="top" theme="light"
-            :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <div v-if="!browserConnection.knownOffline" class="browser-source-tooltip">
-                <strong>{{ $t('localBrowser.local') }}</strong>
-                <span>{{ $t('localBrowser.sourceHint') }}</span>
-              </div>
-              <div v-else class="tooltip-with-link">
-                <span>{{ $t(browserSourceUnavailableHint) }}</span>
-                <a href="#" @click.prevent="openBrowserConnectionSettings">{{ $t('localBrowser.openSettings') }}</a>
-              </div>
-            </template>
-            <button type="button" class="control-btn browser-source-btn"
-              :class="{
-                active: settingsStore.isLocalBrowserEnabled && browserConnection.online,
-                disabled: browserConnection.knownOffline,
-              }"
-              :aria-pressed="settingsStore.isLocalBrowserEnabled && browserConnection.online"
-              :aria-disabled="browserConnection.knownOffline"
-              :aria-label="$t('localBrowser.local')"
-              @click.stop="toggleBrowserSource">
-              <BrowserIcon class="control-icon" />
-            </button>
-          </t-tooltip>
+
 
           <!-- WebSearch 开关按钮（智能体未启用时不显示） -->
           <t-tooltip v-if="showWebSearchButton" placement="top" theme="light"
@@ -3075,13 +3017,7 @@ defineExpose({
             <NexusAgentSelector :visible="showNexusAgentSelector" :anchor-el="nexusAgentButtonRef"
               :current-agent-id="nexusAgentId" :agents="(nexusAgents as NexusAgentOption[])"
               @close="showNexusAgentSelector = false" @select="(id: string) => emit('update:nexusAgentId', id)" />
-            <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
-              :content="$t('localBrowser.local')">
-              <button type="button" class="control-btn browser-source-btn" :aria-label="$t('localBrowser.local')"
-                data-testid="composer-planned-browser" @click.stop="nexusPlanned('localBrowser')">
-                <BrowserIcon class="control-icon" />
-              </button>
-            </t-tooltip>
+
             <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
               :content="$t('input.webSearch.toggleOn')">
               <div class="control-btn websearch-btn" data-testid="composer-planned-websearch" @click.stop="nexusPlanned('webSearch')">

@@ -4,8 +4,6 @@ import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import { computed } from 'vue'
-import { INTEGRATION_PREVIEW_ITEMS } from '../../config/integrations'
-import { integrationSectionKey } from '../../config/settingsRoute'
 
 // Exercise the actual sidebar grouping without mounting the settings panels.
 const source = readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8')
@@ -21,28 +19,12 @@ const compiled = ts.transpileModule(grouping.getText(ast), {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText
 
-function integrationMenu(visibleKeys: string[]): string[] {
+test('MCP 连接位于账户设置，取消集成分组', () => {
   const groups = runInNewContext(`${compiled}\nnavGroups.value`, {
-    computed,
-    navItems: { value: visibleKeys.map((key) => ({ key })) },
-    t: (key: string) => key,
-    integrationSectionKey,
-    INTEGRATION_PREVIEW_ITEMS,
+    computed, navItems: { value: ['general', 'mcp-endpoints', 'integration-im', 'integration-api'].map(key => ({ key })) }, t: (key: string) => key,
   }) as Array<{ key: string; items: Array<{ key: string }> }>
-  const integrationGroup = groups.find((group) => group.key === 'integrations')
-  return Array.from(integrationGroup?.items ?? [], (item) => item.key)
-}
-
-const integrationKeys = INTEGRATION_PREVIEW_ITEMS.map((item) => integrationSectionKey(item.key))
-
-test('settings sidebar includes every registered integration, including CLI, in navigation order', () => {
-  assert.deepEqual(integrationMenu(['general', ...integrationKeys]), integrationKeys)
-})
-
-test('settings sidebar preserves visibility filtering without hiding CLI', () => {
-  const visible = integrationKeys.filter((key) => key !== 'integration-api' && key !== 'integration-im')
-  assert.deepEqual(integrationMenu(visible), visible)
-  assert.deepEqual(integrationMenu(['general']), [])
+  assert.deepEqual(Array.from(groups.find(group => group.key === 'account')?.items || [], item => item.key), ['general', 'mcp-endpoints'])
+  assert.equal(groups.some(group => group.key === 'integrations'), false)
 })
 
 // Keep navigation tests tied to the real close handler, without mounting

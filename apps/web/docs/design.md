@@ -24,7 +24,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 - 复用的 WeKnora 组件：`usermsg.vue`、`botmsg.vue`（含 `AgentStreamDisplay` 时间线与回答工具栏）、`MessageTimestamp`、`ChatQuestionMinimap`、`PendingPromptDock`、`ToolApprovalCard`、`AskUserCard`、`Input-field.vue`（`nexusMode`）。调用 WeKnora 接口的 `ChatHeader.vue` 按原模板复制为 `components/NexusChatHeader.vue`。
 - 数据适配：`utils/nexusChatTranscript.ts` 把平台消息按 Run 分组为 WeKnora 行（一条用户消息 + 一条助手回答），历史回答的时间线由该 Run 的事件重建（打开会话时以最多 4 个并发读取 `GET .../runs/{id}/events`；读取失败时回退为正文）。`utils/nexusAgentEvents.ts` 把 Run 事件映射为 `agentEventStream`：文本、工具调用、`approval.*` → `tool_approval_required`、`input.*` → `agent_prompt_required`（ask_user）。审批参数只经 `GET .../approvals` 取得。
 - 运行操作：`composables/nexusChatActions.ts` 由对话页提供；`ToolApprovalCard` 与 `AskUserCard` 检测到它时改调平台审批与回答接口（审批后 `useNativeRun.resume()` 继续跟随），否则保持 WeKnora 原行为。
-- 占位：平台尚无后端的入口照常显示，点击统一提示「该功能暂未开放」——顶栏改名（含双击标题）、查看授权、删除会话、沙箱面板；欢迎页推荐问题与刷新；消息分叉、回滚、问助手、加入知识库、产物；输入框本地浏览器、联网搜索、图片与附件上传、@ 引用、模型与思考强度。「复制为 Markdown」在前端实现。数据驱动的区域（追问建议、子智能体标签页、引用与附件抽屉、浏览器任务预览、后台任务）在没有数据时与 WeKnora 一样不出现。
+- 占位：平台尚无后端的入口照常显示，点击统一提示「该功能暂未开放」——顶栏改名（含双击标题）、查看授权、删除会话、沙箱面板；欢迎页推荐问题与刷新；消息分叉、回滚、问助手、加入知识库、产物；输入框联网搜索、图片与附件上传、@ 引用、模型与思考强度。「复制为 Markdown」在前端实现。数据驱动的区域（追问建议、子智能体标签页、引用与附件抽屉、浏览器任务预览、后台任务）在没有数据时与 WeKnora 一样不出现。
 - 智能体选择与 WeKnora 一致：输入框左侧的 `agent-mode-btn` 打开 `components/NexusAgentSelector.vue`（按 WeKnora `AgentSelector.vue` 的模板、定位与样式复制，只列平台已发布的智能体，归入「自定义智能体」；不读取 WeKnora 的 store 与接口）。会话已绑定智能体，会话内点击该按钮为占位。
 - 已去掉 Nexus 自加的元素：运行状态标签、运行停滞告警条（`NativeWatchdogBanner.vue` 保留但不再挂载）、失败与排队提示行。运行失败时与 WeKnora 处理运行级错误相同：错误说明作为回答写入时间线，并弹出错误提示。因此对话页目前没有「继续等待 / 发送提示」与排队位置的入口；取消用输入框的停止按钮，追加指令用运行中的发送。
 - 与 WeKnora 仍不同之处：欢迎页不显示宿主沙箱的项目目录条（WeKnora 仅桌面端显示）。
@@ -37,10 +37,18 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API 的传递依赖闭包抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
 
-`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、路由和专用模型目录适配器已删除，Wails 与自动初始化入口已移除；工作台仍包含待移除的旧集成，管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
+`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、路由和专用模型目录适配器已删除，Wails 与自动初始化入口已移除；旧集成页与本地浏览器连接入口已移除；管理业务页、共用编辑器、样式和双应用浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
 
 认证恢复只使用已有令牌，不尝试桌面自动初始化。注册表单按是否持有邀请令牌分流：自助注册发送企业名称与编码，邀请注册只发送邀请与账号字段。两应用共用 404 页面，已删除的平台管理路由不再挂载应用页面；旧设置参数归一到 `general` 并移除旧 `panel` 参数。工作台改密路由先经过认证，临时密码账号先改密，避免初始化豁免绕过认证。
 
 管理应用只承载本应用的路由；邀请与无企业身份的开户入口以原始 `fullPath` 转交员工应用，保留邀请参数。两个应用的未知路径使用共用 404 组件。
 
 独立浮动助手及页面上下文桥已移除，普通聊天的工具结果卡片和资源刷新通知继续沿用原契约。`workspace/src/stores/pageDrafts.ts` 只管理 `open_page` 结果交给模型/MCP 编辑器的一次性草稿；不存储会话、面板布局或凭据，账号/企业切换时同步清空。同一身份的令牌刷新不丢弃待编辑草稿。智能体和自动化使用的写入授权级别契约保留，助手专用名称、布局、页面授权和个人设置已删除。
+
+## 智能体渠道与 MCP 连接
+
+`/platform/agents/:agentId/channels` 的 IM/embed 标签替代旧集成页；旧链接保留智能体 ID 并迁移到新地址，未指定智能体时进入列表。页面读取服务端的 `can_maintain` 与 `ownership`，只向维护者提供渠道操作。共享的 `core/src/components/IMChannelPanel.vue` 通过 `core/src/api/enterprise-connections.ts` 调用 Nexus 渠道接口：个人微信受企业外部渠道策略限制，企业自建应用从具有 `org:manage` 的配置列表中按智能体、用途和启用状态筛选；没有可选配置时提示联系管理员。企微机器人和 QQ 尚未核验，保持不可创建。二维码内容由 TDesign 在本地编码，不发送给第三方二维码服务；关闭、身份变化和卸载均终止轮询，过期响应不能回写。
+
+账户设置的 `mcp-endpoints` 页面替代旧 MCP 服务集成页，提供只读连接地址和依据 `tools:manage` 授权的创建、编辑、停用、删除、令牌轮换及吊销。知识库用可读名称选择，提交稳定 ID；空知识库范围遵循后端“全部可读库”的含义。工具选项与服务端只读工具白名单保持一致。创建或轮换返回的令牌只保存在当前弹窗内存中，关闭、离开设置、身份变化或卸载时清空；元数据列表不接收令牌字段。所有异步响应和确认操作均校验当前作用域。
+
+当前 MCP endpoint 仍是企业资源，并非个人专属令牌；个人令牌的持有与签发授权待 E2.4/E6 后续实施。embed 标签明确提示后端尚未接入，不创建虚假渠道。独立嵌入客户端保留，不能视作渠道后端已经完成。Ollama/Cloud 配置页、API/CLI/Chrome/Claw 集成页以及本地浏览器连接设置已移除；历史消息中的浏览器工具结果和任务展示继续保留。

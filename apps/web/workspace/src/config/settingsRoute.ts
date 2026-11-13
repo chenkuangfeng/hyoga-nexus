@@ -1,81 +1,34 @@
-import { INTEGRATION_TABS, type IntegrationTab } from './integrations'
-
-export const INTEGRATION_SECTION_PREFIX = 'integration-'
-
+/** 设置查询参数及旧集成地址的兼容跳转；不再注册集成导航。 */
 type QueryValue = string | number | null | undefined | Array<string | number | null>
 export type SettingsRouteQuery = Record<string, QueryValue>
+const REMOVED_SETTINGS_SECTIONS = new Set(['assistant', 'system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log', 'ollama', 'weknoracloud', 'browserconnection', 'api', 'cli', 'chrome', 'claw'])
 
-export function integrationSectionKey(tab: IntegrationTab): string {
-  return `${INTEGRATION_SECTION_PREFIX}${tab}`
-}
+export function agentChannelsPath(agentId: string): string { return `/platform/agents/${encodeURIComponent(agentId)}/channels` }
 
-export function integrationTabFromSection(section: string): IntegrationTab {
-  const raw = section.startsWith(INTEGRATION_SECTION_PREFIX)
-    ? section.slice(INTEGRATION_SECTION_PREFIX.length)
-    : section
-  if (INTEGRATION_TABS.includes(raw as IntegrationTab)) {
-    return raw as IntegrationTab
+/** 旧 IM/embed 书签进入指定智能体的渠道；缺少智能体时先进入列表，避免跨资源操作。 */
+export function legacyIntegrationLocation(section: unknown, tab?: unknown, agentId?: unknown) {
+  if (typeof section !== 'string') return undefined
+  const raw = section === 'integrations' ? (typeof tab === 'string' ? tab : 'im') : section.replace(/^integration-/, '')
+  if (raw === 'im' || raw === 'embed') {
+    return typeof agentId === 'string' && agentId ? { path: agentChannelsPath(agentId), query: { tab: raw } } : { path: '/platform/agents', query: {} }
   }
-  return 'im'
+  if (raw === 'mcpserver') return { path: '/platform/settings', query: { section: 'mcp-endpoints' } }
+  if (section.startsWith('integration-') || section === 'integrations' || ['api', 'cli', 'chrome', 'claw'].includes(raw)) return { path: '/platform/settings', query: { section: 'general' } }
+  return undefined
 }
 
-export function isIntegrationSection(section: string): boolean {
-  if (!section.startsWith(INTEGRATION_SECTION_PREFIX)) return false
-  const raw = section.slice(INTEGRATION_SECTION_PREFIX.length)
-  return (INTEGRATION_TABS as readonly string[]).includes(raw)
-}
-
-const REMOVED_SETTINGS_SECTIONS = new Set([
-  'assistant', 'system-global', 'model-catalog', 'runtime-queues', 'platform-api-keys', 'system-audit-log',
-])
-
-function isBareIntegrationTab(section: string): section is IntegrationTab {
-  return (INTEGRATION_TABS as readonly string[]).includes(section)
-}
-
-/**
- * Map URL `section` (and a leftover `tab` from old bookmarks) onto the
- * settings nav key. Canonical form is `integration-<tab>`; `integrations`,
- * `api`, and bare tab names remain aliases.
- */
 export function normalizeSettingsSection(section: string, tab?: string | null): string {
-  if (REMOVED_SETTINGS_SECTIONS.has(section)) return 'general'
-  if (section === 'integrations') {
-    return integrationSectionKey(integrationTabFromSection(tab || 'im'))
-  }
-  if (isBareIntegrationTab(section)) {
-    return integrationSectionKey(section)
-  }
+  if (section === 'mcpserver' || section === 'integration-mcpserver' || (section === 'integrations' && tab === 'mcpserver')) return 'mcp-endpoints'
+  if (REMOVED_SETTINGS_SECTIONS.has(section) || section.startsWith('integration-') || ['integrations', 'im', 'embed'].includes(section)) return 'general'
   return section
 }
-
-/**
- * Settings left-nav → URL. Every page, including integrations, is
- * `?section=<navKey>` (e.g. `integration-claw`). `tab` is dropped.
- * 已删除页面的旧地址归一到常规设置，旧平台管理 panel 参数一律移除。
- */
-export function buildSettingsRouteQuery(
-  sectionKey: string,
-  currentQuery: object = {},
-): SettingsRouteQuery {
+export function buildSettingsRouteQuery(sectionKey: string, currentQuery: object = {}): SettingsRouteQuery {
   const query: SettingsRouteQuery = { ...(currentQuery as SettingsRouteQuery) }
-  delete query.tab
-  if (!isIntegrationSection(sectionKey)) {
-    delete query.agentId
-  }
-  delete query.panel
+  delete query.tab; delete query.agentId; delete query.panel
   query.section = normalizeSettingsSection(sectionKey)
   return query
 }
-
-export function settingsQueryUnchanged(
-  currentQuery: object,
-  nextQuery: SettingsRouteQuery,
-): boolean {
+export function settingsQueryUnchanged(currentQuery: object, nextQuery: SettingsRouteQuery): boolean {
   const current = currentQuery as SettingsRouteQuery
-  return String(current.section ?? '') === String(nextQuery.section ?? '')
-    && current.tab == null
-    && nextQuery.tab == null
-    && String(current.agentId ?? '') === String(nextQuery.agentId ?? '')
-    && String(current.panel ?? '') === String(nextQuery.panel ?? '')
+  return String(current.section ?? '') === String(nextQuery.section ?? '') && current.tab == null && nextQuery.tab == null && current.agentId == null && nextQuery.agentId == null && current.panel == null && nextQuery.panel == null
 }

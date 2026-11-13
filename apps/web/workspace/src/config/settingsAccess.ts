@@ -9,8 +9,7 @@ export type SettingsRoleKey = 'viewer' | 'contributor' | 'admin' | 'owner'
  */
 export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   general: 'viewer',
-  ollama: 'admin',
-  weknoracloud: 'admin',
+  'mcp-endpoints': 'viewer',
   models: 'viewer',
   websearch: 'admin',
   chathistory: 'admin',
@@ -24,7 +23,6 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   mcp: 'admin',
   system: 'viewer',
   userprofile: 'viewer',
-  browserconnection: 'viewer',
   tenant: 'viewer',
   members: 'viewer',
   // 部门架构：org:manage 属于治理权限，admin 默认不持有，与成员管理一致只对 owner 开放。

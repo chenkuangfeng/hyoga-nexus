@@ -8,7 +8,7 @@ import {
   groupTools,
   mcpServerKey,
   MCP_TOKEN_PLACEHOLDER,
-} from './mcpServerIntegration'
+} from './mcpEndpointSnippets'
 
 test('buildMcpEndpointUrl strips the api prefix and joins the endpoint path', () => {
   assert.equal(buildMcpEndpointUrl('https://kb.example.com/api/v1', '/mcp/abc'), 'https://kb.example.com/mcp/abc')

@@ -15,17 +15,16 @@ const access = (role: string | null, unsupported: string[] = [], superuser = fal
   isSupported: (capability?: string) => !capability || !unsupported.includes(capability),
 })
 
-test('toolbox tabs: skills, tools and MCP are open, browser connection is planned; infrastructure stays in settings', () => {
+test('toolbox tabs expose skills, tools and MCP; infrastructure stays in settings', () => {
   assert.deepEqual(TOOLBOX_ITEMS.map((item) => [item.key, item.available]),
-    [['skills', true], ['tools', true], ['mcp', true], ['browserconnection', false]])
+    [['skills', true], ['tools', true], ['mcp', true]])
   const lookup = (key: string) => key.split('.').reduce<any>((node, part) => node?.[part], zhCN)
   for (const item of TOOLBOX_ITEMS) {
     for (const key of [item.title, item.description]) assert.equal(typeof lookup(key), 'string', key)
   }
   assert.equal(isToolboxSectionAvailable('skills') && isToolboxSectionAvailable('tools'), true)
   assert.equal(isToolboxSectionAvailable('mcp'), true)
-  assert.equal(isToolboxSectionAvailable('browserconnection'), false)
-  for (const key of ['sandbox', 'websearch', 'envvars', 'integration-api', undefined, 'unknown']) {
+  for (const key of ['sandbox', 'websearch', 'envvars', 'integration-api', 'browserconnection', undefined, 'unknown']) {
     assert.equal(isToolboxSection(key), false)
   }
 })
@@ -47,8 +46,8 @@ test('skill shortcut retains its target sandbox without leaking it to other tool
   assert.deepEqual(toolboxLocation('skills', 'sandbox-123'), {
     path: '/platform/toolbox/skills', query: { sandboxId: 'sandbox-123' },
   })
-  assert.deepEqual(toolboxLocation('browserconnection', 'sandbox-123'), {
-    path: '/platform/toolbox/browserconnection', query: {},
+  assert.deepEqual(toolboxLocation('tools', 'sandbox-123'), {
+    path: '/platform/toolbox/tools', query: {},
   })
   assert.deepEqual(toolboxLocation(), { path: '/platform/toolbox', query: {} })
 })

@@ -1,60 +1,13 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { getApiBaseUrl } from '@nexus-web/core/utils/api-base'
 
-type NexusDesktopWindow = Window & {
-  __WEKNORA_API_BASE__?: string
-  go?: {
-    main?: {
-      App?: {
-        GetAPIBaseURL?: () => Promise<string> | string
-      }
-    }
-  }
-}
-
+/** 返回可复制到外部客户端的 API 地址，保留部署前缀，不依赖桌面绑定。 */
 export function useApiBaseUrlDisplay() {
-  const wailsApiBaseURL = ref<string | null>(null)
-
   const apiBaseUrlDisplay = computed(() => {
-    if (wailsApiBaseURL.value) {
-      return wailsApiBaseURL.value
-    }
-    const configured = getApiBaseUrl().trim().replace(/\/$/, '')
-    let origin = typeof window !== 'undefined' ? window.location.origin : ''
-    if (!origin || origin === 'null') {
-      origin = ''
-    }
-    const base = configured || origin
-    return `${base}/api/v1`
+    const base = getApiBaseUrl().trim().replace(/\/+$/, '')
+    const path = `${base}/api/v1`
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    return origin && origin !== 'null' ? new URL(path, origin).href : path
   })
-
-  async function loadApiBaseUrl() {
-    const win = window as NexusDesktopWindow
-    for (let i = 0; i < 40; i++) {
-      const injected = win.__WEKNORA_API_BASE__
-      if (typeof injected === 'string' && injected.trim()) {
-        wailsApiBaseURL.value = injected.trim().replace(/\/$/, '')
-        return
-      }
-      const fn = win.go?.main?.App?.GetAPIBaseURL
-      if (typeof fn === 'function') {
-        try {
-          const raw = await Promise.resolve(fn())
-          if (typeof raw === 'string' && raw.trim()) {
-            wailsApiBaseURL.value = raw.trim().replace(/\/$/, '')
-            return
-          }
-        } catch {
-          /* binding error */
-        }
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 50))
-    }
-  }
-
-  onMounted(() => {
-    void loadApiBaseUrl()
-  })
-
   return { apiBaseUrlDisplay }
 }

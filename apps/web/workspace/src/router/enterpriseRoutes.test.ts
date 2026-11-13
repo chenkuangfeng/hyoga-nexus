@@ -5,7 +5,7 @@ import test from 'node:test'
 import ts from 'typescript'
 import { defineComponent } from 'vue'
 import { createMemoryHistory, createRouter, type Router, type RouterOptions } from 'vue-router'
-import { normalizeSettingsSection } from '../config/settingsRoute.ts'
+import { legacyIntegrationLocation } from '../config/settingsRoute.ts'
 import { isToolboxSection, toolboxLocation } from '../config/toolbox.ts'
 
 type Guard = (to: { path: string; fullPath: string; meta: Record<string, boolean>; query: object }, from: object, next: (target?: unknown) => void) => Promise<void>
@@ -32,7 +32,7 @@ function setup(options: { token?: string; authenticated?: boolean; restored?: bo
     },
     '@nexus-web/core/stores/auth': { useAuthStore: () => auth },
     '@/stores/deploymentCapabilities': { useDeploymentCapabilitiesStore: () => ({ ensureLoaded: async () => {}, isSupported: () => true }) },
-    '@/config/settingsRoute': { normalizeSettingsSection }, '@/config/toolbox': { isToolboxSection, toolboxLocation },
+    '@/config/settingsRoute': { legacyIntegrationLocation }, '@/config/toolbox': { isToolboxSection, toolboxLocation },
     'tdesign-vue-next': { MessagePlugin: { warning() {} } },
     '@nexus-web/core/i18n/index': { default: { global: { t: (key: string) => key } } },
     '@/views/placeholder/PlannedPage.vue': { default: {} },

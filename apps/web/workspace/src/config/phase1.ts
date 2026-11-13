@@ -9,6 +9,7 @@
  */
 export const PHASE1_SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
   'general',
+  'mcp-endpoints',
   'models',
   'memory',
   'mymemory',

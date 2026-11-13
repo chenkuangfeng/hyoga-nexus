@@ -21,7 +21,8 @@ test('page provides Nexus actions and the WeKnora prompt dock', () => {
   const page = read('./NexusChatPage.vue')
   assert.match(page, /provideNexusChatActions\(/)
   assert.match(page, /providePromptDock\(/)
-  for (const entry of ['suggestedQuestions', 'sandboxPanel', 'fork', 'rewind', 'askAssistant']) {
+  assert.doesNotMatch(page, /planned\('askAssistant'\)/)
+  for (const entry of ['suggestedQuestions', 'sandboxPanel', 'fork', 'rewind']) {
     assert.match(page, new RegExp(`planned\\('${entry}'\\)`), entry)
   }
 })
@@ -40,9 +41,10 @@ test('reused WeKnora cards submit through Nexus actions before WeKnora APIs', ()
   }
 })
 
-test('composer shows every WeKnora control as a placeholder in nexus mode', () => {
+test('composer keeps supported placeholders after enterprise entry cleanup', () => {
   const composer = read('../../components/Input-field.vue')
-  for (const entry of ['localBrowser', 'webSearch', 'imageUpload', 'attachmentUpload', 'mention', 'modelSelect', 'reasoningEffort']) {
+  assert.doesNotMatch(composer, /nexusPlanned\('localBrowser'\)/)
+  for (const entry of ['webSearch', 'imageUpload', 'attachmentUpload', 'mention', 'modelSelect', 'reasoningEffort']) {
     assert.match(composer, new RegExp(`nexusPlanned\\('${entry}'\\)`), entry)
   }
 })

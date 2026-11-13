@@ -5,7 +5,7 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@nexus-web/core/i18n/index'
-import { normalizeSettingsSection } from '@/config/settingsRoute'
+import { legacyIntegrationLocation } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 // 主对话页：WeKnora 风格布局 + 平台 Native API（会话、Run、事件）。
@@ -151,20 +151,14 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
         },
         {
+          path: "agents/:agentId/channels",
+          name: "agentChannels",
+          component: () => import('../views/agent/AgentChannels.vue'),
+          meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
+        },
+        {
           path: "integrations",
-          redirect: (to) => {
-            const tab = typeof to.query.tab === 'string' ? to.query.tab : undefined
-            const incoming = typeof to.query.section === 'string' ? to.query.section : 'integrations'
-            const rest = { ...to.query }
-            delete rest.tab
-            return {
-              path: '/platform/settings',
-              query: {
-                ...rest,
-                section: normalizeSettingsSection(incoming, tab),
-              },
-            }
-          },
+          redirect: (to) => legacyIntegrationLocation(to.query.section || 'integrations', to.query.tab, to.query.agentId) || { path: '/platform/settings', query: { section: 'general' } },
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -233,6 +227,11 @@ router.beforeEach(async (to, from, next) => {
   if (hasPendingOIDCCallback()) {
     next()
     return
+  }
+
+  if (to.path === '/platform/settings') {
+    const moved = legacyIntegrationLocation(to.query.section, to.query.tab, to.query.agentId)
+    if (moved) { next({ ...moved, replace: true }); return }
   }
 
   // Preserve bookmarks for tools that have moved out of Settings.

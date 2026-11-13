@@ -103,15 +103,9 @@
                                     :title="t('organization.settings.pendingJoinRequestsBadge')">{{
                                         orgStore.totalPendingJoinRequestCount }}</span>
                                 <span v-if="item.path === 'toolbox' && toolboxPreview.length" class="menu-toolbox-stack"
-                                    :title="toolboxPreview.map((tool) => tool.key === 'browserconnection' && browserStackStatus
-                                        ? `${t(tool.title)} (${t(`localBrowser.${browserStackStatus}`)})` : t(tool.title)).join(' · ')">
+                                    :title="toolboxPreview.map((tool) => t(tool.title)).join(' · ')">
                                     <span v-for="tool in toolboxPreview" :key="tool.key" class="menu-toolbox-stack__item">
-                                        <template v-if="tool.key === 'browserconnection'">
-                                            <BrowserIcon width="12" height="12" />
-                                            <i v-if="browserStackStatus" class="menu-toolbox-stack__status"
-                                                :class="`is-${browserStackStatus}`" aria-hidden="true" />
-                                        </template>
-                                        <t-icon v-else :name="tool.icon" size="12px" />
+                                        <t-icon :name="tool.icon" size="12px" />
                                     </span>
                                 </span>
                             </template>
@@ -239,8 +233,6 @@ import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { useAuthStore } from '@nexus-web/core/stores/auth';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { TOOLBOX_ITEMS, canAccessToolboxSection } from '@/config/toolbox';
-import BrowserIcon from '@/components/icons/BrowserIcon.vue';
-import { useBrowserConnectionStore } from '@/stores/browserConnection';
 import { useOrganizationStore } from '@nexus-web/core/stores/organization';
 import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
@@ -293,15 +285,6 @@ const toolboxPreview = computed(() => TOOLBOX_ITEMS.filter((item) => canAccessTo
 })));
 const orgStore = useOrganizationStore();
 const uiStore = useUIStore();
-const browserConnection = useBrowserConnectionStore();
-const browserStackStatus = computed(() => {
-    if (!uiStore.sidebarBrowserStatus) return '';
-    if (!browserConnection.loaded || !browserConnection.enabled || !browserConnection.device) return '';
-    return browserConnection.connected ? 'connected' : 'offline';
-});
-watch(() => uiStore.sidebarBrowserStatus && toolboxPreview.value.some((tool) => tool.key === 'browserconnection'), (visible) => {
-    if (visible && !browserConnection.loaded) browserConnection.refresh().catch(() => {});
-}, { immediate: true });
 const commandPaletteStore = useCommandPaletteStore();
 
 // Platform-aware label for the ⌘K hint. navigator.platform is deprecated but

@@ -57,6 +57,12 @@ test('operation labels remain referenced when pruning locale bundles', () => {
   assert.deepEqual(keys.filter((key) => !referencedKeys.has(key)), [])
 })
 
+test('operation risk labels survive pruning for backend-supplied risk IDs', () => {
+  const keys = [...localeKeysByName[REFERENCE_LOCALE]].filter(key => key.startsWith('agentStream.operations.risk.'))
+  assert.ok(keys.length > 0)
+  assert.deepEqual(keys.filter(key => !referencedKeys.has(key)), [])
+})
+
 test('installer command progress messages resolve in the settings namespace', () => {
   for (const [locale, bundle] of Object.entries(LOCALE_BUNDLES)) {
     for (const name of ['installCommandRunning', 'installCommandWaiting']) {

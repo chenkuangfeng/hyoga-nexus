@@ -1922,7 +1922,7 @@ import { SKILL_ICON } from '@/types/mention';
 import { listEmbedChannels } from '@nexus-web/core/api/embed/index';
 import { ASSISTANT_ACCESS_LEVELS, type AssistantAccessLevel } from '@nexus-web/core/api/assistant';
 import { getRootZoom, rectToCssPx } from '@/utils/zoom';
-import { integrationSectionKey } from '@/config/settingsRoute';
+import { agentChannelsPath } from '@/config/settingsRoute';
 import { toolboxLocation } from '@/config/toolbox';
 import {
   deriveKbFilterFromTools,
@@ -3187,7 +3187,7 @@ function gotoIntegrations(tab: 'im' | 'embed') {
   const agentId = editorAgent.value?.id;
   if (!agentId) return;
   handleClose();
-  router.push({ path: '/platform/settings', query: { section: integrationSectionKey(tab), agentId } });
+  router.push({ path: agentChannelsPath(agentId), query: { tab } });
 }
 
 const filteredIntentPlaceholders = computed(() => {

@@ -22,15 +22,7 @@
               <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2"
                 stroke-linecap="round" />
             </svg>
-            <!-- WeKnora Cloud 使用自定义 W 图标 -->
-            <svg v-else-if="item.key === 'weknoracloud'" width="17" height="17" viewBox="0 0 18 18"
-              fill="none" xmlns="http://www.w3.org/2000/svg" class="nav-icon">
-              <rect x="1.5" y="1.5" width="15" height="15" rx="3.5" stroke="currentColor" stroke-width="1.2"
-                fill="none" />
-              <path d="M4.5 5.5L6.5 12.5L9 7.5L11.5 12.5L13.5 5.5" stroke="currentColor" stroke-width="1.3"
-                stroke-linecap="round" stroke-linejoin="round" fill="none" />
-            </svg>
-            <!-- 沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
+            <!-- 沙箱使用独立运行窗口 -->
             <svg v-else-if="item.key === 'sandbox'" width="17" height="17" viewBox="0 0 18 18" fill="none"
               xmlns="http://www.w3.org/2000/svg" class="nav-icon">
               <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.2"
@@ -63,7 +55,7 @@
     <div class="content-wrapper" :class="{
       'content-wrapper--wide': currentSection === 'members',
       'content-wrapper--resource-list': ['models', 'mymemory', 'members', 'sandbox'].includes(currentSection),
-      'content-wrapper--full': isIntegrationSection(currentSection),
+      'content-wrapper--full': currentSection === 'mcp-endpoints',
     }">
       <!-- 角色不允许访问当前 section（deep-link 进来 / 跨空间切换后角色降级）—— 优先于具体 section 渲染。
            正常导航走 navItems filter 不会到这里，但 watch(navItems) 的 fallback 会在角色降级
@@ -84,15 +76,7 @@
           <GeneralSettings />
         </div>
 
-        <!-- Ollama 设置 -->
-        <div v-if="currentSection === 'ollama' && isPhase1Section('ollama')" class="section">
-          <OllamaSettings />
-        </div>
 
-        <!-- WeKnora Cloud -->
-        <div v-if="currentSection === 'weknoracloud' && isPhase1Section('weknoracloud')" class="section">
-          <WeKnoraCloudSettings />
-        </div>
 
         <!-- 模型配置 -->
         <div v-if="currentSection === 'models' && isPhase1Section('models')" class="section">
@@ -170,10 +154,7 @@
           <OrgStructure />
         </div>
 
-        <!-- 发布集成 -->
-        <div v-if="isIntegrationSection(currentSection)" class="section">
-          <IntegrationSettingsSection :tab="integrationTabFromSection(currentSection)" />
-        </div>
+        <div v-if="currentSection === 'mcp-endpoints'" class="section"><McpEndpointSettings :active="visible" /></div>
       </template>
     </div>
   </SettingsModalShell>
@@ -192,13 +173,13 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useModalShell } from '@/composables/useModalShell'
 import SettingsModalShell from '@/components/SettingsModalShell.vue'
+import McpEndpointSettings from './McpEndpointSettings.vue'
 import SystemInfo from './SystemInfo.vue'
 import TenantInfo from './TenantInfo.vue'
 import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 // Nexus model settings replace WeKnora's ModelSettings (openspec 2026-11-05-weknora-agent-tool-model-settings).
 import ModelSettings from './NexusModelSettings.vue'
-import OllamaSettings from './OllamaSettings.vue'
 import WebSearchSettings from './WebSearchSettings.vue'
 import ChatHistorySettings from './ChatHistorySettings.vue'
 import NexusMemorySettings from './NexusMemorySettings.vue'
@@ -208,24 +189,14 @@ import VectorStoreSettings from './VectorStoreSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
 import StorageBackendSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
-import WeKnoraCloudSettings from './WeKnoraCloudSettings.vue'
 import TenantMembers from './TenantMembers.vue'
 import OrgStructure from './OrgStructure.vue'
-import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
-import {
-  INTEGRATION_PREVIEW_ITEMS,
-  INTEGRATION_TAB_CAPABILITY,
-  INTEGRATION_TAB_MIN_ROLE,
-} from '@/config/integrations'
 import { SETTINGS_SECTION_MIN_ROLE } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY, skillSettingsSupported } from '@/config/deploymentCapabilities'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import { hostSkillsOnly } from '@/utils/skillTarget'
 import {
   buildSettingsRouteQuery,
-  integrationSectionKey,
-  integrationTabFromSection,
-  isIntegrationSection,
   normalizeSettingsSection as normalizeSettingsSectionFromQuery,
   settingsQueryUnchanged,
 } from '@/config/settingsRoute'
@@ -267,7 +238,7 @@ type NavGroup = {
 // 设置二级导航的最低可见角色来自 settingsAccess.ts，和
 // internal/router/router.go 的守卫矩阵对齐。
 // 以「页面里至少有 1 个有意义的写操作所要求的最低角色」为基准，把基础设
-// 施配置（models 写、ollama 下载、websearch 写、parser/storage/vector/mcp
+// 施配置（models 写、websearch 写、parser/storage/vector/mcp
 // CRUD、sandbox 连接、skills 安装、chat-history 配置）统一收到 admin；只读类（general / system info /
 // tenant-info / members 名册）保留 viewer 可见；最高敏感的 reset api
 // key 是 owner-only。改这张表前请在 router.go 里复核对应路由组。
@@ -295,11 +266,6 @@ const syncSettingsRoute = (sectionKey: string) => {
 }
 
 const isSectionSupported = (key: string): boolean => {
-  if (isIntegrationSection(key)) {
-    return deploymentCapabilities.isSupported(
-      INTEGRATION_TAB_CAPABILITY[integrationTabFromSection(key)],
-    )
-  }
   if (key === 'skills' || key === 'envvars') {
     return skillSettingsSupported(deploymentCapabilities.capabilities)
   }
@@ -307,12 +273,6 @@ const isSectionSupported = (key: string): boolean => {
 }
 
 const canSeeSection = (key: string): boolean => {
-  if (isIntegrationSection(key)) {
-    const min = INTEGRATION_TAB_MIN_ROLE[integrationTabFromSection(key)]
-    if (!min) return true
-    if (authStore.canAccessAllTenants) return true
-    return authStore.hasRole(min)
-  }
   const min = SETTINGS_SECTION_MIN_ROLE[key] ?? 'viewer'
   // canAccessAllTenants（superuser）和路由层一样必须 bypass，否则 cross-tenant
   // 管理员看不到自己有权操作的入口（参考 TenantMembers.vue 的 canManage）。
@@ -327,19 +287,9 @@ const isEnterpriseSpace = computed(() => {
 })
 
 const navItems = computed(() => {
-  // 一律走 SETTINGS_SECTION_MIN_ROLE 表，避免 ad-hoc isAdmin/isOwner 散落在多处。
-  // 服务端在每条路由上仍以 g.Viewer/Admin/Owner 为准，这里只决定 UI 是
-  // 否露入口；改动入口规则请同步更新 settingsAccess.ts 和对应后端路由。
-  const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
-    key: integrationSectionKey(item.key),
-    icon: item.icon.type === 'icon' ? item.icon.name : 'integration',
-    emoji: item.icon.type === 'emoji' ? item.icon.value : undefined,
-    label: t(`integrations.tabs.${item.key}`),
-  }))
   const all: NavItem[] = [
     { key: 'general', icon: 'setting', label: t('general.title') },
-    { key: 'ollama', icon: 'server', label: 'Ollama' },
-    { key: 'weknoracloud', icon: '', label: 'WeKnora Cloud' },
+    { key: 'mcp-endpoints', icon: 'link', label: t('connectionUi.endpoints') },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
     { key: 'websearch', icon: 'search', label: t('settings.webSearchConfig') },
     { key: 'chathistory', icon: 'chat', label: t('chatHistorySettings.title') },
@@ -355,7 +305,6 @@ const navItems = computed(() => {
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
     ...(isEnterpriseSpace.value ? [{ key: 'org-structure', icon: 'organization', label: t('orgStructure.title') }] : []),
-    ...integrationItems,
   ]
   // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
   // viewer 入口然后角色一返回又消失，先卡住不渲染更稳，跟原先 members
@@ -369,7 +318,7 @@ const navItems = computed(() => {
 const navGroups = computed<NavGroup[]>(() => {
   const itemMap = new Map(navItems.value.map((item) => [item.key, item]))
   const pickItems = (keys: string[]) => keys.map((key) => itemMap.get(key)).filter(Boolean) as NavItem[]
-  // 分组：账户 → 空间 → 模型 → 发布集成 → 数据与扩展 → 平台
+  // 分组：账户 → 空间 → 模型 → 数据与扩展
   // 关键调整：把个人偏好(general)和用户信息收进「账户」；
   // 把空间内功能开关(chathistory)从「平台」挪到「空间」；
   // 把检索引擎和外部集成合并为「数据与扩展」，避免两个 2~3 项的窄分组。
@@ -377,7 +326,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'account',
       label: t('settings.navGroups.account'),
-      items: pickItems(['general', 'userprofile', 'mymemory', 'envvars']),
+      items: pickItems(['general', 'userprofile', 'mymemory', 'envvars', 'mcp-endpoints']),
     },
     {
       key: 'workspace',
@@ -387,12 +336,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'models_runtime',
       label: t('settings.navGroups.modelsRuntime'),
-      items: pickItems(['models', 'ollama', 'weknoracloud']),
-    },
-    {
-      key: 'integrations',
-      label: t('integrations.title'),
-      items: pickItems(INTEGRATION_PREVIEW_ITEMS.map((item) => integrationSectionKey(item.key))),
+      items: pickItems(['models']),
     },
     {
       key: 'data_extensions',

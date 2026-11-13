@@ -65,7 +65,7 @@
                 <ResourceCardAvatar kind="agent" />
                 <span class="card-title" :title="agent.name">{{ agent.name }}</span>
               </div>
-              <t-popup v-if="canCreate" :visible="openMoreId === agent.id" trigger="click" overlayClassName="card-more-popup"
+              <t-popup v-if="agent.can_maintain === true" :visible="openMoreId === agent.id" trigger="click" overlayClassName="card-more-popup"
                 destroy-on-close placement="bottom-right" @update:visible="(v: boolean) => { openMoreId = v ? agent.id : null }">
                 <button type="button" :aria-label="$t('common.expand')" class="more-wrap"
                   :class="{ 'active-more': openMoreId === agent.id }" aria-haspopup="true" @click.stop>
@@ -76,6 +76,7 @@
                     <div class="popup-menu-item" @click="startChat(agent)">
                       <t-icon class="menu-icon" name="chat" /><span>{{ $t('nexusAgent.startChat') }}</span>
                     </div>
+                    <div class="popup-menu-item" @click="openChannels(agent)"><t-icon class="menu-icon" name="chat-message" /><span>{{ $t('connectionUi.channels') }}</span></div>
                     <div class="popup-menu-item" @click="openEdit(agent)">
                       <t-icon class="menu-icon" name="edit" /><span>{{ $t('common.edit') }}</span>
                     </div>
@@ -130,6 +131,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { agentChannelsPath } from '@/config/settingsRoute'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import ResourceIcon from '@/components/icons/ResourceIcon.vue'
@@ -204,8 +206,10 @@ function startChat(agent: NexusAgent) {
   void router.push({ path: '/platform/creatChat', query: { agent: agent.published_version_id } })
 }
 
+function openChannels(agent: NexusAgent) { openMoreId.value = null; void router.push(agentChannelsPath(agent.id)) }
+
 function handleCardClick(agent: NexusAgent) {
-  if (canCreate.value) openEdit(agent)
+  if (agent.can_maintain === true) openEdit(agent)
   else startChat(agent)
 }
 

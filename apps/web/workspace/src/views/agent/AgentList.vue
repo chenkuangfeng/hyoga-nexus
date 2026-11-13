@@ -757,7 +757,7 @@ import { shouldShowResourceOriginBadge } from '@/utils/card-list-badge'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useListUrlState } from '@/composables/useListUrlState'
 import { useResourcePins } from '@/composables/useResourcePins'
-import { integrationSectionKey } from '@/config/settingsRoute'
+import { agentChannelsPath } from '@/config/settingsRoute'
 import {
   DEFAULT_RESOURCE_SORT,
   sortResourcesWithinGroups,
@@ -1093,8 +1093,8 @@ const checkAndOpenEditModal = async () => {
   if (editId && (section === 'im' || section === 'embed' || section === 'integrations' || section === 'integration-im' || section === 'integration-embed')) {
     const tab = section === 'embed' || section === 'integration-embed' ? 'embed' : 'im'
     router.replace({
-      path: '/platform/settings',
-      query: { section: integrationSectionKey(tab), agentId: editId },
+      path: agentChannelsPath(editId),
+      query: { tab },
     })
     return
   }

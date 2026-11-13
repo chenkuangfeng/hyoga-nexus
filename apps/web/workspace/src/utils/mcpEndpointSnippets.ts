@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the "Nexus as MCP server" integration page. Kept free
+ * Pure helpers for MCP connection settings. Kept free
  * of Vue so the snippet builders can be unit-tested with node:test.
  */
 

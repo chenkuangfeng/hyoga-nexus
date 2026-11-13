@@ -28,13 +28,6 @@ export const TOOLBOX_ITEMS = [
     description: 'mcpSettings.description',
     available: true,
   },
-  {
-    key: 'browserconnection',
-    icon: 'browse',
-    title: 'localBrowser.settingsTitle',
-    description: 'localBrowser.settingsDescription',
-    available: false,
-  },
 ] as const
 
 export type ToolboxSection = typeof TOOLBOX_ITEMS[number]['key']

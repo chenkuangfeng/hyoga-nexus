@@ -7,6 +7,7 @@
 - `src/composables/`、`src/utils/`：主题、字体、请求与令牌刷新等基础逻辑。
 - `src/i18n/`：公共语言资源与审计、扫描工具。
 - `src/views/auth/`：公共登录与改密组件；自助注册只创建企业，邀请注册加入已有企业。
+- `src/components/IMChannelPanel.vue`：智能体 IM 渠道面板，遵循维护权限、归属与企业策略，二维码在本地生成；接口封装在 `api/enterprise-connections.ts`。
 - `src/components/NotFound.vue`：两个应用共用的未知页面提示。
 
 应用经 `@nexus-web/core/...` 导入源码。Vue、TDesign、Pinia、vue-router 与 vue-i18n 使用 peerDependencies，共用 catalog 版本。公共包不得反向导入两个应用，`pnpm test` 检查该边界。

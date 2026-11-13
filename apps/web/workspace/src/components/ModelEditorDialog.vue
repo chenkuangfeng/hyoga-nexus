@@ -106,10 +106,7 @@
             class="ollama-unavailable-tip">
             <t-icon name="error-circle-filled" class="tip-icon" />
             <span class="tip-text">{{ $t('model.editor.ollamaUnavailable') }}</span>
-            <t-button variant="text" size="small" @click="goToOllamaSettings" class="tip-link">
-              <template #icon><t-icon name="jump" /></template>
-              {{ $t('model.editor.goToOllamaSettings') }}
-            </t-button>
+
           </div>
         </div>
 
@@ -234,11 +231,7 @@
                   {{ $t('settings.weknoraCloud.credentialUnconfigured') }}
                 </template>
                 <div style="margin-top: 8px;">
-                  <t-button variant="text" size="small" @click="goToWeKnoraCloudSettings"
-                    style="padding: 0; height: auto;">
-                    <template #icon><t-icon name="jump" /></template>
-                    {{ $t('settings.weknoraCloud.goToSettings') }}
-                  </t-button>
+
                 </div>
               </div>
             </div>
@@ -1296,15 +1289,6 @@ const checkWkcCredentialStatus = async () => {
   }
 }
 
-const goToWeKnoraCloudSettings = async () => {
-  emit('update:visible', false)
-  if (uiStore.showSettingsModal) {
-    uiStore.closeSettings()
-    await nextTick()
-  }
-  uiStore.openSettings('weknoracloud')
-}
-
 const formData = ref<ModelFormData>({
   id: '',
   name: '',
@@ -1436,25 +1420,6 @@ const checkOllamaServiceStatus = async () => {
   if (ollamaServiceStatus.value === false && !isEdit.value && formData.value.source === 'local') {
     formData.value.source = 'remote'
   }
-}
-
-// 打开Ollama设置窗口
-const goToOllamaSettings = async () => {
-  console.log('点击跳转到Ollama设置按钮')
-  // 关闭当前弹窗
-  emit('update:visible', false)
-
-  // 先关闭设置弹窗（如果已打开）
-  if (uiStore.showSettingsModal) {
-    uiStore.closeSettings()
-    // 等待 DOM 更新
-    await nextTick()
-  }
-
-  // 打开设置窗口并直接跳转到Ollama设置
-  console.log('调用uiStore.openSettings')
-  uiStore.openSettings('ollama')
-  console.log('uiStore.openSettings调用完成')
 }
 
 // 上一次打开时的 modelData id：用来判断切换模型/新增 vs. 同一次新增的连续打开
