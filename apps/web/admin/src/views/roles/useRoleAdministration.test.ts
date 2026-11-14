@@ -5,7 +5,7 @@ import * as vue from 'vue'
 import { fixture, flush } from '@nexus-web/core/test-utils/vueFixture'
 
 const fixtures = new WeakMap<object, ReturnType<typeof fixture>>()
-function setup(t: Parameters<typeof fixture>[0], options: { memberFailure?: boolean; coreFailure?: boolean; failWrite?: boolean; loseAccess?: boolean; noMembersPermission?: boolean; unmountOnReconcile?: boolean } = {}) {
+function setup(t: Parameters<typeof fixture>[0], options: { memberFailure?: boolean; coreFailure?: boolean; failWrite?: boolean; loseAccess?: boolean; noMembersPermission?: boolean; unmountOnReconcile?: boolean; departments?: boolean; departmentFailure?: boolean } = {}) {
   const f = fixtures.get(t) || fixture(t)
   fixtures.set(t, f)
   const calls: Array<{ operation: string; input?: unknown }> = []
@@ -16,16 +16,20 @@ function setup(t: Parameters<typeof fixture>[0], options: { memberFailure?: bool
     can(key: string) { return this.ready && this.permissions.includes(key) }, invalidate() { this.ready = false; this.revision++; if (options.unmountOnReconcile) unmount() },
     async load() { permissionLoads++; if (options.loseAccess) this.permissions = []; this.ready = true },
   })
+  if (options.departments) context.permissions.push('org:manage')
   const role = { id: 'r', tenant_id: 'a', name: 'Custom', builtin: false, menus: ['roles'], apis: ['roles:manage'] }
   const builtin = { ...role, id: 'builtin', builtin: true, name: 'Auditor' }
   const record = (operation: string, input?: unknown) => { calls.push({ operation, input }); if (options.failWrite) throw new Error('write_failed') }
   const compiled = f.evaluate(readFileSync(new URL('./useRoleAdministration.ts', import.meta.url), 'utf8'), {
+    '../organization/organizationTree': { organizationRows: (rows: { id: string; name: string; status: string }[]) => rows.map(node => ({ node, path: `Company / ${node.name}` })) },
+    '@nexus-web/core/api/enterprise-organizations': { listOrganizationUnits: async () => { if (options.departmentFailure) throw new Error('tree_failed'); return [{ id: 'd', name: 'Dept', status: 'active' }, { id: 'disabled', name: 'Dept', status: 'disabled' }] } },
     vue, '@nexus-web/core/stores/auth': { useAuthStore: () => auth }, '../../stores/context': { useAdminContext: () => context },
     'vue-router': { useRouter: () => ({ replace: async () => {} }) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key, te: () => false }) },
     'tdesign-vue-next': { MessagePlugin: { success() {}, error() {} }, DialogPlugin: { confirm: (input: { onConfirm: () => Promise<void>; onClose: () => void }) => { const dialog = { ...input, hide() {} }; dialogs.push(dialog); return dialog } } },
     '@nexus-web/core/api/enterprise-members': { listEnterpriseMembers: async () => { if (options.memberFailure) throw new Error('member_failed'); return [{ user_id: 'u', role: 'viewer', display_name: 'User' }, { user_id: 'owner', role: 'owner', display_name: 'Owner' }] } },
     '@nexus-web/core/api/enterprise-roles': {
+      assignDepartmentRole: async (_tenant: string, unit: string, role: string) => { record('department', { unit, role }); return { assigned: ['u'], skipped: ['v'] } },
       listEnterpriseRoles: async () => [{ ...role }, { ...builtin }],
       getRoleCatalog: async () => { if (options.coreFailure) throw new Error('failed'); return { menus: ['roles'], apis: ['roles:manage', 'models:manage'] } },
       getRoleActorPermissions: async () => ({ menus: ['roles'], apis: ['roles:manage'] }),
@@ -93,4 +97,29 @@ test('清空权限导致父外壳卸载页面后仍完成身份校准和权限�
   assert.equal(s.calls[0].operation, 'create')
   assert.equal(s.permissionLoads(), 1)
   assert.equal(s.context.ready, true)
+})
+
+
+test('部门分配需要组织权限和可读的启用部门，仅提交部门与角色且先确认', async t => {
+  const s = setup(t, { departments: true }); await flush()
+  assert.equal(s.vm.departmentsReady, true)
+  assert.equal(s.vm.departmentChoices[0].label, 'Company / Dept')
+  s.vm.selectedDepartment = 'disabled'; s.vm.departmentRole = 'r'; s.vm.assignDepartment()
+  assert.equal(s.dialogs.length, 0)
+  s.vm.selectedDepartment = 'd'; s.vm.assignDepartment()
+  assert.equal(s.calls.length, 0)
+  await s.dialogs[0].onConfirm(); await flush()
+  assert.deepEqual(JSON.parse(JSON.stringify(s.calls[0].input)), { unit: 'd', role: 'r' })
+  assert.equal(s.permissionLoads(), 1)
+})
+
+test('组织读取失败或权限缺失不阻断角色维护；切换企业使部门确认失效', async t => {
+  const s = setup(t, { departments: true, departmentFailure: true }); await flush()
+  assert.equal(s.vm.ready, true); assert.equal(s.vm.departmentsReady, false); assert.equal(s.vm.departmentError, 'tree_failed')
+  s.vm.selectedDepartment = 'd'; s.vm.departmentRole = 'r'; s.vm.assignDepartment(); assert.equal(s.dialogs.length, 0)
+  const other = setup(t, { departments: true }); await flush()
+  other.vm.selectedDepartment = 'd'; other.vm.departmentRole = 'r'; other.vm.assignDepartment()
+  other.auth.effectiveTenantId = 'b'; await flush(); await other.dialogs[0].onConfirm()
+  assert.equal(other.calls.length, 0)
+  const denied = setup(t); await flush(); assert.equal(denied.vm.canManageDepartments, false)
 })

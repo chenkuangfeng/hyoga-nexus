@@ -5,7 +5,9 @@ import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useAdminContext } from '../../stores/context'
-import { listEnterpriseRoles, getRoleCatalog, getRoleActorPermissions, createEnterpriseRole, updateEnterpriseRole, listRoleAssignments, setMemberRoleAssignment, type EnterpriseRole, type PermissionSet, type RoleAssignment } from '@nexus-web/core/api/enterprise-roles'
+import { assignDepartmentRole, listEnterpriseRoles, getRoleCatalog, getRoleActorPermissions, createEnterpriseRole, updateEnterpriseRole, listRoleAssignments, setMemberRoleAssignment, type EnterpriseRole, type PermissionSet, type RoleAssignment } from '@nexus-web/core/api/enterprise-roles'
+import { listOrganizationUnits, type OrganizationNode } from '@nexus-web/core/api/enterprise-organizations'
+import { organizationRows } from '../organization/organizationTree'
 import { listEnterpriseMembers, type EnterpriseMember } from '@nexus-web/core/api/enterprise-members'
 
 export function useRoleAdministration() {
@@ -17,9 +19,14 @@ export function useRoleAdministration() {
   const editor = ref(false), selected = ref<EnterpriseRole | null>(null)
   const form = reactive({ name: '', menus: [] as string[], apis: [] as string[] })
   const selectedMember = ref(''), selectedRole = ref('')
+  const departments = ref<OrganizationNode[]>([]), departmentsReady = ref(false), departmentError = ref('')
+  const selectedDepartment = ref(''), departmentRole = ref('')
   let epoch = 0, confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
   const canManage = computed(() => context.can('roles:manage'))
   const canManageMembers = computed(() => canManage.value && context.can('members:manage'))
+  const canManageDepartments = computed(() => canManageMembers.value && context.can('org:manage'))
+  const departmentChoices = computed(() => organizationRows(departments.value).map(row => ({ value: row.node.id, label: row.path, disabled: row.node.status !== 'active' })))
+  const canAssignDepartment = computed(() => ready.value && departmentsReady.value && canManageDepartments.value && !busy.value && !loading.value && departments.value.some(row => row.id === selectedDepartment.value && row.status === 'active') && assignableRoles.value.some(row => row.id === departmentRole.value))
   const filteredRoles = computed(() => roles.value.filter(row => row.name.toLowerCase().includes(search.value.trim().toLowerCase())))
   const withinActor = (grants: PermissionSet) => !!actor.value && grants.menus.every(key => actor.value!.menus.includes(key)) && grants.apis.every(key => actor.value!.apis.includes(key))
   const valid = computed(() => ready.value && canManage.value && !selected.value?.builtin && !!form.name.trim() && form.name.trim().length <= 64 && form.menus.length <= 32 && form.apis.length <= 64 && withinActor(form) && form.menus.every(key => catalog.value?.menus.includes(key)) && form.apis.every(key => catalog.value?.apis.includes(key)))
@@ -33,6 +40,7 @@ export function useRoleAdministration() {
   function message(reason: unknown) { return reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string' && !reason.message.endsWith('_response_invalid') ? reason.message : t('adminConsole.failed') }
   function closeEditor() { if (!busy.value) { confirmation?.hide(); confirmation = undefined; editor.value = false; selected.value = null; form.name = ''; form.menus = []; form.apis = [] } }
   function invalidate() {
+    departments.value = []; departmentsReady.value = false; departmentError.value = ''; selectedDepartment.value = ''; departmentRole.value = ''
     epoch++; confirmation?.hide(); confirmation = undefined
     ready.value = false; membersReady.value = false; roles.value = []; actor.value = null; catalog.value = null; members.value = []; assignments.value = []
     editor.value = false; selected.value = null; form.name = ''; form.menus = []; form.apis = []; selectedMember.value = ''; selectedRole.value = ''
@@ -55,14 +63,18 @@ export function useRoleAdministration() {
       if (people[0].status === 'fulfilled' && people[1].status === 'fulfilled') { members.value = people[0].value; assignments.value = people[1].value; membersReady.value = true }
       else membersError.value = t('adminConsole.failed')
     }
-    loading.value = false
+    if (canManageDepartments.value) {
+      try { const rows = await listOrganizationUnits(tenant); if (current !== epoch) return; departments.value = rows; departmentsReady.value = true }
+      catch (reason) { if (current === epoch) departmentError.value = message(reason) }
+    }
+    if (current === epoch) loading.value = false
   }
   function openEditor(row?: EnterpriseRole) {
     if (!canManage.value || !ready.value || busy.value || loading.value || (row && !roles.value.includes(row))) return
     selected.value = row || null; form.name = row?.name || ''; form.menus = [...(row?.menus || [])]; form.apis = [...(row?.apis || [])]; editor.value = true
   }
   /** 写入成功后身份与权限重读失败使用独立反馈，不能将已完成的写入报告为失败。 */
-  async function reconcile(tenant: string, user: string | undefined) {
+  async function reconcile(tenant: string, user: string | undefined, resultMessage = t('adminRoles.saved')) {
     context.invalidate()
     const revision = context.revision
     const sameIdentity = () => auth.user?.id === user && String(auth.effectiveTenantId) === tenant
@@ -75,10 +87,10 @@ export function useRoleAdministration() {
       await pending
       if (!sameIdentity() || context.revision !== loadingRevision) return
       if (context.failed) void MessagePlugin.error(t('adminRoles.refreshFailed'))
-      else void MessagePlugin.success(t('adminRoles.saved'))
+      else void MessagePlugin.success(resultMessage)
     } catch { if (sameIdentity() && context.revision === revision) void MessagePlugin.error(t('adminRoles.refreshFailed')) }
   }
-  function confirmWrite(body: string, operation: (tenant: string) => Promise<unknown>) {
+  function confirmWrite(body: string, operation: (tenant: string) => Promise<unknown>, resultMessage?: () => string) {
     if (!canManage.value || !ready.value || busy.value || loading.value || confirmation) return
     const current = epoch, tenant = String(auth.effectiveTenantId), user = auth.user?.id
     const dialog = DialogPlugin.confirm({ header: t('adminRoles.confirm'), body,
@@ -90,7 +102,7 @@ export function useRoleAdministration() {
         try { await operation(tenant) }
         catch (reason) { if (current === epoch) { error.value = message(reason); busy.value = false }; return }
         if (current !== epoch || auth.user?.id !== user || String(auth.effectiveTenantId) !== tenant) return
-        await reconcile(tenant, user)
+        await reconcile(tenant, user, resultMessage?.())
       }, onClose: () => { dialog.hide(); if (confirmation === dialog) confirmation = undefined },
     })
     confirmation = dialog
@@ -105,12 +117,20 @@ export function useRoleAdministration() {
     const user = selectedMember.value, role = selectedRole.value
     confirmWrite(t('adminRoles.assignConfirm', { name: memberName(knownMember(user)!), role: roles.value.find(row => row.id === role)!.name }), tenant => setMemberRoleAssignment(tenant, user, role, true))
   }
+  function assignDepartment() {
+    if (!canAssignDepartment.value) return
+    const unit = selectedDepartment.value, role = departmentRole.value
+    const path = departmentChoices.value.find(row => row.value === unit)!.label
+    const name = assignableRoles.value.find(row => row.id === role)!.name
+    let result = { assigned: [] as string[], skipped: [] as string[] }
+    confirmWrite(t('adminRoles.departmentConfirm', { path, role: name }), async tenant => { result = await assignDepartmentRole(tenant, unit, role) }, () => t('adminRoles.departmentResult', { assigned: result.assigned.length, skipped: result.skipped.length }))
+  }
   function revoke(user: string, role: string) {
     const member = knownMember(user), row = roles.value.find(item => item.id === role)
     if (!canManageMembers.value || !membersReady.value || !member || !row || !assignments.value.some(item => item.user_id === user && item.role_id === role)) return
     confirmWrite(t('adminRoles.revokeConfirm', { name: memberName(member), role: row.name }), tenant => setMemberRoleAssignment(tenant, user, role, false))
   }
-  watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.ready, () => context.revision, canManage, canManageMembers], () => { void load() }, { immediate: true, flush: 'sync' })
+  watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.ready, () => context.revision, canManage, canManageMembers, canManageDepartments], () => { void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { roles, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke }
+  return { departmentsReady, departmentError, departmentChoices, selectedDepartment, departmentRole, canManageDepartments, canAssignDepartment, assignDepartment, roles, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke }
 }

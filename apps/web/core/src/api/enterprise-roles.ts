@@ -36,3 +36,12 @@ export async function setMemberRoleAssignment(tenant: string, user: string, role
   if (assigned) await put(url, {})
   else await del(url)
 }
+
+export interface DepartmentAssignmentResult { assigned: string[]; skipped: string[] }
+/** 仅分配所选启用部门的直接活跃非 owner 成员；已有分配跳过，返回实际结果。 */
+export async function assignDepartmentRole(tenant: string, unit: string, role: string): Promise<DepartmentAssignmentResult> {
+  const row = object(await post(`${base(tenant)}/org-units/${encodeURIComponent(unit)}/role-assignments`, { role_id: role }))
+  const assigned = array(row.assigned).map(string), skipped = array(row.skipped).map(string)
+  if (new Set([...assigned, ...skipped]).size !== assigned.length + skipped.length) throw new Error('roles_response_invalid')
+  return { assigned, skipped }
+}

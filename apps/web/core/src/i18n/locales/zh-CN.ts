@@ -136,6 +136,13 @@ export default {
     "unnamedMember": "未命名成员"
   },
   adminRoles: {
+    "departmentTitle": "按部门批量分配",
+    "department": "选择部门",
+    "departmentAssign": "分配给部门成员",
+    "departmentHint": "仅分配当前部门的直接活跃成员，不含下级部门；owner 和已分配成员会跳过。本次分配不会随未来部门成员变化自动更新。",
+    "departmentDenied": "部门分配需要角色管理、成员管理及组织管理权限。",
+    "departmentConfirm": "将角色“{role}”分配给部门“{path}”的直接活跃成员？不含下级部门，未来新增成员不会自动获得该角色。",
+    "departmentResult": "部门分配完成：新增 {assigned} 人，已分配跳过 {skipped} 人。",
     "operation": "操作",
     "title": "角色与权限",
     "description": "管理企业角色及成员授权。",
@@ -159,7 +166,7 @@ export default {
     "revoke": "撤销分配",
     "noAssignments": "暂无角色分配。",
     "membersDenied": "查看成员与分配角色还需要成员管理权限；你仍可维护角色权限。",
-    "assignmentHint": "角色权限与成员已有权限叠加；owner 已拥有全部权限，无需分配。部门批量分配尚未接入。",
+    "assignmentHint": "角色权限与成员已有权限叠加；owner 已拥有全部权限，无需分配。部门批量分配可在下方单独操作。",
     "builtinHint": "内置角色不可修改，可以分配给成员。",
     "limitHint": "只能授予自己已有的权限；菜单可见性不代替操作授权。已有超出自身范围的权限须先移除才能保存。",
     "confirm": "确认授权变更",

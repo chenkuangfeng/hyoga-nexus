@@ -136,6 +136,13 @@ export default {
     "unnamedMember": "Unnamed member"
   },
   adminRoles: {
+    "departmentTitle": "Assign by department",
+    "department": "Select department",
+    "departmentAssign": "Assign to department members",
+    "departmentHint": "Assign only active direct members, excluding subdepartments. Owners and existing assignments are skipped. Future membership changes do not update this assignment.",
+    "departmentDenied": "Department assignment requires role, member and organization management permissions.",
+    "departmentConfirm": "Assign “{role}” to active direct members of “{path}”? Subdepartments and future members are excluded.",
+    "departmentResult": "Department assignment completed: {assigned} added, {skipped} existing assignments skipped.",
     "operation": "Actions",
     "title": "Roles and permissions",
     "description": "Manage enterprise roles and member assignments.",
@@ -159,7 +166,7 @@ export default {
     "revoke": "Revoke assignment",
     "noAssignments": "No role assignments.",
     "membersDenied": "Member management permission is also required to manage assignments. You can still maintain roles.",
-    "assignmentHint": "Role permissions add to existing member permissions. Owners already have full access. Department assignment is not available yet.",
+    "assignmentHint": "Role permissions add to existing member permissions. Owners already have full access. Use the separate department assignment section below.",
     "builtinHint": "Built-in roles are read-only and can be assigned to members.",
     "limitHint": "You can only grant permissions you hold. Menu visibility does not authorize actions. Remove existing permissions outside your scope before saving.",
     "confirm": "Confirm permission change",

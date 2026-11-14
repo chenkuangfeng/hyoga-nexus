@@ -1,4 +1,4 @@
-# 部门批量角色分配（待确认）
+# 部门批量角色分配
 
 ### MODIFIED Requirements
 

@@ -3,7 +3,7 @@
 import { useI18n } from 'vue-i18n'
 import { useRoleAdministration } from './useRoleAdministration'
 const { t } = useI18n()
-const { catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke } = useRoleAdministration()
+const { departmentsReady, departmentError, departmentChoices, selectedDepartment, departmentRole, canManageDepartments, canAssignDepartment, assignDepartment, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke } = useRoleAdministration()
 const groups = ['menus', 'apis'] as const
 </script>
 <template>
@@ -24,6 +24,15 @@ const groups = ['menus', 'apis'] as const
           <p class="hint">{{ t('adminRoles.assignmentHint') }}</p>
           <div class="data-table-shell role-table"><table><thead><tr><th>{{ t('adminRoles.member') }}</th><th>{{ t('adminRoles.role') }}</th><th>{{ t('adminRoles.operation') }}</th></tr></thead><tbody><tr v-for="row in assignmentRows" :key="`${row.user_id}:${row.role_id}`"><td>{{ row.member ? memberName(row.member) : '' }}</td><td>{{ row.role?.name }}</td><td><t-button variant="text" theme="danger" :disabled="busy || loading" @click="revoke(row.user_id, row.role_id)">{{ t('adminRoles.revoke') }}</t-button></td></tr><tr v-if="!assignmentRows.length"><td colspan="3">{{ t('adminRoles.noAssignments') }}</td></tr></tbody></table></div>
         </template>
+        <h3>{{ t('adminRoles.departmentTitle') }}</h3>
+        <p class="hint">{{ t('adminRoles.departmentHint') }}</p>
+        <t-alert v-if="!canManageDepartments" theme="info" :message="t('adminRoles.departmentDenied')" />
+        <t-alert v-else-if="departmentError" theme="error" :message="departmentError" />
+        <div v-else-if="departmentsReady" class="assignment-form department-assignment-form">
+          <t-select v-model="selectedDepartment" :options="departmentChoices" :aria-label="t('adminRoles.department')" :placeholder="t('adminRoles.department')" :disabled="busy" filterable />
+          <t-select v-model="departmentRole" :options="assignableRoles.map(row => ({ value: row.id, label: row.name }))" :aria-label="t('adminRoles.role')" :placeholder="t('adminRoles.role')" :disabled="busy" filterable />
+          <t-button theme="primary" :disabled="!canAssignDepartment" @click="assignDepartment">{{ t('adminRoles.departmentAssign') }}</t-button>
+        </div>
       </template>
     </t-loading>
     <t-dialog :visible="editor" :header="t(selected?.builtin ? 'adminRoles.view' : selected ? 'adminRoles.edit' : 'adminRoles.create')" width="680px" :footer="false" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @close="closeEditor">

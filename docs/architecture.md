@@ -355,6 +355,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 **企业策略**（`enterprise_policies`，`tenants/policies.py`，决定 4）：只收紧平台已有的检查，缺省行即默认值。`self_build_agents`（`all` / `org_units` / `none`，owner、admin 不受限，viewer 不能自建）决定谁能创建个人智能体；`personal_models`（默认关闭）决定成员能否使用个人模型与 Key，关闭后下一次选择或执行即被拒绝；`external_sharing`（默认关闭）决定能否共享到含其他企业的共享空间；`personal_wecom_channels`、`personal_external_channels` 供 IM 渠道使用；`retention_days` 供数据治理使用。读取接口 `GET /tenants/{id}/admin/policy` 对全体成员开放，修改 `PATCH` 需要 `policy:manage`。
 
+**部门批量角色分配**：成员管理与角色管理权限同时满足，且目标角色 menus/apis 为操作者有效授权的子集时，才可给启用部门的直接活跃非 owner 成员批量分配；与单成员分配共用授予范围校验。操作在企业锁与同一事务中完成，已有分配跳过，不含下级与未来成员；页面额外通过组织管理权限读取完整部门路径。
+
 **内置角色**（决定 8）：每家企业创建时写入 `security_admin`（`policy:manage`、`tools:manage`、`audit:read`）与 `auditor`（`audit:read`），`tenant_roles.builtin` 为真，可以分配，不能改授权。`policy:manage`、`audit:read_content` 属于治理权限，admin 默认不持有。
 
 **知识库可见范围**（决定 3）：`knowledge_bases.visibility` 为 `private` 或 `tenant`。新建个人库默认 `private`（只有创建者与 owner、admin 可读），新建企业库默认 `tenant`；企业库设为 `private` 时只有管理者、知识库管理员与 owner、admin 可读。他人可用的智能体（企业智能体、有角色授权或共享空间共享的个人智能体）只能绑定 `tenant` 库，发布、分配与共享时检查；被这类智能体绑定或已共享到共享空间的库不能改为 `private`（`kb_in_use`）；只有 `tenant` 库能共享到共享空间。

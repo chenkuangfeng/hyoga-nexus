@@ -105,6 +105,20 @@ def update_role_grants(
     return role
 
 
+def require_grantable_role(
+    session: Session, tenant_id: UUID, role_id: UUID, actor: EffectivePermissions,
+) -> TenantRoleRecord:
+    """校验同企业角色且授权不超出操作者，供单成员与部门批量分配共用。
+
+    调用方须先校验角色管理权限，并在同一写事务内锁定企业；本函数不启动事务。
+    内置角色也可分配，但菜单/API 授权必须全部属于操作者有效权限。
+    """
+    role = _role_in_tenant(session, tenant_id, role_id)
+    menus, apis = effective_permissions_for_role(session, role.id)
+    _ensure_within_actor(actor, menus, apis)
+    return role
+
+
 def assign_role(session: Session, principal: Principal, tenant_id: UUID, member_id: UUID, role_id: UUID) -> None:
     with session.begin():
         actor_id, actor = require_role_manager(session, principal, tenant_id)
@@ -115,8 +129,7 @@ def assign_role(session: Session, principal: Principal, tenant_id: UUID, member_
             raise NotFound("Tenant member not found")
         if member.role == TenantRole.OWNER.value:
             raise Conflict("The owner already has full access")
-        grants = effective_permissions_for_role(session, role.id)
-        _ensure_within_actor(actor, grants[0], grants[1])
+        require_grantable_role(session, tenant_id, role_id, actor)
         if session.get(TenantUserRoleRecord, (tenant_id, member_id, role.id)) is not None:
             raise Conflict("Role is already assigned to this member")
         session.add(TenantUserRoleRecord(

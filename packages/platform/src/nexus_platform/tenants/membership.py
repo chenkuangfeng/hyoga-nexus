@@ -34,12 +34,12 @@ from nexus_platform.persistence.models import (
     SpaceInviteLinkRecord,
     SpaceJoinRequestRecord,
     TenantRecord,
-    TenantRoleRecord,
     TenantUserRoleRecord,
     UserOrgUnitRecord,
     UserRecord,
 )
 from nexus_platform.tenants.service import lock_tenant
+from nexus_platform.tenants.roles import require_role_manager, require_grantable_role
 
 INVITABLE_ROLES = frozenset({"admin", "contributor", "viewer"})
 REJECTION_COOLDOWN = timedelta(days=7)
@@ -342,16 +342,19 @@ def assign_role_to_unit(session: Session, principal: Principal, tenant_id: UUID,
     """Give a custom role to every active member placed directly in one node (not its subtree).
 
     The owner already holds the full catalog and is skipped. People who already have the role are
-    skipped too, so the call can be repeated safely. Returns `assigned` and `skipped` user ids.
+    skipped too, so the call can be repeated safely. Requires members:manage and roles:manage;
+    the role grants must be a subset of the caller permissions. Returns `assigned` and `skipped` user ids.
     """
     now = utc_now()
     with session.begin():
         actor = _manager(session, principal, tenant_id)
         lock_tenant(session, tenant_id)
+        _, permissions = require_role_manager(session, principal, tenant_id)
+        # 获取企业锁后按同一份有效授权复核两项权限，不能沿用等待锁之前的成员授权。
+        if not permissions.allows_api("members:manage"):
+            raise Forbidden("Your tenant role does not allow member administration")
         _active_unit(session, tenant_id, unit_id)
-        role = session.get(TenantRoleRecord, role_id)
-        if role is None or role.tenant_id != tenant_id:
-            raise NotFound("Tenant role not found")
+        require_grantable_role(session, tenant_id, role_id, permissions)
         member_ids = list(session.scalars(
             select(UserOrgUnitRecord.user_id).join(
                 MembershipRecord,
