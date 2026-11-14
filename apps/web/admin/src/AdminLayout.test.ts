@@ -39,3 +39,20 @@ test('身份校准失败只进入登录；退出接口失败也会清除本地�
   assert.equal(s.invalidations(), 3)
   assert.deepEqual(s.paths, ['/login', '/login'])
 })
+
+
+test('折叠状态独立切换，关闭用户弹层可恢复触发按钮焦点', async t => {
+  const s = setup(t)
+  assert.equal(s.vm.collapsed, false)
+  s.vm.toggleSidebar()
+  assert.equal(s.vm.collapsed, true)
+  s.vm.toggleSidebar()
+  assert.equal(s.vm.collapsed, false)
+  let focused = false
+  s.vm.accountButton = { focus() { focused = true } }
+  s.vm.accountOpen = true
+  s.vm.closeAccount(true)
+  await import('vue').then(vue => vue.nextTick())
+  assert.equal(s.vm.accountOpen, false)
+  assert.equal(focused, true)
+})

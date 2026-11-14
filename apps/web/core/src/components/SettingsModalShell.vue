@@ -64,7 +64,7 @@
 <script setup lang="ts">
 /**
  * 全屏"设置类"弹窗壳：遮罩 + 1080×780 面板 + 左侧分组导航 + 右侧内容 + 可选底栏。
- * 被工作台 Settings / 编辑器及企业管理 AdminLayout 共用，
+ * 被工作台 Settings / 编辑器共用，
  * 关闭行为（Esc / 遮罩 / 未保存守卫）由消费方通过 useModalShell 决定，本组件只发出 `close`。
  *
  * 样式为非 scoped、以 `.settings-modal-shell` 为根前缀，这样通过 `nav` 插槽自定义导航的消费方

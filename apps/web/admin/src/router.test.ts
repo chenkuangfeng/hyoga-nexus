@@ -61,7 +61,7 @@ test('受保护路由先作废旧权限、校准身份，强制改密优先于�
 })
 
 
-test('开发入口转交同主机员工端口，生产测试继续使用同源路径', () => {
+test('管理外壳不提供工作台跳转参数，开户入口保留独立转交', () => {
   const redirects: string[] = []
   const source = readFileSync(new URL('./router.ts', import.meta.url), 'utf8').replaceAll('import.meta.env.BASE_URL', "'/admin/'").replaceAll('import.meta.env.DEV', 'true')
   const exports: { default?: Router } = {}
@@ -79,6 +79,5 @@ test('开发入口转交同主机员工端口，生产测试继续使用同源�
   const enter = to.matched.at(-1)!.beforeEnter as NavigationGuard
   enter(to, to, () => {})
   assert.deepEqual(redirects, ['http://192.0.2.1:5173/join?token=invite%2Btoken'])
-  const props = router.resolve('/').matched[0].props.default as () => { workspaceHref: string }
-  assert.equal(props().workspaceHref, 'http://192.0.2.1:5173/')
+  assert.equal(router.resolve('/').matched[0].props.default, false)
 })
