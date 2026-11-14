@@ -135,6 +135,22 @@ export default {
     "linkCreated": "链接已创建，可在邀请列表中复制。",
     "unnamedMember": "未命名成员"
   },
+  adminAgentGrants: {
+      "title": "企业智能体使用授权",
+      "agent": "选择企业智能体",
+      "view": "查看",
+      "run": "运行",
+      "revoke": "撤销此角色授权",
+      "confirm": "确认智能体授权",
+      "saveConfirm": "将角色“{role}”对企业智能体“{agent}”的权限替换为“{permissions}”？",
+      "revokeConfirm": "撤销角色“{role}”对企业智能体“{agent}”的授权？成员仍可能通过其他角色或部门授权保留访问。",
+      "saved": "智能体使用授权已更新。",
+      "scopeHint": "仅列出当前接口可见的企业智能体，并非完整资源目录；可见不代表有权授予查看或运行，具体权限及知识库范围由服务端校验。",
+      "revokeHint": "取消全部选项可撤销此角色授权。撤销不影响其他角色、部门或成员已有的授权。",
+      "unresolved": "有 {count} 项已有授权不在当前可解析的候选范围内，本区暂不能修改这些授权。",
+      "noAgents": "当前列表没有可用的企业智能体，请检查资源可见性、发布状态和模型权限。",
+      "empty": "当前可见范围内暂无角色智能体授权。"
+  },
   adminRoles: {
     "departmentTitle": "按部门批量分配",
     "department": "选择部门",

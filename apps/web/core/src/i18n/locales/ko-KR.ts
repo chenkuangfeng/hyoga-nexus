@@ -135,6 +135,22 @@ export default {
     "linkCreated": "Link created. Copy it from the invitation list.",
     "unnamedMember": "Unnamed member"
   },
+  adminAgentGrants: {
+      "title": "Enterprise agent use permissions",
+      "agent": "Select enterprise agent",
+      "view": "View",
+      "run": "Run",
+      "revoke": "Revoke role access",
+      "confirm": "Confirm agent permissions",
+      "saveConfirm": "Replace role “{role}” permissions on enterprise agent “{agent}” with “{permissions}”?",
+      "revokeConfirm": "Revoke role “{role}” access to enterprise agent “{agent}”? Other roles or department grants may still allow access.",
+      "saved": "Agent use permissions updated.",
+      "scopeHint": "Only currently visible enterprise agents are listed. This is not the full resource directory. Visibility does not authorize delegation; the server checks permissions and knowledge scope.",
+      "revokeHint": "Clear all options to revoke this role access. Other role, department and member grants remain effective.",
+      "unresolved": "{count} existing grants cannot be resolved in the current candidates and cannot be edited here.",
+      "noAgents": "No enterprise agents in the current list. Check visibility, publication state and model access.",
+      "empty": "No role agent grants in the currently visible scope."
+  },
   adminRoles: {
     "departmentTitle": "Assign by department",
     "department": "Select department",

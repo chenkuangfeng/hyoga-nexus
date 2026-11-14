@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /** 企业角色页面仅组合授权状态与表单，不直接调用接口。 */
 import { useI18n } from 'vue-i18n'
+import AgentRoleGrantsPanel from './AgentRoleGrantsPanel.vue'
 import { useRoleAdministration } from './useRoleAdministration'
 const { t } = useI18n()
-const { departmentsReady, departmentError, departmentChoices, selectedDepartment, departmentRole, canManageDepartments, canAssignDepartment, assignDepartment, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke } = useRoleAdministration()
+const { roles, reconcile, departmentsReady, departmentError, departmentChoices, selectedDepartment, departmentRole, canManageDepartments, canAssignDepartment, assignDepartment, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke } = useRoleAdministration()
 const groups = ['menus', 'apis'] as const
 </script>
 <template>
@@ -33,6 +34,7 @@ const groups = ['menus', 'apis'] as const
           <t-select v-model="departmentRole" :options="assignableRoles.map(row => ({ value: row.id, label: row.name }))" :aria-label="t('adminRoles.role')" :placeholder="t('adminRoles.role')" :disabled="busy" filterable />
           <t-button theme="primary" :disabled="!canAssignDepartment" @click="assignDepartment">{{ t('adminRoles.departmentAssign') }}</t-button>
         </div>
+        <AgentRoleGrantsPanel :roles="roles" :disabled="busy || loading" :refresh-permissions="reconcile" />
       </template>
     </t-loading>
     <t-dialog :visible="editor" :header="t(selected?.builtin ? 'adminRoles.view' : selected ? 'adminRoles.edit' : 'adminRoles.create')" width="680px" :footer="false" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @close="closeEditor">

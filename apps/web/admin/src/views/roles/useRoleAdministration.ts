@@ -132,5 +132,5 @@ export function useRoleAdministration() {
   }
   watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.ready, () => context.revision, canManage, canManageMembers, canManageDepartments], () => { void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { departmentsReady, departmentError, departmentChoices, selectedDepartment, departmentRole, canManageDepartments, canAssignDepartment, assignDepartment, roles, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke }
+  return { reconcile, departmentsReady, departmentError, departmentChoices, selectedDepartment, departmentRole, canManageDepartments, canAssignDepartment, assignDepartment, roles, catalog, actor, ready, membersReady, loading, busy, error, membersError, success, search, editor, selected, form, selectedMember, selectedRole, canManage, canManageMembers, filteredRoles, valid, assignableRoles, memberChoices, assignmentRows, canAssign, memberName, permissionLabel, closeEditor, load, openEditor, save, assign, revoke }
 }

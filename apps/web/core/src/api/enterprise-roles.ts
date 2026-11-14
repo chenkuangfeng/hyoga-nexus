@@ -45,3 +45,30 @@ export async function assignDepartmentRole(tenant: string, unit: string, role: s
   if (new Set([...assigned, ...skipped]).size !== assigned.length + skipped.length) throw new Error('roles_response_invalid')
   return { assigned, skipped }
 }
+
+export type AgentUsePermission = 'view' | 'run'
+export interface RoleAgentGrant { role_id: string; agent_id: string; permission: AgentUsePermission }
+export interface RoleAgentChoice { id: string; name: string }
+function usePermissions(value: unknown): AgentUsePermission[] {
+  return array(value).map(value => { if (value !== 'view' && value !== 'run') throw new Error('roles_response_invalid'); return value })
+}
+/** 当前可见列表受模型/发布状态过滤，只返回企业资源；不宣称是企业完整资源目录。 */
+export async function listRoleAgentChoices(tenant: string): Promise<RoleAgentChoice[]> {
+  const rows = array(await get(`${base(tenant)}/agents`)).map(value => {
+    const row = object(value)
+    if (row.tenant_id !== tenant || !['personal', 'enterprise'].includes(string(row.ownership))) throw new Error('roles_response_invalid')
+    return { id: string(row.id), name: string(row.name), ownership: row.ownership }
+  })
+  return rows.filter(row => row.ownership === 'enterprise').map(({ id, name }) => ({ id, name }))
+}
+export async function listRoleAgentGrants(tenant: string): Promise<RoleAgentGrant[]> {
+  return array(await get(`${base(tenant)}/agent-grants`)).map(value => { const row = object(value); return { role_id: string(row.role_id), agent_id: string(row.agent_id), permission: usePermissions([row.permission])[0] } })
+}
+/** 整体替换一个角色的智能体使用授权；空数组撤销，最终权限与知识库范围由服务端复核。 */
+export async function setRoleAgentGrants(tenant: string, role: string, agent: string, permissions: AgentUsePermission[]): Promise<void> {
+  const input = usePermissions(permissions)
+  const row = object(await put(`${base(tenant)}/roles/${encodeURIComponent(role)}/agents/${encodeURIComponent(agent)}`, { permissions: input }))
+  if (row.role_id !== role || row.agent_id !== agent) throw new Error('roles_response_invalid')
+  const result = usePermissions(row.permissions)
+  if (new Set(result).size !== result.length || result.length !== new Set(input).size || result.some(p => !input.includes(p))) throw new Error('roles_response_invalid')
+}
