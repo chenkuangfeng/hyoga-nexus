@@ -18,6 +18,7 @@ export function legacyIntegrationLocation(section: unknown, tab?: unknown, agent
 }
 
 export function normalizeSettingsSection(section: string, tab?: string | null): string {
+  if (section === 'tenant') return 'userprofile'
   if (section === 'mcpserver' || section === 'integration-mcpserver' || (section === 'integrations' && tab === 'mcpserver')) return 'mcp-endpoints'
   if (REMOVED_SETTINGS_SECTIONS.has(section) || section.startsWith('integration-') || ['integrations', 'im', 'embed'].includes(section)) return 'general'
   return section

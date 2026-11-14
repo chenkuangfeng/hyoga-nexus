@@ -1,4 +1,5 @@
 export default {
+  enterpriseMembership: {"title": "Current enterprise membership", "enterprise": "Current enterprise", "role": "My enterprise role", "leave": "Leave current enterprise", "leaveHint": "Leaving ends only your membership, not the enterprise or account. Sign in again in the workspace to select another enterprise.", "ownerHint": "Owners cannot leave directly. Transfer ownership and adjust your role through an authorized administrator first.", "confirmTitle": "Confirm leaving enterprise", "confirmBody": "Leave enterprise “{name}”? You will lose access to its resources. Your account and the enterprise will not be deleted."},
   adminAudit: {
       "title": "Audit log",
       "description": "View enterprise audit metadata and export a date range.",

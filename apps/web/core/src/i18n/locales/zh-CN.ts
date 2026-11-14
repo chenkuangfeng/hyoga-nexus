@@ -1,4 +1,5 @@
 export default {
+  enterpriseMembership: {"title": "当前企业成员身份", "enterprise": "当前企业", "role": "我的企业角色", "leave": "退出当前企业", "leaveHint": "退出仅终止你在当前企业的成员身份，不会删除企业或账号。退出后需在工作台重新登录选择其他企业。", "ownerHint": "企业所有者不能直接退出。请先由有权管理员完成所有权转移及角色调整，再退出企业。", "confirmTitle": "确认退出企业", "confirmBody": "确定退出企业“{name}”？退出后你将失去该企业的资源访问权限，账号和企业本身不会被删除。"},
   adminAudit: {
       "title": "审计日志",
       "description": "查看当前企业审计元数据，并按日期导出。",

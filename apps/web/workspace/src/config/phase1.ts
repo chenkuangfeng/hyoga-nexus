@@ -14,7 +14,6 @@ export const PHASE1_SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
   'memory',
   'mymemory',
   'userprofile',
-  'tenant',
   'members',
   // 旧书签已实现迁移说明，不再加载部门管理实现。
   'org-structure',

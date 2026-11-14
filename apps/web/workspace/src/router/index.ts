@@ -82,7 +82,7 @@ const router = createRouter({
       children: [
         {
           path: "tenant",
-          redirect: "/platform/settings"
+          redirect: { path: "/platform/settings", query: { section: "userprofile" } }
         },
         {
           path: "settings",

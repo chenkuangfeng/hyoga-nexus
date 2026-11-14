@@ -139,11 +139,6 @@
           <UserProfile />
         </div>
 
-        <!-- 空间信息 -->
-        <div v-if="currentSection === 'tenant'" class="section">
-          <TenantInfo />
-        </div>
-
         <!-- 成员管理 (#1303 PR 3) -->
         <div v-if="currentSection === 'members'" class="section">
           <TenantMembers />
@@ -175,7 +170,6 @@ import { useModalShell } from '@/composables/useModalShell'
 import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import McpEndpointSettings from './McpEndpointSettings.vue'
 import SystemInfo from './SystemInfo.vue'
-import TenantInfo from './TenantInfo.vue'
 import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 // Nexus model settings replace WeKnora's ModelSettings (openspec 2026-11-05-weknora-agent-tool-model-settings).
@@ -241,7 +235,7 @@ type NavGroup = {
 // 以「页面里至少有 1 个有意义的写操作所要求的最低角色」为基准，把基础设
 // 施配置（models 写、websearch 写、parser/storage/vector/mcp
 // CRUD、sandbox 连接、skills 安装、chat-history 配置）统一收到 admin；只读类（general / system info /
-// tenant-info / members 名册）保留 viewer 可见；最高敏感的 reset api
+// members 名册）保留 viewer 可见；最高敏感的 reset api
 // key 是 owner-only。改这张表前请在 router.go 里复核对应路由组。
 //
 // 特别说明：
@@ -298,7 +292,6 @@ const navItems = computed(() => {
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
     { key: 'envvars', icon: 'key', label: envNavLabel() },
-    { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
   ]
   // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
@@ -326,7 +319,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'members', 'chathistory', 'memory']),
+      items: pickItems(['members', 'chathistory', 'memory']),
     },
     {
       key: 'models_runtime',

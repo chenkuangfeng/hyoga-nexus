@@ -166,10 +166,12 @@
         </div>
       </div>
     </div>
+    <CurrentEnterpriseMembership />
   </div>
 </template>
 
 <script setup lang="ts">
+import CurrentEnterpriseMembership from './CurrentEnterpriseMembership.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'

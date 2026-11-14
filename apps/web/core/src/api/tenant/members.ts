@@ -162,7 +162,7 @@ export async function removeMember(
 }
 
 /**
- * 自行退出空间（任何活跃成员均可，最后一名 owner 不可退出）。
+ * 自行退出企业（活跃非 owner 成员可退出；任何 owner 都须先转移所有权）。
  * Backend: POST /api/v1/tenants/:id/leave。
  */
 export async function leaveTenant(tenantId: string): Promise<SimpleResponse> {

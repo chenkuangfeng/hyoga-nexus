@@ -83,3 +83,10 @@ test('已迁移的部门写页面不再进入工作台导航或模块依赖，�
   assert.equal(source.includes("import OrgStructure"), false)
   assert.equal(existsSync(new URL('./OrgStructure.vue', import.meta.url)), false)
 })
+
+test('旧企业治理页不再随工作台设置加载，账户资料保留本人企业操作', () => {
+  assert.equal(source.includes('import TenantInfo'),false)
+  assert.equal(existsSync(new URL('./TenantInfo.vue',import.meta.url)),false)
+  const profile=readFileSync(new URL('./UserProfile.vue',import.meta.url),'utf8')
+  assert.ok(profile.includes('CurrentEnterpriseMembership'))
+})

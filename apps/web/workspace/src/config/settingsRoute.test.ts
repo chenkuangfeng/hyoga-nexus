@@ -41,3 +41,28 @@ test('旧部门书签只显示已实现的迁移说明，不再受 owner 导航�
   assert.equal(isPhase1Section('org-structure'), true)
   assert.equal(SETTINGS_SECTION_MIN_ROLE['org-structure'] ?? 'viewer', 'viewer')
 })
+
+test('旧企业信息书签迁到个人资料的企业成员身份，清除旧管理参数', () => {
+  assert.equal(normalizeSettingsSection('tenant'), 'userprofile')
+  assert.deepEqual(buildSettingsRouteQuery('tenant', { section:'tenant',panel:'delete',tab:'members' }), { section:'userprofile' })
+})
+
+test('旧 /platform/tenant 实际路由落到账户资料，保留成员身份入口', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { runInNewContext } = await import('node:vm')
+  const ts = await import('typescript')
+  const { createRouter, createMemoryHistory } = await import('vue-router')
+  const source = readFileSync(new URL('../router/index.ts', import.meta.url),'utf8')
+  const ast = ts.createSourceFile('router.ts',source,ts.ScriptTarget.Latest,true)
+  let record: string | undefined
+  function visit(node: import('typescript').Node) {
+    if (ts.isObjectLiteralExpression(node) && node.properties.some(p => ts.isPropertyAssignment(p) && p.name.getText(ast)==='path' && ts.isStringLiteral(p.initializer) && p.initializer.text==='tenant')) record=node.getText(ast)
+    ts.forEachChild(node,visit)
+  }
+  visit(ast); assert.ok(record)
+  const route = runInNewContext(`(${record})`)
+  const router = createRouter({ history:createMemoryHistory(), routes:[{path:'/platform',children:[route]},{path:'/platform/settings',component:{render:()=>null}}] })
+  await router.push('/platform/tenant')
+  assert.equal(router.currentRoute.value.path,'/platform/settings')
+  assert.equal(router.currentRoute.value.query.section,'userprofile')
+})
