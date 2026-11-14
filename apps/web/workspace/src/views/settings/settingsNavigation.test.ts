@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
@@ -73,4 +73,13 @@ test('closing settings preserves a known in-app previous route', () => {
 
 test('closing an overlaid settings panel leaves the underlying route alone', () => {
   assert.deepEqual(closeSettings(null, 'general', '/platform/chat/session-123'), ['blur', 'close'])
+})
+
+test('已迁移的部门写页面不再进入工作台导航或模块依赖，旧书签保留迁移说明', () => {
+  const groups = runInNewContext(`${compiled}\nnavGroups.value`, {
+    computed, navItems: { value: ['tenant', 'members', 'org-structure'].map(key => ({ key })) }, t: (key: string) => key,
+  }) as Array<{ items: Array<{ key: string }> }>
+  assert.equal(groups.some(group => group.items.some(item => item.key === 'org-structure')), false)
+  assert.equal(source.includes("import OrgStructure"), false)
+  assert.equal(existsSync(new URL('./OrgStructure.vue', import.meta.url)), false)
 })

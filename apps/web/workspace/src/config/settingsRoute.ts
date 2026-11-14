@@ -32,3 +32,14 @@ export function settingsQueryUnchanged(currentQuery: object, nextQuery: Settings
   const current = currentQuery as SettingsRouteQuery
   return String(current.section ?? '') === String(nextQuery.section ?? '') && current.tab == null && nextQuery.tab == null && current.agentId == null && nextQuery.agentId == null && current.panel == null && nextQuery.panel == null
 }
+
+/** 已迁入独立管理应用的旧设置书签只保留说明，不重新挂载管理实现。 */
+export function isMigratedAdminSection(section: string): boolean { return section === 'org-structure' }
+/** 部门管理的显式跨应用入口：开发保留当前主机，生产尊重静态部署前缀。 */
+export function adminOrganizationLocation(base: string, origin: string, development: boolean): string {
+  const path = `${base.replace(/\/+$/, '')}/admin/organization`
+  if (!development) return path
+  const url = new URL(path, origin)
+  url.port = '5174'
+  return url.href
+}

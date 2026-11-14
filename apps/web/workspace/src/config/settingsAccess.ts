@@ -25,8 +25,6 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   userprofile: 'viewer',
   tenant: 'viewer',
   members: 'viewer',
-  // 部门架构：org:manage 属于治理权限，admin 默认不持有，与成员管理一致只对 owner 开放。
-  'org-structure': 'owner',
   mymemory: 'viewer',
   memory: 'admin',
   // Every member fills in their own environment variables; the workspace-wide

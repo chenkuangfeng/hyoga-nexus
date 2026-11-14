@@ -150,8 +150,8 @@
         </div>
 
         <!-- 部门架构（企业空间） -->
-        <div v-if="currentSection === 'org-structure' && isPhase1Section('org-structure')" class="section">
-          <OrgStructure />
+        <div v-if="currentSection === 'org-structure'" class="section">
+          <AdminSectionMoved />
         </div>
 
         <div v-if="currentSection === 'mcp-endpoints'" class="section"><McpEndpointSettings :active="visible" /></div>
@@ -190,13 +190,14 @@ import ParserEngineSettings from './ParserEngineSettings.vue'
 import StorageBackendSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
 import TenantMembers from './TenantMembers.vue'
-import OrgStructure from './OrgStructure.vue'
+import AdminSectionMoved from './AdminSectionMoved.vue'
 import { SETTINGS_SECTION_MIN_ROLE } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY, skillSettingsSupported } from '@/config/deploymentCapabilities'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import { hostSkillsOnly } from '@/utils/skillTarget'
 import {
   buildSettingsRouteQuery,
+  isMigratedAdminSection,
   normalizeSettingsSection as normalizeSettingsSectionFromQuery,
   settingsQueryUnchanged,
 } from '@/config/settingsRoute'
@@ -266,6 +267,7 @@ const syncSettingsRoute = (sectionKey: string) => {
 }
 
 const isSectionSupported = (key: string): boolean => {
+  if (isMigratedAdminSection(key)) return true
   if (key === 'skills' || key === 'envvars') {
     return skillSettingsSupported(deploymentCapabilities.capabilities)
   }
@@ -279,12 +281,6 @@ const canSeeSection = (key: string): boolean => {
   if (authStore.canAccessAllTenants) return true
   return authStore.hasRole(min)
 }
-
-// The department page belongs to enterprise spaces only; personal spaces answer 404 for the org APIs.
-const isEnterpriseSpace = computed(() => {
-  const current = String(authStore.currentTenantId ?? '')
-  return (authStore.memberships ?? []).some((m) => String(m.tenant_id) === current && m.kind === 'enterprise')
-})
 
 const navItems = computed(() => {
   const all: NavItem[] = [
@@ -304,7 +300,6 @@ const navItems = computed(() => {
     { key: 'envvars', icon: 'key', label: envNavLabel() },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
-    ...(isEnterpriseSpace.value ? [{ key: 'org-structure', icon: 'organization', label: t('orgStructure.title') }] : []),
   ]
   // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
   // viewer 入口然后角色一返回又消失，先卡住不渲染更稳，跟原先 members
@@ -331,7 +326,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'members', 'org-structure', 'chathistory', 'memory']),
+      items: pickItems(['tenant', 'members', 'chathistory', 'memory']),
     },
     {
       key: 'models_runtime',
@@ -490,6 +485,7 @@ watch(
 // 切换空间后角色可能变化，原本可见的 admin-only 面板可能消失。
 // 如果 currentSection 落到了不再显示的 key 上，就回退到第一个可见项。
 watch(navItems, (items) => {
+  if (isMigratedAdminSection(currentSection.value)) return
   if (!items.some((item) => item.key === currentSection.value)) {
     const fallback = items[0]?.key || 'general'
     currentSection.value = fallback

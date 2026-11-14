@@ -84,7 +84,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 管理端部门组织
 
-`/admin/organization` 由 `OrganizationPage.vue` 和 `useOrganizationAdministration.ts` 组合，沿用现有工作台 `OrgStructure.vue` 的节点与成员归属流程，以及 WeKnora 组织设置的表格、反馈和确认模式。公共 `enterprise-organizations.ts` 调用当前企业 `/org-units` 的树、节点和成员归属接口，运行时校验单根、唯一节点、完整父引用、无环连通结构及回执企业/节点/成员。树遍历与子树排除采用迭代算法，避免深层组织递归溢出。
+`/admin/organization` 由 `OrganizationPage.vue` 和 `useOrganizationAdministration.ts` 组合，承接原工作台部门页的节点与成员归属流程，以及 WeKnora 组织设置的表格、反馈和确认模式。公共 `enterprise-organizations.ts` 调用当前企业 `/org-units` 的树、节点和成员归属接口，运行时校验单根、唯一节点、完整父引用、无环连通结构及回执企业/节点/成员。树遍历与子树排除采用迭代算法，避免深层组织递归溢出。
 
 完整树与可选企业成员并行加载且分别反馈失败；所选节点的直接成员另用请求序号，阻止迟到响应覆盖新选择。企业、账号和权限代次变化同步清空状态；确认还绑定节点选择及成员请求序号。写入后重读树、候选和节点成员，首次分配自动设为主部门等规则由服务端结果决定。移动只提交变化字段，保留未变的停用父节点；根不提供父节点选择。删除既检查已读直接成员，也保留服务端历史关联冲突反馈。
 
@@ -116,3 +116,10 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 
 角色到企业智能体授权由 `AgentRoleGrantsPanel.vue` 独立编排候选/既有授权加载和确认，复用角色页的身份校准回调。仅列出现有列表可见的 enterprise 资源，按真实名称选择角色与智能体；未解析的授权单独提示。选择目标后回填 view/run，整体替换与空数组撤销由既有 PUT 执行，服务端保留每项授予权限及知识库范围校验。独立加载失败、保存失败保留草稿、选择代次与作用域代次共同阻止过期确认及响应。
+
+
+## 工作台旧部门设置收尾
+
+工作台设置导航不再注册部门管理，旧 `OrgStructure.vue` 已删除，其组织读写不会再随设置页面打包。旧 `section=org-structure` 保留 `AdminSectionMoved.vue` 迁移说明，依据当前企业服务端 entries 提供显式管理应用链接；开发使用同主机 5174，生产按应用 base 构造 admin/organization。不会自动跨应用导航，管理端继续校准身份和组织权限。旧书签被识别为迁移区，不受原部门能力/owner 导航门槛影响，也不会因当前导航没有此项而自动丢回通用设置。
+
+此批不删除尚承载退出企业和审计等能力的旧企业信息/成员页，不影响共享空间、加入企业或企业切换；工作台完整管理依赖隔离仍待后续。

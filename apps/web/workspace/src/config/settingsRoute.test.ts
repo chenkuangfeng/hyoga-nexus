@@ -25,3 +25,19 @@ test('设置地址清除旧集成与平台参数，并保留正常设置', () =>
   assert.equal(settingsQueryUnchanged({ section: 'mcp-endpoints' }, { section: 'mcp-endpoints' }), true)
   assert.equal(settingsQueryUnchanged({ section: 'mcp-endpoints', agentId: 'a' }, { section: 'mcp-endpoints' }), false)
 })
+
+test('迁移的部门书签有明确管理应用入口，开发与生产链接保留部署边界', async () => {
+  const { adminOrganizationLocation, isMigratedAdminSection } = await import('./settingsRoute')
+  assert.equal(isMigratedAdminSection('org-structure'), true)
+  assert.equal(isMigratedAdminSection('members'), false)
+  assert.equal(adminOrganizationLocation('/', 'http://192.0.2.1:5173', true), 'http://192.0.2.1:5174/admin/organization')
+  assert.equal(adminOrganizationLocation('/nexus/', 'https://example.test', false), '/nexus/admin/organization')
+  assert.equal(adminOrganizationLocation('/', 'https://example.test', false), '/admin/organization')
+})
+
+test('旧部门书签只显示已实现的迁移说明，不再受 owner 导航门槛限制', async () => {
+  const { isPhase1Section } = await import('./phase1')
+  const { SETTINGS_SECTION_MIN_ROLE } = await import('./settingsAccess')
+  assert.equal(isPhase1Section('org-structure'), true)
+  assert.equal(SETTINGS_SECTION_MIN_ROLE['org-structure'] ?? 'viewer', 'viewer')
+})
