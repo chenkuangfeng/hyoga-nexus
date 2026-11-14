@@ -123,3 +123,8 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 工作台设置导航不再注册部门管理，旧 `OrgStructure.vue` 已删除，其组织读写不会再随设置页面打包。旧 `section=org-structure` 保留 `AdminSectionMoved.vue` 迁移说明，依据当前企业服务端 entries 提供显式管理应用链接；开发使用同主机 5174，生产按应用 base 构造 admin/organization。不会自动跨应用导航，管理端继续校准身份和组织权限。旧书签被识别为迁移区，不受原部门能力/owner 导航门槛影响，也不会因当前导航没有此项而自动丢回通用设置。
 
 此批不删除尚承载退出企业和审计等能力的旧企业信息/成员页，不影响共享空间、加入企业或企业切换；工作台完整管理依赖隔离仍待后续。
+
+
+## 管理端审计日志
+
+`AuditPage.vue` 与 `useAuditAdministration.ts` 消费现有最近记录接口和 UTC 日期导出，不增加后端契约。列表最多读取 500 条，本地筛选明确只覆盖已加载范围；元数据通过 Vue 文本渲染，未知动作/结果保持原始值。`enterprise-audit.ts` 校验响应结构、自然日有效性与日期差，导出要求 NDJSON Blob，通过认证请求层获取后下载并释放对象 URL。身份/权限代次、列表请求序号和导出请求序号分别阻止过期列表、详情和文件交付。

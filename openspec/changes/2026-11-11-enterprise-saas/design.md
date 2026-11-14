@@ -422,3 +422,11 @@ channel_identities / channel_session_bindings：沿用架构 2.14 的 ChannelIde
 已确认的管理业务迁移收尾中，先移除工作台 `OrgStructure.vue` 及设置导航中的部门管理项；admin 的组织页面已提供对应节点和归属流程。旧 `?section=org-structure` 和内部旧快捷调用保留迁移说明，不再加载组织树或提供写操作；有服务端 admin 入口时提供显式链接进入独立管理应用，无入口显示权限说明，不自动跨应用导航。开发链接使用同主机 5174，生产使用应用 base 下的 admin/organization；admin 继续自己校准身份及 org:manage 权限。
 
 旧 TenantInfo 的退出企业与 TenantMembers 的审计入口尚未完整迁移，本批不删除它们，不宣称工作台已完全隔离管理代码。保留共享空间/组织页面、加入企业、企业切换及个人设置；后续补齐退出/审计承接再清理其余旧页。
+
+### E2.5.3 审计日志迁移批
+
+在已确认的管理业务迁移范围内，新增 `/admin/audit`，按服务端 `audit:read` 控制导航及页面。参考固定版本 WeKnora `TenantMembers.vue` 的审计时间/操作者/动作/目标/结果及展开详情，按 Nexus 实际返回的 metadata 实现文本详情，不伪造 actor_role、请求路径或正文。现有 GET `/tenants/{id}/audit-log?limit=` 最近优先，limit 1–500，无游标；页面提供 100/500 条读取与已加载范围内筛选，明确并非全量检索。
+
+导出沿用 GET `/tenants/{id}/admin/audit/export?start=&end=`，UTC 自然日含首尾，开始不晚于结束，日期差最多 366 天，与服务端一致。使用认证请求层获取 NDJSON Blob 后本地下载，不把令牌放链接、不跳过服务端 audit:read。导出自带哈希链且服务端记录 audit.exported，不宣称已实现审计正文查看；audit:read_content 不替代当前列表/导出权限。
+
+页面区分列表加载失败、空结果、筛选无匹配、导出失败和无权限，元数据仅通过文本渲染；企业/账号/权限代次变化及卸载清空详情、筛选、列表并作废旧请求和下载，避免跨企业文件交付。写入型审计接口行为不变。旧成员页仍有退出/其他未承接流程，本批不整页删除，完整工作台管理依赖清理继续保留。

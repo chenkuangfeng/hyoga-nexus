@@ -1,4 +1,27 @@
 export default {
+  adminAudit: {
+      "title": "审计日志",
+      "description": "查看当前企业审计元数据，并按日期导出。",
+      "scopeHint": "列表最多加载最近 {count} 条，筛选仅作用于已加载记录，不是全量检索。当前接口不提供审计正文。",
+      "search": "筛选动作、结果、操作者或目标",
+      "limit": "最近记录上限",
+      "time": "时间",
+      "actor": "操作者 ID",
+      "action": "动作",
+      "target": "目标",
+      "result": "结果",
+      "details": "元数据详情",
+      "system": "系统",
+      "empty": "暂无审计记录。",
+      "noMatch": "已加载记录中没有匹配项。",
+      "exportTitle": "日期范围导出",
+      "exportHint": "按 UTC 自然日导出，包含首尾两天。文件为带哈希链的 JSONL，导出操作本身会被记录。",
+      "start": "开始日期（UTC）",
+      "end": "结束日期（UTC）",
+      "export": "导出 JSONL",
+      "invalidDates": "请选择有效日期，开始不晚于结束，日期差最多 366 天。",
+      "exported": "审计文件已交给浏览器下载。"
+  },
   adminMigration: {"organizationMoved": "部门组织管理已迁入独立的企业管理应用。请在管理后台维护部门与成员归属。", "openAdmin": "打开企业管理后台", "noEntry": "当前企业未授予管理后台入口，请联系企业管理员。"},
   adminOrganization: {
     "title": "Organization",

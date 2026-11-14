@@ -1,4 +1,27 @@
 export default {
+  adminAudit: {
+      "title": "Audit log",
+      "description": "View enterprise audit metadata and export a date range.",
+      "scopeHint": "Loads at most the latest {count} records. Filtering applies only to loaded records, not the full history. Audit content is not available in this API.",
+      "search": "Filter action, result, actor or target",
+      "limit": "Recent record limit",
+      "time": "Time",
+      "actor": "Actor ID",
+      "action": "Action",
+      "target": "Target",
+      "result": "Result",
+      "details": "Metadata details",
+      "system": "System",
+      "empty": "No audit records.",
+      "noMatch": "No matches in loaded records.",
+      "exportTitle": "Export a date range",
+      "exportHint": "Exports inclusive UTC calendar days as hash-chained JSONL. The export operation is itself audited.",
+      "start": "Start date (UTC)",
+      "end": "End date (UTC)",
+      "export": "Export JSONL",
+      "invalidDates": "Choose valid dates, with start no later than end and at most 366 days apart.",
+      "exported": "The audit file was handed to the browser for download."
+  },
   adminMigration: {"organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
     "title": "Organization",
