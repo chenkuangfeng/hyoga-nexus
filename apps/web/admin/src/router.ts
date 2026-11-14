@@ -33,6 +33,7 @@ const router = createRouter({
       { path: 'organization', component: () => import('./views/organization/OrganizationPage.vue') },
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
+      { path: 'agents', component: () => import('./views/agents/AgentsPage.vue') },
       { path: 'audit', component: () => import('./views/audit/AuditPage.vue') },
       { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },
     ] },

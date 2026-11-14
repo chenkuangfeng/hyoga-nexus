@@ -30,7 +30,10 @@
                   <template v-for="group in navGroups" :key="group.key">
                     <div class="nav-group-title">{{ group.label }}</div>
                     <div v-for="item in group.items" :key="item.key" :class="['nav-item', { active: modelValue === item.key }]"
-                      :data-guide="navItemGuidePrefix ? `${navItemGuidePrefix}-${item.key}` : undefined"
+                      :data-guide="navItemGuidePrefix ? `${navItemGuidePrefix}-${item.key}` : undefined" role="button" tabindex="0"
+                      :aria-current="modelValue === item.key ? 'page' : undefined"
+                      @keydown.enter.prevent="emit('update:modelValue', item.key)"
+                      @keydown.space.prevent="emit('update:modelValue', item.key)"
                       @click="emit('update:modelValue', item.key)">
                       <slot name="nav-icon" :item="item" :active="modelValue === item.key">
                         <t-icon :name="item.icon" class="nav-icon" />

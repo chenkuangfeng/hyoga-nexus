@@ -99,9 +99,9 @@ import {
   disableBuiltinResource, downloadSkillBundle, getMyApiPermissions, listSkillVersions, listTenantSkills,
   rescanSkillVersion, restoreBuiltinResource, type SkillVersionInfo, type TenantSkill,
 } from '@nexus-web/core/api/nexus-agents'
-import NexusMySkillsPanel from '@/views/agent/NexusMySkillsPanel.vue'
-import NexusSkillReviewPanel from '@/views/agent/NexusSkillReviewPanel.vue'
-import NexusSkillInstallPanel from '@/views/agent/NexusSkillInstallPanel.vue'
+import NexusMySkillsPanel from '@nexus-web/core/components/agent-editor/NexusMySkillsPanel.vue'
+import NexusSkillReviewPanel from '@nexus-web/core/components/agent-editor/NexusSkillReviewPanel.vue'
+import NexusSkillInstallPanel from '@nexus-web/core/components/agent-editor/NexusSkillInstallPanel.vue'
 import { usageText } from '@/views/agent/mySkills'
 import { bundleFileName, rowBadges, runReasonKey, runState, sortLibrary } from './toolboxSkills'
 
@@ -185,7 +185,7 @@ function runReason(skill: TenantSkill): string {
 }
 
 onMounted(async () => {
-  isAdmin.value = (await getMyApiPermissions(props.tenantId).catch(() => [])).includes('tools:manage')
+  isAdmin.value = (await getMyApiPermissions(props.tenantId).catch((): string[] => [])).includes('tools:manage')
 })
 watch(() => props.tenantId, () => { open.value = ''; void load() }, { immediate: true })
 </script>

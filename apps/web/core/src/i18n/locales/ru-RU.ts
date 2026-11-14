@@ -1,4 +1,26 @@
 export default {
+  adminAgents: {
+    "title": "Enterprise agents",
+    "description": "Configure, publish and archive enterprise agents.",
+    "create": "Create enterprise agent",
+    "scopeHint": "Only visible enterprise agents are listed. Results depend on publication state and model access. Archived agents are excluded.",
+    "search": "Search name or description",
+    "grants": "Assign role usage permissions",
+    "archive": "Archive",
+    "archiveConfirm": "Archive “{name}”? New runs will be blocked; existing conversations are retained. Restore is currently unavailable.",
+    "archived": "Archived",
+    "draft": "Draft",
+    "published": "Published",
+    "noDescription": "No description",
+    "version": "Version {version}",
+    "edit": "Edit and publish",
+    "noMatch": "No matching enterprise agents",
+    "empty": "No visible enterprise agents",
+    "modelsPending": "Admin model management has not migrated yet. Configure an enterprise model before selecting it.",
+    "enterpriseKnowledge": "Enterprise agents can bind only enterprise knowledge bases. The server validates the final binding scope.",
+    "open": "Manage agents"
+  },
+
   enterpriseMembership: {"title": "Current enterprise membership", "enterprise": "Current enterprise", "role": "My enterprise role", "leave": "Leave current enterprise", "leaveHint": "Leaving ends only your membership, not the enterprise or account. Sign in again in the workspace to select another enterprise.", "ownerHint": "Owners cannot leave directly. Transfer ownership and adjust your role through an authorized administrator first.", "confirmTitle": "Confirm leaving enterprise", "confirmBody": "Leave enterprise “{name}”? You will lose access to its resources. Your account and the enterprise will not be deleted."},
   adminAudit: {
       "title": "Audit log",

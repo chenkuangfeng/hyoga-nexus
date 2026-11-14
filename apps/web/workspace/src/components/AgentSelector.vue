@@ -186,7 +186,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { Icon as TIcon, Tooltip as TTooltip } from 'tdesign-vue-next';
 import { type CustomAgent, BUILTIN_QUICK_ANSWER_ID, BUILTIN_SMART_REASONING_ID } from '@nexus-web/core/api/agent/index';
-import AgentAvatar from '@/components/AgentAvatar.vue';
+import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue';
 import { useOrganizationStore } from '@nexus-web/core/stores/organization';
 import { useSettingsStore } from '@/stores/settings';
 import type { SharedAgentInfo } from '@nexus-web/core/api/organization/index';

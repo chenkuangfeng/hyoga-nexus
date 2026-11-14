@@ -59,7 +59,7 @@
  */
 import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AgentAvatar from '@/components/AgentAvatar.vue'
+import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue'
 import { cssViewportSize, getRootZoom, rectToCssPx } from '@/utils/zoom'
 import type { NexusAgentOption } from '@/composables/nexusChatActions'
 

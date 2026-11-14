@@ -9,7 +9,7 @@ import { test } from 'node:test'
 
 const files = [
   './NexusAgentList.vue',
-  './NexusAgentEditorModal.vue',
+  '../../../../core/src/components/agent-editor/NexusAgentEditorModal.vue',
   '../settings/NexusModelSettings.vue',
   '../settings/NexusModelEditorDialog.vue',
   '../../../../core/src/api/nexus-agents.ts',

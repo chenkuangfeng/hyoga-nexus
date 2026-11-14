@@ -118,7 +118,7 @@
     </div>
 
     <NexusAgentEditorModal v-if="tenantId" :visible="editorVisible" :tenant-id="tenantId" :agent-id="editingId"
-      @close="editorVisible = false" @saved="reload" />
+      @close="editorVisible = false" @open-model-settings="editorVisible = false; router.push({ path: '/platform/settings', query: { section: 'models' } })" @saved="reload" />
   </div>
 </template>
 
@@ -138,7 +138,7 @@ import ResourceIcon from '@/components/icons/ResourceIcon.vue'
 import ResourceCardAvatar from '@/components/ResourceCardAvatar.vue'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { archiveNexusAgent, copyNexusAgent, listNexusAgents, type NexusAgent } from '@nexus-web/core/api/nexus-agents'
-import NexusAgentEditorModal from './NexusAgentEditorModal.vue'
+import NexusAgentEditorModal from '@nexus-web/core/components/agent-editor/NexusAgentEditorModal.vue'
 
 const { t } = useI18n()
 const router = useRouter()

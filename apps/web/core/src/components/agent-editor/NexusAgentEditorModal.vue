@@ -6,10 +6,11 @@
     MCP, multimodal, suggestions, sharing) are omitted until their backends exist.
   -->
   <SettingsModalShell :visible="visible" :title="isEdit ? $t('agent.editor.editTitle') : $t('agent.editor.createTitle')"
-    v-model="currentSection" :nav-groups="navGroups" :loading="loading" :z-index="1000" @close="requestClose">
+    overlay-class="agent-editor-shell" v-model="currentSection" :nav-groups="navGroups" :loading="loading" :z-index="1000" @close="requestClose">
     <div class="content-wrapper">
       <div v-if="loadError" class="section">
         <t-alert theme="error" :message="loadError" />
+        <t-button variant="outline" :disabled="loading" @click="load">{{ $t('connectionUi.refresh') }}</t-button>
       </div>
 
       <!-- 基本信息 -->
@@ -299,6 +300,10 @@
           <h2>知识库</h2>
           <p class="section-description">选择智能体可检索的知识库。保存时会一并绑定知识库检索工具；每次检索仍按使用者此刻的权限过滤。</p>
         </div>
+        <t-alert v-if="knowledgeError" theme="error" :message="knowledgeError" />
+        <t-button v-if="knowledgeError" variant="outline" @click="retryKnowledge">{{ $t('connectionUi.refresh') }}</t-button>
+        <p v-if="knowledgeLoading" role="status">{{ $t('common.loading') }}</p>
+        <p v-if="enterprise" class="section-description">{{ $t('adminAgents.enterpriseKnowledge') }}</p>
         <t-checkbox-group :value="form.knowledge_bases.map(kb => kb.id)" class="kb-bind-list"
           @change="onKnowledgeChange">
           <t-checkbox v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
@@ -307,7 +312,7 @@
             <span class="kb-bind-desc">{{ kb.description || `${kb.knowledge_count} 个文档` }}</span>
           </t-checkbox>
         </t-checkbox-group>
-        <p v-if="!knowledgeBases.length" class="section-description">当前空间还没有知识库，可在「知识库」页面创建。</p>
+        <p v-if="!knowledgeLoading && !knowledgeError && !knowledgeBases.length" class="section-description">当前空间还没有知识库，可在「知识库」页面创建。</p>
       </div>
 
       <!-- 工具配置 -->
@@ -473,7 +478,7 @@
 
     <template #footer>
       <t-button variant="outline" @click="requestClose">{{ $t('common.cancel') }}</t-button>
-      <t-button theme="primary" :loading="saving" :disabled="loading || !!loadError" @click="save">
+      <t-button theme="primary" :loading="saving" :disabled="loading || saving || !!loadError || !!switching || !!enabling" @click="save">
         {{ isEdit ? $t('agent.editor.buttons.saveAndClose') : $t('agent.editor.buttons.create') }}
       </t-button>
     </template>
@@ -490,16 +495,16 @@
  * (proposal decision 3), so the agent is usable in chat right after saving. If publishing fails,
  * the draft is kept and the reason is shown; the modal stays open.
  *
- * Props: `visible`, `tenantId` and `agentId` (null to create). Emits `close` and `saved(agent)`.
+ * Props: `visible`, `tenantId`, `agentId` (null to create), `creationScope` (personal by default).
+ * Emits `close`, `saved(agent)` and `open-model-settings` (navigation is owned by the application).
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
-import AgentAvatar from '@/components/AgentAvatar.vue'
-import { copyWithToast } from '@/utils/clipboard'
-import { levelDescriptionKey, levelLabelKey } from '@/utils/reasoningEffort'
+import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue'
+import { copyWithToast } from '@nexus-web/core/utils/clipboard'
+import { levelDescriptionKey, levelLabelKey } from '@nexus-web/core/utils/reasoningEffort'
 import NexusSkillInstallDialog from './NexusSkillInstallDialog.vue'
 import NexusMySkillsDialog from './NexusMySkillsDialog.vue'
 import { usageText } from './mySkills'
@@ -511,19 +516,19 @@ import {
   type AgentToolCatalog, type AgentToolEntry, type NativeDefaults, type NexusAgent, type TenantSkill,
 } from '@nexus-web/core/api/nexus-agents'
 import { getModelSettings, type ModelSettingsView } from '@nexus-web/core/api/nexus-models'
-import { listKnowledgeBases } from '@nexus-web/core/api/knowledge-base/index'
-import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@/views/settings/nexusModelCards'
+import { createEnterpriseAgent, updateEnterpriseAgent, publishEnterpriseAgent, getEnterpriseAgent, listAgentKnowledgeChoices, type AgentKnowledgeChoice } from '@nexus-web/core/api/enterprise-agents'
+import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@nexus-web/core/utils/nexusModelCards'
 import {
   DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_TIMEOUT_SECONDS, MAX_OUTPUT_TOKENS_LIMIT, MAX_ROUNDS_LIMIT, REASONING_EFFORTS,
   KNOWLEDGE_TOOLS, draftFromForm, formForNewAgent, formFromAgent, skillHasNewerVersion, skillToolNeeds, validateForm,
   type AgentEditorForm,
 } from './nexusAgentForm'
 
-const props = defineProps<{ visible: boolean; tenantId: string; agentId: string | null }>()
-const emit = defineEmits<{ (e: 'close'): void; (e: 'saved', agent: NexusAgent): void }>()
+const props = defineProps<{ visible: boolean; tenantId: string; agentId: string | null; creationScope?: 'personal' | 'enterprise' }>()
+const emit = defineEmits<{ (e: 'open-model-settings'): void; (e: 'close'): void; (e: 'saved', agent: NexusAgent): void }>()
 
 const { t, te } = useI18n()
-const router = useRouter()
+
 
 const currentSection = ref('basic')
 const loading = ref(false)
@@ -537,7 +542,10 @@ const nativeDefaults = ref<NativeDefaults | null>(null)
 const form = reactive<AgentEditorForm>(formForNewAgent(null, '', []))
 const errors = reactive<Partial<Record<keyof AgentEditorForm, string>>>({})
 
-const isEdit = computed(() => !!props.agentId)
+let epoch = 0
+const isEdit = computed(() => !!props.agentId || !!agent.value)
+const enterprise = computed(() => props.creationScope === 'enterprise')
+const active = (current: number) => current === epoch && props.visible
 const chatModels = computed(() => modelSettings.value ? chatModelOptions(modelSettings.value) : [])
 
 const navGroups = computed(() => [
@@ -569,19 +577,20 @@ const reviewOpen = ref(false)
 let skillsRequest = 0
 
 async function loadSkills() {
+  const current = epoch, tenant = props.tenantId
   const request = ++skillsRequest
   skillsLoading.value = true
   skillsError.value = ''
   try {
-    const listed = await listTenantSkills(props.tenantId, form.sandbox_profile)
-    if (request === skillsRequest) skills.value = listed
+    const listed = await listTenantSkills(tenant, form.sandbox_profile)
+    if (request === skillsRequest && active(current)) skills.value = listed
   } catch (error) {
-    if (request === skillsRequest) {
+    if (request === skillsRequest && active(current)) {
       skills.value = []
       skillsError.value = errorMessage(error) || t('nexusAgent.skillBinding.loadFailed')
     }
   } finally {
-    if (request === skillsRequest) skillsLoading.value = false
+    if (request === skillsRequest && active(current)) skillsLoading.value = false
   }
 }
 
@@ -629,17 +638,22 @@ function updateSkill(skill: TenantSkill) {
 
 /** Turn a builtin tool or skill off for this space only, or back on. Published agent versions are not touched. */
 async function switchBuiltin(kind: 'tool' | 'skill', name: string, off: boolean) {
+  if (!props.visible || loading.value || saving.value || switching.value || enabling.value) return
+  const current = epoch, tenant = props.tenantId
   switching.value = `${kind}:${name}`
   try {
-    if (off) await disableBuiltinResource(props.tenantId, kind, name)
-    else await restoreBuiltinResource(props.tenantId, kind, name)
-    const [tools] = await Promise.all([getAgentToolCatalog(props.tenantId), loadSkills()])
+    if (off) await disableBuiltinResource(tenant, kind, name)
+    else await restoreBuiltinResource(tenant, kind, name)
+    if (!active(current)) return
+    const tools = await getAgentToolCatalog(tenant)
+    if (!active(current)) return
+    void loadSkills()
     catalog.value = tools
     MessagePlugin.success(t(off ? 'nexusAgent.disableDone' : 'nexusAgent.restoreDone', { name: kind === 'tool' ? toolLabel(name) : name }))
   } catch (error) {
-    MessagePlugin.error(errorMessage(error) || t('nexusAgent.switchFailed'))
+    if (active(current)) MessagePlugin.error(errorMessage(error) || t('nexusAgent.switchFailed'))
   } finally {
-    switching.value = ''
+    if (active(current)) switching.value = ''
   }
 }
 
@@ -695,22 +709,28 @@ function onGroupSwitch(id: string, value: boolean) {
 }
 
 // Knowledge bases the agent may bind: the space's own and those shared into it.
-const knowledgeBases = ref<Array<{ id: string, name: string, description: string, shared: boolean, tenant_id: string,
-  knowledge_count: number }>>([])
-async function loadKnowledgeBases() {
+const knowledgeBases = ref<AgentKnowledgeChoice[]>([])
+const knowledgeError = ref('')
+const knowledgeLoading = ref(false)
+async function loadKnowledgeBases(current: number, tenant: string) {
+  knowledgeLoading.value = true; knowledgeError.value = ''
   try {
-    const res: any = await listKnowledgeBases()
-    knowledgeBases.value = res?.data || []
-  } catch {
-    knowledgeBases.value = []
+    const rows = await listAgentKnowledgeChoices(tenant, enterprise.value)
+    if (active(current)) knowledgeBases.value = rows
+  } catch (error) {
+    if (active(current)) knowledgeError.value = t('nexusAgent.loadFailed')
+  } finally {
+    if (active(current)) knowledgeLoading.value = false
   }
 }
-void loadKnowledgeBases()
+function retryKnowledge() { if (!knowledgeLoading.value && !saving.value) void loadKnowledgeBases(epoch, props.tenantId) }
 
 function onKnowledgeChange(ids: Array<string | number | boolean>) {
   const chosen = new Set(ids.map(String))
-  form.knowledge_bases = knowledgeBases.value.filter(kb => chosen.has(kb.id))
-    .map(kb => ({ id: kb.id, source_tenant_id: kb.tenant_id }))
+  const listed = new Set(knowledgeBases.value.map(kb => kb.id))
+  form.knowledge_bases = [...knowledgeBases.value.filter(kb => chosen.has(kb.id))
+    .map(kb => ({ id: kb.id, source_tenant_id: kb.tenant_id })),
+    ...form.knowledge_bases.filter(kb => !listed.has(kb.id))]
   // Offer the knowledge tools together with the first base: those the space has enabled are added to the selection.
   if (form.knowledge_bases.length) {
     const enabled = new Set((catalog.value?.tools || []).filter(tool => tool.enabled_in_tenant).map(tool => tool.name))
@@ -768,53 +788,78 @@ function resetErrors() {
   for (const key of Object.keys(errors)) delete errors[key as keyof AgentEditorForm]
 }
 
+/** 关闭、重选、企业变化及卸载都作废旧链，不能用迟到的草稿继续发布。 */
+function invalidate() {
+  epoch++; skillsRequest++
+  agent.value = null; catalog.value = null; modelSettings.value = null; nativeDefaults.value = null
+  skills.value = []; skillsError.value = ''; skillsLoading.value = false
+  knowledgeBases.value = []; knowledgeError.value = ''; knowledgeLoading.value = false
+  loading.value = false; saving.value = false; enabling.value = ''; switching.value = ''; loadError.value = ''
+  installOpen.value = false; mySkillsOpen.value = false; reviewOpen.value = false
+  Object.assign(form, formForNewAgent(null, '', [])); resetErrors()
+}
 async function load() {
+  invalidate()
+  const current = epoch, tenant = props.tenantId, id = props.agentId
   loading.value = true
   loadError.value = ''
   resetErrors()
   currentSection.value = 'basic'
   try {
-    const [settings, tools] = await Promise.all([getModelSettings(props.tenantId), getAgentToolCatalog(props.tenantId)])
+    const [settings, tools] = await Promise.all([getModelSettings(tenant), getAgentToolCatalog(tenant)])
+    if (!active(current)) return
     modelSettings.value = settings
     catalog.value = tools
-    void loadSkills()
-    if (props.agentId) {
-      const loaded = await getNexusAgent(props.tenantId, props.agentId)
+    void loadKnowledgeBases(current, tenant)
+    if (id) {
+      const loaded = await (enterprise.value ? getEnterpriseAgent(tenant, id) : getNexusAgent(tenant, id))
+      if (!active(current)) return
       agent.value = loaded
       const model = loaded.model_profile_version_id ? findModelByVersion(settings, loaded.model_profile_version_id) : undefined
       Object.assign(form, formFromAgent(loaded, model?.options || {}))
     } else {
       agent.value = null
-      nativeDefaults.value = await getNativeDefaults(props.tenantId)
+      const defaults = await getNativeDefaults(tenant)
+      if (!active(current)) return
+      nativeDefaults.value = defaults
       const enabled = new Set(tools.tools.filter(tool => tool.enabled_in_tenant).map(tool => tool.name))
       Object.assign(form, formForNewAgent(nativeDefaults.value, defaultChatVersion(settings),
         tools.default_tools.filter(name => enabled.has(name))))
     }
+    void loadSkills()
   } catch (error) {
-    loadError.value = errorMessage(error) || t('nexusAgent.loadFailed')
+    if (!active(current)) return
+    loadError.value = errorMessage(error).endsWith('_response_invalid') ? t('nexusAgent.loadFailed') : errorMessage(error) || t('nexusAgent.loadFailed')
   } finally {
-    loading.value = false
+    if (active(current)) loading.value = false
   }
 }
 
 // The per-skill "can its scripts run here" line depends on the chosen profile, so changing it asks again.
 watch(() => form.sandbox_profile, () => { if (props.visible) void loadSkills() })
 
-watch(() => [props.visible, props.agentId, props.tenantId] as const, ([visible]) => {
+watch(() => [props.visible, props.agentId, props.tenantId, props.creationScope] as const, ([visible]) => {
   if (visible) void load()
-}, { immediate: true })
+  else invalidate()
+}, { immediate: true, flush: 'sync' })
+onBeforeUnmount(invalidate)
 
 async function enableTool(name: string) {
+  if (!props.visible || loading.value || saving.value || switching.value || enabling.value) return
+  const current = epoch, tenant = props.tenantId
   enabling.value = name
   try {
-    await enableTenantTool(props.tenantId, name)
-    catalog.value = await getAgentToolCatalog(props.tenantId)
+    await enableTenantTool(tenant, name)
+    if (!active(current)) return
+    const tools = await getAgentToolCatalog(tenant)
+    if (!active(current)) return
+    catalog.value = tools
     if (!form.allowed_tools.includes(name)) form.allowed_tools.push(name)
     MessagePlugin.success(t('nexusAgent.enableDone', { name: toolLabel(name) }))
   } catch (error) {
-    MessagePlugin.error(errorMessage(error) || t('nexusAgent.enableFailed'))
+    if (active(current)) MessagePlugin.error(errorMessage(error) || t('nexusAgent.enableFailed'))
   } finally {
-    enabling.value = ''
+    if (active(current)) enabling.value = ''
   }
 }
 
@@ -823,8 +868,7 @@ function copyAgentId() {
 }
 
 function goModelSettings() {
-  emit('close')
-  void router.push({ path: '/platform/settings', query: { section: 'models' } })
+  if (!saving.value) emit('open-model-settings')
 }
 
 function requestClose() {
@@ -832,6 +876,8 @@ function requestClose() {
 }
 
 async function save() {
+  if (!props.visible || loading.value || saving.value || loadError.value || switching.value || enabling.value) return
+  const current = epoch, tenant = props.tenantId
   resetErrors()
   Object.assign(errors, validateForm(form))
   const firstError = Object.keys(errors)[0] as keyof AgentEditorForm | undefined
@@ -842,25 +888,28 @@ async function save() {
   }
   saving.value = true
   try {
-    const body = draftFromForm(form, agent.value, nativeDefaults.value, props.tenantId)
+    const body = draftFromForm(form, agent.value, nativeDefaults.value, tenant)
     const saved = agent.value
-      ? await updateNexusAgent(props.tenantId, agent.value.id, body)
-      : await createNexusAgent(props.tenantId, body)
+      ? await (enterprise.value ? updateEnterpriseAgent(tenant, agent.value.id, body) : updateNexusAgent(tenant, agent.value.id, body))
+      : await (enterprise.value ? createEnterpriseAgent(tenant, body) : createNexusAgent(tenant, body))
+    if (!active(current)) return
     agent.value = saved
     try {
-      await publishNexusAgent(props.tenantId, saved.id)
+      await (enterprise.value ? publishEnterpriseAgent(tenant, saved.id) : publishNexusAgent(tenant, saved.id))
     } catch (error) {
+      if (!active(current)) return
       MessagePlugin.error(t('nexusAgent.publishFailed', { reason: errorMessage(error) || t('nexusAgent.saveFailed') }))
       emit('saved', saved)
       return
     }
+    if (!active(current)) return
     MessagePlugin.success(t('nexusAgent.saved'))
     emit('saved', saved)
     emit('close')
   } catch (error) {
-    MessagePlugin.error(errorMessage(error) || t('nexusAgent.saveFailed'))
+    if (active(current)) MessagePlugin.error(errorMessage(error) || t('nexusAgent.saveFailed'))
   } finally {
-    saving.value = false
+    if (active(current)) saving.value = false
   }
 }
 </script>
@@ -1755,6 +1804,30 @@ async function save() {
     font-size: var(--app-text-sm);
     color: var(--td-text-color-placeholder);
     word-break: break-word;
+  }
+}
+</style>
+
+<!-- 编辑器的窄屏布局只作用于本弹窗，保留其他设置弹窗的布局约定。 -->
+<style lang="less">
+@media (max-width: 760px) {
+  .settings-modal-shell.agent-editor-shell {
+    padding: 12px;
+    .settings-modal { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+    .settings-container { flex-direction: column; }
+    .settings-sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--td-component-stroke); }
+    .sidebar-header { padding: 16px 52px 12px 16px; }
+    .settings-nav { display: flex; flex: none; gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 8px; }
+    .nav-group-title { display: none; }
+    .nav-item { flex: none; margin: 0; white-space: nowrap; min-height: 40px; }
+    .settings-content { min-height: 0; }
+    .content-wrapper { padding: 20px 16px; }
+    .setting-row { flex-direction: column; gap: 12px; }
+    .setting-info, .setting-control { flex: none; width: 100%; max-width: 100%; }
+    .setting-control { justify-content: flex-start; }
+    .settings-footer { padding: 12px 16px; }
+    .settings-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
+    .close-btn { top: 10px; right: 10px; width: 40px; height: 40px; }
   }
 }
 </style>

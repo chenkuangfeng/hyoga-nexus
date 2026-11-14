@@ -1911,7 +1911,7 @@ import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { HOST_SKILL_TARGET_ID, hostSkillTargetRecord, hostSkillsOnly } from '@/utils/skillTarget';
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources';
-import AgentAvatar from '@/components/AgentAvatar.vue';
+import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue';
 import PromptTemplateSelector from '@/components/PromptTemplateSelector.vue';
 import ModelSelector from '@/components/ModelSelector.vue';
 import SandboxSkillsPanel from '@/components/SandboxSkillsPanel.vue';

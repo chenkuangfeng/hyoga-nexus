@@ -1,4 +1,25 @@
 export default {
+  adminAgents: {
+    "title": "企业智能体",
+    "description": "管理企业智能体的配置、发布版本与归档。",
+    "create": "创建企业智能体",
+    "scopeHint": "仅显示当前可见的企业智能体。结果受发布状态与模型访问权限过滤，归档资源不在此列表。",
+    "search": "搜索名称或描述",
+    "grants": "分配角色使用权限",
+    "archive": "归档",
+    "archiveConfirm": "确认归档「{name}」？归档后不能发起新的运行，已有会话保留。当前未提供恢复入口。",
+    "archived": "已归档",
+    "draft": "草稿",
+    "published": "已发布",
+    "noDescription": "暂无描述",
+    "version": "版本 {version}",
+    "edit": "编辑并发布",
+    "noMatch": "没有匹配的企业智能体",
+    "empty": "暂无可见的企业智能体",
+    "modelsPending": "后台模型管理尚未迁移，请先完成企业模型配置后再选择。",
+    "enterpriseKnowledge": "企业智能体只能绑定企业知识库；最终可绑定范围由服务端校验。",
+    "open": "管理智能体"
+  },
   enterpriseMembership: {"title": "当前企业成员身份", "enterprise": "当前企业", "role": "我的企业角色", "leave": "退出当前企业", "leaveHint": "退出仅终止你在当前企业的成员身份，不会删除企业或账号。退出后需在工作台重新登录选择其他企业。", "ownerHint": "企业所有者不能直接退出。请先由有权管理员完成所有权转移及角色调整，再退出企业。", "confirmTitle": "确认退出企业", "confirmBody": "确定退出企业“{name}”？退出后你将失去该企业的资源访问权限，账号和企业本身不会被删除。"},
   adminAudit: {
       "title": "审计日志",

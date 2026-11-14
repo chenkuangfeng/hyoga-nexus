@@ -1,4 +1,26 @@
 export default {
+  adminAgents: {
+    "title": "Enterprise agents",
+    "description": "Configure, publish and archive enterprise agents.",
+    "create": "Create enterprise agent",
+    "scopeHint": "Only visible enterprise agents are listed. Results depend on publication state and model access. Archived agents are excluded.",
+    "search": "Search name or description",
+    "grants": "Assign role usage permissions",
+    "archive": "Archive",
+    "archiveConfirm": "Archive “{name}”? New runs will be blocked; existing conversations are retained. Restore is currently unavailable.",
+    "archived": "Archived",
+    "draft": "Draft",
+    "published": "Published",
+    "noDescription": "No description",
+    "version": "Version {version}",
+    "edit": "Edit and publish",
+    "noMatch": "No matching enterprise agents",
+    "empty": "No visible enterprise agents",
+    "modelsPending": "Admin model management has not migrated yet. Configure an enterprise model before selecting it.",
+    "enterpriseKnowledge": "Enterprise agents can bind only enterprise knowledge bases. The server validates the final binding scope.",
+    "open": "Manage agents"
+  },
+
   enterpriseMembership: {"title": "当前企业成员身份", "enterprise": "当前企业", "role": "我的企业角色", "leave": "退出当前企业", "leaveHint": "退出仅终止你在当前企业的成员身份，不会删除企业或账号。退出后需在工作台重新登录选择其他企业。", "ownerHint": "企业所有者不能直接退出。请先由有权管理员完成所有权转移及角色调整，再退出企业。", "confirmTitle": "确认退出企业", "confirmBody": "确定退出企业“{name}”？退出后你将失去该企业的资源访问权限，账号和企业本身不会被删除。"},
   adminAudit: {
       "title": "审计日志",

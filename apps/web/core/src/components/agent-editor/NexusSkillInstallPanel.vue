@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import {
@@ -103,6 +103,10 @@ const result = ref<SkillInstallResult | null>(null)
 const build = ref<SkillInstallStatus | null>(null)
 let timer: ReturnType<typeof setTimeout> | undefined
 
+let epoch = 0
+let disposed = false
+const active = (current: number) => !disposed && current === epoch
+
 const buildFailed = computed(() => build.value?.build_state === 'failed')
 
 function stopPolling() {
@@ -111,6 +115,7 @@ function stopPolling() {
 }
 
 function reset() {
+  epoch++
   stopPolling()
   failure.value = null
   result.value = null
@@ -124,16 +129,20 @@ function onPick(event: Event) {
 }
 
 async function run(action: () => Promise<SkillInstallResult>) {
+  if (busy.value || disposed) return
   reset()
+  const current = epoch
   busy.value = true
   try {
-    result.value = await action()
+    const installed = await action()
+    if (!active(current)) return
+    result.value = installed
     emit('installed')
     if (result.value.build_state === 'installing') await follow()
   } catch (error) {
-    failure.value = parseInstallFailure(error)
+    if (active(current)) failure.value = parseInstallFailure(error)
   } finally {
-    busy.value = false
+    if (active(current)) busy.value = false
   }
 }
 
@@ -148,44 +157,53 @@ function retryWithAck() {
 
 /** Poll the build until it ends; a closed dialog or a new install stops the loop. */
 async function follow() {
+  const request = epoch, tenant = props.tenantId
+  if (disposed) return
   const current = result.value
   if (!current) return
   try {
-    build.value = await getSkillInstallStatus(props.tenantId, current.skill, current.version)
+    const status = await getSkillInstallStatus(tenant, current.skill, current.version)
+    if (!active(request) || result.value !== current) return
+    build.value = status
   } catch (error) {
-    failure.value = parseInstallFailure(error)
+    if (active(request)) failure.value = parseInstallFailure(error)
     return
   }
   if (isFinishedBuild(build.value.build_state)) {
     emit('installed')
     return
   }
-  timer = setTimeout(() => { if (result.value === current) void follow() }, POLL_MS)
+  timer = setTimeout(() => { if (active(request) && result.value === current) void follow() }, POLL_MS)
 }
 
 async function stopBuild() {
-  if (!result.value) return
+  if (!result.value || disposed) return
+  const current = epoch
   try {
     await stopSkillInstall(props.tenantId, result.value.skill, result.value.version)
+    if (!active(current)) return
     stopPolling()
     await follow()
   } catch (error) {
-    MessagePlugin.error(parseInstallFailure(error).message)
+    if (active(current)) MessagePlugin.error(parseInstallFailure(error).message)
   }
 }
 
 async function retryBuild() {
-  if (!result.value) return
+  if (!result.value || disposed) return
+  const current = epoch
   try {
     await reinstallSkill(props.tenantId, result.value.skill, result.value.version, props.sandboxProfile)
+    if (!active(current)) return
     stopPolling()
     await follow()
   } catch (error) {
-    MessagePlugin.error(parseInstallFailure(error).message)
+    if (active(current)) MessagePlugin.error(parseInstallFailure(error).message)
   }
 }
 
-onBeforeUnmount(stopPolling)
+watch(() => props.tenantId, () => { reset(); busy.value = false; file.value = null; source.value = '' }, { flush: 'sync' })
+onBeforeUnmount(() => { disposed = true; epoch++; stopPolling() })
 </script>
 
 <style scoped>
