@@ -32,6 +32,7 @@ const router = createRouter({
       { path: 'enterprise', component: () => import('./views/EnterpriseInfo.vue') },
       { path: 'organization', component: () => import('./views/organization/OrganizationPage.vue') },
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
+      { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
       { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },
     ] },
     { path: '/:pathMatch(.*)*', component: () => import('@nexus-web/core/components/NotFound.vue'), meta: { public: true } },

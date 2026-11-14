@@ -103,3 +103,10 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 ## 企业信息
 
 管理端 `/admin/enterprise` 由 `EnterpriseInfo.vue` 编排，公共 `enterprise-info.ts` 校验现有 GET/PATCH `/tenants/current` 的完整详情和目标企业 ID，删除沿用 DELETE `/tenants/{id}`。页面使用公共设置行，owner 可编辑和归档；只有名称/描述变化时才提交，删除确认绑定当前快照名称。权限与作用域代次驱动请求失效，失败保留可重试状态。删除成功清除本地身份，在管理应用内重新登录。企业编码接口和工作台旧管理页隔离仍待后续。
+
+
+## 角色与权限
+
+`admin/src/views/roles/RolesPage.vue` 组合列表、权限选择和成员分配，`useRoleAdministration.ts` 负责服务端目录、操作者授权、表单确认和身份隔离。`core/src/api/enterprise-roles.ts` 消费现有角色与权限接口，运行时校验权限数组、内置标记及角色企业 ID；不改变后端契约。
+
+核心目录/角色/操作者授权全部成功后开放编辑，成员和分配列表独立读取且需成员管理权限。选择范围受当前操作者授权约束，内置角色只读，所有写入确认后执行。写入成功后刷新身份与当前企业权限，区分原写入失败和后续刷新失败；身份代次保证旧操作不能在企业切换后继续刷新和展示成功。部门批量分配和角色到智能体授权仍待后续。
