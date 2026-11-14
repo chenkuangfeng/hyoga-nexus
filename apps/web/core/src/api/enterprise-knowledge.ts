@@ -1,5 +1,5 @@
-/** 企业知识库目录与内容管理员客户端；原生 DTO 校验归属，管理权限由服务端最终决定。 */
-import { get, post, del } from '../utils/request'
+/** 企业知识库目录、内容管理员与读取受众客户端；原生 DTO 校验归属，管理权限由服务端最终决定。 */
+import { get, post, del, put } from '../utils/request'
 export type EnterpriseKnowledgeType = 'document' | 'faq' | 'wiki'
 export type KnowledgeVisibility = 'private' | 'tenant' | 'scoped'
 export interface EnterpriseKnowledgeBase {
@@ -7,6 +7,8 @@ export interface EnterpriseKnowledgeBase {
   visibility: KnowledgeVisibility; knowledge_count: number; can_manage: boolean
 }
 export interface KnowledgeMaintainer { user_id: string; display_name: string | null; email: string | null; granted_by: string; granted_at: string }
+export interface KnowledgeBaseAudienceItem { kind: 'user' | 'org_unit'; id: string; include_descendants: boolean }
+export interface KnowledgeBaseAudience { visibility: KnowledgeVisibility; items: KnowledgeBaseAudienceItem[] }
 const invalid = () => new Error('enterprise_knowledge_response_invalid')
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid(); return value as Record<string, unknown> }
 function string(value: unknown): string { if (typeof value !== 'string') throw invalid(); return value }
@@ -48,3 +50,32 @@ export async function addKnowledgeMaintainer(tenant: string, kb: string, user: s
 }
 /** 204 撤销一项明确记录，不影响成员通过其他授权来源拥有的能力。 */
 export async function removeKnowledgeMaintainer(tenant: string, kb: string, user: string): Promise<void> { await del(`${maintainers(tenant, kb)}/${encodeURIComponent(user)}`) }
+/** 读取当前知识库的完整成员/部门受众；管理权限和企业归属由服务端校验。 */
+export function knowledgeBaseAudienceFromResponse(value: unknown): KnowledgeBaseAudience {
+  const row = object(value), visibility = string(row.visibility)
+  if (!['private', 'tenant', 'scoped'].includes(visibility)) throw invalid()
+  const items = array(row.items).map(value => {
+    const item = object(value), kind = string(item.kind), id = string(item.id)
+    if (!['user', 'org_unit'].includes(kind) || !id.trim() || typeof item.include_descendants !== 'boolean') throw invalid()
+    return { kind: kind as KnowledgeBaseAudienceItem['kind'], id, include_descendants: item.include_descendants }
+  })
+  if (new Set(items.map(item => `${item.kind}:${item.id}`)).size !== items.length) throw invalid()
+  return { visibility: visibility as KnowledgeVisibility, items }
+}
+const audiencePath = (tenant: string, kb: string) => `${base(tenant)}/knowledge/bases/${encodeURIComponent(kb)}/audience`
+export async function getKnowledgeBaseAudience(tenant: string, kb: string): Promise<KnowledgeBaseAudience> {
+  return knowledgeBaseAudienceFromResponse(await get(audiencePath(tenant, kb)))
+}
+/** 整体替换受众；响应必须对应请求的稳定 ID 集合，后端拒绝会破坏智能体绑定的收窄。 */
+export async function setKnowledgeBaseAudience(tenant: string, kb: string, items: KnowledgeBaseAudienceItem[]): Promise<KnowledgeBaseAudience> {
+  if (!Array.isArray(items) || items.length > 500 || items.some(item => !item || typeof item !== 'object')) throw invalid()
+  const keys = items.map(item => `${item.kind}:${item.id}`)
+  if (keys.some(key => !key.split(':').slice(1).join(':').trim()) || new Set(keys).size !== keys.length ||
+      items.some(item => !['user', 'org_unit'].includes(item.kind) || typeof item.include_descendants !== 'boolean')) throw invalid()
+  const result = knowledgeBaseAudienceFromResponse(await put(audiencePath(tenant, kb), { items }))
+  if (items.length > 0 && result.visibility !== 'scoped') throw invalid()
+  const expected = items.map(item => `${item.kind}:${item.id}:${item.include_descendants}`).sort()
+  const received = result.items.map(item => `${item.kind}:${item.id}:${item.include_descendants}`).sort()
+  if (expected.length !== received.length || expected.some((item, index) => item !== received[index])) throw invalid()
+  return result
+}

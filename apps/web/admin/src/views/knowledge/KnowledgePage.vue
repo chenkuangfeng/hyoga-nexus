@@ -1,12 +1,13 @@
 <script setup lang="ts">
-/** 企业库目录与知识库管理员；完整设置/内容编辑仍由后续共用编辑器迁移承接。 */
+/** 企业库目录、完整设置、读取受众与知识库管理员。 */
 import { ref } from 'vue'
 import KnowledgeBaseEditorModal from '@nexus-web/core/components/knowledge-editor/KnowledgeBaseEditorModal.vue'
+import KnowledgeAudienceDialog from './KnowledgeAudienceDialog.vue'
 import type { EnterpriseKnowledgeBase } from '@nexus-web/core/api/enterprise-knowledge'
 import { useI18n } from 'vue-i18n'
 import { useKnowledgeAdministration } from './useKnowledgeAdministration'
 const { t } = useI18n()
-const { editor, editingId, editorKey, tenant, openEditor, openSettings, loading, ready, error, search, selected, maintainers, maintainersReady, membersReady, panelLoading, busy, panelError, membersError, success, selectedMember, canManage, canReadMembers, filtered, memberOptions, maintainerName, canAdd, editable, load, inspect, closePanel, add, remove } = useKnowledgeAdministration()
+const { editor, editingId, editorKey, tenant, openEditor, openSettings, audienceTarget, closeAudience, audienceSaved, openAudience, loading, ready, error, search, selected, maintainers, maintainersReady, membersReady, panelLoading, busy, panelError, membersError, success, selectedMember, canManage, canReadMembers, canReadOrganization, filtered, memberOptions, maintainerName, canAdd, editable, load, inspect, closePanel, add, remove } = useKnowledgeAdministration()
 const panelRoot = ref<HTMLElement | null>(null)
 async function openMaintainers(row: EnterpriseKnowledgeBase) {
   await inspect(row)
@@ -26,7 +27,7 @@ async function openMaintainers(row: EnterpriseKnowledgeBase) {
           <article v-for="row in filtered" :key="row.id" class="kb-card" :class="{ selected: selected?.id === row.id }">
             <header><t-icon name="folder" size="28px" /><h3>{{ row.name }}</h3><t-tag variant="light">{{ t(`adminKnowledge.types.${row.type}`) }}</t-tag></header>
             <p>{{ row.description || t('adminKnowledge.noDescription') }}</p>
-            <footer><div class="metadata"><span>{{ t(`adminKnowledge.visibility.${row.visibility}`) }}</span><span>{{ t('adminKnowledge.documents', { count: row.knowledge_count }) }}</span></div><div class="actions"><t-button variant="text" :disabled="busy || editor || !row.can_manage" @click="openEditor(row)">{{ t('adminKnowledge.edit') }}</t-button><t-button variant="text" :disabled="busy || editor || !row.can_manage" :aria-pressed="selected?.id === row.id" aria-controls="knowledge-maintainer-panel" @click="openMaintainers(row)">{{ t('adminKnowledge.maintainers') }}</t-button></div></footer>
+          <footer><div class="metadata"><span>{{ t(`adminKnowledge.visibility.${row.visibility}`) }}</span><span>{{ t('adminKnowledge.documents', { count: row.knowledge_count }) }}</span></div><div class="actions"><t-button variant="text" :disabled="busy || editor || audienceTarget || !row.can_manage" @click="openEditor(row)">{{ t('adminKnowledge.edit') }}</t-button><t-button variant="text" :disabled="busy || editor || audienceTarget || !row.can_manage" @click="openAudience(row)">{{ t('adminKnowledge.audienceManage') }}</t-button><t-button variant="text" :disabled="busy || editor || audienceTarget || !row.can_manage" :aria-pressed="selected?.id === row.id" aria-controls="knowledge-maintainer-panel" @click="openMaintainers(row)">{{ t('adminKnowledge.maintainers') }}</t-button></div></footer>
           </article>
         </div>
         <div v-else-if="ready" class="empty"><t-icon :name="search.trim() ? 'search' : 'folder'" size="40px" /><p>{{ t(search.trim() ? 'adminKnowledge.noMatch' : 'adminKnowledge.empty') }}</p></div>
@@ -43,6 +44,7 @@ async function openMaintainers(row: EnterpriseKnowledgeBase) {
         </t-loading>
       </section>
       <KnowledgeBaseEditorModal v-if="editor" :key="editorKey" :visible="editor" :mode="editingId ? 'edit' : 'create'" :kb-id="editingId" :tenant-id="tenant" creation-scope="enterprise" @update:visible="editor = $event" @success="load" @open-settings="openSettings" />
+      <KnowledgeAudienceDialog v-if="audienceTarget" :key="`${tenant}:${editorKey}:${audienceTarget.id}`" :visible="true" :tenant-id="tenant" :scope-key="editorKey" :knowledge-base="audienceTarget" :can-read-members="canReadMembers" :can-read-organization="canReadOrganization" @update:visible="value => !value && closeAudience()" @saved="audienceSaved" />
       <p class="planned">{{ t('adminKnowledge.editorPending') }}</p>
     </template>
   </section>
