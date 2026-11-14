@@ -23,7 +23,6 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   mcp: 'admin',
   system: 'viewer',
   userprofile: 'viewer',
-  members: 'viewer',
   mymemory: 'viewer',
   memory: 'admin',
   // Every member fills in their own environment variables; the workspace-wide
@@ -36,6 +35,5 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
  * corresponding read-only Settings page.
  */
 export const SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE = {
-  members: 'owner',
   models: 'admin',
 } as const satisfies Record<string, SettingsRoleKey>

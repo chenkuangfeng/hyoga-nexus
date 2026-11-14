@@ -2294,7 +2294,7 @@ watch(addMemberPopupVisible, (visible) => {
   }
 }
 
-// 成员管理（对齐 TenantMembers 列表 + 权限弹层）
+// 共享空间成员管理：列表与权限说明，不属于企业成员治理页面。
 .section-header-row {
   display: flex;
   align-items: center;

@@ -63,7 +63,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 管理端成员与邀请
 
-`/admin/members` 由 `views/members/MembersPage.vue` 和 `useMemberAdministration.ts` 组成，复用已接通的管理外壳与权限上下文。界面参考 WeKnora `TenantMembers.vue` 的成员/待邀请标签、搜索与角色操作、邀请表单和链接流程，按 Nexus 现有 DTO 重写；不导入工作台组件，不复制无后端支持的审计抽屉或停用入口。剪贴板函数迁到 `core`，原工作台路径保留转导出。
+`/admin/members` 由 `views/members/MembersPage.vue` 和 `useMemberAdministration.ts` 组成，复用已接通的管理外壳与权限上下文。界面参考 WeKnora `TenantMembers.vue` 的成员/待邀请标签、搜索与角色操作、邀请表单和链接流程，按 Nexus 现有 DTO 重写；不导入工作台组件，审计由独立 AuditPage 承接，成员停用/恢复入口仍待后端接口。剪贴板函数迁到 `core`，原工作台路径保留转导出。
 
 公共 `api/enterprise-members.ts` 调用现有 `/tenants/{id}/members`、`members/by-email`、`invitations` 和 `invite-links`，无需本批修改后端契约。成员列表一次返回全部活跃行，搜索分页在客户端完成；响应的企业 ID 必须匹配路径，修改角色的用户 ID 也须匹配请求。人员邀请与链接采用联合类型，链接路径仅允许 `/join?token=...`，不接受外部地址、片段或额外参数。
 
@@ -75,7 +75,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 管理端加入申请审批
 
-成员页第三个标签按需挂载 `JoinRequestsPanel.vue`，沿用现有工作台 `JoinApplicationsPanel.vue` 的待处理列表、部门/角色必选和拒绝原因流程，界面继续使用 WeKnora 成员页的表格、反馈与 TDesign 表单模式。列表调用 `/tenants/{id}/join-requests`，批准与拒绝分别 POST `/{application_id}/approve` 和 `/reject`；公共成员客户端校验待处理状态、基础角色与批准回执的用户、角色、active 状态。没有新增后端契约或扩大权限。
+成员页第三个标签按需挂载 `JoinRequestsPanel.vue`，承接原工作台审批面板的待处理列表、部门/角色必选和拒绝原因流程，界面继续使用 WeKnora 成员页的表格、反馈与 TDesign 表单模式。列表调用 `/tenants/{id}/join-requests`，批准与拒绝分别 POST `/{application_id}/approve` 和 `/reject`；公共成员客户端校验待处理状态、基础角色与批准回执的用户、角色、active 状态。没有新增后端契约或扩大权限。
 
 申请和部门并行读取，独立消费失败。部门接口需要 `org:manage`，批准接口仍由后端按 `members:manage` 检查；前端只允许从可读列表选启用节点，不能手工绕过。组织路径构建有循环保护。成员权限缺失时不读取申请，组织权限缺失/失败只禁止批准，不阻断拒绝。申请列表失败时不显示成功空态。
 
@@ -122,7 +122,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 工作台设置导航不再注册部门管理，旧 `OrgStructure.vue` 已删除，其组织读写不会再随设置页面打包。旧 `section=org-structure` 保留 `AdminSectionMoved.vue` 迁移说明，依据当前企业服务端 entries 提供显式管理应用链接；开发使用同主机 5174，生产按应用 base 构造 admin/organization。不会自动跨应用导航，管理端继续校准身份和组织权限。旧书签被识别为迁移区，不受原部门能力/owner 导航门槛影响，也不会因当前导航没有此项而自动丢回通用设置。
 
-旧企业信息页现已由账户成员身份区和独立管理端承接后移除；旧成员页及其他管理依赖仍待后续清理，共享空间、加入企业或企业切换保持原流程。
+旧企业信息页现已由账户成员身份区和独立管理端承接后移除；旧成员治理页也已移除，其他管理配置与产物隔离仍待后续验收，共享空间、加入企业或企业切换保持原流程。
 
 
 ## 管理端审计日志
@@ -133,3 +133,8 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 ## 个人退出企业与旧企业信息页移除
 
 `UserProfile.vue` 组合 `CurrentEnterpriseMembership.vue`，后者独立读取有效企业详情，显示真实只读信息与本人角色。退出直接使用现有成员接口，无需先获取全员名单；所有 owner 均禁止直接退出。确认绑定当前企业/账号/角色代次，提交中禁止关闭及重复提交，失败保留状态，成功清除本地身份并在本工作台登录页重新登录。企业变动通知可刷新只读信息，提交期间不因后台通知重置操作锁。旧 `TenantInfo.vue` 和导航被删除，tenant 设置书签及旧路由统一进入 userprofile；治理编辑/删除由 admin 页面承接，不改变服务端行为。
+
+
+## 工作台旧成员治理页清理
+
+工作台不再注册 members 设置导航，删除旧 `TenantMembers.vue` 和只被其引用的 `JoinApplicationsPanel.vue`。旧 members/部门书签共用参数化 `AdminSectionMoved.vue`，按内部目标枚举构造独立管理应用地址；成员迁移说明提供 members/audit 链接，无入口时说明权限不足，不请求治理接口。成员功能已由管理端成员页、审批面板和审计页承接，前后端真实权限保持不变；共享空间及个人加入/邀请流程保留。

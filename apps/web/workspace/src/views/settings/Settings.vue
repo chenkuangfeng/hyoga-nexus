@@ -53,8 +53,7 @@
       </template>
     </template>
     <div class="content-wrapper" :class="{
-      'content-wrapper--wide': currentSection === 'members',
-      'content-wrapper--resource-list': ['models', 'mymemory', 'members', 'sandbox'].includes(currentSection),
+      'content-wrapper--resource-list': ['models', 'mymemory', 'sandbox'].includes(currentSection),
       'content-wrapper--full': currentSection === 'mcp-endpoints',
     }">
       <!-- 角色不允许访问当前 section（deep-link 进来 / 跨空间切换后角色降级）—— 优先于具体 section 渲染。
@@ -139,14 +138,9 @@
           <UserProfile />
         </div>
 
-        <!-- 成员管理 (#1303 PR 3) -->
-        <div v-if="currentSection === 'members'" class="section">
-          <TenantMembers />
-        </div>
-
-        <!-- 部门架构（企业空间） -->
-        <div v-if="currentSection === 'org-structure'" class="section">
-          <AdminSectionMoved />
+        <!-- 已迁移的企业管理旧书签仅保留说明，不加载治理实现。 -->
+        <div v-if="isMigratedAdminSection(currentSection)" class="section">
+          <AdminSectionMoved :section="currentSection === 'members' ? 'members' : 'org-structure'" />
         </div>
 
         <div v-if="currentSection === 'mcp-endpoints'" class="section"><McpEndpointSettings :active="visible" /></div>
@@ -183,7 +177,6 @@ import VectorStoreSettings from './VectorStoreSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
 import StorageBackendSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
-import TenantMembers from './TenantMembers.vue'
 import AdminSectionMoved from './AdminSectionMoved.vue'
 import { SETTINGS_SECTION_MIN_ROLE } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY, skillSettingsSupported } from '@/config/deploymentCapabilities'
@@ -235,7 +228,7 @@ type NavGroup = {
 // 以「页面里至少有 1 个有意义的写操作所要求的最低角色」为基准，把基础设
 // 施配置（models 写、websearch 写、parser/storage/vector/mcp
 // CRUD、sandbox 连接、skills 安装、chat-history 配置）统一收到 admin；只读类（general / system info /
-// members 名册）保留 viewer 可见；最高敏感的 reset api
+// 账户资料）保留 viewer 可见；最高敏感的 reset api
 // key 是 owner-only。改这张表前请在 router.go 里复核对应路由组。
 //
 // 特别说明：
@@ -271,7 +264,7 @@ const isSectionSupported = (key: string): boolean => {
 const canSeeSection = (key: string): boolean => {
   const min = SETTINGS_SECTION_MIN_ROLE[key] ?? 'viewer'
   // canAccessAllTenants（superuser）和路由层一样必须 bypass，否则 cross-tenant
-  // 管理员看不到自己有权操作的入口（参考 TenantMembers.vue 的 canManage）。
+  // 管理员看不到自己有权操作的入口（具体操作仍由管理应用与服务端复核）。
   if (authStore.canAccessAllTenants) return true
   return authStore.hasRole(min)
 }
@@ -292,11 +285,9 @@ const navItems = computed(() => {
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
     { key: 'envvars', icon: 'key', label: envNavLabel() },
-    { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
   ]
   // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
-  // viewer 入口然后角色一返回又消失，先卡住不渲染更稳，跟原先 members
-  // 入口的策略一致。
+  // viewer 入口然后角色一返回又消失，先卡住不渲染更稳。
   if (!authStore.currentTenantRole && !authStore.canAccessAllTenants) {
     return [] as NavItem[]
   }
@@ -319,7 +310,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['members', 'chathistory', 'memory']),
+      items: pickItems(['chathistory', 'memory']),
     },
     {
       key: 'models_runtime',
@@ -619,9 +610,7 @@ onUnmounted(() => {
   padding: 40px 48px;
 
   /* 表格页面缩小内边距，为多列内容留出空间。 */
-  &--wide {
-    padding: 32px 36px 40px;
-  }
+
 
   &--full {
     padding: 30px 34px 40px;

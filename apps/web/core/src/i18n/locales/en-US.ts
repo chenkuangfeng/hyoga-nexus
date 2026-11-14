@@ -23,7 +23,7 @@ export default {
       "invalidDates": "Choose valid dates, with start no later than end and at most 366 days apart.",
       "exported": "The audit file was handed to the browser for download."
   },
-  adminMigration: {"organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
+  adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
     "title": "Organization",
     "description": "Manage this enterprise organization tree, department status and member positions.",

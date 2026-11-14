@@ -104,4 +104,4 @@
 
 日期导出沿用既有 JSONL 接口，按 UTC 自然日含首尾，开始不晚于结束且日期差最多 366 天。认证请求层取得 NDJSON Blob 后交由浏览器下载；文件包含服务端哈希链，导出操作自身被审计。这里不提供正文查看功能，`audit:read_content` 不能替代 `audit:read`。
 
-切换企业/账号/权限代次或离开页面后，旧列表、详情与导出响应失效，不能下载旧企业文件；导出失败与列表失败分别反馈。页面为 `src/views/audit/AuditPage.vue`，编排在 `useAuditAdministration.ts`，客户端为 `core/src/api/enterprise-audit.ts`。工作台旧成员页仍有其他待承接能力，本批不整页删除。
+切换企业/账号/权限代次或离开页面后，旧列表、详情与导出响应失效，不能下载旧企业文件；导出失败与列表失败分别反馈。页面为 `src/views/audit/AuditPage.vue`，编排在 `useAuditAdministration.ts`，客户端为 `core/src/api/enterprise-audit.ts`。工作台旧成员治理页已移除，成员/审批/审计由管理端承接，个人成员身份与退出由账户资料承接；其他管理配置迁移仍待后续。

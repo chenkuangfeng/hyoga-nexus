@@ -29,7 +29,7 @@ test('设置地址清除旧集成与平台参数，并保留正常设置', () =>
 test('迁移的部门书签有明确管理应用入口，开发与生产链接保留部署边界', async () => {
   const { adminOrganizationLocation, isMigratedAdminSection } = await import('./settingsRoute')
   assert.equal(isMigratedAdminSection('org-structure'), true)
-  assert.equal(isMigratedAdminSection('members'), false)
+  assert.equal(isMigratedAdminSection('members'), true)
   assert.equal(adminOrganizationLocation('/', 'http://192.0.2.1:5173', true), 'http://192.0.2.1:5174/admin/organization')
   assert.equal(adminOrganizationLocation('/nexus/', 'https://example.test', false), '/nexus/admin/organization')
   assert.equal(adminOrganizationLocation('/', 'https://example.test', false), '/admin/organization')
@@ -65,4 +65,12 @@ test('旧 /platform/tenant 实际路由落到账户资料，保留成员身份�
   await router.push('/platform/tenant')
   assert.equal(router.currentRoute.value.path,'/platform/settings')
   assert.equal(router.currentRoute.value.query.section,'userprofile')
+})
+
+test('旧成员管理书签属于迁移说明，管理端成员和审计链接保持独立应用地址', async () => {
+ const {isMigratedAdminSection,adminSettingsLocation}=await import('./settingsRoute')
+ assert.equal(isMigratedAdminSection('members'),true)
+ assert.equal(adminSettingsLocation('/','http://192.0.2.1:5173',true,'members'),'http://192.0.2.1:5174/admin/members')
+ assert.equal(adminSettingsLocation('/nexus/','https://example.test',false,'audit'),'/nexus/admin/audit')
+ assert.equal(normalizeSettingsSection('members'),'members')
 })

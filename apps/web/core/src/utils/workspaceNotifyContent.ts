@@ -11,7 +11,7 @@
 //     would be double-emphasis.
 //   * The role is a categorical attribute and benefits from a visible
 //     coloured tag, so it goes through TDesign's <t-tag> with the same
-//     role→theme mapping used by TenantMembers (settings). This keeps
+//     shared role→theme mapping for member notifications. This keeps
 //     "what an owner / admin / contributor / viewer looks like"
 //     consistent across the product instead of inventing a parallel
 //     chip palette.
@@ -25,7 +25,7 @@
 import { h, type VNode } from 'vue'
 import { Tag as TTag, Icon as TIcon } from 'tdesign-vue-next'
 
-// Mirror TenantMembers.roleTagTheme() so the "owner is blue, admin is
+// Keep the shared role tag convention so the "owner is blue, admin is
 // orange, ..." identity stays consistent across surfaces. If that map
 // changes there, change it here too (or, longer term, lift both into
 // useRoleLabel).

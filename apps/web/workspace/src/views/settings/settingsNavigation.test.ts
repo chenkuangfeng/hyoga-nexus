@@ -90,3 +90,11 @@ test('旧企业治理页不再随工作台设置加载，账户资料保留本�
   const profile=readFileSync(new URL('./UserProfile.vue',import.meta.url),'utf8')
   assert.ok(profile.includes('CurrentEnterpriseMembership'))
 })
+
+test('工作台不再打包旧成员治理页或独占审批组件，普通入口不保留成员管理导航', () => {
+ const groups=runInNewContext(`${compiled}\nnavGroups.value`,{computed,navItems:{value:['members','chathistory'].map(key=>({key}))},t:(key:string)=>key}) as Array<{items:Array<{key:string}>}>
+ assert.equal(groups.some(group=>group.items.some(item=>item.key==='members')),false)
+ assert.equal(existsSync(new URL('./TenantMembers.vue',import.meta.url)),false)
+ assert.equal(existsSync(new URL('../../components/tenant/JoinApplicationsPanel.vue',import.meta.url)),false)
+ assert.equal(source.includes('import TenantMembers'),false)
+})
