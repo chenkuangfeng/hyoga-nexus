@@ -1,4 +1,43 @@
 export default {
+  adminKnowledge: {
+    "title": "Enterprise knowledge bases",
+    "description": "View enterprise knowledge bases and assign content maintainers.",
+    "scopeHint": "Only visible knowledge bases owned by this enterprise are shown. Personal and externally shared bases are excluded. Existing visibility rules apply.",
+    "search": "Search knowledge base name or description",
+    "noDescription": "No description",
+    "documents": "{count} documents",
+    "maintainers": "Knowledge base maintainers",
+    "maintainerHint": "Maintainers can edit content such as documents, chunks and FAQ. They do not gain control over settings, visibility, deletion or sharing.",
+    "types": {
+        "document": "Document",
+        "faq": "FAQ",
+        "wiki": "Wiki"
+    },
+    "visibility": {
+        "private": "Private",
+        "tenant": "Enterprise-wide",
+        "scoped": "Selected audience"
+    },
+    "noMatch": "No matching enterprise knowledge bases",
+    "empty": "No visible enterprise knowledge bases",
+    "member": "Member",
+    "grantedAt": "Assigned at",
+    "actions": "Actions",
+    "remove": "Revoke maintainer",
+    "add": "Assign maintainer",
+    "noMaintainers": "No knowledge base maintainers assigned.",
+    "membersDenied": "Member directory access is required to choose new maintainers. You can still view and revoke existing maintainers.",
+    "membersFailed": "The member directory failed to load. Refresh to retry. Existing maintainers can still be revoked.",
+    "chooseMember": "Choose enterprise member",
+    "noCandidates": "No active members available to add.",
+    "editorPending": "This page currently supports the directory and maintainer assignment. Enterprise creation, settings and content management are not available here yet.",
+    "addConfirm": "Assign “{member}” as a maintainer of “{kb}”? This grants content maintenance only, without settings, visibility, deletion or sharing management.",
+    "removeConfirm": "Revoke “{member}” as a maintainer of “{kb}”? Capabilities from enterprise management roles or other sources may remain effective.",
+    "added": "Maintainer assigned.",
+    "removed": "Maintainer revoked.",
+    "refreshFailed": "Revocation succeeded, but the maintainer list failed to refresh. Refresh to retry.",
+    "open": "Manage knowledge bases"
+  },
   adminAgents: {
     "title": "Enterprise agents",
     "description": "Configure, publish and archive enterprise agents.",

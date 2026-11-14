@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 管理端桌面外壳：企业切换、服务端权限导航、独立业务路由。 */
+/** 管理端外壳：企业切换、服务端权限导航、独立业务路由。 */
 import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -8,6 +8,7 @@ import { logout } from '@nexus-web/core/api/auth'
 import { useAdminContext } from './stores/context'
 // 管理端仅复用公共契约，不引入工作台的会话、邀请和资源状态。
 const collapsed = ref(false), accountOpen = ref(false)
+let narrow = false
 const accountRoot = ref<HTMLElement | null>(null), accountButton = ref<HTMLButtonElement | null>(null)
 const preferenceKey = 'nexus.admin.sidebar.collapsed'
 const userName = computed(() => auth.user?.username || auth.user?.email || '')
@@ -27,12 +28,21 @@ function onPointerDown(event: PointerEvent) {
 function onKeyDown(event: KeyboardEvent) {
   if (event.key === 'Escape' && accountOpen.value) { event.preventDefault(); closeAccount(true) }
 }
+/** 首次进入手机宽度时收起侧栏；不覆写用户的桌面偏好，手机内仍可手动展开。 */
+function onResize() {
+  const next = window.innerWidth <= 600
+  if (next && !narrow) { collapsed.value = true; closeAccount() }
+  narrow = next
+}
 onMounted(() => {
   try { collapsed.value = localStorage.getItem(preferenceKey) === 'true' } catch { /* 使用默认展开态。 */ }
+  onResize()
+  window.addEventListener('resize', onResize)
   window.addEventListener('pointerdown', onPointerDown)
   window.addEventListener('keydown', onKeyDown)
 })
 onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
   window.removeEventListener('pointerdown', onPointerDown)
   window.removeEventListener('keydown', onKeyDown)
 })
@@ -81,6 +91,7 @@ async function signOut() {
           <RouterLink v-if="context.can('org:manage')" class="nav-item" to="/organization" active-class="active" :aria-label="t('adminOrganization.title')" :title="collapsed ? t('adminOrganization.title') : undefined"><t-icon name="view-organization" class="nav-icon" /><span v-if="!collapsed">{{ t('adminOrganization.title') }}</span></RouterLink>
           <RouterLink v-if="context.can('members:manage')" class="nav-item" to="/members" active-class="active" :aria-label="t('adminMembers.title')" :title="collapsed ? t('adminMembers.title') : undefined"><t-icon name="usergroup" class="nav-icon" /><span v-if="!collapsed">{{ t('adminMembers.title') }}</span></RouterLink>
           <RouterLink v-if="context.can('roles:manage')" class="nav-item" to="/roles" active-class="active" :aria-label="t('adminRoles.title')" :title="collapsed ? t('adminRoles.title') : undefined"><t-icon name="user-safety" class="nav-icon" /><span v-if="!collapsed">{{ t('adminRoles.title') }}</span></RouterLink>
+          <RouterLink v-if="context.can('enterprise_kbs:manage')" class="nav-item" to="/knowledge" active-class="active" :aria-label="t('adminKnowledge.title')" :title="collapsed ? t('adminKnowledge.title') : undefined"><t-icon name="folder" class="nav-icon" /><span v-if="!collapsed">{{ t('adminKnowledge.title') }}</span></RouterLink>
           <RouterLink v-if="context.can('enterprise_agents:manage')" class="nav-item" to="/agents" active-class="active" :aria-label="t('adminAgents.title')" :title="collapsed ? t('adminAgents.title') : undefined"><t-icon name="app" class="nav-icon" /><span v-if="!collapsed">{{ t('adminAgents.title') }}</span></RouterLink>
           <RouterLink v-if="context.can('audit:read')" class="nav-item" to="/audit" active-class="active" :aria-label="t('adminAudit.title')" :title="collapsed ? t('adminAudit.title') : undefined"><t-icon name="file-search" class="nav-icon" /><span v-if="!collapsed">{{ t('adminAudit.title') }}</span></RouterLink>
           <RouterLink v-if="context.can('policy:manage')" class="nav-item" to="/policy" active-class="active" :aria-label="t('adminConsole.policy')" :title="collapsed ? t('adminConsole.policy') : undefined"><t-icon name="setting" class="nav-icon" /><span v-if="!collapsed">{{ t('adminConsole.policy') }}</span></RouterLink>

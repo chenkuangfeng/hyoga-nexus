@@ -8,14 +8,15 @@ function setup(t: Parameters<typeof fixture>[0], authenticated = true) {
   const paths: string[] = []
   const auth = reactive({ effectiveTenantId: 'a', currentEntries: ['admin'], memberships: [{ tenant_id: 'a', tenant_name: 'A' }, { tenant_id: 'b', tenant_name: 'B' }],
     setSelectedTenant(id: string) { this.effectiveTenantId = id }, refreshFromAuthMe: async () => authenticated, logout() { logouts++ } })
-  const mounted = fixture(t).component(new URL('./AdminLayout.vue', import.meta.url), {
+  const f = fixture(t)
+  const mounted = f.component(new URL('./AdminLayout.vue', import.meta.url), {
     '@nexus-web/core/stores/auth': { useAuthStore: () => auth },
     './stores/context': { useAdminContext: () => ({ invalidate: () => { invalidations++ }, load: async () => { loads++ } }) },
     '@nexus-web/core/api/auth': { logout: async () => { throw new Error('offline') } },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     'vue-router': { useRouter: () => ({ replace: async (path: string) => { paths.push(path) } }) },
   })
-  return { ...mounted, auth, paths, invalidations: () => invalidations, loads: () => loads, logouts: () => logouts }
+  return { ...mounted, window: f.window, auth, paths, invalidations: () => invalidations, loads: () => loads, logouts: () => logouts }
 }
 
 test('企业切换只接受成员列表中的企业，重新校准身份后再读取权限', async t => {
@@ -55,4 +56,15 @@ test('折叠状态独立切换，关闭用户弹层可恢复触发按钮焦点',
   await import('vue').then(vue => vue.nextTick())
   assert.equal(s.vm.accountOpen, false)
   assert.equal(focused, true)
+})
+
+test('进入手机宽度自动收起侧栏，允许手动展开且不被同宽 resize 覆盖', async t => {
+  const s = setup(t)
+  s.vm.accountOpen = true
+  s.window.innerWidth = 375; s.window.dispatchEvent(new Event('resize'))
+  assert.equal(s.vm.collapsed, true); assert.equal(s.vm.accountOpen, false)
+  s.vm.toggleSidebar(); assert.equal(s.vm.collapsed, false)
+  s.window.dispatchEvent(new Event('resize')); assert.equal(s.vm.collapsed, false)
+  s.window.innerWidth = 1200; s.window.dispatchEvent(new Event('resize'))
+  s.window.innerWidth = 375; s.window.dispatchEvent(new Event('resize')); assert.equal(s.vm.collapsed, true)
 })

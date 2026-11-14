@@ -13,6 +13,7 @@ const { t } = useI18n(), auth = useAuthStore(), context = useAdminContext()
       <SettingsRow v-if="context.can('members:manage')" :label="t('adminMembers.title')" :description="t('adminMembers.description')"><RouterLink class="settings-entry" to="/members">{{ t('adminMembers.open') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
       <SettingsRow v-if="context.can('org:manage')" :label="t('adminOrganization.title')" :description="t('adminOrganization.description')"><RouterLink class="settings-entry" to="/organization">{{ t('adminOrganization.open') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
       <SettingsRow v-if="context.can('enterprise_agents:manage')" :label="t('adminAgents.title')" :description="t('adminAgents.description')"><RouterLink class="settings-entry" to="/agents">{{ t('adminAgents.open') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
+      <SettingsRow v-if="context.can('enterprise_kbs:manage')" :label="t('adminKnowledge.title')" :description="t('adminKnowledge.description')"><RouterLink class="settings-entry" to="/knowledge">{{ t('adminKnowledge.open') }}<t-icon name="chevron-right" /></RouterLink></SettingsRow>
     </div>
     <t-alert theme="info" :message="t('adminConsole.planned')" />
   </section>

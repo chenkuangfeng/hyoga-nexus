@@ -1,4 +1,43 @@
 export default {
+  adminKnowledge: {
+    "title": "企业知识库",
+    "description": "查看企业知识库并指定内容管理员。",
+    "scopeHint": "仅显示当前可见且归属本企业的知识库，不包含个人库和其他企业共享来的库。列表受现有可见性规则过滤。",
+    "search": "搜索知识库名称或描述",
+    "noDescription": "暂无描述",
+    "documents": "{count} 个文档",
+    "maintainers": "知识库管理员",
+    "maintainerHint": "知识库管理员可以维护文档、分块、问答等内容，不获得设置、可见范围、删除或共享的管理权。",
+    "types": {
+        "document": "文档库",
+        "faq": "问答库",
+        "wiki": "Wiki 库"
+    },
+    "visibility": {
+        "private": "私有可见",
+        "tenant": "全企业可见",
+        "scoped": "指定范围可见"
+    },
+    "noMatch": "没有匹配的企业知识库",
+    "empty": "暂无可见的企业知识库",
+    "member": "成员",
+    "grantedAt": "指定时间",
+    "actions": "操作",
+    "remove": "撤销管理员",
+    "add": "指定管理员",
+    "noMaintainers": "尚未指定知识库管理员。",
+    "membersDenied": "没有读取企业成员名单的权限，暂不能选择新增管理员；仍可查看和撤销已有管理员。",
+    "membersFailed": "成员名单加载失败，暂不能新增管理员；可刷新重试，已有管理员仍可撤销。",
+    "chooseMember": "选择企业成员",
+    "noCandidates": "当前没有可新增的活跃成员。",
+    "editorPending": "本页当前支持目录和管理员指定；企业知识库创建、设置和内容管理暂不可用。",
+    "addConfirm": "将「{member}」指定为「{kb}」的知识库管理员？这只授予内容维护权，不授予设置、可见范围、删除或共享的管理权。",
+    "removeConfirm": "撤销「{member}」在「{kb}」中的知识库管理员身份？通过企业管理角色等其他来源获得的能力仍可能有效。",
+    "added": "已指定知识库管理员。",
+    "removed": "已撤销知识库管理员。",
+    "refreshFailed": "撤销已成功，但管理员列表刷新失败，请刷新重试。",
+    "open": "管理知识库"
+  },
   adminAgents: {
     "title": "企业智能体",
     "description": "管理企业智能体的配置、发布版本与归档。",
