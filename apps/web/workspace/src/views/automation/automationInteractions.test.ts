@@ -29,7 +29,7 @@ function setup(t: TestContext, file: string, api: Record<string, unknown>, props
     '@nexus-web/core/stores/auth': { useAuthStore: () => ({ hasRole: () => false, currentUserId: 'me', effectiveTenantId: 'tenant-1' }) },
     '@nexus-web/core/api/nexus-agents': { listNexusAgents: async () => [{ id: 'agent-1', name: 'Helper', published_version_id: 'v1' }, { id: 'agent-2', name: 'Draft only', published_version_id: null }] },
     '@/utils/automationSchedule': schedule,
-    '@/composables/useModalShell': { useModalShell: () => ({ markClean() {}, requestClose() {} }) },
+    '@nexus-web/core/composables/useModalShell': { useModalShell: () => ({ markClean() {}, requestClose() {} }) },
     ...extra,
   }, props)
   const { descriptor } = parse(readFileSync(url, 'utf8'))

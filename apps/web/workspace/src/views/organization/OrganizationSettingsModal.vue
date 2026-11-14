@@ -755,7 +755,7 @@ import BrandMaskIcon from '@/components/BrandMaskIcon.vue'
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { useModalShell } from '@/composables/useModalShell'
+import { useModalShell } from '@nexus-web/core/composables/useModalShell'
 import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import { useI18n } from 'vue-i18n'
 import { copyWithToast } from '@/utils/clipboard'
@@ -773,7 +773,7 @@ import {
 } from '@nexus-web/core/api/organization/index'
 import { useOrganizationStore } from '@nexus-web/core/stores/organization'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
-import SpaceAvatar from '@/components/SpaceAvatar.vue'
+import SpaceAvatar from '@nexus-web/core/components/SpaceAvatar.vue'
 import agentIconSrc from '@/assets/img/agent.svg'
 
 const router = useRouter()

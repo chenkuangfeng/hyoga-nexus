@@ -167,7 +167,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import VectorStoreBadge from '@/components/VectorStoreBadge.vue'
+import VectorStoreBadge from '@nexus-web/core/components/VectorStoreBadge.vue'
 import { useOrganizationStore } from '@nexus-web/core/stores/organization'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { formatStringDate } from '@nexus-web/core/utils/index'

@@ -5,7 +5,7 @@ import test from 'node:test'
 const listSource = readFileSync(new URL('./OrganizationList.vue', import.meta.url), 'utf8')
 const settingsSource = readFileSync(new URL('./OrganizationSettingsModal.vue', import.meta.url), 'utf8')
 const kbShareSource = readFileSync(
-  new URL('../knowledge/settings/KBShareSettings.vue', import.meta.url),
+  new URL('../../../../core/src/components/knowledge-editor/settings/KBShareSettings.vue', import.meta.url),
   'utf8'
 )
 const agentShareSource = readFileSync(

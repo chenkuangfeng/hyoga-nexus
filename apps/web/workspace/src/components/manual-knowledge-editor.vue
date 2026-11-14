@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import { marked } from 'marked'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import { registerUnsavedChanges } from '@/utils/unsavedChanges'
+import { registerUnsavedChanges } from '@nexus-web/core/utils/unsavedChanges'
 import { useUIStore } from '@/stores/ui'
 import {
   getKnowledgeDetails,

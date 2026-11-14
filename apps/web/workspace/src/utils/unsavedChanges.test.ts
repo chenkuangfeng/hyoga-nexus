@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { hasUnsavedChanges, registerUnsavedChanges } from './unsavedChanges'
+import { hasUnsavedChanges, registerUnsavedChanges } from '@nexus-web/core/utils/unsavedChanges'
 
 test('any registered editor with changes counts until it unregisters', () => {
   let dirty = false

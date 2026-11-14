@@ -202,7 +202,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import ModelSelector from '@/components/ModelSelector.vue'
+import ModelSelector from '@nexus-web/core/components/ModelSelector.vue'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { getTenantMemoryConfig, updateTenantMemoryConfig, type MemoryConfig } from '@nexus-web/core/api/memory'

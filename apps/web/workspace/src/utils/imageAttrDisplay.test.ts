@@ -9,7 +9,7 @@ import jaJP from '@nexus-web/core/i18n/locales/ja-JP'
 import koKR from '@nexus-web/core/i18n/locales/ko-KR'
 import ruRU from '@nexus-web/core/i18n/locales/ru-RU'
 import zhCN from '@nexus-web/core/i18n/locales/zh-CN'
-import { imageAttrConditionDisplay, imageAttrDisplay, imageAttrKeyBase } from './imageAttrDisplay.ts'
+import { imageAttrConditionDisplay, imageAttrDisplay, imageAttrKeyBase } from '@nexus-web/core/utils/imageAttrDisplay.ts'
 
 const SPEC: ImageAttrSpec = {
   name: 'contain.text',

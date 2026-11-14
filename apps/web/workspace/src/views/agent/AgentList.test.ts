@@ -27,7 +27,7 @@ function setup(t: TestContext) {
     '@/composables/useResourcePins': { useResourcePins: () => ({ favorites: vue.ref([]), recents: vue.ref([]) }) },
 
     '@nexus-web/core/api/agent/index': {}, '@nexus-web/core/api/chat/index': {}, '@nexus-web/core/api/organization/index': {},
-    '@/config/contextualGuides': {}, '@/config/settingsRoute': {},
+    '@nexus-web/core/config/contextualGuides': {}, '@/config/settingsRoute': {},
     '@/utils/resourceListSearch': {}, '@/utils/card-list-badge': {}, '@/utils/resourceSorting': sorting,
   })
   return { ...f, ...page, fetchAgentsForList }

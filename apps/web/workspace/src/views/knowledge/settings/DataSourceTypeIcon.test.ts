@@ -18,7 +18,7 @@ before(async () => {
     resolve: { alias: { '@': fileURLToPath(new URL('../../../', import.meta.url)) } },
     server: { middlewareMode: true }, appType: 'custom',
   })
-  Icon = (await server.ssrLoadModule('/src/views/knowledge/settings/DataSourceTypeIcon.vue')).default
+  Icon = (await server.ssrLoadModule(fileURLToPath(new URL('../../../../../core/src/components/knowledge-editor/settings/DataSourceTypeIcon.vue', import.meta.url)))).default
 })
 after(async () => { await server?.close() })
 

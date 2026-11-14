@@ -5,14 +5,14 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import SpotlightGuide from '@/components/SpotlightGuide.vue'
+import SpotlightGuide from '@nexus-web/core/components/SpotlightGuide.vue'
 import {
   CONTEXTUAL_GUIDE_TOURS,
   isContextualGuideDone,
   isGlobalUserGuideDone,
   type ContextualGuideTourConfig,
   type ContextualGuideTourId,
-} from '@/config/contextualGuides'
+} from '@nexus-web/core/config/contextualGuides'
 
 const props = defineProps<{
   tour: ContextualGuideTourId

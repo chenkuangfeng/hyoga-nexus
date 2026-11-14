@@ -1,5 +1,9 @@
 export default {
   adminKnowledge: {
+    create: 'Create enterprise knowledge base',
+    edit: 'Edit settings',
+    editorVisibility: 'Visibility',
+    settingsUnavailable: 'This settings entry is not available in the admin app yet. Existing configurations can still be selected.',
     "title": "Enterprise knowledge bases",
     "description": "View enterprise knowledge bases and assign content maintainers.",
     "scopeHint": "Only visible knowledge bases owned by this enterprise are shown. Personal and externally shared bases are excluded. Existing visibility rules apply.",
@@ -30,7 +34,7 @@ export default {
     "membersFailed": "The member directory failed to load. Refresh to retry. Existing maintainers can still be revoked.",
     "chooseMember": "Choose enterprise member",
     "noCandidates": "No active members available to add.",
-    "editorPending": "This page currently supports the directory and maintainer assignment. Enterprise creation, settings and content management are not available here yet.",
+    "editorPending": "This page supports enterprise creation, full settings and maintainer assignment. Content management and deletion are not available here yet.",
     "addConfirm": "Assign “{member}” as a maintainer of “{kb}”? This grants content maintenance only, without settings, visibility, deletion or sharing management.",
     "removeConfirm": "Revoke “{member}” as a maintainer of “{kb}”? Capabilities from enterprise management roles or other sources may remain effective.",
     "added": "Maintainer assigned.",

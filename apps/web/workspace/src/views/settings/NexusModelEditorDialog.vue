@@ -116,7 +116,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import {
   addModel, createProvider, editModel, testDraftConnection, updateProvider,
   type ModelSettingsView, type NexusModelType,

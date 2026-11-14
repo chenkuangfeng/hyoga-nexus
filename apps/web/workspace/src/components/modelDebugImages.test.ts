@@ -36,7 +36,7 @@ async function fixture(type: string, images = true, legacyVision = false) {
       if (name === '@/stores/modelProviders') return { useModelProvidersStore: () => ({ ensureLoaded: async () => {}, labelFor: () => '' }) }
       if (name === '@nexus-web/core/utils/index') return { fileSizeVerification: () => false }
       if (name === '@/utils/reasoningEffort') return require('../utils/reasoningEffort.ts')
-      if (name === '@/utils/contextWindow') return require('../utils/contextWindow.ts')
+      if (name === '@nexus-web/core/utils/contextWindow') return require('../../../core/src/utils/contextWindow.ts')
       if (name === 'tdesign-vue-next') return { MessagePlugin: { error() {} } }
       return { default: {} }
     },

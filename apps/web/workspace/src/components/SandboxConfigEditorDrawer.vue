@@ -782,10 +782,10 @@
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import SandboxBackendBadge from '@/components/settings/SandboxBackendBadge.vue'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
-import { docsUrl } from '@/utils/docsUrl'
+import { docsUrl } from '@nexus-web/core/utils/docsUrl'
 import {
   checkSandboxConfig,
   createSandboxConfig,

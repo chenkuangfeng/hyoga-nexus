@@ -9,7 +9,7 @@ import ts from 'typescript'
 import { createRenderer, h, nextTick, reactive, ref } from 'vue'
 
 const require = createRequire(import.meta.url)
-const filename = fileURLToPath(new URL('./DataSourceEditorDialog.vue', import.meta.url))
+const filename = fileURLToPath(new URL('../../../../../core/src/components/knowledge-editor/settings/DataSourceEditorDialog.vue', import.meta.url))
 const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
 const script = compileScript(descriptor, { id: 'datasource-editor-test' }).content
   .replace('__expose();', '')
@@ -87,6 +87,7 @@ async function fixture({
   runInNewContext(compiled, {
     exports,
     require(name: string) {
+      if (name === '../scopedApi') return { useScopedApi: (api: unknown) => api }
       if (name === 'vue') return require('vue')
       if (name === 'vue-i18n') return { useI18n: () => ({ t: (key: string) => key }) }
       if (name === 'tdesign-vue-next') return { MessagePlugin: { warning(msg: string) { warnings.push(msg) }, success() {}, error() {} } }

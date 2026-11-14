@@ -745,7 +745,7 @@ import type { SharedAgentInfo, OrganizationSharedAgentItem } from '@nexus-web/co
 import AgentEditorModal from './AgentEditorModal.vue'
 import ContextualGuide from '@/components/ContextualGuide.vue'
 import TenantModelsGuide from '@/components/TenantModelsGuide.vue'
-import { focusAgentEditorSection, markContextualGuideDone } from '@/config/contextualGuides'
+import { focusAgentEditorSection, markContextualGuideDone } from '@nexus-web/core/config/contextualGuides'
 import { useTenantModelReadiness } from '@/composables/useTenantModelReadiness'
 import { useUIStore } from '@/stores/ui'
 import ResourceCardAvatar from '@/components/ResourceCardAvatar.vue'

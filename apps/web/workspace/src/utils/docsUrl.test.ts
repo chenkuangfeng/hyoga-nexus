@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { DOC_PAGES, docsUrl } from './docsUrl'
+import { DOC_PAGES, docsUrl } from '@nexus-web/core/utils/docsUrl'
 
 const WEBSITE_DOCS = resolve(dirname(fileURLToPath(import.meta.url)), '../../../website-docs')
 

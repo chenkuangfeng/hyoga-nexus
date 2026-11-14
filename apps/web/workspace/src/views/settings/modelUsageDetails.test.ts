@@ -5,7 +5,7 @@ import test from 'node:test'
 const source = readFileSync(new URL('./ModelSettings.vue', import.meta.url), 'utf8')
 const agentListSource = readFileSync(new URL('../agent/AgentList.vue', import.meta.url), 'utf8')
 const knowledgeBaseEditorSource = readFileSync(
-  new URL('../knowledge/KnowledgeBaseEditorModal.vue', import.meta.url),
+  new URL('../../../../core/src/components/knowledge-editor/KnowledgeBaseEditorModal.vue', import.meta.url),
   'utf8',
 )
 const agentEditorSource = readFileSync(new URL('../agent/AgentEditorModal.vue', import.meta.url), 'utf8')
@@ -38,8 +38,8 @@ test('referenced knowledge bases and agents open their relevant configuration pa
   // 加载遮罩由 SettingsModalShell 的 :loading 渲染（旧写法是模板内 v-if），两种都接受
   assert.match(agentEditorSource, /(?:v-if|:loading)="editorInitializing"[\s\S]*:disabled="editorInitializing"/)
   assert.match(agentEditorSource, /generation !== editorInitializationGeneration \|\| !props\.visible/)
-  assert.match(knowledgeBaseEditorSource, /(?:v-if|:loading)="loading"[\s\S]*:disabled="loading"/)
+  assert.match(knowledgeBaseEditorSource, /(?:v-if|:loading)="loading"[\s\S]*:disabled="loading[^\"]*"/)
   assert.match(knowledgeBaseEditorSource, /isCurrentKBLoad\(generation, kbId\)/)
-  assert.match(knowledgeBaseEditorSource, /generation !== kbEditorLoadGeneration \|\| !props\.visible/)
+  assert.match(knowledgeBaseEditorSource, /isCurrentGeneration\(generation\)/)
   assert.match(knowledgeBaseEditorSource, /setTimeout\(\(\) => \{\s*if \(props\.visible\) return\s*resetState\(\)/)
 })

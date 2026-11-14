@@ -8,7 +8,7 @@ import {
   formatTokenCount,
   isDefaultContextWindow,
   modelHasContextWindow,
-} from './contextWindow.ts'
+} from '@nexus-web/core/utils/contextWindow.ts'
 
 test('effectiveContextWindow falls back to 200K', () => {
   assert.equal(effectiveContextWindow(undefined), DEFAULT_MODEL_CONTEXT_WINDOW)

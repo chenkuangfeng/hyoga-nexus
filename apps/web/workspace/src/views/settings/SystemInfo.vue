@@ -199,7 +199,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { SystemInfo } from '@nexus-web/core/api/system/index'
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources'
 import { useI18n } from 'vue-i18n'
-import { docsUrl } from '@/utils/docsUrl'
+import { docsUrl } from '@nexus-web/core/utils/docsUrl'
 
 const { t, locale } = useI18n()
 

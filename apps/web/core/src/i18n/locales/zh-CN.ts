@@ -1,5 +1,9 @@
 export default {
   adminKnowledge: {
+    create: '创建企业知识库',
+    edit: '编辑设置',
+    editorVisibility: '可见范围',
+    settingsUnavailable: '此设置入口暂未接入企业管理后台，已有配置仍可选择。',
     "title": "企业知识库",
     "description": "查看企业知识库并指定内容管理员。",
     "scopeHint": "仅显示当前可见且归属本企业的知识库，不包含个人库和其他企业共享来的库。列表受现有可见性规则过滤。",
@@ -30,7 +34,7 @@ export default {
     "membersFailed": "成员名单加载失败，暂不能新增管理员；可刷新重试，已有管理员仍可撤销。",
     "chooseMember": "选择企业成员",
     "noCandidates": "当前没有可新增的活跃成员。",
-    "editorPending": "本页当前支持目录和管理员指定；企业知识库创建、设置和内容管理暂不可用。",
+    "editorPending": "本页支持企业知识库创建、完整设置和管理员指定；内容管理与删除入口尚待接入。",
     "addConfirm": "将「{member}」指定为「{kb}」的知识库管理员？这只授予内容维护权，不授予设置、可见范围、删除或共享的管理权。",
     "removeConfirm": "撤销「{member}」在「{kb}」中的知识库管理员身份？通过企业管理角色等其他来源获得的能力仍可能有效。",
     "added": "已指定知识库管理员。",

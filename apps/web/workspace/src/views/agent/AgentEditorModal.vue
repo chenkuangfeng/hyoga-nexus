@@ -1870,13 +1870,13 @@ import AgentCreateContextualGuide from '@/components/AgentCreateContextualGuide.
 import {
   AGENT_EDITOR_FOCUS_SECTION_EVENT,
   markContextualGuideDone,
-} from '@/config/contextualGuides';
+} from '@nexus-web/core/config/contextualGuides';
 import { useI18n } from 'vue-i18n';
-import { selectInitialModelId } from '@/utils/modelDefaults';
+import { selectInitialModelId } from '@nexus-web/core/utils/modelDefaults';
 import { hydrateAgentPromptRefs, serializeAgentPrompts } from '@/utils/agentPromptTemplates';
 import { copyWithToast } from '@/utils/clipboard';
 import { MessagePlugin } from 'tdesign-vue-next';
-import { useModalShell } from '@/composables/useModalShell'
+import { useModalShell } from '@nexus-web/core/composables/useModalShell'
 import SettingsModalShell from '@nexus-web/core/components/SettingsModalShell.vue'
 import {
   createAgent,
@@ -1913,10 +1913,10 @@ import { HOST_SKILL_TARGET_ID, hostSkillTargetRecord, hostSkillsOnly } from '@/u
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources';
 import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue';
 import PromptTemplateSelector from '@/components/PromptTemplateSelector.vue';
-import ModelSelector from '@/components/ModelSelector.vue';
+import ModelSelector from '@nexus-web/core/components/ModelSelector.vue';
 import SandboxSkillsPanel from '@/components/SandboxSkillsPanel.vue';
-import SettingDrawer from '@/components/settings/SettingDrawer.vue';
-import KBParserSettings, { type ParserEngineRule } from '@/views/knowledge/settings/KBParserSettings.vue';
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue';
+import KBParserSettings, { type ParserEngineRule } from '@nexus-web/core/components/knowledge-editor/settings/KBParserSettings.vue';
 import AgentShareSettings from '@/components/AgentShareSettings.vue';
 import { SKILL_ICON } from '@/types/mention';
 import { listEmbedChannels } from '@nexus-web/core/api/embed/index';

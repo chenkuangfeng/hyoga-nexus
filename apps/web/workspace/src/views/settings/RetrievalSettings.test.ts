@@ -47,7 +47,7 @@ async function editConfig(
     vue: { ...vue, onMounted: (callback: () => Promise<void>) => { mounted = callback } },
     'tdesign-vue-next': { MessagePlugin: { success() {}, error() {} } },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
-    '@/components/ModelSelector.vue': {},
+    '@nexus-web/core/components/ModelSelector.vue': {},
     '@nexus-web/core/stores/auth': { useAuthStore: () => ({ hasRole: () => canEdit }) },
     '@nexus-web/core/api/retrieval': {
       getTenantRetrievalConfig: async () => ({ data: config }),

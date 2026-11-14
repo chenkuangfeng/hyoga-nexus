@@ -5,14 +5,14 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import SpotlightGuide from '@/components/SpotlightGuide.vue'
+import SpotlightGuide from '@nexus-web/core/components/SpotlightGuide.vue'
 import {
   isContextualGuideDone,
   isGlobalUserGuideDone,
   markContextualGuideDone,
-} from '@/config/contextualGuides'
+} from '@nexus-web/core/config/contextualGuides'
 import { useUIStore } from '@/stores/ui'
-import type { SpotlightGuideStep } from '@/types/spotlightGuide'
+import type { SpotlightGuideStep } from '@nexus-web/core/types/spotlightGuide'
 
 const props = withDefaults(
   defineProps<{

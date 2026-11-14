@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const source = readFileSync(new URL('./KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../../../../core/src/components/knowledge-editor/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
 
 test('editing a knowledge base closes the editor after a successful save', () => {
-  assert.match(source, /emit\('success', kbId\)\s*handleClose\(\)/)
+  assert.match(source, /emit\('success', kbId\)[\s\S]{0,100}handleClose\(\)/)
 })
 
 test('the first successful create stays open for follow-up configuration', () => {
@@ -40,13 +40,7 @@ test('create mode seeds the full default image actions table', () => {
   assert.match(initBlock, /mergeImageActions\(\)/)
 })
 
-test('edit mode forwards image_processing_config in the update payload', () => {
-  // Regression: the edit branch built data.image_processing_config but never
-  // put it into updateConfig, so KB-editor changes to the image classification
-  // settings were silently dropped (create worked, later edits did not).
-  const editBranch = source.match(
-    /(\/\/ 编辑模式：分别更新基本信息[\s\S]*?await updateKnowledgeBase\(kbId, \{)/
-  )?.[1]
-  assert.ok(editBranch, 'expected to find the edit-mode update block')
-  assert.match(editBranch, /if \(data\.image_processing_config\) \{\s*updateConfig\.image_processing_config = data\.image_processing_config\s*\}/)
+test('edit mode submits the complete built configuration through one scoped update', () => {
+  assert.match(source, /await updateEditableKnowledge\(tenant, kbId, \{ \.\.\.data, visibility: visibility.value \}, settingsSnapshot.value/)
+  assert.doesNotMatch(source, /await updateKBConfig\(/)
 })

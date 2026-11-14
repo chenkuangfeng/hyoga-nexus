@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const source = readFileSync(new URL('./SettingDrawer.vue', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../../../../core/src/components/settings/SettingDrawer.vue', import.meta.url), 'utf8')
 
 test('the title row hosts compact header actions without replacing the step rail', () => {
   assert.match(source, /headerActionsId/)

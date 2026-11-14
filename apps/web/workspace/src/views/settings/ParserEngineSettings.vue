@@ -410,7 +410,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { MessagePlugin } from 'tdesign-vue-next'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import {
   getParserEngines,
   getParserEngineConfig,

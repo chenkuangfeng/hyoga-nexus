@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: 企业知识库目录与内容管理员指定
-管理应用 SHALL 根据当前企业服务端 `enterprise_kbs:manage` 展示可见的本企业 enterprise 知识库，不混入个人库与外部共享库。管理员操作 SHALL 尊重资源 `can_manage`，沿用既有指定与撤销接口并显示授予范围；本批 SHALL 明确企业创建、完整设置及内容管理尚未接入。
+管理应用 SHALL 根据当前企业服务端 `enterprise_kbs:manage` 展示可见的本企业 enterprise 知识库，不混入个人库与外部共享库。管理员操作 SHALL 尊重资源 `can_manage`，沿用既有指定与撤销接口并显示授予范围。完整设置编辑由 `enterprise-knowledge-editor` 规格定义；本需求范围仍不包含知识库内容管理、删除及共享治理。
 
 #### Scenario: 按姓名选择内容管理员
 - **WHEN** 管理者具有成员目录权限并已成功读取管理员与活跃成员

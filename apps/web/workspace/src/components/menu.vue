@@ -251,7 +251,7 @@ import feishuLogo from '@/assets/img/im/feishu.svg';
 import larkLogo from '@/assets/img/im/lark.svg';
 import slackLogo from '@/assets/img/im/slack.svg';
 import telegramLogo from '@/assets/img/im/telegram.svg';
-import dingtalkLogo from '@/assets/img/im/dingtalk.svg';
+import dingtalkLogo from '@nexus-web/core/assets/img/im/dingtalk.svg';
 import mattermostLogo from '@/assets/img/im/mattermost.svg';
 import wechatLogo from '@/assets/img/im/wechat.svg';
 import qqbotLogo from '@/assets/img/im/qqbot.png';

@@ -4,10 +4,10 @@ import test from 'node:test'
 
 import type { ModelConfig } from '@nexus-web/core/api/model/index'
 
-import { filterModelsByType } from './modelSelectorFilter.ts'
+import { filterModelsByType } from '@nexus-web/core/components/modelSelectorFilter.ts'
 
-const selectorSource = readFileSync(new URL('./ModelSelector.vue', import.meta.url), 'utf8')
-const kbEditorSource = readFileSync(new URL('../views/knowledge/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
+const selectorSource = readFileSync(new URL('../../../core/src/components/ModelSelector.vue', import.meta.url), 'utf8')
+const kbEditorSource = readFileSync(new URL('../../../core/src/components/knowledge-editor/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
 const agentEditorSource = readFileSync(new URL('../views/agent/AgentEditorModal.vue', import.meta.url), 'utf8')
 const modelSettingsSource = readFileSync(new URL('../views/settings/ModelSettings.vue', import.meta.url), 'utf8')
 

@@ -5,10 +5,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import SpotlightGuide from '@/components/SpotlightGuide.vue'
-import { GLOBAL_USER_GUIDE_KEY, OPEN_NEW_USER_GUIDE_EVENT } from '@/config/contextualGuides'
+import SpotlightGuide from '@nexus-web/core/components/SpotlightGuide.vue'
+import { GLOBAL_USER_GUIDE_KEY, OPEN_NEW_USER_GUIDE_EVENT } from '@nexus-web/core/config/contextualGuides'
 import { useUIStore } from '@/stores/ui'
-import type { SpotlightGuideStep } from '@/types/spotlightGuide'
+import type { SpotlightGuideStep } from '@nexus-web/core/types/spotlightGuide'
 
 const uiStore = useUIStore()
 let settingsOpenedByGuide = false

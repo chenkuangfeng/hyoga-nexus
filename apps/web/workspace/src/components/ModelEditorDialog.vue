@@ -634,16 +634,16 @@ import {
   providerLabel,
 } from '@/stores/modelProvidersState'
 import { levelLabelKey, supportedLevels } from '@/utils/reasoningEffort'
-import { DEFAULT_MODEL_CONTEXT_WINDOW, formatTokenCount } from '@/utils/contextWindow'
+import { DEFAULT_MODEL_CONTEXT_WINDOW, formatTokenCount } from '@nexus-web/core/utils/contextWindow'
 import { copyWithToast } from '@/utils/clipboard'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import CredentialResource, {
   type CredentialFieldDef,
   type CredentialResourceApi,
 } from '@/components/credentials/CredentialResource.vue'
 import { shouldShowOllamaUnavailableTip } from '@/components/modelEditorSourceState'
 import { WEKNORA_CLOUD_PROVIDER, WKC_MODEL_KINDS, WKC_MODEL_NAME_BY_KIND } from '@/utils/weknoraCloudModels'
-import { docsUrl } from '@/utils/docsUrl'
+import { docsUrl } from '@nexus-web/core/utils/docsUrl'
 
 interface CustomHeaderItem {
   key: string

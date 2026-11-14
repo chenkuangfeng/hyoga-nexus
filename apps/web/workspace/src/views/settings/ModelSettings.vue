@@ -325,17 +325,17 @@ import {
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { generateCopyDisplayName, modelCopyLabel } from '@/utils/modelCopyName'
 import { useUIStore } from '@/stores/ui'
-import { focusKbEditorSection } from '@/config/contextualGuides'
+import { focusKbEditorSection } from '@nexus-web/core/config/contextualGuides'
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources'
 import { useModelProvidersStore } from '@/stores/modelProviders'
-import { docsUrl } from '@/utils/docsUrl'
+import { docsUrl } from '@nexus-web/core/utils/docsUrl'
 import { matchesResourceQuery } from '@/utils/resourceListSearch'
 import { useAssistantDataChange } from '@nexus-web/core/utils/assistantDataChange'
 import {
   formatContextWindow,
   isDefaultContextWindow,
   effectiveContextWindow,
-} from '@/utils/contextWindow'
+} from '@nexus-web/core/utils/contextWindow'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()

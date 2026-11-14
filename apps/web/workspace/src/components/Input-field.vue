@@ -25,7 +25,7 @@ import {
   formatContextWindow,
   isDefaultContextWindow,
   effectiveContextWindow,
-} from '@/utils/contextWindow';
+} from '@nexus-web/core/utils/contextWindow';
 import { type CustomAgent, BUILTIN_QUICK_ANSWER_ID, BUILTIN_SMART_REASONING_ID } from '@nexus-web/core/api/agent/index';
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources';
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources';

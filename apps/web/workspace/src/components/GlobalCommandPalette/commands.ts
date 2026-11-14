@@ -1,6 +1,6 @@
 import type { Router } from 'vue-router'
 import type { Composer } from 'vue-i18n'
-import { openNewUserGuide } from '@/config/contextualGuides'
+import { openNewUserGuide } from '@nexus-web/core/config/contextualGuides'
 
 /**
  * A single command that can be searched and invoked from the palette.

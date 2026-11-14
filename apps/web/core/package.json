@@ -36,7 +36,8 @@
     "./api/embed": "./src/api/embed/index.ts",
     "./api/tenant": "./src/api/tenant/index.ts",
     "./i18n": "./src/i18n/index.ts",
-    "./i18n/locales/embed": "./src/i18n/locales/embed/index.ts"
+    "./i18n/locales/embed": "./src/i18n/locales/embed/index.ts",
+    "./assets/*": "./src/assets/*"
   },
   "peerDependencies": {
     "vue": "catalog:",

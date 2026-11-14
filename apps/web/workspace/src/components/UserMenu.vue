@@ -179,7 +179,7 @@ import {
 import type { TenantInfo } from '@nexus-web/core/api/tenant/index'
 import { useRoleLabel, useHomeTenant } from '@nexus-web/core/composables/useRoleLabel'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
-import { openNewUserGuide } from '@/config/contextualGuides'
+import { openNewUserGuide } from '@nexus-web/core/config/contextualGuides'
 const { t } = useI18n()
 
 const router = useRouter()

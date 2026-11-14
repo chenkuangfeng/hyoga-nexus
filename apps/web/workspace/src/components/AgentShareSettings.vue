@@ -137,7 +137,7 @@ import {
 } from '@nexus-web/core/api/agent-share/index'
 import type { AgentShare, AgentShareLevel } from '@nexus-web/core/api/agent-share/index'
 import type { CustomAgent } from '@nexus-web/core/api/agent/index'
-import SpaceAvatar from '@/components/SpaceAvatar.vue'
+import SpaceAvatar from '@nexus-web/core/components/SpaceAvatar.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()

@@ -9,12 +9,13 @@ import { change, fixture, flush } from '@nexus-web/core/test-utils/vueFixture'
 test('refreshes data source controls after assistant changes and stops on unmount', async t => {
   const f = fixture(t)
   const listDataSources = t.mock.fn(async (_id: string) => ({ data: [] }))
-  const { close } = f.component(new URL('./settings/DataSourceSettings.vue', import.meta.url), {
+  const { close } = f.component(new URL('../../../../core/src/components/knowledge-editor/settings/DataSourceSettings.vue', import.meta.url), {
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     'tdesign-vue-next': { MessagePlugin: { error: assert.fail } },
     '@nexus-web/core/stores/auth': { useAuthStore: () => ({ hasRole: () => true }) },
-    '@/utils/cronHumanize': {},
-    '@/composables/useConnectorLabel': { useConnectorLabel: () => ({ connectorLabel: (type: string) => type }) },
+    '../../../utils/cronHumanize': {},
+    '../../../composables/useConnectorLabel': { useConnectorLabel: () => ({ connectorLabel: (type: string) => type }) },
+    '../scopedApi': { useScopedApi: (api: unknown) => api },
     '@nexus-web/core/api/datasource/index': { listDataSources },
   }, { kbId: 'kb' })
   await flush()
@@ -129,7 +130,7 @@ test('refreshes the mounted KB list with force for knowledge_base changes only',
     '@/composables/useTenantModelReadiness': { useTenantModelReadiness: () => ({ loaded: vue.ref(true), isReadyForDocumentKb: vue.ref(true) }) },
     '@/composables/useListUrlState': { useListUrlState: () => ({ scope: vue.ref('all'), creator: vue.ref('all'), query: vue.ref('') }) },
     '@/composables/useResourcePins': { useResourcePins: () => ({ favorites: vue.ref([]), recents: vue.ref([]) }) },
-    '@nexus-web/core/api/knowledge-base/index': {}, '@nexus-web/core/api/organization/index': {}, '@/config/contextualGuides': {},
+    '@nexus-web/core/api/knowledge-base/index': {}, '@nexus-web/core/api/organization/index': {}, '@nexus-web/core/config/contextualGuides': {},
     '@nexus-web/core/utils/index': {}, '@/utils/kbPermission': {},
     '@/utils/resourceListSearch': {}, '@/utils/card-list-badge': {}, '@/utils/resourceSorting': sorting,
   })

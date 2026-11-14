@@ -44,6 +44,7 @@ function fixture() {
       DialogPlugin: { confirm: (options: any) => { dialogs.push(options); return { destroy() {} } } },
       MessagePlugin: { success() {}, error() {}, warning(message: string) { warnings.push(message) } },
     },
+    '../host': { useKnowledgeEditorHost: () => ui },
     '@/stores/ui': { useUIStore: () => ui },
     '@nexus-web/core/stores/auth': { useAuthStore: () => ({ hasRole: () => true }) },
     '@nexus-web/core/stores/organization': { useOrganizationStore: () => ({ sharedKnowledgeBases: [] }) },
@@ -78,7 +79,7 @@ function fixture() {
     return exports
   }
 
-  modules['@/composables/useModalShell'] = evaluate(readFileSync(new URL('./useModalShell.ts', import.meta.url), 'utf8'))
+  modules['@nexus-web/core/composables/useModalShell'] = evaluate(readFileSync(new URL('../../../core/src/composables/useModalShell.ts', import.meta.url), 'utf8'))
   modules['@nexus-web/core/utils/assistantDataChange'] = evaluate(readFileSync(new URL('../../../core/src/utils/assistantDataChange.ts', import.meta.url), 'utf8'))
   function mount(path: string, props: Record<string, any>) {
     const { descriptor } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'))
@@ -179,7 +180,7 @@ for (const savedRules of [[], [{ file_types: ['xlsx'], engine: 'builtin', xlsx_f
       parserEngineRules: savedRules,
       'onUpdate:parserEngineRules': (rules: any[]) => { updates.push(rules); props.parserEngineRules = rules },
     })
-    const { vm, unmount } = f.mount('../views/knowledge/settings/KBParserSettings.vue', props)
+    const { vm, unmount } = f.mount('../../../core/src/components/knowledge-editor/settings/KBParserSettings.vue', props)
     try {
       release()
       await settle()
@@ -229,7 +230,7 @@ async function mountParserSettings(engines: any[]) {
   const f = fixture()
   f.resources.parserEngines = engines
   const props = vue.reactive({ parserEngineRules: [], 'onUpdate:parserEngineRules': () => {} })
-  const { vm, unmount } = f.mount('../views/knowledge/settings/KBParserSettings.vue', props)
+  const { vm, unmount } = f.mount('../../../core/src/components/knowledge-editor/settings/KBParserSettings.vue', props)
   await settle()
   return { vm, unmount }
 }

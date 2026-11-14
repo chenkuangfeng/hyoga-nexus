@@ -10,7 +10,7 @@ import { createRenderer, h, nextTick, reactive } from 'vue'
 import * as imageProcessingConfig from '../../utils/imageProcessingConfig'
 
 const require = createRequire(import.meta.url)
-const filename = fileURLToPath(new URL('./ImagePipelineSettings.vue', import.meta.url))
+const filename = fileURLToPath(new URL('../../../../core/src/components/knowledge-editor/ImagePipelineSettings.vue', import.meta.url))
 const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
 const script = compileScript(descriptor, { id: 'image-pipeline-settings-test' }).content
   .replace('__expose();', '')
@@ -44,7 +44,7 @@ async function fixture() {
     require(name: string) {
       if (name === 'vue') return require('vue')
       if (name === 'vue-i18n') return { useI18n: () => ({ t: (key: string) => key, te: () => false }) }
-      if (name === '@/utils/imageProcessingConfig') return imageProcessingConfig
+      if (name === '../../utils/imageProcessingConfig') return imageProcessingConfig
       if (name === '@nexus-web/core/api/knowledge-base/index') return {
         fetchImagePipelines: async () => [{ id: 'default', fields: [] }, { id: 'smartocr', fields: [] }],
         validateImagePipelines: (pipelineId: string, params: Record<string, unknown>) =>

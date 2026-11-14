@@ -13,7 +13,7 @@ import {
   LEGACY_PIPELINE_CAPTION_OCR,
   LEGACY_PIPELINE_OB_CAP_OCR,
   type ImageProcessingEdits,
-} from './imageProcessingConfig.ts'
+} from '@nexus-web/core/utils/imageProcessingConfig.ts'
 
 const DEFAULT_ON = [
   { prop: 'contain.text', is: 'block' },

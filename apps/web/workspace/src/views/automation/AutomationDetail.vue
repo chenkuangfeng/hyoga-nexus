@@ -202,7 +202,7 @@ import {
 } from '@nexus-web/core/api/automation'
 import { describeTrigger, formatInZone, hasEndedOnceSchedule } from '@/utils/automationSchedule'
 import { useAssistantDataChange } from '@nexus-web/core/utils/assistantDataChange'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import AutomationStatusTag from './AutomationStatusTag.vue'
 import ChatActionIcon from '@/components/ChatActionIcon.vue'
 

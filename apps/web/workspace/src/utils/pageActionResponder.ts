@@ -7,7 +7,7 @@ import { PageFillError, type PageTextEdit } from './pageText'
 import { activateTab, currentLocation, readFieldText, snapshotPage } from './pageSnapshot'
 import { fillPage, undoFill } from './pageFill'
 import { pageLinkLocation, type AssistantPageLink, type PageLinkLocation } from './assistantPageLink'
-import { hasUnsavedChanges } from './unsavedChanges'
+import { hasUnsavedChanges } from '@nexus-web/core/utils/unsavedChanges'
 
 /** Moves the app to another page; the router in practice. */
 export interface PageNavigator {

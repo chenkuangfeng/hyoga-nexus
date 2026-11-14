@@ -442,7 +442,7 @@ import { previewOrganization, submitJoinRequest } from '@nexus-web/core/api/orga
 import { useI18n } from 'vue-i18n'
 import { copyWithToast } from '@/utils/clipboard'
 import OrganizationSettingsModal from './OrganizationSettingsModal.vue'
-import SpaceAvatar from '@/components/SpaceAvatar.vue'
+import SpaceAvatar from '@nexus-web/core/components/SpaceAvatar.vue'
 import ResourceCardAvatar from '@/components/ResourceCardAvatar.vue'
 import ResourceListToolbar from '@/components/ResourceListToolbar.vue'
 import { matchesResourceQuery } from '@/utils/resourceListSearch'

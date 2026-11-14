@@ -320,7 +320,7 @@ import { useI18n } from 'vue-i18n'
 import { extractTextRelations, fabriText, fabriTag, type Node, type Relation } from '@nexus-web/core/api/initialization/index'
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
-import { docsUrl } from '@/utils/docsUrl'
+import { docsUrl } from '@nexus-web/core/utils/docsUrl'
 
 const { t } = useI18n()
 const authStore = useAuthStore()

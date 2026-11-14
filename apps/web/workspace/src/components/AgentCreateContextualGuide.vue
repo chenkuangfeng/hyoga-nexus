@@ -5,14 +5,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import SpotlightGuide from '@/components/SpotlightGuide.vue'
+import SpotlightGuide from '@nexus-web/core/components/SpotlightGuide.vue'
 import {
   focusAgentEditorSection,
   markContextualGuideDone,
   isContextualGuideDone,
   isGlobalUserGuideDone,
-} from '@/config/contextualGuides'
-import type { SpotlightGuideStep } from '@/types/spotlightGuide'
+} from '@nexus-web/core/config/contextualGuides'
+import type { SpotlightGuideStep } from '@nexus-web/core/types/spotlightGuide'
 
 const props = defineProps<{
   when: boolean

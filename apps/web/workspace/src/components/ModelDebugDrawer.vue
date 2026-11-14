@@ -241,7 +241,7 @@ import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { copyWithToast } from '@/utils/clipboard'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import { debugModel, type ModelConfig, type ModelDebugResult } from '@nexus-web/core/api/model/index'
 import { fileSizeVerification } from '@nexus-web/core/utils/index'
 import { useModelProvidersStore } from '@/stores/modelProviders'
@@ -257,7 +257,7 @@ import {
 import {
   formatContextWindow,
   modelHasContextWindow,
-} from '@/utils/contextWindow'
+} from '@nexus-web/core/utils/contextWindow'
 
 const props = defineProps<{
   visible: boolean

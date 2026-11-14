@@ -250,7 +250,7 @@ import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import { providerLogo } from './providerLogos'
 import {
   createStorageBackend, deleteStorageBackend, listStorageBackends, listStorageBackendTypes,

@@ -324,7 +324,7 @@ import {
   type WebSearchProviderTypeInfo,
   type WebSearchCredentialField,
 } from '@nexus-web/core/api/web-search-provider'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import CredentialResource, {
   type CredentialFieldDef,
   type CredentialResourceApi,

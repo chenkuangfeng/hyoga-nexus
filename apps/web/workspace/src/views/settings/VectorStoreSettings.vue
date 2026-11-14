@@ -355,7 +355,7 @@
 </template>
 
 <script setup lang="ts">
-import CapabilityBadge from '@/components/knowledge/CapabilityBadge.vue'
+import CapabilityBadge from '@nexus-web/core/components/knowledge/CapabilityBadge.vue'
 import { ref, computed, onMounted, watch, type WritableComputedRef } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -372,7 +372,7 @@ import {
 } from '@nexus-web/core/api/vector-store'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { providerLogo } from './providerLogos'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()

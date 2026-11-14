@@ -668,8 +668,8 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import ModelSelector from '@/components/ModelSelector.vue'
-import KBParserSettings from '../settings/KBParserSettings.vue'
+import ModelSelector from '@nexus-web/core/components/ModelSelector.vue'
+import KBParserSettings from '@nexus-web/core/components/knowledge-editor/settings/KBParserSettings.vue'
 import GraphSettings from '../settings/GraphSettings.vue'
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources'
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources'
@@ -677,16 +677,16 @@ import { useUIStore } from '@/stores/ui'
 import { formatFileSize, getFileIcon } from '@/utils/files'
 import { getUploadFileKey } from '../utils/uploadSources'
 import { listKnowledgeTags, mergeImageActions, fetchImageAttrSchema, FALLBACK_IMAGE_ATTR_SCHEMA, type ImageActionsConfig, type ImageAttrSchema } from '@nexus-web/core/api/knowledge-base/index'
-import { imageAttrDisplay, imageAttrConditionDisplay } from '@/utils/imageAttrDisplay'
+import { imageAttrDisplay, imageAttrConditionDisplay } from '@nexus-web/core/utils/imageAttrDisplay'
 import KbUploadSourceDropdown from './KbUploadSourceDropdown.vue'
-import ImagePipelineSettings from '../ImagePipelineSettings.vue'
+import ImagePipelineSettings from '@nexus-web/core/components/knowledge-editor/ImagePipelineSettings.vue'
 import {
   buildPipelineFields,
   resolveImagePipelineFromKb,
   normalizeImagePipelineId,
   IMAGE_PIPELINE_DEFAULT,
   IMAGE_PIPELINE_SMARTOCR,
-} from '@/utils/imageProcessingConfig'
+} from '@nexus-web/core/utils/imageProcessingConfig'
 import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue'
 import { folderOptionFromPath, sortFolderOptions } from '../folderTree'
 import type { KnowledgeProcessOverrides } from '@nexus-web/core/types/knowledgeProcess'

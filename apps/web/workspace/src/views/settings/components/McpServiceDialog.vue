@@ -398,7 +398,7 @@ import {
   type McpCredentialField,
   type MCPOAuthTokenState,
 } from '@nexus-web/core/api/mcp-service'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import McpMetadataPanel from './McpMetadataPanel.vue'
 import CredentialResource, {
   type CredentialFieldDef,

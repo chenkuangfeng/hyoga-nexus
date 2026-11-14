@@ -1,7 +1,7 @@
 /** 企业知识库目录及内容管理员编排。目标代次和身份代次共同保护查询、确认及写入后反馈。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DialogPlugin } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useAdminContext } from '../../stores/context'
 import { listEnterpriseKnowledgeBases, listKnowledgeMaintainers, addKnowledgeMaintainer, removeKnowledgeMaintainer, type EnterpriseKnowledgeBase, type KnowledgeMaintainer } from '@nexus-web/core/api/enterprise-knowledge'
@@ -10,6 +10,13 @@ import { listEnterpriseMembers, type EnterpriseMember } from '@nexus-web/core/ap
 export function useKnowledgeAdministration() {
   const auth = useAuthStore(), context = useAdminContext(), { t } = useI18n()
   const rows = ref<EnterpriseKnowledgeBase[]>([]), loading = ref(false), ready = ref(false), error = ref(''), search = ref('')
+  const editor = ref(false), editingId = ref<string | undefined>(undefined)
+  const editorKey = computed(() => `${tenant.value}:${auth.user?.id}:${context.revision}`)
+  function openEditor(row?: EnterpriseKnowledgeBase) {
+    if (!canManage.value || !ready.value || busy.value || editor.value || (row && (!rows.value.includes(row) || !row.can_manage))) return
+    editingId.value = row?.id; editor.value = true
+  }
+  function openSettings() { void MessagePlugin.info(t('adminKnowledge.settingsUnavailable')) }
   const selected = ref<EnterpriseKnowledgeBase | null>(null), maintainers = ref<KnowledgeMaintainer[]>([]), members = ref<EnterpriseMember[]>([])
   const maintainersReady = ref(false), membersReady = ref(false), panelLoading = ref(false), busy = ref(false)
   const panelError = ref(''), membersError = ref(''), success = ref(''), selectedMember = ref('')
@@ -29,7 +36,7 @@ export function useKnowledgeAdministration() {
     selected.value = null; maintainers.value = []; members.value = []; maintainersReady.value = false; membersReady.value = false
     panelLoading.value = false; busy.value = false; panelError.value = ''; membersError.value = ''; success.value = ''; selectedMember.value = ''
   }
-  function invalidate() { epoch++; read++; resetPanel(); rows.value = []; ready.value = false; loading.value = false; error.value = ''; search.value = '' }
+  function invalidate() { editor.value = false; editingId.value = undefined; epoch++; read++; resetPanel(); rows.value = []; ready.value = false; loading.value = false; error.value = ''; search.value = '' }
   async function load() {
     if (busy.value) return
     const current = epoch, request = ++read, scope = tenant.value
@@ -94,5 +101,5 @@ export function useKnowledgeAdministration() {
   function remove(row: KnowledgeMaintainer) { if (editable.value && maintainers.value.includes(row)) confirmWrite(false, row.user_id, maintainerName(row)) }
   watch([tenant, () => auth.user?.id, () => context.revision, canManage, canReadMembers], () => { invalidate(); void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { rows, loading, ready, error, search, selected, maintainers, maintainersReady, membersReady, panelLoading, busy, panelError, membersError, success, selectedMember, canManage, canReadMembers, filtered, memberOptions, maintainerName, canAdd, editable, load, inspect, closePanel, add, remove }
+  return { editor, editingId, editorKey, tenant, openEditor, openSettings, rows, loading, ready, error, search, selected, maintainers, maintainersReady, membersReady, panelLoading, busy, panelError, membersError, success, selectedMember, canManage, canReadMembers, filtered, memberOptions, maintainerName, canAdd, editable, load, inspect, closePanel, add, remove }
 }
