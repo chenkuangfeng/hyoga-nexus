@@ -135,6 +135,7 @@ export default {
     "linkCreated": "Link created. Copy it from the invitation list.",
     "unnamedMember": "Unnamed member"
   },
+  adminEnterprise: {"title": "기업 정보", "description": "현재 기업의 이름, 설명 및 삭제를 관리합니다.", "saved": "기업 정보를 저장했습니다."},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",

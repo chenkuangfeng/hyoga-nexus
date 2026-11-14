@@ -135,6 +135,7 @@ export default {
     "linkCreated": "链接已创建，可在邀请列表中复制。",
     "unnamedMember": "未命名成员"
   },
+  adminEnterprise: {"title": "企业信息", "description": "管理当前企业的名称、描述与删除操作。", "saved": "企业信息已保存。"},
   adminConsole: {
     unnamedEnterprise: '未命名企业',
     "title": "企业管理",

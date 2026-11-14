@@ -135,6 +135,7 @@ export default {
     "linkCreated": "Link created. Copy it from the invitation list.",
     "unnamedMember": "Unnamed member"
   },
+  adminEnterprise: {"title": "企業資訊", "description": "管理目前企業的名稱、描述與刪除操作。", "saved": "企業資訊已儲存。"},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",

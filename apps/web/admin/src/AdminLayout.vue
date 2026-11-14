@@ -76,6 +76,7 @@ async function signOut() {
       </header>
       <nav id="admin-navigation" class="sidebar-nav" :aria-label="t('adminConsole.title')">
         <template v-if="auth.currentEntries.includes('admin')">
+          <RouterLink v-if="auth.currentTenantRole === 'owner'" class="nav-item" to="/enterprise" active-class="active" :aria-label="t('adminEnterprise.title')" :title="collapsed ? t('adminEnterprise.title') : undefined"><t-icon name="info-circle" class="nav-icon" /><span v-if="!collapsed">{{ t('adminEnterprise.title') }}</span></RouterLink>
           <RouterLink class="nav-item" to="/" exact-active-class="active" :aria-label="t('adminConsole.overview')" :title="collapsed ? t('adminConsole.overview') : undefined"><t-icon name="home" class="nav-icon" /><span v-if="!collapsed">{{ t('adminConsole.overview') }}</span></RouterLink>
           <RouterLink v-if="context.can('org:manage')" class="nav-item" to="/organization" active-class="active" :aria-label="t('adminOrganization.title')" :title="collapsed ? t('adminOrganization.title') : undefined"><t-icon name="view-organization" class="nav-icon" /><span v-if="!collapsed">{{ t('adminOrganization.title') }}</span></RouterLink>
           <RouterLink v-if="context.can('members:manage')" class="nav-item" to="/members" active-class="active" :aria-label="t('adminMembers.title')" :title="collapsed ? t('adminMembers.title') : undefined"><t-icon name="usergroup" class="nav-icon" /><span v-if="!collapsed">{{ t('adminMembers.title') }}</span></RouterLink>

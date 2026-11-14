@@ -98,3 +98,8 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 工作台菜单包含会话、邀请和资源逻辑，管理端不引入这些依赖，也不互相导入应用组件。认证、企业权限、主题 CSS、TDesign 覆盖、`settings-section.less` 与 `settings-table.less` 由 core 复用；`SettingsModalShell` 继续服务工作台设置与编辑器，管理端业务内容保留公共设置行与表格风格。
 
 概览与策略沿用常规设置行：左侧标签/说明、右侧控件，设置组采用分隔线。成员列表沿用设置页标题、紧凑工具按钮、搜索框及带边框表格；部门页沿用原组织页的双栏尺寸、面板、节点和操作间距。标题使用统一字号令牌，普通内容内边距 40px/48px，成员列表 20px/28px；窄屏内容缩小内边距，设置控件可换行。此次调整不改变 API、权限、表单提交及确认逻辑。
+
+
+## 企业信息
+
+管理端 `/admin/enterprise` 由 `EnterpriseInfo.vue` 编排，公共 `enterprise-info.ts` 校验现有 GET/PATCH `/tenants/current` 的完整详情和目标企业 ID，删除沿用 DELETE `/tenants/{id}`。页面使用公共设置行，owner 可编辑和归档；只有名称/描述变化时才提交，删除确认绑定当前快照名称。权限与作用域代次驱动请求失效，失败保留可重试状态。删除成功清除本地身份，在管理应用内重新登录。企业编码接口和工作台旧管理页隔离仍待后续。

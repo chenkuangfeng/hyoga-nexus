@@ -29,6 +29,7 @@ const router = createRouter({
     })),
     { path: '/', component: () => import('./AdminLayout.vue'), children: [
       { path: '', component: () => import('./Home.vue') },
+      { path: 'enterprise', component: () => import('./views/EnterpriseInfo.vue') },
       { path: 'organization', component: () => import('./views/organization/OrganizationPage.vue') },
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },

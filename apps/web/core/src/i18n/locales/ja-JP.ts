@@ -135,6 +135,7 @@ export default {
     "linkCreated": "Link created. Copy it from the invitation list.",
     "unnamedMember": "Unnamed member"
   },
+  adminEnterprise: {"title": "企業情報", "description": "現在の企業の名前、説明、削除を管理します。", "saved": "企業情報を保存しました。"},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",
