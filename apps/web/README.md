@@ -6,9 +6,9 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router、vue-i18n 与 Vite。页面�
 
 | 项目 | 职责 | 当前状态 |
 | --- | --- | --- |
-| [core](core/README.md) | 公共 API、认证、语言、主题、登录与改密 | 已抽取基础模块，编辑器等共用组件仍待迁移 |
-| [workspace](workspace/README.md) | 员工工作台与 embed 入口 | 现有应用已移入，平台管理、桌面自动登录与旧浮动助手已移除，菜单与资源归属重构仍在实施 |
-| [admin](admin/README.md) | 企业管理后台，部署路径 `/admin/` | 独立登录、权限导航、企业切换、企业策略、成员邀请、加入申请审批和部门组织；其他管理页待迁移 |
+| [core](core/README.md) | 公共 API、认证、语言、主题、登录与改密、共享编辑器与渠道组件 | 三项目共享能力；应用不得相互依赖 |
+| [workspace](workspace/README.md) | 员工工作台与 embed 独立入口 | 对话、智能体、知识库、渠道、工具箱、账户设置等员工功能 |
+| [admin](admin/README.md) | 企业管理后台，部署路径 `/admin/` | 独立权限外壳，提供企业、成员、角色、资源、模型、工具、知识库、渠道、用量、运行状态及审计治理页面 |
 
 ## 使用
 
@@ -29,6 +29,7 @@ corepack pnpm dev:admin     # 5174/admin/
 - `pnpm type-check`：串行检查公共包和两个应用。
 - `pnpm test`：工程依赖边界、公共包及两个应用的测试。
 - `pnpm preview`：预览工作台；`pnpm --filter @nexus-web/admin preview`：预览管理后台。
+- 生产静态部署的 Nginx 路由示例见 [nginx.example.conf](docs/nginx.example.conf)。
 - `pnpm check-i18n`：检查公共语言包；语言键扫描覆盖三个项目。
 
 完整构建与工作台类型检查需要内存充足的机器。本地约 1.9GB RAM 环境曾发生退出码 137；降低 Node 堆限制后，工作台类型检查仍触及堆上限。SFC 编译与依赖边界检查不能代替完整构建、类型检查和浏览器验收。浏览器测试命令尚待 E2.8 接入，不能将现有静态 `.browser.test.mjs` 用例当作浏览器验收。
@@ -38,3 +39,4 @@ corepack pnpm dev:admin     # 5174/admin/
 - [需求](docs/requirements.md)
 - [设计](docs/design.md)
 - [实施任务](../../openspec/changes/2026-11-11-enterprise-saas/tasks.md)
+- [部署与反向代理](docs/nginx.example.conf)

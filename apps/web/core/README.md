@@ -17,7 +17,7 @@
 
 应用经 `@nexus-web/core/...` 导入源码。Vue、TDesign、Pinia、vue-router 与 vue-i18n 使用 peerDependencies，共用 catalog 版本。公共包不得反向导入两个应用，`pnpm test` 检查该边界。
 
-在 `apps/web/` 运行 `pnpm --filter @nexus-web/core type-check` 或 `pnpm --filter @nexus-web/core test`。编辑器、公共组件和样式的后续抽取见企业化提案 E2.3。
+在 `apps/web/` 运行 `pnpm --filter @nexus-web/core type-check` 或 `pnpm --filter @nexus-web/core test`。共享能力边界与后续增量抽取见企业化提案 E2.3。
 
 ## 智能体使用受众
 

@@ -2,7 +2,7 @@
 
 Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n 与 Vite。`apps/web` 是 pnpm workspace，公共包与两个应用的边界见下文。下文页面、组件与业务状态路径相对 `workspace/src`，API、认证与语言路径相对 `core/src`。
 
-员工工作台外壳为 `views/platform/index.vue`，左侧为 `components/menu.vue`，右侧为业务路由与共享的设置、上传任务、命令面板等组件。路由在 `workspace/src/router/index.ts`，登录入口为 `/login`，会话地址为 `/platform/chat/:chatid`。认证与当前企业由 `core/src/stores/auth.ts` 统一管理，布局偏好由工作台 `stores/ui.ts` 管理。平台管理路由已删除，未知地址使用公共 404 页面。部署需为两个应用分别配置 history 回退。
+员工工作台外壳为 `workspace/src/views/platform/index.vue`，左侧为 `workspace/src/components/menu.vue`，右侧为业务路由与共享的设置、上传任务、命令面板等组件。路由在 `workspace/src/router/index.ts`，登录入口为 `/login`，会话地址为 `/platform/chat/:chatid`。认证与当前企业由 `core/src/stores/auth.ts` 统一管理，布局偏好由工作台 `workspace/src/stores/ui.ts` 管理。平台管理路由已删除，未知地址使用公共 404 页面；独立企业管理应用部署于 `/admin/`。生产反向代理需分别为 `/`、`/admin/` 和 `/embed/` 配置静态回退，并将 `/api/`、`/wecom/` 转给 API。
 
 模型设置（设置 → 模型管理，`views/settings/NexusModelSettings.vue` 与 `NexusModelEditorDialog.vue`）沿用 WeKnora `ModelSettings.vue`、`ModelEditorDialog.vue` 的布局与样式（类型标签页与计数、搜索、卡片网格、添加卡片、居中编辑抽屉、底部测试连接），数据来自 `api/nexus-models.ts`（`/tenants/{id}/model-settings`）。WeKnora 的一条模型对应 Nexus 的「供应商 + 模型档案」：`views/settings/nexusModelCards.ts`（纯函数，有单元测试）把供应商下的模型展开为卡片，并决定保存时复用已有供应商还是先建供应商（失败重试复用已建供应商）。服务商下拉列出调用者可管理的供应商与「自定义（OpenAI 兼容接口）」；编辑时修改 Key 会轮换整个供应商的 Key，界面提示受影响的模型数。默认模型在卡片菜单中按作用域设置（个人默认；空间共享模型且调用者为管理员时还可设空间默认），卡片显示默认标签。Key 只在提交时发送，提交后清空，不写入浏览器存储。省略 WeKnora 的内置模型、模型目录、调试抽屉、用量对话框、Ollama 与云服务来源。
 
@@ -35,9 +35,9 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 `core`、`workspace`、`admin` 使用唯一锁文件与 `pnpm-workspace.yaml` 的 catalog。`tsconfig.base.json` 开启严格类型检查；两个 Vite 配置调用根 `createWebConfig` 工厂，统一 API 代理、PDF WASM 复制和依赖拆包。工作台保留主页面和 embed 两个入口，管理应用 base 为 `/admin/`。
 
-原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API 的传递依赖闭包抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
+原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API、认证、主题、编辑器及渠道组件抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
 
-`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、路由和专用模型目录适配器已删除，Wails 与自动初始化入口已移除；旧集成页与本地浏览器连接入口已移除；管理端已接入权限外壳、企业策略、企业信息、部门、成员、角色、审计、企业智能体及企业知识库创建、设置和内容维护。智能体与知识库完整编辑器均抽到 core，由应用宿主组合导航；其余管理业务、知识库删除/共享治理及双应用完整浏览器验收仍待 E2 后续任务；尚未满足“工作台产物不含管理后台代码”的最终门禁。
+`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、专用模型目录适配器、桌面绑定与自动初始化入口已删除；旧集成页和本地浏览器连接入口已删除，IM 渠道迁入智能体页、MCP endpoint 迁入个人设置。管理端已接入权限外壳、企业/组织/成员/角色治理、策略、智能体与知识库管理、模型与 MCP、存储/检索、工具与技能、渠道、用量、运行状态及审计页面。智能体与知识库完整编辑器及 IM 面板由 core 复用。embed 服务端契约与 MCP 个人 endpoint 尚未完成；双应用完整构建/浏览器验收和工作台产物隔离仍待 E2.8。
 
 认证恢复只使用已有令牌，不尝试桌面自动初始化。注册表单按是否持有邀请令牌分流：自助注册发送企业名称与编码，邀请注册只发送邀请与账号字段。两应用共用 404 页面，已删除的平台管理路由不再挂载应用页面；旧设置参数归一到 `general` 并移除旧 `panel` 参数。工作台改密路由先经过认证，临时密码账号先改密，避免初始化豁免绕过认证。
 
@@ -69,7 +69,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 控制器分别消费两个列表的成功/失败结果；身份、企业、权限代次或管理权限变化立即清表单、临时密码和链接。所有 mutation 的结果与确认回调校验代次，关闭/卸载后旧确认不能发请求；表单秘密在提交时先清除。角色修改/移除要求成员行来自当前列表，前端提供 owner 规则与最后所有者保护，服务端仍在事务中授权。自身变更会刷新 `/auth/me` 与当前企业权限，即使默认企业发生变化也不复用旧权限。
 
-邮箱流程只在选择创建新账号时提交用户名和临时密码；返回值明确区分 invited 与 created。邀请链接的有效期按 1–30 天校验；撤销只影响未完成的邀请/后续链接使用。加入申请已在管理端接通，独立停用/恢复仍无后端接口，旧工作台成员页面暂保留，不能据此宣称工作台已隔离所有管理代码。
+邮箱流程只在选择创建新账号时提交用户名和临时密码；返回值明确区分 invited 与 created。邀请链接的有效期按 1–30 天校验；撤销只影响未完成的邀请/后续链接使用。加入申请已在管理端接通；独立停用/恢复仍无后端接口，工作台旧成员治理页已删除，E2.8 仍需确认工作台产物隔离。
 
 管理端 API 地址与静态页面路径分开：公共 `getApiBaseUrl` 去掉页面 base 末尾的 `/admin`，`/admin/` 请求 `/api/v1/...`，`/nexus/admin/` 请求 `/nexus/api/v1/...`；员工端与其他子路径部署继续保留自身前缀。这样管理页面不会请求不存在的 `/admin/api/v1/...`。
 

@@ -76,7 +76,7 @@ hyoga-nexus/
 ├── apps/
 │   ├── api/src/nexus_api/           # FastAPI 入口、http、schemas、dependencies
 │   ├── worker/src/nexus_worker/     # 后台入口、jobs、Native 装配
-│   └── web/                         # Vue 3 + TDesign，pnpm workspace（core、workspace、admin）
+│   └── web/                         # Vue 3 + TypeScript + TDesign；core 公共包、workspace 员工端、admin 管理端
 ├── packages/
 │   ├── core/src/nexus_core/         # 公共协议、runtime、events、tools、tasks
 │   ├── platform/src/nexus_platform/ # identity、tenants、authz、agents、sessions、runs、
@@ -480,16 +480,18 @@ Tenant 角色与资源共享不能替代 ActionGrant 或审批。共享智能体
 
 ### 2.15 Web 工作台
 
-借鉴：WeKnora 固定版本 `e1f9a6166` 的 Vue 前端，按 Nexus 身份、企业与 Runtime 契约适配。
+借鉴：WeKnora 固定版本 `e1f9a6166` 的 Vue 前端，按 Nexus 身份、企业与 Runtime 契约适配。反向代理配置示例见 `apps/web/docs/nginx.example.conf`。
 
 - **技术**：Vue 3 + TypeScript + TDesign、Pinia、vue-router、vue-i18n，Node.js 22.12+，pnpm 10。
-- **工程**：`apps/web` 是 pnpm workspace，包含公共源码包 `core`、员工工作台 `workspace` 与企业管理后台 `admin`。API、认证、语言和主题基础逻辑已抽取；管理后台已有独立登录、企业切换、服务端权限导航、企业信息、角色与权限（含企业智能体使用授权）、审计日志、企业策略、成员邀请、加入申请审批和部门组织页面，其他业务页面及共用编辑器仍按 E2 迁移。两个应用独立构建，管理应用 base 为 `/admin/`；公共包不依赖应用，应用互不依赖。当前尚未完成工作台移除管理代码的产物门禁。
-- **认证与旧入口**：两个应用共用登录、改密和未知页面提示。工作台只恢复已有令牌，不调用桌面自动初始化；自助注册只创建企业，邀请注册加入既有企业。平台管理页面与路由已删除，企业管理业务页面仍按 E2 迁移。
+- **工程**：`apps/web` 是 pnpm workspace，包含公共源码包 `core`、员工工作台 `workspace` 与企业管理后台 `admin`。Vue 3 + TypeScript + TDesign；应用独立构建，管理应用 base 为 `/admin/`；公共包不依赖应用，两个应用互不依赖。共享 API/认证/i18n/主题、智能体与知识库编辑器、IM 渠道面板位于 core。E2.8 仍须验收完整类型检查、双应用构建、浏览器流程及工作台产物不含管理端代码。
+- **员工工作台**：承载对话、智能体、知识库、技能与工具箱、共享空间、自动化、个人设置和企业成员日常流程；主 SPA 位于 `/`，单智能体模式按能力配置启用，`embed.html` 是独立入口并由 `/embed/:channelId` 提供。智能体渠道页管理已实现的 IM 渠道，embed 服务端契约尚未接入。
+- **企业管理后台**：独立登录与强制改密、按 `/auth/me` 返回的企业 `entries` 和 API 权限提供导航；现有页面覆盖企业、成员/邀请/审批、组织、角色、策略、智能体/受众、知识库/内容、模型、工具/技能审核、MCP、存储/检索、渠道审核、用量/限额、运行状况与审计。每个写入仍由服务端鉴权；尚无接口的独立成员停用/恢复、企业编码等不以相邻操作或内部 ID 替代。
+- **认证与旧入口**：两个应用共用登录、改密和未知页面提示。工作台只恢复已有令牌，不调用桌面自动初始化；自助注册只创建企业，邀请注册加入既有企业。平台管理页面与路由已删除；工作台和 admin 是两个应用，不提供跨应用“返回工作台”菜单。旧集成页已删除，IM/embed 地址迁移到智能体渠道，MCP endpoint 位于账户设置；不可保留的旧集成入口显示兼容重定向或通用设置。
 - **设置与管理界面**：企业管理主框架对齐 workspace 的品牌、可折叠图标侧栏和左下角账户入口，支持企业切换与退出，不提供返回工作台入口；内容页复用 `core` 的主题、TDesign 覆盖和设置行/表格样式，`SettingsModalShell` 继续服务工作台设置与编辑器。
 - **界面约定**：浅色、扁平卡片、青绿色主色、系统字体，适配桌面与窄屏；键盘焦点可见、对比度达标、加载与错误有反馈、减少动态效果。规划中的功能显示为"待接入"，不显示虚构的运行数据。
 - **信息结构**：智能体管理、会话工作台、技能/工具/MCP 资源、知识库、渠道、设置、观澜工作台。类型标签展示能力来源；资源绑定同时显示兼容状态与版本。
 - **安全**：模型输出按纯文本渲染，不作为 HTML 执行。
-- **API**：业务接口位于 `/api/v1/tenants/{tenant_id}/...`；观澜接口位于 `/api/v1/guanlan/...`。`/agents`、`/skills`、`/knowledge-bases`、`/channels`、`/artifacts` 等为规划接口。
+- **API**：业务接口位于 `/api/v1/tenants/{tenant_id}/...`；观澜接口位于 `/api/v1/guanlan/...`。Web 两个静态应用与 API 共用同源部署时，`/api/` 与 `/wecom/` 需代理到 API，history 路由需由 Web 服务器分别回退到两个应用的 `index.html`；embed URL 回退到 `embed.html`。
 
 ### 2.16 观澜（股票研究，领域扩展）
 
