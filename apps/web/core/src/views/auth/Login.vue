@@ -80,6 +80,15 @@
                 class="oidc-button" @click="handleOIDCLogin">
                 {{ oidcLoading ? $t('auth.redirectingToOIDC') : oidcLoginText }}
               </t-button>
+
+              <div v-if="wecomError" class="invite-banner invite-banner--error" role="alert">{{ wecomError }}</div>
+              <template v-if="!inviteToken">
+                <div class="oidc-divider"><span>{{ $t('wecomLogin.orScan') }}</span></div>
+                <t-form-item :label="$t('wecomLogin.enterpriseCode')">
+                  <t-input v-model="wecomEnterpriseCode" :placeholder="$t('wecomLogin.enterpriseCodePlaceholder')" autocomplete="organization" :disabled="loading || oidcLoading" @enter="startWecomQr" />
+                </t-form-item>
+                <t-button type="button" theme="default" variant="outline" size="large" block :disabled="loading || oidcLoading" @click="startWecomQr">{{ $t('wecomLogin.start') }}</t-button>
+              </template>
             </t-form>
 
           </div>
@@ -219,6 +228,8 @@ const inviteToken = ref('')
 const inviteLookup = ref<InviteLookup | null>(null)
 const inviteLookupError = ref('')
 const inviteLookupLoading = ref(false)
+const wecomEnterpriseCode = ref('')
+const wecomError = ref('')
 
 // Language options
 const languageOptions = [
@@ -325,6 +336,14 @@ const registerRules = computed(() => ({
 const toggleMode = () => {
   isRegisterMode.value = !isRegisterMode.value && registrationEnabled.value
   resetRegisterData()
+}
+
+/** 以企业编码查找该企业的扫码登录应用，再由服务端跳转到企业微信二维码页。 */
+const startWecomQr = () => {
+  const code = wecomEnterpriseCode.value.trim()
+  if (!/^[a-zA-Z0-9_-]{3,32}$/.test(code)) { wecomError.value = t('wecomLogin.codeInvalid'); return }
+  wecomError.value = ''
+  window.location.assign(`/api/v1/auth/wecom/qr?enterprise_code=${encodeURIComponent(code)}`)
 }
 
 // Toggle language menu
@@ -598,6 +617,9 @@ const handleRegister = async () => {
 
 // 恢复已有登录和邀请上下文；Web 只使用显式登录或部署允许的开发登录。
 onMounted(async () => {
+  const wecomStatus = String(route.query.wecom || '')
+  const wecomStatusKeys: Record<string, string> = { expired: 'wecomLogin.expired', unavailable: 'wecomLogin.unavailable', not_in_directory: 'wecomLogin.notInDirectory', forbidden: 'wecomLogin.forbidden' }
+  if (wecomStatusKeys[wecomStatus]) wecomError.value = t(wecomStatusKeys[wecomStatus])
   // Share-link landing: ?token=xxx switches the form into invite-
   // register mode before any other auto-flow (logged-in redirect /
   // OIDC) gets a chance to redirect. Resolution failure

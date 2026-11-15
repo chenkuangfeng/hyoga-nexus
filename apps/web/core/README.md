@@ -11,6 +11,7 @@
 - `src/styles/`：原设置页主题、TDesign 全局覆盖，以及设置标题/行/表格 mixin；工作台原 CSS 路径转导入这些公共实现。
 - `src/i18n/`：公共语言资源与审计、扫描工具。
 - `src/views/auth/`：公共登录与改密组件；自助注册只创建企业，邀请注册加入已有企业。
+- 登录页支持按企业编码发起服务端企业微信扫码登录；企业/目录状态错误以登录页提示呈现。扫码凭据和 OAuth state 由服务端处理，浏览器不接触应用 Secret。
 - `src/components/IMChannelPanel.vue`：智能体 IM 渠道面板，遵循维护权限、归属与企业策略，二维码在本地生成；接口封装在 `api/enterprise-connections.ts`。
 - `src/components/NotFound.vue`：两个应用共用的未知页面提示。
 
