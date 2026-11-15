@@ -1,4 +1,5 @@
 export default {
+  adminStorage: { title: '企业文件存储', description: '管理当前企业可用的知识文件存储后端。', scopeHint: '当前只支持本地目录提供方。创建本地目录可能受部署策略限制；被知识库使用的后端不能删除。路径不会在列表中显示。', addTitle: '添加本地目录', name: '名称', root: '服务器目录路径', rootPlaceholder: '填写部署服务器上的绝对目录路径', provider: '提供方', kind: '来源', builtin: '内置', custom: '企业配置', actions: '操作', add: '添加存储', test: '测试', delete: '删除', empty: '暂无存储后端。', loadFailed: '存储后端读取失败，请刷新重试。', saveFailed: '创建存储后端失败，请核对路径和部署策略。', created: '存储后端已创建。', testOk: '存储后端连接正常。', testFailed: '存储后端测试失败。', deleteTitle: '删除存储后端', deleteConfirm: '确定删除“{name}”？正在被知识库使用的后端无法删除。', deleted: '存储后端已删除。', deleteFailed: '删除失败；后端可能仍被知识库使用。' },
   adminKnowledge: {
     create: '创建企业知识库',
     edit: '编辑设置',

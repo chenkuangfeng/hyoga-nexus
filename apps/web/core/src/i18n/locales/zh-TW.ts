@@ -1,4 +1,5 @@
 export default {
+  adminStorage: { title: '企業檔案儲存', description: '管理目前企業可用的知識檔案儲存後端。', scopeHint: '目前僅支援本機目錄提供者。建立本機目錄可能受部署政策限制；知識庫使用中的後端無法刪除。路徑不會顯示於清單。', addTitle: '新增本機目錄', name: '名稱', root: '伺服器目錄路徑', rootPlaceholder: '輸入部署伺服器上的絕對目錄路徑', provider: '提供者', kind: '來源', builtin: '內建', custom: '企業設定', actions: '操作', add: '新增儲存', test: '測試', delete: '刪除', empty: '目前沒有儲存後端。', loadFailed: '讀取儲存後端失敗，請重新整理重試。', saveFailed: '建立儲存後端失敗，請檢查路徑與部署政策。', created: '儲存後端已建立。', testOk: '儲存後端連線正常。', testFailed: '儲存後端測試失敗。', deleteTitle: '刪除儲存後端', deleteConfirm: '確定刪除「{name}」？知識庫使用中的後端無法刪除。', deleted: '儲存後端已刪除。', deleteFailed: '刪除失敗；後端可能仍被知識庫使用。' },
   adminKnowledge: {
     create: 'Create enterprise knowledge base',
     edit: 'Edit settings',

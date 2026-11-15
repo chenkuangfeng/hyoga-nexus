@@ -1,4 +1,5 @@
 export default {
+  adminStorage: { title: '기업 파일 저장소', description: '현재 기업의 지식 파일 저장소를 관리합니다.', scopeHint: '현재 로컬 디렉터리 제공자만 지원합니다. 배포 정책에 따라 기업 로컬 경로 생성이 차단될 수 있습니다. 지식 베이스에서 사용 중인 저장소는 삭제할 수 없습니다. 경로는 목록에 표시되지 않습니다.', addTitle: '로컬 디렉터리 추가', name: '이름', root: '서버 디렉터리 경로', rootPlaceholder: '배포 서버의 절대 경로', provider: '제공자', kind: '출처', builtin: '내장', custom: '기업 설정', actions: '작업', add: '저장소 추가', test: '테스트', delete: '삭제', empty: '저장소가 없습니다.', loadFailed: '저장소를 불러오지 못했습니다. 새로고침 후 다시 시도하세요.', saveFailed: '저장소 생성에 실패했습니다. 경로와 배포 정책을 확인하세요.', created: '저장소를 생성했습니다.', testOk: '저장소에 연결할 수 있습니다.', testFailed: '저장소 테스트에 실패했습니다.', deleteTitle: '저장소 삭제', deleteConfirm: '“{name}”을(를) 삭제할까요? 지식 베이스에서 사용 중이면 삭제할 수 없습니다.', deleted: '저장소를 삭제했습니다.', deleteFailed: '삭제할 수 없습니다. 지식 베이스에서 사용 중일 수 있습니다.' },
   adminKnowledge: {
     create: 'Create enterprise knowledge base',
     edit: 'Edit settings',

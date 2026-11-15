@@ -1,4 +1,5 @@
 export default {
+  adminStorage: { title: '企業ファイルストレージ', description: 'この企業で利用するナレッジファイルストレージを管理します。', scopeHint: '現在はローカルディレクトリのみ対応しています。企業のローカルパスはデプロイポリシーで拒否される場合があります。ナレッジベースが使用中のストレージは削除できません。パスは一覧に表示されません。', addTitle: 'ローカルディレクトリを追加', name: '名前', root: 'サーバーディレクトリパス', rootPlaceholder: 'デプロイサーバー上の絶対パス', provider: 'プロバイダー', kind: 'ソース', builtin: '組み込み', custom: '企業設定', actions: '操作', add: '追加', test: 'テスト', delete: '削除', empty: 'ストレージはありません。', loadFailed: 'ストレージを読み込めません。再試行してください。', saveFailed: '作成に失敗しました。パスとデプロイポリシーを確認してください。', created: 'ストレージを作成しました。', testOk: '接続できました。', testFailed: '接続テストに失敗しました。', deleteTitle: 'ストレージを削除', deleteConfirm: '「{name}」を削除しますか？ナレッジベースが使用中の場合は削除できません。', deleted: '削除しました。', deleteFailed: '削除できません。ナレッジベースが使用中の可能性があります。' },
   adminKnowledge: {
     create: 'Create enterprise knowledge base',
     edit: 'Edit settings',
