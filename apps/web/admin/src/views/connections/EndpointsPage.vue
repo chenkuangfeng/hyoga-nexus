@@ -61,7 +61,7 @@ async function load() {
   const request = epoch, scope = tenant.value, user = String(auth.user?.id || ''), revision = context.revision
   loading.value = true
   try {
-    const [rows, knowledge] = await Promise.all([listEndpoints(scope), listEndpointKnowledge(scope)])
+    const [rows, knowledge] = await Promise.all([listEndpoints(scope, true), listEndpointKnowledge(scope, true)])
     if (!current(request, scope, user, revision)) return
     endpoints.value = rows; bases.value = knowledge; ready.value = true
   } catch { if (current(request, scope, user, revision)) error.value = t('connectionUi.failed') }
@@ -80,12 +80,12 @@ async function save({ validateResult }: { validateResult: unknown }) {
   busy.value = true; error.value = ''
   try {
     if (id) {
-      const updated = await updateEndpoint(scope, id, input)
+      const updated = await updateEndpoint(scope, id, input, true)
       if (!current(request, scope, user, revision)) return
       endpoints.value = endpoints.value.map(row => row.id === id ? updated : row); closeEditor()
       void MessagePlugin.success(t('adminConnections.saved'))
     } else {
-      const result = await createEndpoint(scope, input)
+      const result = await createEndpoint(scope, input, true)
       if (!current(request, scope, user, revision)) return
       endpoints.value = [result.endpoint, ...endpoints.value]; closeEditor()
       issuedEndpoint.value = result.endpoint; freshToken.value = result.token
@@ -105,22 +105,22 @@ function confirmAction(row: Endpoint, operation: 'rotate' | 'revoke' | 'delete' 
       busy.value = true; error.value = ''
       try {
         if (operation === 'rotate') {
-          const result = await rotateEndpointToken(scope, row.id)
+          const result = await rotateEndpointToken(scope, row.id, true)
           if (!current(request, scope, user, revision)) return
           clearToken(); issuedEndpoint.value = result.endpoint; freshToken.value = result.token
         } else if (operation === 'revoke') {
-          await revokeEndpointToken(scope, row.id)
+          await revokeEndpointToken(scope, row.id, true)
           if (!current(request, scope, user, revision)) return
           if (issuedEndpoint.value?.id === row.id) clearToken()
           void MessagePlugin.success(t('adminConnections.tokenRevoked'))
         } else if (operation === 'delete') {
-          await deleteEndpoint(scope, row.id)
+          await deleteEndpoint(scope, row.id, true)
           if (!current(request, scope, user, revision)) return
           endpoints.value = endpoints.value.filter(item => item.id !== row.id)
           if (issuedEndpoint.value?.id === row.id) clearToken()
           void MessagePlugin.success(t('adminConnections.deleted'))
         } else {
-          const updated = await updateEndpoint(scope, row.id, { enabled: !row.enabled })
+          const updated = await updateEndpoint(scope, row.id, { enabled: !row.enabled }, true)
           if (!current(request, scope, user, revision)) return
           endpoints.value = endpoints.value.map(item => item.id === row.id ? updated : item)
         }

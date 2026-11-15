@@ -40,7 +40,7 @@ export function endpointFromResponse(value: unknown): Endpoint {
 }
 function tenant(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}` }
 function channel(tenantId: string, id: string): string { return `${tenant(tenantId)}/channels/${encodeURIComponent(id)}` }
-function endpoint(tenantId: string, id = ''): string { return `${tenant(tenantId)}/mcp-endpoints${id ? `/${encodeURIComponent(id)}` : ''}` }
+function endpoint(tenantId: string, id = '', admin = false): string { return `${tenant(tenantId)}${admin ? '/admin' : ''}/mcp-endpoints${id ? `/${encodeURIComponent(id)}` : ''}` }
 
 /** 渠道与平台核验状态来自同一次读取；未核验的渠道不可创建。 */
 export async function listAgentChannels(tenantId: string, agentId: string) {
@@ -103,32 +103,32 @@ export async function fetchWecomApps(tenantId: string): Promise<WecomAgentApp[]>
   })
 }
 /** 读取当前企业连接元数据；拒绝混入其他企业的响应。 */
-export async function listEndpoints(tenantId: string): Promise<Endpoint[]> {
-  const rows = array(await get(endpoint(tenantId))).map(endpointFromResponse)
+export async function listEndpoints(tenantId: string, admin = false): Promise<Endpoint[]> {
+  const rows = array(await get(endpoint(tenantId, '', admin))).map(endpointFromResponse)
   if (rows.some(row => row.tenant_id !== tenantId)) throw new Error('connection_response_invalid')
   return rows
 }
 /** 创建企业连接并分离一次性令牌；调用方仅在当前弹窗内存中保留令牌。 */
-export async function createEndpoint(tenantId: string, input: EndpointInput) {
-  const data = object(await post(endpoint(tenantId), input))
+export async function createEndpoint(tenantId: string, input: EndpointInput, admin = false) {
+  const data = object(await post(endpoint(tenantId, '', admin), input))
   return { endpoint: endpointFromResponse(data), token: string(data.token) }
 }
 /** 更新企业连接配置或启用状态；服务端要求 tools:manage。 */
-export async function updateEndpoint(tenantId: string, id: string, input: Partial<EndpointInput> & { enabled?: boolean }): Promise<Endpoint> {
-  return endpointFromResponse(await patch(endpoint(tenantId, id), input))
+export async function updateEndpoint(tenantId: string, id: string, input: Partial<EndpointInput> & { enabled?: boolean }, admin = false): Promise<Endpoint> {
+  return endpointFromResponse(await patch(endpoint(tenantId, id, admin), input))
 }
 /** 删除企业连接及其令牌；调用方须先确认。 */
-export async function deleteEndpoint(tenantId: string, id: string) { await del(endpoint(tenantId, id)) }
+export async function deleteEndpoint(tenantId: string, id: string, admin = false) { await del(endpoint(tenantId, id, admin)) }
 /** 立即使旧令牌失效并返回一次性新令牌；不得写入持久存储。 */
-export async function rotateEndpointToken(tenantId: string, id: string) {
-  const data = object(await post(`${endpoint(tenantId, id)}/rotate-token`, {}))
+export async function rotateEndpointToken(tenantId: string, id: string, admin = false) {
+  const data = object(await post(`${endpoint(tenantId, id, admin)}/rotate-token`, {}))
   return { endpoint: endpointFromResponse(data), token: string(data.token) }
 }
 /** 吊销企业连接现有令牌；不会生成替代令牌。 */
-export async function revokeEndpointToken(tenantId: string, id: string) { await post(`${endpoint(tenantId, id)}/revoke-token`, {}) }
+export async function revokeEndpointToken(tenantId: string, id: string, admin = false) { await post(`${endpoint(tenantId, id, admin)}/revoke-token`, {}) }
 /** 读取可选知识库名称与稳定 ID，避免让用户填写内部标识。 */
-export async function listEndpointKnowledge(tenantId: string): Promise<KnowledgeChoice[]> {
-  return array(object(await get(`${tenant(tenantId)}/knowledge/bases`)).items).map(value => {
+export async function listEndpointKnowledge(tenantId: string, admin = false): Promise<KnowledgeChoice[]> {
+  return array(object(await get(`${tenant(tenantId)}${admin ? '/admin' : ''}/knowledge/bases`)).items).map(value => {
     const row = object(value); return { id: string(row.id), name: string(row.name) }
   })
 }

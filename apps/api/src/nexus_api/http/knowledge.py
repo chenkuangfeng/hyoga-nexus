@@ -89,6 +89,12 @@ def list_bases(tenant_id: UUID, principal: Principal = Depends(get_principal),
     return {'items': [service.base_view(db, kb, tenant_id, user.id) for kb in rows]}
 
 
+# The admin app uses a distinct API namespace while the workspace keeps its
+# domain route. Both are the same membership-filtered read operation.
+admin_router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/admin/knowledge', tags=['Knowledge administration'])
+admin_router.add_api_route('/bases', list_bases, methods=['GET'], name='admin_list_knowledge_bases')
+
+
 @router.post('/bases', status_code=201)
 def create_base(tenant_id: UUID, body: BaseInput, principal: Principal = Depends(get_principal),
                 db: Session = Depends(get_database_session)) -> dict[str, Any]:

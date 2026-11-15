@@ -134,8 +134,9 @@ from nexus_api.http.roles import router as roles_router
 app.include_router(roles_router)
 from nexus_api.http.auth import router as auth_router
 app.include_router(auth_router)
-from nexus_api.http.knowledge import router as knowledge_router
+from nexus_api.http.knowledge import router as knowledge_router, admin_router as knowledge_admin_router
 app.include_router(knowledge_router)
+app.include_router(knowledge_admin_router)
 from nexus_api.http.knowledge_wiki import router as knowledge_wiki_router
 app.include_router(knowledge_wiki_router)
 from nexus_api.http.admin_resources import router as admin_resources_router

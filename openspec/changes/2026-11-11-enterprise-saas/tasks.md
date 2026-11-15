@@ -78,6 +78,7 @@
   - [x] 组织、成员/邀请/审批、角色、审计元数据、运行阻塞治理及技能投稿审核的管理专用路由提供 `/admin/` 规范路径；旧租户路径标记为 deprecated 并进入同一处理器，保持原权限检查。
   - [x] 管理端前端客户端切换至新路径；成员自己的加入申请、邀请响应和退出企业保留工作台用户路径。
   - [x] 企业模型管理客户端使用 `/admin/model-settings`；个人模型设置保留原 `/model-settings` 路径，二者共享服务端校验与不可变版本语义。
+  - [x] 管理端企业 MCP endpoint 使用 `/admin/mcp-endpoints`，工作台账户设置保留原域路径；两者经过同一服务端授权。
   - [ ] 其余管理页面调用的共享资源 API 完成路径盘点、适用边界确认和兼容迁移后，再整体勾选 E2.6。
 - [x] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
