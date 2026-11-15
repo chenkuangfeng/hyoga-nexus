@@ -96,7 +96,7 @@
     </div>
 
     <NexusModelEditorDialog v-if="tenantId && settings" v-model:visible="dialogVisible" :tenant-id="tenantId"
-      :settings="settings" :editing="editing" :initial-type="activeType === 'all' ? 'chat' : activeType" @saved="reload" />
+      :key="scopeKey" :draft="modelDraft" :settings="settings" :editing="editing" :initial-type="activeType === 'all' ? 'chat' : activeType" @saved="reload" />
   </div>
 </template>
 
@@ -106,7 +106,9 @@
  * model-settings API. Only management of personal providers, or of space providers for space
  * administrators, is offered; the server rechecks every write.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
+import { usePageDraftStore, type ModelFormDraft } from '@/stores/pageDrafts'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { AddIcon } from 'tdesign-icons-vue-next'
@@ -119,7 +121,10 @@ import { countByType, filterCards, flattenModelCards, NEXUS_TYPES, type ModelCar
 import NexusModelEditorDialog from './NexusModelEditorDialog.vue'
 
 const { t } = useI18n()
-const authStore = useAuthStore()
+const authStore = useAuthStore(), route = useRoute(), pageDrafts = usePageDraftStore()
+const modelDraft = ref<ModelFormDraft | null>(null)
+const scopeKey = computed(() => JSON.stringify([authStore.user?.id, authStore.effectiveTenantId, authStore.currentTenantRole]))
+let epoch = 0, alive = true
 
 const tenantId = computed(() => authStore.effectiveTenantId ? String(authStore.effectiveTenantId) : '')
 const settings = ref<ModelSettingsView | null>(null)
@@ -156,27 +161,52 @@ function errorMessage(error: unknown, fallback: string): string {
   return typeof message === 'string' && message ? message : fallback
 }
 
+/** Open tools' one-shot drafts only after the current enterprise directory has loaded. */
+function openRequestedModel() {
+  if (!settings.value || loading.value || !alive) return
+  const draft = pageDrafts.takePageDraft('model')
+  if (draft) {
+    if (draft.source === 'local') { MessagePlugin.warning(t('nexusModels.localDraftUnsupported')); return }
+    modelDraft.value = draft
+    editing.value = null
+    dialogVisible.value = true
+    return
+  }
+  const id = route.query.model_id
+  if (typeof id !== 'string') return
+  const card = cards.value.find(row => row.model.id === id)
+  if (card?.canManage) { modelDraft.value = null; editing.value = card; dialogVisible.value = true }
+}
 async function reload() {
-  if (!tenantId.value) return
+  const current = ++epoch, tenant = tenantId.value
+  if (!tenant || !alive) return
   loading.value = true
   loadError.value = ''
   try {
-    settings.value = await getModelSettings(tenantId.value)
+    const result = await getModelSettings(tenant)
+    if (current !== epoch || !alive) return
+    settings.value = result
   } catch (error) {
-    loadError.value = errorMessage(error, t('nexusModels.loadFailed'))
+    if (current === epoch && alive) loadError.value = errorMessage(error, t('nexusModels.loadFailed'))
   } finally {
-    loading.value = false
+    if (current === epoch && alive) { loading.value = false; openRequestedModel() }
   }
 }
-
-watch(tenantId, () => { void reload() }, { immediate: true })
+watch(scopeKey, () => {
+  epoch++; settings.value = null; dialogVisible.value = false; editing.value = null; modelDraft.value = null
+  void reload()
+}, { immediate: true, flush: 'sync' })
+watch(() => [route.query.model_id, pageDrafts.pageDraft], openRequestedModel)
+onBeforeUnmount(() => { alive = false; epoch++ })
 
 function openAdd() {
+  modelDraft.value = null
   editing.value = null
   dialogVisible.value = true
 }
 
 function openEdit(card: ModelCard) {
+  modelDraft.value = null
   editing.value = card
   dialogVisible.value = true
 }

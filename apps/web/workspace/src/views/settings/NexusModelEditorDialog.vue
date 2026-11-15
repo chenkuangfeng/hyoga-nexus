@@ -113,7 +113,8 @@
  * The API Key lives only in this component's state until submit and is cleared afterwards.
  * A provider created by a failed attempt is remembered so a retry does not create another (R5).
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
+import type { ModelFormDraft } from '@/stores/pageDrafts'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
@@ -129,10 +130,13 @@ const props = defineProps<{
   settings: ModelSettingsView
   editing: ModelCard | null
   initialType: NexusModelType
+  draft?: ModelFormDraft | null
 }>()
 const emit = defineEmits<{ (e: 'update:visible', value: boolean): void; (e: 'saved'): void }>()
 const { t } = useI18n()
 
+let epoch = 0, alive = true
+onBeforeUnmount(() => { alive = false; epoch++; form.api_key = '' })
 const saving = ref(false)
 const checking = ref(false)
 const tested = ref(false)
@@ -158,7 +162,8 @@ function emptyForm(): ModelEditorForm {
     scope: 'personal', protocol: 'openai_chat_completions' }
 }
 
-watch(() => props.visible, visible => {
+watch(() => [props.visible, props.tenantId, props.draft, props.editing] as const, ([visible]) => {
+  epoch++; saving.value = false; checking.value = false
   if (!visible) { form.api_key = ''; return }
   tested.value = false
   testMessage.value = ''
@@ -168,7 +173,10 @@ watch(() => props.visible, visible => {
     model_type: card.type, model_name: card.model.name, provider_id: card.provider.id,
     provider_name: card.provider.name, base_url: card.provider.base_url, scope: card.provider.scope,
     protocol: String(card.model.options.protocol || 'openai_chat_completions'),
-  } : { model_type: props.initialType })
+  } : {
+    model_type: props.draft ? (props.draft.type === 'vllm' ? 'vision' : props.draft.type === 'asr' ? 'speech' : props.draft.type) : props.initialType,
+    model_name: props.draft?.model_name || '', provider_name: props.draft?.provider || '', base_url: props.draft?.base_url || '',
+  })
 }, { immediate: true })
 
 // Any change to the tested fields invalidates the previous result.
@@ -184,24 +192,27 @@ function selectedProvider() {
 }
 
 async function testConnection() {
+  if (checking.value || saving.value || !props.visible || !alive) return
+  const current = epoch, tenant = props.tenantId
   checking.value = true
   try {
     const provider = selectedProvider()
-    const result = await testDraftConnection(props.tenantId, {
+    const result = await testDraftConnection(tenant, {
       scope: provider?.scope || form.scope,
       base_url: provider && !props.editing ? provider.base_url : form.base_url.trim(),
       model_name: form.model_name.trim(), model_type: form.model_type,
       options: modelOptionsFor(form, props.editing?.model.options), provider_id: provider?.id, api_key: form.api_key || undefined,
     })
+    if (current !== epoch || !alive) return
     testOk.value = result.ok
     // The code identifies the cause precisely when reporting problems; the message stays human-readable.
     testMessage.value = result.ok || !result.code ? result.message : `${result.message}（${result.code}）`
   } catch (error) {
+    if (current !== epoch || !alive) return
     testOk.value = false
     testMessage.value = errorMessage(error, t('model.editor.connectionFailed'))
   } finally {
-    tested.value = true
-    checking.value = false
+    if (current === epoch && alive) { tested.value = true; checking.value = false }
   }
 }
 
@@ -213,6 +224,8 @@ function validate(): string {
 }
 
 async function save() {
+  if (saving.value || checking.value || !props.visible || !alive) return
+  const current = epoch, tenant = props.tenantId
   const missing = validate()
   if (missing) { MessagePlugin.warning(missing); return }
   saving.value = true
@@ -221,24 +234,28 @@ async function save() {
   try {
     const plan = planSave(form, props.editing, createdProviderId.value)
     if (plan.kind === 'edit') {
-      if (plan.updateProvider) await updateProvider(props.tenantId, plan.providerId, providerBody)
-      await editModel(props.tenantId, plan.providerId, plan.profileId, model)
+      if (plan.updateProvider) await updateProvider(tenant, plan.providerId, providerBody)
+      if (current !== epoch || !alive) return
+      await editModel(tenant, plan.providerId, plan.profileId, model)
     } else {
       let providerId = plan.kind === 'add' ? plan.providerId : ''
       if (plan.kind === 'create-provider-then-add') {
-        providerId = (await createProvider(props.tenantId, providerBody)).id
+        providerId = (await createProvider(tenant, providerBody)).id
+        if (current !== epoch || !alive) return
         createdProviderId.value = providerId
       }
-      await addModel(props.tenantId, providerId, model)
+      await addModel(tenant, providerId, model)
     }
+    if (current !== epoch || !alive) return
     form.api_key = ''
     MessagePlugin.success(t('nexusModels.saved'))
     emit('saved')
     emit('update:visible', false)
   } catch (error) {
-    MessagePlugin.error(errorMessage(error, t('nexusModels.saveFailed')))
+    if (current === epoch && alive) MessagePlugin.error(errorMessage(error, t('nexusModels.saveFailed')))
   } finally {
-    saving.value = false
+    providerBody.api_key = ''
+    if (current === epoch && alive) { saving.value = false; form.api_key = '' }
   }
 }
 </script>

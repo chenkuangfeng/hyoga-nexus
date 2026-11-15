@@ -166,3 +166,9 @@ MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，�
 ## 企业编码只读展示
 
 企业详情客户端严格校验 code 为 string/null。管理端 EnterpriseInfo 页面使用既有 SettingsRow、主题与剪贴板工具显示只读编码和复制反馈；空值禁用复制。复制请求与账号/企业/权限、页面代次绑定，切换或卸载后的结果不能污染当前页面。
+
+## 工作台旧模型孤立实现清理
+
+设置只挂载 Nexus 模型页，旧 WeKnora ModelSettings、ModelEditorDialog、ModelDebugDrawer 及独占的 modelProviders/modelProvidersState、modelEditorSourceState、modelCopyName、weknoraCloudModels、browserPairingOrigin 已删除。共享文案、解析器 Cloud 状态及通用 API 不按名称批量移除，依赖包仍被其他页面使用。
+
+聊天工具继续通过 pageDrafts 交付无凭据模型草稿。Nexus 页面等待当前目录加载后一次消费，显式映射 vllm→vision、asr→speech；local 来源提示不支持。模型深链接按实际 profile id 定位且校验 canManage。账号/企业/基础角色变化清空旧页面和表单；对话框以 scope key 重建，关闭/卸载或目标变化使旧测试、供应商→模型写链失效，凭据不保留在重试状态。仅 provider id 用于模型失败后的复用。

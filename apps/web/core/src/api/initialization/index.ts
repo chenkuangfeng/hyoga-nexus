@@ -668,7 +668,7 @@ export interface ModelProviderOption {
 
 // 获取模型厂商列表。
 //
-// 失败时 reject（不再吞成空数组）：唯一的调用方 stores/modelProviders 需要
+// 失败时 reject（不吞成空数组）：目录调用方需要
 // 区分「后端真的没有厂商」和「这次请求挂了」——把失败当成空列表缓存下来，
 // 会让厂商下拉在整个会话里一直空着，直到用户刷新页面。
 export function listModelProviders(modelType?: string): Promise<ModelProviderOption[]> {

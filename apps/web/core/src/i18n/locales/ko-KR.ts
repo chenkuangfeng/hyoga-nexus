@@ -9029,6 +9029,7 @@ export default {
     }
   },
   nexusModels: {
+    localDraftUnsupported: "원격 모델 초안만 지원됩니다. 모델 서비스 URL을 설정하세요.",
     description: "채팅, 임베딩, 재정렬, 비전, 음성 모델을 관리합니다. 주소와 Key는 공급자에 저장되며 같은 공급자의 모델이 함께 사용합니다",
     scopeLabel: "공개 범위",
     scope: {

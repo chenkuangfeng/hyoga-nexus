@@ -9021,6 +9021,7 @@ export default {
     }
   },
   nexusModels: {
+    localDraftUnsupported: "Only remote model drafts are supported. Configure a model service URL.",
     description: "Manage chat, embedding, rerank, vision and speech models. Address and Key belong to the provider and are shared by its models",
     scopeLabel: "Visibility",
     scope: {

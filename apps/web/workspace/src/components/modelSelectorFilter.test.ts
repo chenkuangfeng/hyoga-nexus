@@ -9,7 +9,6 @@ import { filterModelsByType } from '@nexus-web/core/components/modelSelectorFilt
 const selectorSource = readFileSync(new URL('../../../core/src/components/ModelSelector.vue', import.meta.url), 'utf8')
 const kbEditorSource = readFileSync(new URL('../../../core/src/components/knowledge-editor/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
 const agentEditorSource = readFileSync(new URL('../views/agent/AgentEditorModal.vue', import.meta.url), 'utf8')
-const modelSettingsSource = readFileSync(new URL('../views/settings/ModelSettings.vue', import.meta.url), 'utf8')
 
 function model(overrides: Partial<ModelConfig> & Pick<ModelConfig, 'id' | 'type'>): ModelConfig {
   return {
@@ -38,7 +37,7 @@ test('VLLM selector keeps the standard model-name presentation without type suff
   assert.doesNotMatch(selectorSource, /modelOptionTypeLabel|modelOptionLabel|vlmOptionType/)
 })
 
-test('VLM selection, knowledge-base and agent saves, and deletion preserve the selected model ID', () => {
+test('VLM selection and knowledge-base and agent saves preserve the selected model ID', () => {
   assert.match(selectorSource, /:key="model\.id"[\s\S]*:value="model\.id"/)
   assert.match(selectorSource, /emit\('update:selectedModelId', value \|\| ''\)/)
   assert.match(kbEditorSource, /handleMultimodalVLLMChange[\s\S]*vllmModelId = modelId/)
@@ -46,9 +45,6 @@ test('VLM selection, knowledge-base and agent saves, and deletion preserve the s
   assert.match(agentEditorSource, /model-type="VLLM"[\s\S]*formData\.config\.vlm_model_id[\s\S]*formData\.config\.vlm_model_id = val/)
   assert.match(agentEditorSource, /const payload = \{ \.\.\.formData\.value, config: serializeAgentPrompts/)
   assert.match(agentEditorSource, /updateAgent\(formData\.value\.id, payload\)/)
-  assert.match(modelSettingsSource, /@confirm="deleteModel\(model\._modelType, model\.id\)"/)
-  assert.match(modelSettingsSource, /allModels\.value\.find\(m => m\.id === modelId\)/)
-  assert.match(modelSettingsSource, /await deleteModelAPI\(modelId\)/)
 })
 
 test('VLLM selector excludes non-vision chat and other types even with supports_vision', () => {

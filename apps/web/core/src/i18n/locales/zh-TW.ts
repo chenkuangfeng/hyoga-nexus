@@ -9025,6 +9025,7 @@ export default {
     }
   },
   nexusModels: {
+    localDraftUnsupported: "目前僅支援遠端模型草稿，請設定模型服務位址。",
     description: "管理對話、向量、重排、視覺與語音模型。位址與 Key 儲存在服務商上，同一服務商下的模型共用",
     scopeLabel: "可見範圍",
     scope: {

@@ -9029,6 +9029,7 @@ export default {
     }
   },
   nexusModels: {
+    localDraftUnsupported: "リモートモデルの下書きのみ対応しています。モデルサービスのURLを設定してください。",
     description: "チャット、埋め込み、リランク、ビジョン、音声モデルを管理します。アドレスと Key はプロバイダーに保存され、同じプロバイダーのモデルで共有されます",
     scopeLabel: "公開範囲",
     scope: {
