@@ -59,6 +59,13 @@ export default {
     "audienceConfirm": "Update the access scope for “{kb}”? Narrowing it may affect users of assigned agents. The server will reject changes that remove their access.",
     "audienceInactive": "This knowledge base is not currently scoped. Saving members or departments will switch it to a selected audience. Clearing the list does not automatically broaden access.",
     "audienceRequired": "A scoped knowledge base must have at least one member or department.",
+    "deleteBase": {
+      "action": "Delete knowledge base",
+      "title": "Delete enterprise knowledge base",
+      "confirm": "Deleting “{name}” is irreversible. Access from this enterprise and shared spaces will stop immediately, and agents using it will lose this knowledge source. Files and indexes are cleaned up in the background. Continue?",
+      "deleted": "Deletion was queued for “{name}”.",
+      "failed": "Could not delete the knowledge base. Refresh and retry."
+    },
     "content": {
       'back': 'Back to knowledge bases',
       'title': 'Knowledge base content',

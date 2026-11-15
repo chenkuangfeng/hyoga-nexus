@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useAdminContext } from '../../stores/context'
-import { listEnterpriseKnowledgeBases, listKnowledgeMaintainers, addKnowledgeMaintainer, removeKnowledgeMaintainer, type EnterpriseKnowledgeBase, type KnowledgeBaseAudience, type KnowledgeMaintainer } from '@nexus-web/core/api/enterprise-knowledge'
+import { listEnterpriseKnowledgeBases, listKnowledgeMaintainers, addKnowledgeMaintainer, removeKnowledgeMaintainer, deleteEnterpriseKnowledgeBase, type EnterpriseKnowledgeBase, type KnowledgeBaseAudience, type KnowledgeMaintainer } from '@nexus-web/core/api/enterprise-knowledge'
 import { listEnterpriseMembers, type EnterpriseMember } from '@nexus-web/core/api/enterprise-members'
 
 export function useKnowledgeAdministration() {
@@ -111,7 +111,28 @@ export function useKnowledgeAdministration() {
     if (canAdd.value && member) confirmWrite(true, member.user_id, memberName(member))
   }
   function remove(row: KnowledgeMaintainer) { if (editable.value && maintainers.value.includes(row)) confirmWrite(false, row.user_id, maintainerName(row)) }
+  function deleteBase(row: EnterpriseKnowledgeBase) {
+    if (!canManage.value || !ready.value || busy.value || !row.can_manage || !rows.value.includes(row) || confirmation) return
+    const current = epoch, scope = tenant.value, kb = row.id
+    const valid = () => current === epoch && scope === tenant.value && canManage.value && row.can_manage && rows.value.includes(row)
+    let dialog: ReturnType<typeof DialogPlugin.confirm>
+    dialog = DialogPlugin.confirm({ header: t('adminKnowledge.deleteBase.title'), body: t('adminKnowledge.deleteBase.confirm', { name: row.name }), theme: 'danger',
+      onConfirm: async () => {
+        if (confirmation !== dialog) return
+        dialog.hide(); confirmation = undefined
+        if (!valid() || busy.value) return
+        busy.value = true; error.value = ''; panelError.value = ''
+        try { await deleteEnterpriseKnowledgeBase(scope, kb) }
+        catch { if (valid()) { busy.value = false; error.value = t('adminKnowledge.deleteBase.failed') }; return }
+        if (!valid()) return
+        void MessagePlugin.success(t('adminKnowledge.deleteBase.deleted', { name: row.name }))
+        busy.value = false
+        await load()
+      }, onClose: () => { dialog.hide(); if (confirmation === dialog) confirmation = undefined },
+    })
+    confirmation = dialog
+  }
   watch([tenant, () => auth.user?.id, () => context.revision, canManage, canReadMembers], () => { invalidate(); void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { editor, editingId, editorKey, tenant, openEditor, openSettings, audienceTarget, closeAudience, audienceSaved, openAudience, rows, loading, ready, error, search, selected, maintainers, maintainersReady, membersReady, panelLoading, busy, panelError, membersError, success, selectedMember, canManage, canReadMembers, canReadOrganization: computed(() => context.can('org:manage')), filtered, memberOptions, maintainerName, canAdd, editable, load, inspect, closePanel, add, remove }
+  return { editor, editingId, editorKey, tenant, openEditor, openSettings, audienceTarget, closeAudience, audienceSaved, openAudience, rows, loading, ready, error, search, selected, maintainers, maintainersReady, membersReady, panelLoading, busy, panelError, membersError, success, selectedMember, canManage, canReadMembers, canReadOrganization: computed(() => context.can('org:manage')), filtered, memberOptions, maintainerName, canAdd, editable, load, inspect, closePanel, add, remove, deleteBase }
 }
