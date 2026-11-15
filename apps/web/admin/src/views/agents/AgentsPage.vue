@@ -1,11 +1,19 @@
 <script setup lang="ts">
 /** 管理应用组合共享编辑器；不依赖工作台路由或聊天状态。 */
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import { MessagePlugin } from 'tdesign-vue-next'
 import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue'
 import NexusAgentEditorModal from '@nexus-web/core/components/agent-editor/NexusAgentEditorModal.vue'
 import { useAgentAdministration } from './useAgentAdministration'
+import { useAdminContext } from '../../stores/context'
 const { t } = useI18n()
-const { loading, ready, busy, error, search, editor, selected, revision, tenant, canManage, canGrant, filtered, load, open, archive, modelSettings } = useAgentAdministration()
+const router = useRouter(), adminContext = useAdminContext()
+const { loading, ready, busy, error, search, editor, selected, revision, tenant, canManage, canGrant, filtered, load, open, archive } = useAgentAdministration()
+function openModelSettings() {
+  if (adminContext.can('models:manage')) void router.push('/models')
+  else void MessagePlugin.info(t('adminAgents.modelsPermission'))
+}
 </script>
 <template>
   <section class="agents-page">
@@ -25,7 +33,7 @@ const { loading, ready, busy, error, search, editor, selected, revision, tenant,
         </div>
         <div v-else-if="ready" class="empty"><t-icon :name="search.trim() ? 'search' : 'app'" size="40px" /><p>{{ t(search.trim() ? 'adminAgents.noMatch' : 'adminAgents.empty') }}</p></div>
       </t-loading>
-      <NexusAgentEditorModal v-if="editor" :key="revision" :visible="editor" :tenant-id="tenant" :agent-id="selected" creation-scope="enterprise" @close="editor = false" @saved="load" @open-model-settings="modelSettings" />
+      <NexusAgentEditorModal v-if="editor" :key="revision" :visible="editor" :tenant-id="tenant" :agent-id="selected" creation-scope="enterprise" @close="editor = false" @saved="load" @open-model-settings="openModelSettings" />
     </template>
   </section>
 </template>

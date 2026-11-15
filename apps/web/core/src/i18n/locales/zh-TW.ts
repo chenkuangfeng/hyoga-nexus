@@ -155,6 +155,23 @@ export default {
     "refreshFailed": "Revocation succeeded, but the maintainer list failed to refresh. Refresh to retry.",
     "open": "Manage knowledge bases"
   },
+  adminModels: {
+    title: 'Enterprise models',
+    description: 'Manage shared providers, model versions and defaults for this enterprise.',
+    scopeHint: 'Only shared enterprise models are shown. Member personal models are not read or changed. API keys are sent only when submitted and are never displayed in full.',
+    loadFailed: 'Could not load enterprise models. Try again.', saveFailed: 'Could not save the model configuration. Check the fields and retry.', deleteFailed: 'Could not disable the model configuration. Try again.',
+    addProvider: 'Add provider', editProvider: 'Edit provider', addProviderTitle: 'Add enterprise model provider', editProviderTitle: 'Edit enterprise model provider',
+    providerName: 'Provider name', baseUrl: 'API address', apiKey: 'API key', keyRequired: 'Enter API key', keyKeepHint: 'Leave blank to keep the current key', keyWriteOnly: 'The key is encrypted on the server. Changing the API address requires a replacement key.',
+    providerRequired: 'Enter the provider name, API address and required API key.', keyRequiredForAddressChange: 'Changing the API address requires a replacement API key.', providerSaved: 'Enterprise provider saved.', keyConfigured: 'Configured key:', disable: 'Disable',
+    deleteProviderTitle: 'Disable enterprise provider', deleteProviderConfirm: 'Disabling “{name}” revokes its credential, clears related defaults and prevents agents from using its models. Historical runs are retained. Continue?',
+    deleteModelTitle: 'Disable model', deleteModelConfirm: 'Disabling “{name}” clears its default and prevents future calls. Historical runs are retained. Continue?', providerDisabled: 'Provider “{name}” disabled.', modelDisabled: 'Model “{name}” disabled.',
+    defaultsTitle: 'Enterprise model defaults', defaultsHint: 'Defaults apply to new configurations that do not select a model. Published agents and active runs are not changed.', noDefault: 'No default model', defaultSaved: 'Enterprise default updated.', defaultFailed: 'Could not update the enterprise default. The previous selection was restored.',
+    addModel: 'Add model', editModel: 'Edit model', addModelTitle: 'Add model', editModelTitle: 'Edit model and create version', modelName: 'Provider model name', modelType: 'Model type', modelRequired: 'Enter the provider model name.', modelSaved: 'Model added.', modelVersionSaved: 'New model version saved. Existing agents keep their current version.', modelVersion: 'Version {version}', noModels: 'No models have been added to this provider.', noProviders: 'No enterprise model providers configured.',
+    protocol: 'Protocol', temperature: 'Temperature (optional, 0–2)', reasoningEffort: 'Reasoning effort (optional)', modelOptionsHint: 'Protocol and options are saved in an immutable model version. Model type cannot be changed after creation.', versionHint: 'Saving appends a version and leaves published agent references on their current version.',
+    test: 'Test connection', testHint: 'The test sends a minimal chat request to the provider and may incur charges. Only chat models make a live request; other types are reported as unsupported by the server.', testFailed: 'Connection test failed. Try again later.',
+    types: { chat: 'Chat', embedding: 'Embedding', rerank: 'Rerank', vision: 'Vision', speech: 'Speech' },
+    protocols: { openai_chat_completions: 'OpenAI Chat Completions', openai_responses: 'OpenAI Responses', anthropic_messages: 'Anthropic Messages' }, save: 'Save'
+  },
   adminAgents: {
     "title": "Enterprise agents",
     "description": "Configure, publish and archive enterprise agents.",
@@ -172,7 +189,7 @@ export default {
     "edit": "Edit and publish",
     "noMatch": "No matching enterprise agents",
     "empty": "No visible enterprise agents",
-    "modelsPending": "Admin model management has not migrated yet. Configure an enterprise model before selecting it.",
+    "modelsPermission": "Enterprise model management permission is required to open model settings.",
     "enterpriseKnowledge": "Enterprise agents can bind only enterprise knowledge bases. The server validates the final binding scope.",
     "open": "Manage agents"
   },

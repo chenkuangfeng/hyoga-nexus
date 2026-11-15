@@ -155,6 +155,30 @@ export default {
     "refreshFailed": "撤销已成功，但管理员列表刷新失败，请刷新重试。",
     "open": "管理知识库"
   },
+  adminModels: {
+    title: '企业模型',
+    description: '管理当前企业共享的模型服务商、模型版本和各类型默认模型。',
+    scopeHint: '仅显示当前企业共享模型，不读取或修改成员个人模型。模型 Key 只在提交时发送，页面不会回显完整密钥。',
+    loadFailed: '企业模型读取失败，请重试。',
+    saveFailed: '模型配置保存失败，请检查字段后重试。',
+    deleteFailed: '停用模型配置失败，请重试。',
+    addProvider: '添加服务商', editProvider: '编辑服务商', addProviderTitle: '添加企业模型服务商', editProviderTitle: '编辑企业模型服务商',
+    providerName: '服务商名称', baseUrl: 'API 地址', apiKey: 'API Key', keyRequired: '请输入 API Key', keyKeepHint: '留空表示保留当前 Key', keyWriteOnly: 'Key 加密保存在服务端；修改 API 地址时必须重新填写 Key。',
+    providerRequired: '请填写服务商名称、API 地址和必需的 API Key。', keyRequiredForAddressChange: '修改 API 地址需要重新填写 API Key。',
+    providerSaved: '企业模型服务商已保存。', keyConfigured: '已配置密钥：', disable: '停用',
+    deleteProviderTitle: '停用企业模型服务商', deleteProviderConfirm: '停用“{name}”会撤销该服务商凭据、清除相关默认模型，并使引用这些模型的智能体无法继续使用；历史运行记录保留。确认停用？',
+    deleteModelTitle: '停用模型', deleteModelConfirm: '停用“{name}”会清除该模型默认值，并阻止后续调用；历史运行记录保留。确认停用？',
+    providerDisabled: '服务商“{name}”已停用。', modelDisabled: '模型“{name}”已停用。',
+    defaultsTitle: '企业默认模型', defaultsHint: '默认值只影响未显式指定模型的新配置，不会改写已发布的智能体或正在进行的运行。', noDefault: '不设置默认模型', defaultSaved: '企业默认模型已更新。', defaultFailed: '企业默认模型更新失败，已恢复原选择。',
+    addModel: '添加模型', editModel: '编辑模型', addModelTitle: '添加模型', editModelTitle: '编辑模型并创建新版本', modelName: '服务商模型名称', modelType: '模型类型',
+    modelRequired: '请输入服务商模型名称。', modelSaved: '模型已添加。', modelVersionSaved: '新模型版本已保存；已有智能体继续使用原版本。', modelVersion: '版本 {version}', noModels: '该服务商尚未添加模型。', noProviders: '尚未配置企业模型服务商。',
+    protocol: '接口协议', temperature: 'Temperature（可选，0–2）', reasoningEffort: '推理强度（可选）', modelOptionsHint: '协议和参数会写入不可变模型版本。模型类型创建后不可更改。', versionHint: '保存会追加新版本，不会改写已发布智能体引用的旧版本。',
+    test: '测试连接', testHint: '连接测试会向服务商发送一条最小聊天请求，可能产生费用；仅聊天模型执行真实请求，其他类型由服务端返回暂不支持。', testFailed: '连接测试失败，请稍后重试。',
+    types: { chat: '对话', embedding: '向量化', rerank: '重排', vision: '视觉', speech: '语音' },
+    protocols: { openai_chat_completions: 'OpenAI Chat Completions', openai_responses: 'OpenAI Responses', anthropic_messages: 'Anthropic Messages' },
+    save: '保存'
+  },
+
   adminAgents: {
     "title": "企业智能体",
     "description": "管理企业智能体的配置、发布版本与归档。",
@@ -172,7 +196,7 @@ export default {
     "edit": "编辑并发布",
     "noMatch": "没有匹配的企业智能体",
     "empty": "暂无可见的企业智能体",
-    "modelsPending": "后台模型管理尚未迁移，请先完成企业模型配置后再选择。",
+    "modelsPermission": "需要企业模型管理权限才能打开模型配置。",
     "enterpriseKnowledge": "企业智能体只能绑定企业知识库；最终可绑定范围由服务端校验。",
     "open": "管理智能体"
   },

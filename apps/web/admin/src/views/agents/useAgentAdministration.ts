@@ -51,8 +51,7 @@ export function useAgentAdministration() {
     })
     confirmation = dialog
   }
-  function modelSettings() { void MessagePlugin.info(t('adminAgents.modelsPending')) }
   watch([tenant, () => auth.user?.id, () => context.revision, canManage], () => { invalidate(); void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { rows, loading, ready, busy, error, search, editor, selected, revision, tenant, canManage, canGrant, filtered, load, open, archive, modelSettings }
+  return { rows, loading, ready, busy, error, search, editor, selected, revision, tenant, canManage, canGrant, filtered, load, open, archive }
 }
