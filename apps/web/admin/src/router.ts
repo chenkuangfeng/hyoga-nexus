@@ -35,6 +35,7 @@ const router = createRouter({
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
       { path: 'models', component: () => import('./views/models/ModelsPage.vue') },
+      { path: 'usage', component: () => import('./views/usage/UsagePage.vue') },
       { path: 'mcp-endpoints', component: () => import('./views/connections/EndpointsPage.vue') },
       { path: 'mcp-services', component: () => import('./views/connections/McpServicesPage.vue') },
       { path: 'storage', component: () => import('./views/storage/StoragePage.vue') },
