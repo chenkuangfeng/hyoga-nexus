@@ -40,7 +40,7 @@ const tool = (over: Partial<McpServiceTool> = {}): McpServiceTool => ({
 /** Mount the toolbox MCP panel with the given API mock; `perms` selects the `tools:manage` grant. */
 function panel(t: TestContext, api: Record<string, unknown>, perms: string[] = ['tools:manage']) {
   const f = fixture(t)
-  const { vm } = f.component(new URL('./NexusToolboxMcp.vue', import.meta.url), {
+  const { vm } = f.component(new URL('../../../../core/src/components/mcp-admin/NexusToolboxMcp.vue', import.meta.url), {
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key, te: () => false }) },
     'tdesign-vue-next': { MessagePlugin: { success() {}, error() {} } },
     '@nexus-web/core/api/nexus-mcp': api,
@@ -53,7 +53,7 @@ function panel(t: TestContext, api: Record<string, unknown>, perms: string[] = [
 /** Mount the create/edit dialog with a mocked `@/api/nexus-mcp`. */
 function dialog(t: TestContext, api: Record<string, unknown>, serviceProp: McpService | null = null) {
   const f = fixture(t)
-  const { vm } = f.component(new URL('./NexusMcpServiceDialog.vue', import.meta.url), {
+  const { vm } = f.component(new URL('../../../../core/src/components/mcp-admin/NexusMcpServiceDialog.vue', import.meta.url), {
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@nexus-web/core/api/nexus-mcp': api,
     './toolboxMcp': { configFromForm, formFromService, validateMcpForm },

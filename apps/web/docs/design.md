@@ -156,3 +156,5 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 
 管理端 `/mcp-endpoints` 复用 `core/api/enterprise-connections.ts` 的企业路径 API 和严格 DTO 解析，使用 `tools:manage` 权限上下文；令牌明文仅保存在页面临时状态，身份、企业或权限代次变化会作废请求并清空秘密。知识库选项以名称呈现，提交稳定 ID；端点执行期的白名单与访问范围仍由 MCP 服务端复核。
+
+MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，工作台工具箱通过兼容薄宿主接入，管理应用用独立 `/mcp-services` 页面组合；管理员权限由宿主服务端上下文注入，非管理成员的工作台保留只读目录。新工具发现后关闭启用状态，逐工具白名单继续由服务端校验。
