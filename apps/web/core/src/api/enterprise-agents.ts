@@ -19,34 +19,35 @@ export function enterpriseAgentFromResponse(value: unknown, tenant: string): Nex
 const base = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}`
 /** 接口还返回个人资源；仅接受本企业记录并筛出 enterprise，不把可见列表冒充完整目录。 */
 export async function listEnterpriseAgents(tenant: string): Promise<NexusAgent[]> {
-  return array(await get(`${base(tenant)}/agents`)).flatMap(value => {
+  return array(await get(`${base(tenant)}/admin/agents`)).flatMap(value => {
     const row = object(value)
     if (row.tenant_id !== tenant || !['personal', 'enterprise'].includes(string(row.ownership))) throw invalid()
     return row.ownership === 'enterprise' ? [enterpriseAgentFromResponse(row, tenant)] : []
   })
 }
 export async function getEnterpriseAgent(tenant: string, id: string): Promise<NexusAgent> {
-  const row = enterpriseAgentFromResponse(await get(`${base(tenant)}/agents/${encodeURIComponent(id)}`), tenant)
+  const row = enterpriseAgentFromResponse(await get(`${base(tenant)}/admin/agents/${encodeURIComponent(id)}`), tenant)
   if (row.id !== id || !row.can_maintain || row.status === 'archived') throw invalid()
   return row
 }
 export async function createEnterpriseAgent(tenant: string, body: AgentDraftInput): Promise<NexusAgent> { return enterpriseAgentFromResponse(await post(`${base(tenant)}/admin/agents`, body), tenant) }
 export async function updateEnterpriseAgent(tenant: string, id: string, body: AgentDraftInput): Promise<NexusAgent> {
-  const row = enterpriseAgentFromResponse(await put(`${base(tenant)}/agents/${encodeURIComponent(id)}`, body), tenant)
+  const row = enterpriseAgentFromResponse(await put(`${base(tenant)}/admin/agents/${encodeURIComponent(id)}`, body), tenant)
   if (row.id !== id) throw invalid()
   return row
 }
 /** 发布结果必须指向本次草稿；发布失败保留草稿，由编辑器更新重试。 */
 export async function publishEnterpriseAgent(tenant: string, id: string): Promise<void> {
-  const row = object(await post(`${base(tenant)}/agents/${encodeURIComponent(id)}/publish`, {}))
+  const row = object(await post(`${base(tenant)}/admin/agents/${encodeURIComponent(id)}/publish`, {}))
   if (row.id !== id || !Number.isInteger(row.version) || Number(row.version) < 1) throw invalid()
 }
-export async function archiveEnterpriseAgent(tenant: string, id: string): Promise<void> { await del(`${base(tenant)}/agents/${encodeURIComponent(id)}`) }
+export async function archiveEnterpriseAgent(tenant: string, id: string): Promise<void> { await del(`${base(tenant)}/admin/agents/${encodeURIComponent(id)}`) }
 
 export interface AgentKnowledgeChoice { id: string; tenant_id: string; name: string; description: string; shared: boolean; knowledge_count: number; ownership: 'personal' | 'enterprise' }
 /** 从原生知识库 DTO 获取候选，避免旧适配器丢失 ownership；共享来源的 tenant_id 用于绑定。 */
 export async function listAgentKnowledgeChoices(tenant: string, enterprise: boolean): Promise<AgentKnowledgeChoice[]> {
-  return array(object(await get(`${base(tenant)}/knowledge/bases`)).items).map(value => {
+  const knowledgePath = `${base(tenant)}/${enterprise ? 'admin/knowledge' : 'knowledge'}/bases`
+  return array(object(await get(knowledgePath)).items).map(value => {
     const row = object(value)
     if (!['personal', 'enterprise'].includes(string(row.ownership)) || typeof row.shared !== 'boolean' || !Number.isInteger(row.knowledge_count) || Number(row.knowledge_count) < 0) throw invalid()
     const ownership = row.ownership as 'personal' | 'enterprise'

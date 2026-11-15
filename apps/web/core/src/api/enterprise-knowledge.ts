@@ -30,10 +30,11 @@ export function knowledgeMaintainersFromResponse(value: unknown): KnowledgeMaint
   return rows
 }
 const base = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}`
-const maintainers = (tenant: string, kb: string) => `${base(tenant)}/admin/knowledge/bases/${encodeURIComponent(kb)}/maintainers`
+const knowledge = (tenant: string) => `${base(tenant)}/admin/knowledge`
+const maintainers = (tenant: string, kb: string) => `${knowledge(tenant)}/bases/${encodeURIComponent(kb)}/maintainers`
 /** 原列表受可见性过滤；仅显示当前企业的 enterprise 记录，不声称是完整资产目录。 */
 export async function listEnterpriseKnowledgeBases(tenant: string): Promise<EnterpriseKnowledgeBase[]> {
-  const rows = array(object(await get(`${base(tenant)}/knowledge/bases`)).items).flatMap(value => {
+  const rows = array(object(await get(`${knowledge(tenant)}/bases`)).items).flatMap(value => {
     const row = object(value), source = string(row.tenant_id)
     if (!['personal', 'enterprise'].includes(string(row.ownership)) || typeof row.shared !== 'boolean' || (row.shared !== (source !== tenant))) throw invalid()
     return source === tenant && row.ownership === 'enterprise' ? [enterpriseBaseFromResponse(row, tenant)] : []
@@ -43,7 +44,7 @@ export async function listEnterpriseKnowledgeBases(tenant: string): Promise<Ente
 }
 /** 删除当前企业知识库；资源访问立即停用，后台异步清理其内容与索引。 */
 export async function deleteEnterpriseKnowledgeBase(tenant: string, kb: string): Promise<void> {
-  await del(`${base(tenant)}/knowledge/bases/${encodeURIComponent(kb)}`)
+  await del(`${knowledge(tenant)}/bases/${encodeURIComponent(kb)}`)
 }
 export async function listKnowledgeMaintainers(tenant: string, kb: string): Promise<KnowledgeMaintainer[]> { return knowledgeMaintainersFromResponse(await get(maintainers(tenant, kb))) }
 /** 指定只授予内容维护，返回完整管理员列表；服务端复核活跃成员，已有记录幂等。 */
@@ -66,7 +67,7 @@ export function knowledgeBaseAudienceFromResponse(value: unknown): KnowledgeBase
   if (new Set(items.map(item => `${item.kind}:${item.id}`)).size !== items.length) throw invalid()
   return { visibility: visibility as KnowledgeVisibility, items }
 }
-const audiencePath = (tenant: string, kb: string) => `${base(tenant)}/knowledge/bases/${encodeURIComponent(kb)}/audience`
+const audiencePath = (tenant: string, kb: string) => `${knowledge(tenant)}/bases/${encodeURIComponent(kb)}/audience`
 export async function getKnowledgeBaseAudience(tenant: string, kb: string): Promise<KnowledgeBaseAudience> {
   return knowledgeBaseAudienceFromResponse(await get(audiencePath(tenant, kb)))
 }

@@ -38,7 +38,7 @@ function openModelSettings() {
         <div v-else-if="ready" class="empty"><t-icon :name="search.trim() ? 'search' : 'app'" size="40px" /><p>{{ t(search.trim() ? 'adminAgents.noMatch' : 'adminAgents.empty') }}</p></div>
       </t-loading>
       <NexusAgentEditorModal v-if="editor" :key="revision" :visible="editor" :tenant-id="tenant" :agent-id="selected" creation-scope="enterprise" @close="editor = false" @saved="load" @open-model-settings="openModelSettings" />
-      <AgentAudienceDialog v-if="audienceAgent" v-model:visible="audienceOpen" :tenant-id="tenant" :agent-id="audienceAgent.id" :agent-name="audienceAgent.name" :scope-key="`${tenant}:${audienceAgent.id}:${adminContext.revision}`" :can-manage="canManage && !!audienceAgent.can_maintain" :can-read-members="adminContext.can('members:manage')" :can-read-organization="adminContext.can('org:manage')" @saved="MessagePlugin.success(t('agentAudience.saved'))" />
+      <AgentAudienceDialog v-if="audienceAgent" v-model:visible="audienceOpen" :tenant-id="tenant" :agent-id="audienceAgent.id" :agent-name="audienceAgent.name" :scope-key="`${tenant}:${audienceAgent.id}:${adminContext.revision}`" :can-manage="canManage && !!audienceAgent.can_maintain" :can-read-members="adminContext.can('members:manage')" :can-read-organization="adminContext.can('org:manage')" admin-api @saved="MessagePlugin.success(t('agentAudience.saved'))" />
     </template>
   </section>
 </template>

@@ -38,8 +38,9 @@ export function invitationFromResponse(value: unknown): EnterpriseInvitation {
   return { ...base, kind: 'person', user_id: string(row.user_id), email: nullable(row.email), display_name: nullable(row.display_name) }
 }
 /** 服务端一次返回全部活跃成员，搜索和分页由页面完成；拒绝跨企业响应。 */
-export async function listEnterpriseMembers(tenantId: string): Promise<EnterpriseMember[]> {
-  const data: unknown = await get(`${tenantAdminPath(tenantId)}/members`)
+export async function listEnterpriseMembers(tenantId: string, admin = true): Promise<EnterpriseMember[]> {
+  const path = admin ? `${tenantAdminPath(tenantId)}/members` : `/api/v1/tenants/${encodeURIComponent(tenantId)}/members`
+  const data: unknown = await get(path)
   if (!Array.isArray(data)) throw new Error('members_response_invalid')
   const rows = data.map(memberFromResponse)
   if (rows.some(row => row.tenant_id !== tenantId)) throw new Error('members_response_invalid')

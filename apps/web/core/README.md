@@ -21,4 +21,4 @@
 
 ## 智能体使用受众
 
-`src/api/enterprise-agent-audience.ts` 校验智能体部门/成员受众并封装整体替换接口；`src/components/agent-editor/AgentAudienceDialog.vue` 在管理端智能体目录和工作台共享设置中复用。受众直接授予 view/run，不覆盖角色授权；候选按成员和组织目录权限分别读取，无权或失败时保留对应已有项，避免空列表覆盖。
+`src/api/enterprise-agent-audience.ts` 校验智能体部门/成员受众并封装整体替换接口；`src/components/agent-editor/AgentAudienceDialog.vue` 在管理端智能体目录和工作台共享设置中复用，并按宿主应用选择 `/admin/...` 或工作台兼容路径。受众直接授予 view/run，不覆盖角色授权；候选按成员和组织目录权限分别读取，无权或失败时保留对应已有项，避免空列表覆盖。

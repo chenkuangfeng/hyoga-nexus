@@ -35,7 +35,7 @@ async function load() {
   if (!allowed.value || !auth.effectiveTenantId) return
   const tenant = String(auth.effectiveTenantId)
   loading.value = true
-  try { const row = await getEnterpriseInfo(tenant); if (current === epoch) accept(row) }
+  try { const row = await getEnterpriseInfo(tenant, true); if (current === epoch) accept(row) }
   catch (reason) { if (current === epoch) error.value = failure(reason) }
   finally { if (current === epoch) loading.value = false }
 }
@@ -45,7 +45,7 @@ async function save() {
   const current = epoch, tenant = String(auth.effectiveTenantId), input = { ...changes.value }
   busy.value = true; error.value = ''; saved.value = false
   try {
-    const row = await updateEnterpriseInfo(tenant, input)
+    const row = await updateEnterpriseInfo(tenant, input, true)
     if (current !== epoch) return
     accept(row); saved.value = true
     // 仅更新当前作用域的可读名称，避免侧栏继续显示旧名称。

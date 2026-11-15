@@ -67,8 +67,8 @@ export interface DraftTestInput {
   api_key?: string
 }
 
-function root(tenantId: string): string {
-  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/model-settings`
+function root(tenantId: string, admin = false): string {
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}${admin ? '/admin' : ''}/model-settings`
 }
 
 function withoutEmptyKey<T extends { api_key?: string }>(body: T): T {
@@ -77,8 +77,8 @@ function withoutEmptyKey<T extends { api_key?: string }>(body: T): T {
   return copy
 }
 
-export async function getModelSettings(tenantId: string): Promise<ModelSettingsView> {
-  const data = await get<ModelSettingsView>(root(tenantId))
+export async function getModelSettings(tenantId: string, admin = false): Promise<ModelSettingsView> {
+  const data = await get<ModelSettingsView>(root(tenantId, admin))
   if (!data || !Array.isArray(data.providers)) throw new Error('Unexpected model settings response')
   return { providers: data.providers, defaults: data.defaults || {}, can_manage_tenant: !!data.can_manage_tenant }
 }

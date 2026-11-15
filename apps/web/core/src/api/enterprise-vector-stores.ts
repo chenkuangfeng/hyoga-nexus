@@ -14,7 +14,7 @@ function field(value: unknown): VectorField {
   if (enums !== undefined && (!Array.isArray(enums) || !enums.every(item => typeof item === 'string'))) throw new Error('admin_response_invalid')
   return { name: str(row.name), type: kind as VectorField['type'], required: row.required, sensitive: row.sensitive === true, description: typeof row.description === 'string' ? row.description : '', ...(row.default === undefined ? {} : { default: row.default }), ...(typeof row.min === 'number' ? { min: row.min } : {}), ...(enums ? { enum: enums as string[] } : {}) }
 }
-function path(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/knowledge` }
+function path(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/admin/knowledge` }
 function store(value: unknown): EnterpriseVectorStore {
   const row = object(value)
   if (typeof row.builtin !== 'boolean') throw new Error('admin_response_invalid')

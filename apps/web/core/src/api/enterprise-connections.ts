@@ -75,7 +75,7 @@ export async function listEnterpriseChannels(tenantId: string, status?: ChannelS
 }
 /** 读取调用者可见智能体的名称映射，供渠道总览显示可读名称而不展示 ID。 */
 export async function listChannelAgentNames(tenantId: string): Promise<Array<{ id: string; name: string }>> {
-  return array(await get(`${tenant(tenantId)}/agents`)).map(value => {
+  return array(await get(`${tenant(tenantId)}/admin/agents`)).map(value => {
     const row = object(value)
     if (row.tenant_id !== tenantId || !['personal', 'enterprise'].includes(string(row.ownership))) throw new Error('connection_response_invalid')
     return { id: string(row.id), name: string(row.name) }

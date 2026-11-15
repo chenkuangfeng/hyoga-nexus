@@ -17,7 +17,7 @@ function backend(value: unknown): EnterpriseStorageBackend {
   if (typeof row.id !== 'string' || typeof row.name !== 'string' || typeof row.provider !== 'string' || typeof row.builtin !== 'boolean') throw new Error('admin_response_invalid')
   return { id: row.id, name: row.name, provider: row.provider, builtin: row.builtin, config }
 }
-function tenantPath(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/knowledge/storage-backends` }
+function tenantPath(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/admin/knowledge/storage-backends` }
 /** 列出当前企业可见的内置与自定义存储后端。 */
 export async function listEnterpriseStorageBackends(tenantId: string): Promise<EnterpriseStorageBackend[]> {
   const response = object(await get(tenantPath(tenantId)))

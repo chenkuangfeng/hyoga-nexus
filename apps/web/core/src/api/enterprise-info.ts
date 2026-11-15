@@ -13,14 +13,16 @@ export function enterpriseInfoFromResponse(value: unknown, tenantId: string): En
   return { id: row.id as string, name: row.name as string, role: row.role as string, status: row.status as string, created_at: row.created_at as string, description: row.description as string | null ?? '' }
 }
 /** 当前企业由已认证请求层的 X-Tenant-ID 指定；响应必须与调用时作用域一致。 */
-export async function getEnterpriseInfo(tenantId: string): Promise<EnterpriseInfo> {
-  return enterpriseInfoFromResponse(await get('/api/v1/tenants/current'), tenantId)
+export async function getEnterpriseInfo(tenantId: string, admin = false): Promise<EnterpriseInfo> {
+  const path = admin ? `/api/v1/tenants/${encodeURIComponent(tenantId)}/admin` : '/api/v1/tenants/current'
+  return enterpriseInfoFromResponse(await get(path), tenantId)
 }
 /** 只提交变化字段；description 空字符串明确清空描述。服务端复核管理权限。 */
-export async function updateEnterpriseInfo(tenantId: string, changes: { name?: string; description?: string }): Promise<EnterpriseInfo> {
-  return enterpriseInfoFromResponse(await patch('/api/v1/tenants/current', changes), tenantId)
+export async function updateEnterpriseInfo(tenantId: string, changes: { name?: string; description?: string }, admin = false): Promise<EnterpriseInfo> {
+  const path = admin ? `/api/v1/tenants/${encodeURIComponent(tenantId)}/admin` : '/api/v1/tenants/current'
+  return enterpriseInfoFromResponse(await patch(path, changes), tenantId)
 }
 /** 删除由服务端归档，仅 owner 可操作；关联共享空间冲突由服务端返回。 */
 export async function archiveEnterprise(tenantId: string): Promise<void> {
-  await del(`/api/v1/tenants/${encodeURIComponent(tenantId)}`)
+  await del(`/api/v1/tenants/${encodeURIComponent(tenantId)}/admin`)
 }

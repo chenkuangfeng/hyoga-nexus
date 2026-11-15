@@ -25,7 +25,7 @@ async function load() {
   if (!canManage.value || !tenant.value) return
   const request = epoch, scope = tenant.value, user = String(auth.user?.id || ''), revision = context.revision
   loading.value = true
-  try { const result = await getAgentToolCatalog(scope); if (current(request, scope, user, revision)) { catalog.value = result; ready.value = true } }
+  try { const result = await getAgentToolCatalog(scope, true); if (current(request, scope, user, revision)) { catalog.value = result; ready.value = true } }
   catch { if (current(request, scope, user, revision)) error.value = t('adminToolCatalog.loadFailed') }
   finally { if (current(request, scope, user, revision)) loading.value = false }
 }
@@ -37,8 +37,8 @@ async function change(tool: AgentToolEntry, disable: boolean, request: number, s
   if (!current(request, scope, user, revision) || busy.value) return
   busy.value = tool.name; error.value = ''
   try {
-    if (disable) await disableBuiltinResource(scope, 'tool', tool.name)
-    else await restoreBuiltinResource(scope, 'tool', tool.name)
+    if (disable) await disableBuiltinResource(scope, 'tool', tool.name, true)
+    else await restoreBuiltinResource(scope, 'tool', tool.name, true)
     if (!current(request, scope, user, revision)) return
     MessagePlugin.success(t(disable ? 'adminToolCatalog.disabled' : 'adminToolCatalog.restored'))
     await load()

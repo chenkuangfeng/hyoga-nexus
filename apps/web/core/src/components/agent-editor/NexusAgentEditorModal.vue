@@ -642,10 +642,11 @@ async function switchBuiltin(kind: 'tool' | 'skill', name: string, off: boolean)
   const current = epoch, tenant = props.tenantId
   switching.value = `${kind}:${name}`
   try {
-    if (off) await disableBuiltinResource(tenant, kind, name)
-    else await restoreBuiltinResource(tenant, kind, name)
+    const adminApi = props.creationScope === 'enterprise'
+    if (off) await disableBuiltinResource(tenant, kind, name, adminApi)
+    else await restoreBuiltinResource(tenant, kind, name, adminApi)
     if (!active(current)) return
-    const tools = await getAgentToolCatalog(tenant)
+    const tools = await getAgentToolCatalog(tenant, adminApi)
     if (!active(current)) return
     void loadSkills()
     catalog.value = tools
@@ -806,7 +807,8 @@ async function load() {
   resetErrors()
   currentSection.value = 'basic'
   try {
-    const [settings, tools] = await Promise.all([getModelSettings(tenant), getAgentToolCatalog(tenant)])
+    const adminApi = props.creationScope === 'enterprise'
+    const [settings, tools] = await Promise.all([getModelSettings(tenant, adminApi), getAgentToolCatalog(tenant, adminApi)])
     if (!active(current)) return
     modelSettings.value = settings
     catalog.value = tools
@@ -849,9 +851,10 @@ async function enableTool(name: string) {
   const current = epoch, tenant = props.tenantId
   enabling.value = name
   try {
-    await enableTenantTool(tenant, name)
+    const adminApi = props.creationScope === 'enterprise'
+    await enableTenantTool(tenant, name, adminApi)
     if (!active(current)) return
-    const tools = await getAgentToolCatalog(tenant)
+    const tools = await getAgentToolCatalog(tenant, adminApi)
     if (!active(current)) return
     catalog.value = tools
     if (!form.allowed_tools.includes(name)) form.allowed_tools.push(name)

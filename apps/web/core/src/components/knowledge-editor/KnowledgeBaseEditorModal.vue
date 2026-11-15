@@ -1480,7 +1480,7 @@ const handleStorageBackendUpdate = (value: string) => {
 async function loadTenantDefaultStorageProvider(_force = false) {
   const generation = kbEditorLoadGeneration
   try {
-    const listed = await listKnowledgeEditorStorage(props.tenantId)
+    const listed = await listKnowledgeEditorStorage(props.tenantId, props.creationScope === 'enterprise')
     if (!isCurrentGeneration(generation)) return
     storageChoices.value = listed
     tenantDefaultStorageProvider.value = (listed.find(item => item.id === 'builtin') || listed[0])?.provider || ''

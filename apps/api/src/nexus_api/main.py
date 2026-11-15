@@ -117,6 +117,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Hyoga Nexus", version="0.1.0", lifespan=lifespan)
 
 from nexus_api.security import DevelopmentLoopbackGuard  # noqa: E402
+from nexus_api.http.admin_routes import add_tenant_admin_aliases  # noqa: E402
 app.add_middleware(DevelopmentLoopbackGuard)
 app.include_router(platform_router)
 app.include_router(skills_router)
@@ -158,6 +159,31 @@ from nexus_api.http.schedules import router as schedules_router
 app.include_router(schedules_router)
 from nexus_api.http.artifacts import router as artifacts_router
 app.include_router(artifacts_router)
+add_tenant_admin_aliases(
+    app,
+    "/api/v1/tenants/{tenant_id}/knowledge",
+    "/api/v1/tenants/{tenant_id}/admin/knowledge",
+)
+add_tenant_admin_aliases(
+    app,
+    "/api/v1/tenants/{tenant_id}/agents",
+    "/api/v1/tenants/{tenant_id}/admin/agents",
+)
+add_tenant_admin_aliases(
+    app,
+    "/api/v1/tenants/{tenant_id}/agent-tools",
+    "/api/v1/tenants/{tenant_id}/admin/agent-tools",
+)
+add_tenant_admin_aliases(
+    app,
+    "/api/v1/tenants/{tenant_id}/tools",
+    "/api/v1/tenants/{tenant_id}/admin/tools",
+)
+add_tenant_admin_aliases(
+    app,
+    "/api/v1/tenants/{tenant_id}/builtin-disabled",
+    "/api/v1/tenants/{tenant_id}/admin/builtin-disabled",
+)
 # Stateless outbound MCP endpoint: bearer-token auth (endpoint long-lived token) runs ahead of the
 # global session Auth, so external MCP clients reach the read-only tool face without a user session.
 from nexus_platform.mcp.http import endpoint_app  # noqa: E402

@@ -14,7 +14,7 @@ export function editableKnowledgeResponse(value: unknown, tenant: string, id?: s
   return { success: true as const, data }
 }
 const base = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}`
-export async function getEditableKnowledge(tenant: string, id: string, enterpriseOnly: boolean) { return editableKnowledgeResponse(await get(`${base(tenant)}/knowledge/bases/${encodeURIComponent(id)}`), tenant, id, enterpriseOnly) }
+export async function getEditableKnowledge(tenant: string, id: string, enterpriseOnly: boolean) { return editableKnowledgeResponse(await get(`${base(tenant)}/${enterpriseOnly ? 'admin/knowledge' : 'knowledge'}/bases/${encodeURIComponent(id)}`), tenant, id, enterpriseOnly) }
 /** 沿用完整转换器，额外合并原生未知设置和分块扩展；既有绑定不写入编辑请求。 */
 export function knowledgeEditorInput(data: Record<string, unknown>, snapshot: Record<string, unknown> = {}, editing = false) {
   const body: Record<string, unknown> = toNexusBaseInput(data)
@@ -34,13 +34,13 @@ export async function createEditableKnowledge(tenant: string, data: Record<strin
   return response
 }
 export async function updateEditableKnowledge(tenant: string, id: string, data: Record<string, unknown>, snapshot: Record<string, unknown>, enterpriseOnly: boolean) {
-  return editableKnowledgeResponse(await patch(`${base(tenant)}/knowledge/bases/${encodeURIComponent(id)}`, knowledgeEditorInput(data, snapshot, true)), tenant, id, enterpriseOnly)
+  return editableKnowledgeResponse(await patch(`${base(tenant)}/${enterpriseOnly ? 'admin/knowledge' : 'knowledge'}/bases/${encodeURIComponent(id)}`, knowledgeEditorInput(data, snapshot, true)), tenant, id, enterpriseOnly)
 }
 
 export interface KnowledgeEditorStorage { id: string; provider: string; name: string }
 /** 创建默认绑定来自真实可见存储目录；不读取旧工作台的部署配置接口。 */
-export async function listKnowledgeEditorStorage(tenant: string): Promise<KnowledgeEditorStorage[]> {
-  const response = object(await get(`${base(tenant)}/knowledge/storage-backends`))
+export async function listKnowledgeEditorStorage(tenant: string, enterprise = false): Promise<KnowledgeEditorStorage[]> {
+  const response = object(await get(`${base(tenant)}/${enterprise ? 'admin/knowledge' : 'knowledge'}/storage-backends`))
   if (!Array.isArray(response.items)) throw new Error('knowledge_editor_response_invalid')
   return response.items.map(value => {
     const row = object(value)

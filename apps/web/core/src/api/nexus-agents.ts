@@ -155,8 +155,8 @@ export async function copyNexusAgent(tenantId: string, agentId: string, name?: s
   return post<NexusAgent>(`${agentPath(tenantId, agentId)}/copy`, name ? { name } : {})
 }
 
-export async function getAgentToolCatalog(tenantId: string): Promise<AgentToolCatalog> {
-  const data: unknown = await get(`${tenantPath(tenantId)}/agent-tools`)
+export async function getAgentToolCatalog(tenantId: string, admin = false): Promise<AgentToolCatalog> {
+  const data: unknown = await get(`${tenantPath(tenantId)}${admin ? '/admin' : ''}/agent-tools`)
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Unexpected tool catalog response')
   const value = data as Record<string, unknown>
   if (!Array.isArray(value.tools) || !value.tools.every(isAgentToolEntry)
@@ -178,18 +178,18 @@ function isAgentToolEntry(value: unknown): value is AgentToolEntry {
 }
 
 /** Enable a builtin tool for the whole space (owner/admin; the server checks `tools:manage`). */
-export async function enableTenantTool(tenantId: string, name: string): Promise<void> {
-  await post(`${tenantPath(tenantId)}/tools/${encodeURIComponent(name)}/enable`, {})
+export async function enableTenantTool(tenantId: string, name: string, admin = false): Promise<void> {
+  await post(`${tenantPath(tenantId)}${admin ? '/admin' : ''}/tools/${encodeURIComponent(name)}/enable`, {})
 }
 
 /** Stop offering a builtin tool or skill in this space only (owner/admin). Published agents keep their bindings. */
-export async function disableBuiltinResource(tenantId: string, kind: 'tool' | 'skill', resourceId: string): Promise<void> {
-  await put(`${tenantPath(tenantId)}/builtin-disabled/${kind}/${encodeURIComponent(resourceId)}`, {})
+export async function disableBuiltinResource(tenantId: string, kind: 'tool' | 'skill', resourceId: string, admin = false): Promise<void> {
+  await put(`${tenantPath(tenantId)}${admin ? '/admin' : ''}/builtin-disabled/${kind}/${encodeURIComponent(resourceId)}`, {})
 }
 
 /** Offer a switched-off builtin tool or skill in this space again. */
-export async function restoreBuiltinResource(tenantId: string, kind: 'tool' | 'skill', resourceId: string): Promise<void> {
-  await del(`${tenantPath(tenantId)}/builtin-disabled/${kind}/${encodeURIComponent(resourceId)}`)
+export async function restoreBuiltinResource(tenantId: string, kind: 'tool' | 'skill', resourceId: string, admin = false): Promise<void> {
+  await del(`${tenantPath(tenantId)}${admin ? '/admin' : ''}/builtin-disabled/${kind}/${encodeURIComponent(resourceId)}`)
 }
 
 /**

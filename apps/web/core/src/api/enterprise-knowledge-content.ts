@@ -38,7 +38,7 @@ function string(value: unknown): string { if (typeof value !== 'string') throw i
 function nullableString(value: unknown): string | null { return value === null ? null : string(value) }
 function count(value: unknown): number { if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalid(); return value }
 function strings(value: unknown): string[] { return array(value).map(string) }
-const root = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}/knowledge`
+const root = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}/admin/knowledge`
 const base = (tenant: string, kb: string) => `${root(tenant)}/bases/${encodeURIComponent(kb)}`
 
 function versionFromResponse(value: unknown): KnowledgeDocumentVersion {

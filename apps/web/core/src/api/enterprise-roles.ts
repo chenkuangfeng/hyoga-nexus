@@ -55,7 +55,7 @@ function usePermissions(value: unknown): AgentUsePermission[] {
 }
 /** 当前可见列表受模型/发布状态过滤，只返回企业资源；不宣称是企业完整资源目录。 */
 export async function listRoleAgentChoices(tenant: string): Promise<RoleAgentChoice[]> {
-  const rows = array(await get(`${base(tenant)}/agents`)).map(value => {
+  const rows = array(await get(`${adminBase(tenant)}/agents`)).map(value => {
     const row = object(value)
     if (row.tenant_id !== tenant || !['personal', 'enterprise'].includes(string(row.ownership))) throw new Error('roles_response_invalid')
     return { id: string(row.id), name: string(row.name), ownership: row.ownership }

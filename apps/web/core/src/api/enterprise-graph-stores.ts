@@ -6,7 +6,7 @@ export interface EnterpriseGraphStore { id: string; name: string; engine: string
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('admin_response_invalid'); return value as Record<string, unknown> }
 function string(value: unknown): string { if (typeof value !== 'string') throw new Error('admin_response_invalid'); return value }
 function bool(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error('admin_response_invalid'); return value }
-function path(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/knowledge/graph-stores` }
+function path(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/admin/knowledge/graph-stores` }
 function store(value: unknown): EnterpriseGraphStore { const row = object(value); return { id: string(row.id), name: string(row.name), engine: string(row.engine), builtin: bool(row.builtin) } }
 function engine(value: unknown): GraphStoreEngine {
   const row = object(value), status = string(row.status)

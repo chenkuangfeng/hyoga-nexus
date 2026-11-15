@@ -25,6 +25,10 @@ FastAPI 应用入口，提供平台资源、会话/运行与 SSE、用户模型�
 
 企业成员/邀请与加入申请审批、角色、组织、审计元数据、运行阻塞治理及技能投稿审核等仅供管理端使用的接口，规范路径为 `/api/v1/tenants/{tenant_id}/admin/...`。企业模型管理使用 `/admin/model-settings`，管理端的 MCP endpoint 使用 `/admin/mcp-endpoints`；工作台个人模型和 MCP 设置保留原路径。旧的租户级管理路径在兼容周期内仍由同一处理器提供；仅工作台继续使用的共享路径不标为弃用。所有路径执行相同的身份、企业范围和 API 权限校验。工作台成员自己的加入申请、邀请接受/拒绝、离开企业等用户操作保持原路径。
 
+资源管理端通过 `/api/v1/tenants/{tenant_id}/admin/agents/...`、`/admin/knowledge/...` 及 `/admin/agent-tools`、`/admin/tools`、`/admin/builtin-disabled` 使用智能体、知识库和工具管理接口；共享操作沿用原处理器及依赖，旧路径继续服务工作台。已有的企业资源创建/删除专用处理器优先保留，不重复注册。
+
+企业资料管理使用 `/api/v1/tenants/{tenant_id}/admin` 的 GET/PATCH，归档使用 DELETE；工作台仍可通过 `/tenants/current` 读取当前企业身份，旧归档路径保留为 deprecated 兼容入口。
+
 **实时事件**：`GET /tenants/{tenant}/runs/{run}/events`（`Accept: text/event-stream`）为异步 SSE，续连用 `Last-Event-ID`；通道后端、嵌入模式与配置见 `configs/nexus.example.toml` 的 `[run_events]`、`[deployment]` 与 [总体架构 2.12](../../docs/architecture.md)。`GET /tenants/{tenant}/sessions/{session}/live-run` 返回会话正在生成的 Run（无则 204）。
 
 ## 开发热重载

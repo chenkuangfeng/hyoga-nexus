@@ -7,7 +7,7 @@ import { getAgentAudience, setAgentAudience, type AgentAudience, type AgentAudie
 import { listEnterpriseMembers, type EnterpriseMember } from '@nexus-web/core/api/enterprise-members'
 import { listOrganizationUnits, type OrganizationNode } from '@nexus-web/core/api/enterprise-organizations'
 
-const props = defineProps<{ visible: boolean; tenantId: string; agentId: string; agentName: string; scopeKey: string; canManage: boolean; canReadMembers: boolean; canReadOrganization: boolean }>()
+const props = defineProps<{ visible: boolean; tenantId: string; agentId: string; agentName: string; scopeKey: string; canManage: boolean; canReadMembers: boolean; canReadOrganization: boolean; adminApi?: boolean }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; saved: [audience: AgentAudience] }>()
 const { t } = useI18n()
 const loading = ref(false), saving = ref(false), audienceReady = ref(false), error = ref('')
@@ -44,9 +44,9 @@ async function load() {
   if (!props.visible || !tenant || !agent || !props.canManage) return
   loading.value = true
   const result = await Promise.allSettled([
-    getAgentAudience(tenant, agent),
-    props.canReadMembers ? listEnterpriseMembers(tenant) : Promise.resolve(null),
-    props.canReadOrganization ? listOrganizationUnits(tenant) : Promise.resolve(null),
+    getAgentAudience(tenant, agent, props.adminApi === true),
+    props.canReadMembers ? listEnterpriseMembers(tenant, props.adminApi === true) : Promise.resolve(null),
+    props.canReadOrganization ? listOrganizationUnits(tenant, props.adminApi === true) : Promise.resolve(null),
   ])
   if (request !== epoch || tenant !== props.tenantId || agent !== props.agentId || scope !== props.scopeKey || !props.visible) return
   if (result[0].status === 'fulfilled') {
@@ -74,7 +74,7 @@ function save() {
       dialog.hide(); confirmation = undefined
       if (request !== epoch || tenant !== props.tenantId || agent !== props.agentId || scope !== props.scopeKey || !props.visible || !props.canManage || saving.value) return
       saving.value = true; error.value = ''
-      try { const result = await setAgentAudience(tenant, agent, items); if (request !== epoch || tenant !== props.tenantId || agent !== props.agentId || scope !== props.scopeKey || !props.visible) return; emit('saved', result); emit('update:visible', false) }
+      try { const result = await setAgentAudience(tenant, agent, items, props.adminApi === true); if (request !== epoch || tenant !== props.tenantId || agent !== props.agentId || scope !== props.scopeKey || !props.visible) return; emit('saved', result); emit('update:visible', false) }
       catch { if (request === epoch) error.value = t('agentAudience.saveFailed') }
       finally { if (request === epoch) saving.value = false }
     }, onClose: () => { dialog.hide(); if (confirmation === dialog) confirmation = undefined },

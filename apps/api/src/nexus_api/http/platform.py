@@ -115,7 +115,33 @@ def update_current_tenant(
     return tenant_view(row, role)
 
 
-@router.delete("/tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.get("/tenants/{tenant_id}/admin", response_model=TenantView)
+def get_tenant_admin_info(
+    tenant_id: UUID,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Read enterprise details through the canonical management resource path."""
+    row, role = tenants.current_space(db, principal, tenant_id)
+    return tenant_view(row, role)
+
+
+@router.patch("/tenants/{tenant_id}/admin", response_model=TenantView)
+def update_tenant_admin_info(
+    tenant_id: UUID,
+    body: TenantUpdate,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Update enterprise details; the tenant service enforces owner/admin permissions."""
+    fields = body.model_dump(exclude_unset=True)
+    row = tenants.update_space(db, principal, tenant_id, name=fields.get("name"),
+                               description=fields.get("description"))
+    _, role = tenants.current_space(db, principal, tenant_id)
+    return tenant_view(row, role)
+
+
+@tenant_admin_route(router, "/tenants/{tenant_id}", methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT)
 def delete_tenant(
     tenant_id: UUID,
     principal: Principal = Depends(get_principal),
