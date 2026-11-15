@@ -158,3 +158,9 @@
 `/graph-stores` 按 `enterprise_kbs:manage` 展示内置图存储和当前企业已登记项；现有可配置引擎 Neo4j 标为未验证，计划引擎不可操作。支持 Neo4j 登记、保存前连接测试、已保存连接测试及确认删除。密码只在当前表单内存中保存，列表不回显；服务端继续执行公网上游地址检查，知识库正在使用的图存储不能删除。
 
 页面为 `src/views/storage/GraphStoresPage.vue`，运行时响应校验客户端为 `core/src/api/enterprise-graph-stores.ts`。服务端当前无编辑接口，因此本页不提供编辑操作。
+
+## 企业微信绑定与应用目录
+
+`/wecom` 由 `org:manage` 控制，展示企业绑定、回调凭据配置状态、通讯录同步状态及已有自建应用。企业 Corp ID 首次绑定后不可直接变更；回调 Token 与 EncodingAESKey 只写不读，空输入保留已保存值。支持请求立即同步、复制回调地址和应用主页地址，并明确标示扫码登录应用。该页面不展示或保存企业微信应用 Secret。
+
+页面为 `src/views/organization/WecomPage.vue`，公共客户端为 `core/src/api/enterprise-wecom.ts`；服务端对配置、凭据和同步操作继续按 `org:manage` 授权。

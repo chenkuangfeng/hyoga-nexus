@@ -31,6 +31,7 @@ const router = createRouter({
       { path: '', component: () => import('./Home.vue') },
       { path: 'enterprise', component: () => import('./views/EnterpriseInfo.vue') },
       { path: 'organization', component: () => import('./views/organization/OrganizationPage.vue') },
+      { path: 'wecom', component: () => import('./views/organization/WecomPage.vue') },
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
       { path: 'models', component: () => import('./views/models/ModelsPage.vue') },
