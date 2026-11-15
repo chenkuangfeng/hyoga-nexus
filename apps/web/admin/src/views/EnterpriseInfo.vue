@@ -5,13 +5,16 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { getEnterpriseInfo, updateEnterpriseInfo, archiveEnterprise, type EnterpriseInfo } from '@nexus-web/core/api/enterprise-info'
+import { copyToClipboard } from '@nexus-web/core/utils/clipboard'
 import SettingsRow from '@nexus-web/core/components/SettingsRow.vue'
 import { useAdminContext } from '../stores/context'
 const auth = useAuthStore(), context = useAdminContext(), router = useRouter(), { t } = useI18n()
 const snapshot = ref<EnterpriseInfo | null>(null)
 const name = ref(''), description = ref(''), error = ref(''), saved = ref(false)
+const copyBusy = ref(false), copyFeedback = ref(''), copyFailed = ref(false)
 const loading = ref(false), busy = ref(false), deleteVisible = ref(false), confirmationName = ref('')
-let epoch = 0
+let epoch = 0, live = true
+const codeAvailable = computed(() => !!snapshot.value?.code?.trim())
 const allowed = computed(() => context.ready && auth.currentTenantRole === 'owner')
 const canWrite = computed(() => allowed.value && snapshot.value?.role === 'owner')
 const changes = computed(() => {
@@ -23,6 +26,21 @@ const changes = computed(() => {
 const valid = computed(() => !!name.value.trim() && name.value.trim().length <= 160 && description.value.trim().length <= 500)
 const dirty = computed(() => Object.keys(changes.value).length > 0)
 function accept(row: EnterpriseInfo) { snapshot.value = row; name.value = row.name; description.value = row.description }
+/** Copy the loaded code; discard feedback after account, enterprise or permission changes. */
+async function copyCode() {
+  const code = snapshot.value?.code
+  if (!live || !allowed.value || !code?.trim() || copyBusy.value || loading.value || busy.value) return
+  const current = epoch, tenant = String(auth.effectiveTenantId), user = auth.user?.id
+  copyBusy.value = true; copyFeedback.value = ''
+  try {
+    const ok = await copyToClipboard(code)
+    if (!live || current !== epoch || tenant !== String(auth.effectiveTenantId) || user !== auth.user?.id || !allowed.value) return
+    copyFailed.value = !ok
+    copyFeedback.value = t(ok ? 'adminEnterprise.codeCopied' : 'adminEnterprise.codeCopyFailed')
+  } catch {
+    if (live && current === epoch && allowed.value) { copyFailed.value = true; copyFeedback.value = t('adminEnterprise.codeCopyFailed') }
+  } finally { if (live && current === epoch) copyBusy.value = false }
+}
 function failure(reason: unknown) {
   if (reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string' && reason.message !== 'admin_response_invalid') return reason.message
   return t('adminConsole.failed')
@@ -30,6 +48,7 @@ function failure(reason: unknown) {
 /** 重读时清空旧快照，读取失败不得保留可提交的旧表单。 */
 async function load() {
   const current = ++epoch
+  copyBusy.value = false; copyFeedback.value = ''; copyFailed.value = false
   snapshot.value = null; name.value = ''; description.value = ''; error.value = ''; saved.value = false
   deleteVisible.value = false; confirmationName.value = ''; busy.value = false; loading.value = false
   if (!allowed.value || !auth.effectiveTenantId) return
@@ -72,7 +91,7 @@ async function remove() {
   finally { if (current === epoch) busy.value = false }
 }
 watch([() => auth.effectiveTenantId, () => auth.user?.id, () => auth.currentTenantRole, () => context.ready, () => context.revision], () => { void load() }, { immediate: true, flush: 'sync' })
-onBeforeUnmount(() => { epoch++; snapshot.value = null; deleteVisible.value = false })
+onBeforeUnmount(() => { live = false; epoch++; snapshot.value = null; deleteVisible.value = false })
 </script>
 <template>
   <section>
@@ -84,6 +103,7 @@ onBeforeUnmount(() => { epoch++; snapshot.value = null; deleteVisible.value = fa
       <template v-if="snapshot">
         <t-form :data="{ name, description }" :disabled="!canWrite || busy" @submit="save">
           <SettingsRow :label="t('tenant.details.nameLabel')" :description="t('tenant.details.nameDescription')"><t-input v-model="name" :aria-label="t('tenant.details.nameLabel')" :maxlength="160" /></SettingsRow>
+          <SettingsRow :label="t('adminEnterprise.codeLabel')" :description="t('adminEnterprise.codeHint')"><div class="enterprise-code"><code v-if="codeAvailable">{{ snapshot.code }}</code><span v-else>{{ t('adminEnterprise.codeMissing') }}</span><t-button type="button" variant="text" :loading="copyBusy" :disabled="!codeAvailable || copyBusy || busy || loading" @click="copyCode">{{ t('adminEnterprise.copyCode') }}</t-button><span v-if="copyFeedback" role="status" :class="{ 'copy-error': copyFailed }">{{ copyFeedback }}</span></div></SettingsRow>
           <SettingsRow :label="t('tenant.details.descriptionLabel')" :description="t('tenant.details.descriptionDescription')"><t-textarea v-model="description" :aria-label="t('tenant.details.descriptionLabel')" :maxlength="500" :autosize="{ minRows: 2, maxRows: 6 }" /></SettingsRow>
           <SettingsRow :label="t('tenant.details.statusLabel')"><span>{{ t(['active', 'inactive', 'suspended'].includes(snapshot.status) ? `tenant.status${snapshot.status[0].toUpperCase()}${snapshot.status.slice(1)}` : 'tenant.statusUnknown') }}</span></SettingsRow>
           <SettingsRow :label="t('tenant.details.createdAtLabel')"><time>{{ snapshot.created_at }}</time></SettingsRow>
@@ -102,6 +122,9 @@ onBeforeUnmount(() => { epoch++; snapshot.value = null; deleteVisible.value = fa
 </template>
 <style scoped>
 section { width: 100%; }
+.enterprise-code { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.enterprise-code code { overflow-wrap: anywhere; }
+.copy-error { color: var(--td-error-color); }
 .info-actions { display: flex; gap: 12px; padding: 24px 0; }
 :deep(.setting-control .t-input__wrap), :deep(.setting-control .t-textarea) { width: 320px; max-width: 100%; }
 </style>

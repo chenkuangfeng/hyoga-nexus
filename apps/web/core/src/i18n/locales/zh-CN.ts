@@ -469,7 +469,7 @@ export default {
       "audit_read_content": "查看审计正文"
     }
   },
-  adminEnterprise: {"title": "企业信息", "description": "管理当前企业的名称、描述与删除操作。", "saved": "企业信息已保存。"},
+  adminEnterprise: {"codeLabel": "企业编码", "codeHint": "用于企业微信扫码登录，编码由企业注册时确定。", "codeMissing": "未配置企业编码", "copyCode": "复制编码", "codeCopied": "企业编码已复制。", "codeCopyFailed": "复制失败，请重试。", "title": "企业信息", "description": "管理当前企业的名称、描述与删除操作。", "saved": "企业信息已保存。"},
   adminConsole: {
     unnamedEnterprise: '未命名企业',
     "title": "企业管理",

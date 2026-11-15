@@ -463,7 +463,7 @@ export default {
       "audit_read_content": "Read audit content"
     }
   },
-  adminEnterprise: {"title": "기업 정보", "description": "현재 기업의 이름, 설명 및 삭제를 관리합니다.", "saved": "기업 정보를 저장했습니다."},
+  adminEnterprise: {"codeLabel": "기업 코드", "codeHint": "WeCom QR 로그인에 사용되며 기업 등록 시 설정됩니다.", "codeMissing": "기업 코드가 설정되지 않았습니다", "copyCode": "코드 복사", "codeCopied": "기업 코드를 복사했습니다.", "codeCopyFailed": "복사에 실패했습니다. 다시 시도해 주세요.", "title": "기업 정보", "description": "현재 기업의 이름, 설명 및 삭제를 관리합니다.", "saved": "기업 정보를 저장했습니다."},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",

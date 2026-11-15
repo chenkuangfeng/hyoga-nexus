@@ -463,7 +463,7 @@ export default {
       "audit_read_content": "Read audit content"
     }
   },
-  adminEnterprise: {"title": "Информация о компании", "description": "Управление названием, описанием и удалением текущей компании.", "saved": "Информация о компании сохранена."},
+  adminEnterprise: {"codeLabel": "Код предприятия", "codeHint": "Используется для входа через QR WeCom; задаётся при регистрации предприятия.", "codeMissing": "Код предприятия не задан", "copyCode": "Копировать код", "codeCopied": "Код предприятия скопирован.", "codeCopyFailed": "Не удалось скопировать. Повторите попытку.", "title": "Информация о компании", "description": "Управление названием, описанием и удалением текущей компании.", "saved": "Информация о компании сохранена."},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",

@@ -19,8 +19,11 @@ class TenantUpdate(BaseModel):
 
 
 class TenantView(BaseModel):
+    """Enterprise metadata; code is the existing public sign-in identifier, never its internal UUID."""
+
     id: UUID
     name: str
+    code: str | None = None
     kind: str = "enterprise"
     description: str | None = None
     role: str

@@ -462,7 +462,7 @@ export default {
       "audit_read_content": "Read audit content"
     }
   },
-  adminEnterprise: {"title": "Enterprise information", "description": "Manage the current enterprise name, description and deletion.", "saved": "Enterprise information saved."},
+  adminEnterprise: {"codeLabel": "Enterprise code", "codeHint": "Used for WeCom QR sign-in; assigned when the enterprise is registered.", "codeMissing": "No enterprise code configured", "copyCode": "Copy code", "codeCopied": "Enterprise code copied.", "codeCopyFailed": "Copy failed. Please retry.", "title": "Enterprise information", "description": "Manage the current enterprise name, description and deletion.", "saved": "Enterprise information saved."},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",

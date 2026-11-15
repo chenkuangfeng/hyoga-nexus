@@ -707,7 +707,7 @@ def list_audit_records(
 
 
 def tenant_view(row, role: str) -> TenantView:
-    return TenantView(id=row.id, name=row.name, kind=row.kind, description=row.description, role=role,
+    return TenantView(id=row.id, name=row.name, code=row.code, kind=row.kind, description=row.description, role=role,
                       status=row.status, created_at=row.created_at)
 
 

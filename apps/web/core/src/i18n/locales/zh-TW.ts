@@ -463,7 +463,7 @@ export default {
       "audit_read_content": "查看审计正文"
     }
   },
-  adminEnterprise: {"title": "企業資訊", "description": "管理目前企業的名稱、描述與刪除操作。", "saved": "企業資訊已儲存。"},
+  adminEnterprise: {"codeLabel": "企業編碼", "codeHint": "用於企業微信掃碼登入，編碼於企業註冊時設定。", "codeMissing": "未設定企業編碼", "copyCode": "複製編碼", "codeCopied": "企業編碼已複製。", "codeCopyFailed": "複製失敗，請重試。", "title": "企業資訊", "description": "管理目前企業的名稱、描述與刪除操作。", "saved": "企業資訊已儲存。"},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",

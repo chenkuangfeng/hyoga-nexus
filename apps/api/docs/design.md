@@ -42,3 +42,7 @@ Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始
 ## 企业组织来源
 
 组织树与节点返回 sync_managed，source=wecom 或具有 external_id 的节点由通用更新/删除接口返回 409。归属列表和 PUT 回执增加 source（manual/wecom/mixed）；DELETE 只撤销手工贡献，mixed 保留企微关系，pure wecom 返回 409。权限维持 org:manage。现有 `/admin/wecom` 及 `/admin/wecom/sync` 提供同步状态和立即同步，不增加同步计划配置。
+
+## 企业编码只读展示
+
+TenantView 与 tenant_view 映射现有 tenants.code（string/null），用于当前企业、管理详情、列表和创建/更新回执。原有成员读取及管理写入授权保持一致；TenantUpdate 不提供编码修改字段，无数据库迁移。

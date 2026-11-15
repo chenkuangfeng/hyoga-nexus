@@ -463,7 +463,7 @@ export default {
       "audit_read_content": "Read audit content"
     }
   },
-  adminEnterprise: {"title": "企業情報", "description": "現在の企業の名前、説明、削除を管理します。", "saved": "企業情報を保存しました。"},
+  adminEnterprise: {"codeLabel": "企業コード", "codeHint": "WeComのQRログインに使用します。企業登録時に設定されます。", "codeMissing": "企業コードは未設定です", "copyCode": "コードをコピー", "codeCopied": "企業コードをコピーしました。", "codeCopyFailed": "コピーに失敗しました。再試行してください。", "title": "企業情報", "description": "現在の企業の名前、説明、削除を管理します。", "saved": "企業情報を保存しました。"},
   adminConsole: {
     unnamedEnterprise: 'Unnamed enterprise',
     "title": "Enterprise administration",
