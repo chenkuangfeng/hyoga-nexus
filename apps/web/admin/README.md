@@ -170,3 +170,9 @@
 `/channels` 按 `enterprise_agents:manage` 展示当前企业渠道总览，并可按状态筛选；总览包含当前企业智能体渠道，包括成员个人智能体的渠道。待审核渠道可确认通过或填写原因拒绝，审批回执更新列表；渠道记录按稳定智能体 ID 关联当前可见名称，不展示内部 ID。服务端每次复核授权和待审核状态。
 
 页面位于 `src/views/agents/ChannelsPage.vue`，渠道管理 API 位于 `core/src/api/enterprise-connections.ts`。
+
+## 企业技能投稿审核
+
+`/skill-submissions` 按 `tools:manage` 展示最多 200 条待审技能投稿。详情以纯文本显示技能内容、附加文件、最新扫描发现和与现有技能库版本的差异。批准前确认会说明技能进入企业库并可被智能体使用；若库版本已变化，页面阻止批准并提示刷新。拒绝要求填写 1–1000 字原因。客户端不渲染 Markdown 或不可信 HTML。
+
+页面位于 `src/views/skills/SkillSubmissionsPage.vue`，运行时校验客户端位于 `core/src/api/enterprise-skill-submissions.ts`；服务端负责重新扫描、版本竞争检查和最终发布。
