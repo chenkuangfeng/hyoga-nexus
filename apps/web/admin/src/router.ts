@@ -45,6 +45,7 @@ const router = createRouter({
       { path: 'agents', component: () => import('./views/agents/AgentsPage.vue') },
       { path: 'channels', component: () => import('./views/agents/ChannelsPage.vue') },
       { path: 'skill-submissions', component: () => import('./views/skills/SkillSubmissionsPage.vue') },
+      { path: 'tools', component: () => import('./views/tools/ToolCatalogPage.vue') },
       { path: 'audit', component: () => import('./views/audit/AuditPage.vue') },
       { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },
     ] },

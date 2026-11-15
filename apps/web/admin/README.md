@@ -176,3 +176,9 @@
 `/skill-submissions` 按 `tools:manage` 展示最多 200 条待审技能投稿。详情以纯文本显示技能内容、附加文件、最新扫描发现和与现有技能库版本的差异。批准前确认会说明技能进入企业库并可被智能体使用；若库版本已变化，页面阻止批准并提示刷新。拒绝要求填写 1–1000 字原因。客户端不渲染 Markdown 或不可信 HTML。
 
 页面位于 `src/views/skills/SkillSubmissionsPage.vue`，运行时校验客户端位于 `core/src/api/enterprise-skill-submissions.ts`；服务端负责重新扫描、版本竞争检查和最终发布。
+
+## 企业工具目录
+
+`/tools` 按 `tools:manage` 展示当前企业可分配的内置工具、风险等级、审批要求和声明的副作用。管理员可以确认停用或恢复单个工具；停用只影响新建和编辑时的工具选择，已发布智能体版本保留现有绑定。实际调用仍受服务端工具门禁、审批和部署策略限制。
+
+页面位于 `src/views/tools/ToolCatalogPage.vue`，使用 `core/src/api/nexus-agents.ts` 的目录与企业级内置资源开关接口。切换企业、账号或权限后，旧请求和确认框失效。

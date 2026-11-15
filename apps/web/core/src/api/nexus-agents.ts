@@ -156,9 +156,25 @@ export async function copyNexusAgent(tenantId: string, agentId: string, name?: s
 }
 
 export async function getAgentToolCatalog(tenantId: string): Promise<AgentToolCatalog> {
-  const data = await get<AgentToolCatalog>(`${tenantPath(tenantId)}/agent-tools`)
-  if (!data || !Array.isArray(data.tools)) throw new Error('Unexpected tool catalog response')
-  return data
+  const data: unknown = await get(`${tenantPath(tenantId)}/agent-tools`)
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Unexpected tool catalog response')
+  const value = data as Record<string, unknown>
+  if (!Array.isArray(value.tools) || !value.tools.every(isAgentToolEntry)
+      || !Array.isArray(value.groups) || !value.groups.every((item) => typeof item === 'string')
+      || !Array.isArray(value.default_tools) || !value.default_tools.every((item) => typeof item === 'string')
+      || typeof value.can_enable_tools !== 'boolean') throw new Error('Unexpected tool catalog response')
+  return value as unknown as AgentToolCatalog
+}
+
+function isAgentToolEntry(value: unknown): value is AgentToolEntry {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const row = value as Record<string, unknown>
+  return typeof row.name === 'string' && typeof row.description === 'string' && typeof row.group === 'string'
+    && ['low', 'medium', 'high'].includes(String(row.risk_level))
+    && typeof row.read_only === 'boolean' && typeof row.requires_approval === 'boolean'
+    && typeof row.side_effects === 'boolean' && typeof row.enabled_in_tenant === 'boolean'
+    && (row.builtin === undefined || typeof row.builtin === 'boolean')
+    && (row.disabled === undefined || typeof row.disabled === 'boolean')
 }
 
 /** Enable a builtin tool for the whole space (owner/admin; the server checks `tools:manage`). */
