@@ -178,3 +178,7 @@ MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，�
 工作台不再导入 StorageBackendSettings/VectorStoreSettings。固定 MIGRATED_ADMIN_SECTIONS 注册表为旧部门、成员、存储与向量库书签提供标题、说明和 Admin 目标；hasOwnProperty 检查防止继承属性成为目标。Settings 保留旧 section 值，并对迁移说明绕过原写页面的角色与能力门槛，说明本身只消费身份 entries，不请求或写入配置。AdminSectionMoved 链接随当前身份变化，不自动跳转，成员旧书签仍提供独立审计入口。
 
 core 的 KBStorageSettings/KBVectorStoreSettings 继续通过真实目录适配器读取可用配置，现有绑定与快捷调用保留。共享适配器和文案不是旧页面的独占资源，不随治理页删除。
+
+## Sandbox 表单的模板状态桥接
+
+`SandboxConfigEditorDrawer.vue` 的 Cube、E2B、Docker 配置和已存密钥标记仍由原来的 reactive 对象管理。模板通过 `connectionForms` Ref 容器读取这些同一代理，使条件分支的模板类型生成与 Vue 自动解包一致；脚本侧校验、密钥占位处理和载荷收集继续读取原对象，不复制表单状态或增加提交字段。

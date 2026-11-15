@@ -130,27 +130,27 @@
 
         <template v-if="backend === 'cube'">
           <t-form-item :label="requiredLabel('apiUrl')" :status="fieldStatus('api_url')" :tips="fieldTip('api_url')">
-            <t-input v-model="cube.api_url" placeholder="http://cube.example.com:33000"
+            <t-input v-model="connectionForms.cube.api_url" placeholder="http://cube.example.com:33000"
               :disabled="retargetFrozen" @input="onConnectionInput('api_url')" />
           </t-form-item>
           <div class="form-grid form-grid--two">
             <t-form-item :label="requiredLabel('proxyUrl')" :status="fieldStatus('proxy_url')"
               :tips="fieldTip('proxy_url')">
-              <t-input v-model="cube.proxy_url" placeholder="http://cube.example.com:80"
+              <t-input v-model="connectionForms.cube.proxy_url" placeholder="http://cube.example.com:80"
                 :disabled="retargetFrozen" @input="onConnectionInput('proxy_url')" />
             </t-form-item>
             <t-form-item :label="requiredLabel('sandboxDomain')" :status="fieldStatus('sandbox_domain')"
               :tips="fieldTip('sandbox_domain')">
-              <t-input v-model="cube.sandbox_domain" placeholder="cube.app"
+              <t-input v-model="connectionForms.cube.sandbox_domain" placeholder="cube.app"
                 :disabled="retargetFrozen" @input="onConnectionInput('sandbox_domain')" />
             </t-form-item>
           </div>
           <t-form-item :label="$t('settings.sandbox.apiKey')">
-            <t-input v-model="cube.api_key" type="password" :placeholder="secretInputPlaceholder('cube')"
+            <t-input v-model="connectionForms.cube.api_key" type="password" :placeholder="secretInputPlaceholder('cube')"
               :disabled="retargetFrozen" @input="invalidateConnection" />
             <div class="field-hints">
               <p class="section-help">
-                {{ storedSecrets.cube
+                {{ connectionForms.storedSecrets.cube
                   ? $t('settings.sandbox.secretConfigured')
                   : $t('settings.sandbox.cubeApiKeyOptional') }}
               </p>
@@ -162,7 +162,7 @@
           </t-form-item>
           <t-form-item :label="$t('settings.sandbox.cubeDnsServers')"
             :help="$t('settings.sandbox.cubeDnsServersHelp')">
-            <t-tag-input v-model="cube.dns_servers" :placeholder="$t('settings.sandbox.cubeDnsServersPlaceholder')"
+            <t-tag-input v-model="connectionForms.cube.dns_servers" :placeholder="$t('settings.sandbox.cubeDnsServersPlaceholder')"
               :disabled="retargetFrozen" clearable @change="invalidateConnection" />
           </t-form-item>
         </template>
@@ -170,11 +170,11 @@
         <template v-else-if="backend === 'e2b'">
           <t-form-item :label="requiredLabel('apiKey')" :status="fieldStatus('api_key')"
             :tips="fieldTip('api_key')">
-            <t-input v-model="e2b.api_key" type="password" :placeholder="secretInputPlaceholder('e2b')"
+            <t-input v-model="connectionForms.e2b.api_key" type="password" :placeholder="secretInputPlaceholder('e2b')"
               :disabled="retargetFrozen" @input="onConnectionInput('api_key')" />
             <div class="field-hints">
               <p class="section-help">
-                {{ storedSecrets.e2b
+                {{ connectionForms.storedSecrets.e2b
                   ? $t('settings.sandbox.secretConfigured')
                   : $t('settings.sandbox.e2bApiKeyHelp') }}
               </p>
@@ -186,16 +186,16 @@
           </t-form-item>
           <div class="form-grid form-grid--two">
             <t-form-item :label="$t('settings.sandbox.apiUrl')" :help="$t('settings.sandbox.e2bApiUrlOptional')">
-              <t-input v-model="e2b.api_url" placeholder="https://api.e2b.app"
+              <t-input v-model="connectionForms.e2b.api_url" placeholder="https://api.e2b.app"
                 :disabled="retargetFrozen" @input="invalidateConnection" />
             </t-form-item>
             <t-form-item :label="$t('settings.sandbox.sandboxDomain')" :help="$t('settings.sandbox.e2bDomainOptional')">
-              <t-input v-model="e2b.sandbox_domain" placeholder="e2b.app"
+              <t-input v-model="connectionForms.e2b.sandbox_domain" placeholder="e2b.app"
                 :disabled="retargetFrozen" @input="invalidateConnection" />
             </t-form-item>
           </div>
           <t-form-item :label="$t('settings.sandbox.proxyUrl')" :help="$t('settings.sandbox.e2bProxyUrlOptional')">
-            <t-input v-model="e2b.proxy_url" placeholder="http://sandbox-gateway.example.com"
+            <t-input v-model="connectionForms.e2b.proxy_url" placeholder="http://sandbox-gateway.example.com"
               :disabled="retargetFrozen" @input="invalidateConnection" />
           </t-form-item>
         </template>
@@ -226,7 +226,7 @@
         </div>
         <t-form-item :label="requiredLabel('dockerImage')" :status="fieldStatus('image')"
           :tips="fieldTip('image')">
-          <t-input v-model="docker.image" :placeholder="defaultDockerImage"
+          <t-input v-model="connectionForms.docker.image" :placeholder="defaultDockerImage"
             :disabled="retargetFrozen" @input="onFieldInput('image')" />
           <p v-if="retargetFrozen" class="section-help section-help--field">
             {{ hasSkillSnapshot
@@ -235,12 +235,12 @@
           </p>
         </t-form-item>
         <t-form-item :label="$t('settings.sandbox.dockerHost')" :help="$t('settings.sandbox.dockerHostHelp')">
-          <t-input v-model="docker.host" placeholder="unix:///var/run/docker.sock"
+          <t-input v-model="connectionForms.docker.host" placeholder="unix:///var/run/docker.sock"
             :disabled="retargetFrozen" @input="onFieldInput('host')" />
         </t-form-item>
         <t-form-item :label="$t('settings.sandbox.dockerTlsCertPath')"
           :help="$t('settings.sandbox.dockerTlsCertPathHelp')">
-          <t-input v-model="docker.tls_cert_path" placeholder="/etc/weknora/docker-certs"
+          <t-input v-model="connectionForms.docker.tls_cert_path" placeholder="/etc/weknora/docker-certs"
             :disabled="retargetFrozen" @input="onFieldInput('tls_cert_path')" />
         </t-form-item>
         <t-alert theme="warning" class="compact-alert" :message="$t('settings.sandbox.dockerHostRisk')" />
@@ -397,16 +397,16 @@
             <template v-if="isRemoteBackend">
               <t-form-item :label="$t('settings.sandbox.httpTimeout')"
                 :tips="$t('settings.sandbox.httpTimeoutHelp')">
-                <t-input-number v-if="backend === 'cube'" v-model="cube.http_timeout_sec" :min="0"
+                <t-input-number v-if="backend === 'cube'" v-model="connectionForms.cube.http_timeout_sec" :min="0"
                   theme="column" placeholder="30" />
-                <t-input-number v-else v-model="e2b.http_timeout_sec" :min="0" theme="column"
+                <t-input-number v-else v-model="connectionForms.e2b.http_timeout_sec" :min="0" theme="column"
                   placeholder="30" />
               </t-form-item>
               <t-form-item :label="$t('settings.sandbox.sandboxTtl')"
                 :tips="$t('settings.sandbox.sandboxTtlHelp')">
-                <t-input-number v-if="backend === 'cube'" v-model="cube.cube_sandbox_ttl_seconds"
+                <t-input-number v-if="backend === 'cube'" v-model="connectionForms.cube.cube_sandbox_ttl_seconds"
                   :min="0" theme="column" placeholder="1800" />
-                <t-input-number v-else v-model="e2b.e2b_sandbox_ttl_seconds" :min="0"
+                <t-input-number v-else v-model="connectionForms.e2b.e2b_sandbox_ttl_seconds" :min="0"
                   theme="column" placeholder="300" />
               </t-form-item>
             </template>
@@ -419,22 +419,22 @@
             <template v-if="backend === 'docker'">
               <t-form-item :label="$t('settings.sandbox.dockerIdleTtl')"
                 :tips="$t('settings.sandbox.dockerIdleTtlHelp')">
-                <t-input-number v-model="docker.idle_ttl_seconds" :min="0" theme="column"
+                <t-input-number v-model="connectionForms.docker.idle_ttl_seconds" :min="0" theme="column"
                   placeholder="1800" />
               </t-form-item>
               <t-form-item :label="$t('settings.sandbox.dockerCpuLimit')"
                 :tips="$t('settings.sandbox.dockerCpuLimitHelp')">
-                <t-input-number v-model="docker.cpu_limit" :min="0" :step="0.5" theme="column"
+                <t-input-number v-model="connectionForms.docker.cpu_limit" :min="0" :step="0.5" theme="column"
                   placeholder="2" />
               </t-form-item>
               <t-form-item :label="$t('settings.sandbox.dockerMemoryLimit')"
                 :tips="$t('settings.sandbox.dockerMemoryLimitHelp')">
-                <t-input-number v-model="docker.memory_limit_mb" :min="0" theme="column"
+                <t-input-number v-model="connectionForms.docker.memory_limit_mb" :min="0" theme="column"
                   placeholder="2048" />
               </t-form-item>
               <t-form-item :label="$t('settings.sandbox.dockerPidsLimit')"
                 :tips="$t('settings.sandbox.dockerPidsLimitHelp')">
-                <t-input-number v-model="docker.pids_limit" :min="0" theme="column"
+                <t-input-number v-model="connectionForms.docker.pids_limit" :min="0" theme="column"
                   placeholder="512" />
               </t-form-item>
             </template>
@@ -470,7 +470,7 @@
         <template v-if="backend === 'docker'">
           <t-form-item :label="$t('settings.sandbox.dockerNetworkMode')"
             :tips="$t('settings.sandbox.dockerNetworkModeHelp')">
-            <t-select v-model="docker.network_mode"
+            <t-select v-model="connectionForms.docker.network_mode"
               :placeholder="$t('settings.sandbox.dockerNetworkBridge')" clearable>
               <t-option value="bridge" :label="$t('settings.sandbox.dockerNetworkBridge')" />
               <t-option value="none" :label="$t('settings.sandbox.dockerNetworkNone')" />
@@ -875,6 +875,9 @@ const docker = reactive<SandboxDockerConfig>({})
 // Tracks which secrets the tenant already has stored, so an empty input can
 // mean "keep the saved key" instead of "no key configured".
 const storedSecrets = reactive({ cube: false, e2b: false })
+// Give conditional-template narrowing an explicit Ref while retaining the original reactive proxies.
+// Script-side validation and payload assembly keep using those same objects.
+const connectionForms = ref({ cube, e2b, docker, storedSecrets })
 const envRows = ref<{ key: string; value: string; stored?: boolean }[]>([])
 const skillRollout = ref<'next_turn' | 'new_session'>('next_turn')
 const allocationMode = ref<'session' | 'user'>('session')
