@@ -508,3 +508,12 @@ core 的 EnterpriseInfo 增加可空 code；运行时只接受 string/null，缺
 设置路由已挂载 NexusModelSettings，旧 ModelSettings/ModelEditorDialog/ModelDebugDrawer 仅互相引用。移除这套孤立实现及独占的模型目录 store、Ollama/Cloud 状态、复制名称和浏览器配对辅助；保留 core 的通用模型选择器与模型引用工具、仍被解析器使用的 Cloud 状态。模型页的工具草稿和 model_id 深链接由 Nexus 页面接管：只预填无凭据字段，vllm/asr 对应 vision/speech，local 来源明确提示不支持；不创建或保存模型，仍由用户填写凭据并确认保存。
 
 草稿按当前账号/企业读取并一次消费；模型目录查询、对话框测试及供应商→模型连续写入在身份变化或卸载后作废，不能把旧企业写链继续提交到新企业。旧实现专属测试随删除移除，混合测试保留真实共享选择器与资源编辑器覆盖，并增加 Nexus 草稿/深链接/异步隔离的行为回归。共享文案及依赖只有确认无其他消费者才删除，不以本批维护推导个人 MCP 或 embed 功能已完成。
+
+
+### E2.5.3.3 工作台存储与向量库配置入口隔离
+
+Admin 的 StoragePage 已承接本地后端列表/新增/删除/已保存测试，VectorStoresPage 已承接能力目录、配置新增/编辑/删除和连接测试；旧存储页的编辑/默认/草稿测试只调用 PlannedFeatureError，不代表可用能力。删除工作台 StorageBackendSettings/VectorStoreSettings 及普通设置导航。
+
+保留 storage/vectorstore 旧查询参数和知识库编辑器的 openSettings 快捷调用，统一挂载 AdminSectionMoved 迁移说明，按 currentEntries.admin 提供显式 /admin/storage 或 /admin/vector-stores 链接；没有管理入口则提示联系管理员，不自动跨应用导航、不读取目录或修改配置。迁移说明对所有有效成员可见，不受已移除写页面的旧 admin 门槛或部署能力开关阻断。标题/描述/目标使用固定枚举映射，未知键不能生成任意 URL。部门/成员和审计旧入口保持原行为。
+
+知识库编辑器的存储/向量库读取、选择和已有绑定继续使用 core 适配器，因此不删除这些公共 API、共享字段和 providerLogo。解析器等尚无完整 Admin 承接的页面留待后续；本批不扩展存储后端契约。

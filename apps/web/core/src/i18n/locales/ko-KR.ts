@@ -232,7 +232,7 @@ export default {
       "invalidDates": "Choose valid dates, with start no later than end and at most 366 days apart.",
       "exported": "The audit file was handed to the browser for download."
   },
-  adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
+  adminMigration: {storageMoved: "기업 파일 저장소 설정이 별도 관리 앱으로 이동했습니다. 지식 베이스에서 기존 저장소를 계속 선택할 수 있습니다. 편집과 기본값 선택은 아직 지원되지 않습니다.", vectorStoreMoved: "기업 벡터 저장소 설정이 별도 관리 앱으로 이동했습니다. 지식 베이스에서 기존 저장소를 계속 선택할 수 있으며 설정 관리 권한이 필요합니다.", "membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
     linkSourceLabel: '소속 출처',
     linkSource: { manual: '수동', wecom: 'WeCom', mixed: '수동 및 WeCom' },

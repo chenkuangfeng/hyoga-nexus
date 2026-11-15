@@ -232,7 +232,7 @@ export default {
       "invalidDates": "Choose valid dates, with start no later than end and at most 366 days apart.",
       "exported": "The audit file was handed to the browser for download."
   },
-  adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
+  adminMigration: {storageMoved: "Настройка файлового хранилища перенесена в отдельное приложение администрирования. Базы знаний могут выбирать существующие хранилища. Редактирование и выбор по умолчанию пока недоступны.", vectorStoreMoved: "Настройка векторных хранилищ перенесена в отдельное приложение администрирования. Базы знаний могут выбирать существующие хранилища; для настройки нужны права управления.", "membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
     linkSourceLabel: 'Источник связи',
     linkSource: { manual: 'Вручную', wecom: 'WeCom', mixed: 'Вручную и WeCom' },

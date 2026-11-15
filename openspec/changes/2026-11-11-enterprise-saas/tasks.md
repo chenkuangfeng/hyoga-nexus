@@ -56,6 +56,10 @@
       - 验证：API 3 项、核心客户端/国际化 17 项、管理端企业信息组件 7 项通过；Admin 完整 vue-tsc（1024MB 堆）通过。锁文件安装、Python 3.11 编译、OpenAPI code 字段与 diff 检查通过。Chromium 使用真实 Admin/TDesign 与模拟 API 检查编码展示、复制成功/失败、空值禁用、1440/720/375px 无页面横向溢出和深色主题，无 pageerror；模拟接口不替代真实环境与生产包验收。Admin 构建在 Vite transforming 阶段被系统终止（exit 137），完整构建继续保留 E2.8。
 
     - [ ] E2.5.3.3 工作台旧企业管理页面清理与入口隔离，随其余管理业务迁移完成后验收。
+      - [x] 清理工作台存储/向量库治理页面与导航，旧书签和知识库快捷调用保留按当前身份变化的显式 Admin 迁移说明。
+        - 实施记录（2026-11-15）：Admin 已覆盖现有本地存储增删/已保存测试及向量库能力、增改删/连接测试；移除工作台 StorageBackendSettings/VectorStoreSettings。固定迁移注册表处理 storage/vectorstore，旧书签与知识库快捷调用不自动跳转；所有有效成员可见说明，只有当前身份含 Admin 入口时显示管理链接。保留 core 目录读取/知识库选择适配器和既有绑定，不删除仍被其他页面使用的 providerLogo 或共享文案。未实现的存储编辑/默认/草稿测试继续保留服务端后续。
+        - 验证：工作台路由/导航/角色/能力/组件 39 项、核心国际化/知识库适配器 20 项、工程边界 2 项通过，共 61 项；迁移组件及路由/角色配置定向 vue-tsc 通过。独立 Vue 组件浏览器预览（模拟身份，轻量图标/提示组件）检查存储/向量库目标、Tab 聚焦、Admin 入口变化、1200/720/375px 无横向溢出、无治理 API 请求和无 pageerror；不替代完整 Settings/TDesign 或真实业务验收。临时配置与预览文件已移除。
+        - 限制：包含完整 Settings 的类型检查报告未修改的 SandboxConfigEditorDrawer.vue 多处 TS2339（value 属性）错误，迁移文件未报错；工作台生产构建在 transforming 阶段被系统终止（exit 137）。完整工作台类型、生产包与业务浏览器验收仍在 E2.8，其他设置迁移尚未整体完成。
     - [x] E2.5.3.4 角色与权限：服务端权限目录、自定义角色创建/权限编辑、内置角色只读、按成员分配与撤销、越权限制及作用域隔离；生产构建门禁仍见 E2.8。
     - [ ] E2.5.3.5 角色后续：部门批量分配、角色到智能体使用授权与旧管理代码清理。
       - [x] E2.5.3.5.1 确认部门批量角色分配与授权校验修复方案（涉及服务端权限规则）。
@@ -115,6 +119,7 @@
 - [x] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
+  - [ ] 排查完整 Settings 类型检查暴露的 SandboxConfigEditorDrawer.vue TS2339（value 属性）错误，完成工作台类型门禁。
   - 复验（2026-11-15）：Node 22.23.4 / pnpm 10.34.9 与锁定版本一致。`pnpm build`、单独工作台构建和 `NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @nexus-web/admin build` 均在 Vite `transforming` 阶段以 exit 1 结束且无诊断，未得到可验收产物；Core 与 Admin 类型检查通过，工作台全量类型检查以 exit 1 结束且无诊断。未运行测试，E2.8 保持未完成。
 - [x] E2.9 文档：`AGENTS.md` 前端命令；`apps/web` 父模块文档与三个项目的 `README.md`；`docs/architecture.md` 1.4 与 2.15；反向代理示例；更正根 README 中的 Element Plus 描述。
   - Web 文档反映当前 Vue 3 / TypeScript / TDesign、core/workspace/admin 边界与现有管理页面；明确 embed 后端、个人 MCP endpoint 及 E2.8 验收限制。

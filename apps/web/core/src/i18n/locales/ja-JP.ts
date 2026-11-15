@@ -232,7 +232,7 @@ export default {
       "invalidDates": "Choose valid dates, with start no later than end and at most 366 days apart.",
       "exported": "The audit file was handed to the browser for download."
   },
-  adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
+  adminMigration: {storageMoved: "企業のファイル保存設定は独立した管理アプリに移動しました。ナレッジベースでは既存の保存先を選択できます。編集と既定値の設定は未対応です。", vectorStoreMoved: "企業のベクトルストア設定は独立した管理アプリに移動しました。ナレッジベースでは既存のストアを選択できます。設定の管理には権限が必要です。", "membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
     linkSourceLabel: '所属の出所',
     linkSource: { manual: '手動', wecom: 'WeCom', mixed: '手動とWeCom' },

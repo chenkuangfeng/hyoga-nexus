@@ -1,20 +1,21 @@
 <script setup lang="ts">
-/** 旧部门/成员设置书签的迁移说明，不读取或修改企业组织数据。 */
+/** 旧企业管理书签的迁移说明：只提供显式链接，不读取或修改企业治理配置。 */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
-import { adminSettingsLocation } from '@/config/settingsRoute'
-const props = withDefaults(defineProps<{ section?: 'org-structure' | 'members' }>(), { section: 'org-structure' })
+import { adminSettingsLocation, MIGRATED_ADMIN_SECTIONS, type MigratedAdminSection } from '@/config/settingsRoute'
+const props = withDefaults(defineProps<{ section?: MigratedAdminSection }>(), { section: 'org-structure' })
+const destination = computed(() => MIGRATED_ADMIN_SECTIONS[props.section])
 const members = computed(() => props.section === 'members')
 const auth = useAuthStore(), { t } = useI18n()
 const canOpen = computed(() => auth.currentEntries.includes('admin'))
-const href = computed(() => adminSettingsLocation(import.meta.env.BASE_URL, window.location.origin, import.meta.env.DEV, members.value ? 'members' : 'organization'))
+const href = computed(() => adminSettingsLocation(import.meta.env.BASE_URL, window.location.origin, import.meta.env.DEV, destination.value.target))
 const auditHref = adminSettingsLocation(import.meta.env.BASE_URL, window.location.origin, import.meta.env.DEV, 'audit')
 </script>
 <template>
   <section class="admin-section-moved">
-    <h2>{{ t(members ? 'adminMembers.title' : 'adminOrganization.title') }}</h2>
-    <p>{{ t(members ? 'adminMigration.membersMoved' : 'adminMigration.organizationMoved') }}</p>
+    <h2>{{ t(destination.titleKey) }}</h2>
+    <p>{{ t(destination.messageKey) }}</p>
     <div v-if="canOpen" class="admin-links"><a class="admin-entry" :href="href">{{ t('adminMigration.openAdmin') }}<t-icon name="chevron-right" aria-hidden="true" /></a><a v-if="members" class="admin-entry" :href="auditHref">{{ t('adminAudit.title') }}</a></div>
     <t-alert v-else theme="info" :message="t('adminMigration.noEntry')" />
   </section>

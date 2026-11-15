@@ -98,3 +98,25 @@ test('工作台不再打包旧成员治理页或独占审批组件，普通入�
  assert.equal(existsSync(new URL('../../components/tenant/JoinApplicationsPanel.vue',import.meta.url)),false)
  assert.equal(source.includes('import TenantMembers'),false)
 })
+
+test('文件存储和向量库治理不进入员工设置导航，旧书签使用统一迁移说明', () => {
+  const groups = runInNewContext(`${compiled}\nnavGroups.value`, {
+    computed, navItems: { value: ['storage', 'vectorstore', 'general'].map(key => ({ key })) }, t: (key: string) => key,
+  }) as Array<{ items: Array<{ key: string }> }>
+  assert.equal(groups.some(group => group.items.some(item => ['storage', 'vectorstore'].includes(item.key))), false)
+  for (const name of ['StorageBackendSettings', 'VectorStoreSettings']) {
+    assert.equal(source.includes(`import ${name}`), false)
+    assert.equal(existsSync(new URL(`./${name}.vue`, import.meta.url)), false)
+  }
+})
+
+ test('旧治理书签仅展示迁移说明，不再要求原写页面的 admin 角色', async () => {
+  const { isMigratedAdminSection } = await import('../../config/settingsRoute')
+  const { SETTINGS_SECTION_MIN_ROLE } = await import('../../config/settingsAccess')
+  const declaration = ast.statements.find(statement => ts.isVariableStatement(statement) && statement.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === 'canSeeSection'))
+  assert.ok(declaration)
+  const js = ts.transpileModule(declaration.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  const canSee = runInNewContext(`${js}\ncanSeeSection`, { isMigratedAdminSection, SETTINGS_SECTION_MIN_ROLE, authStore: { canAccessAllTenants: false, hasRole: () => false } })
+  for (const section of ['storage', 'vectorstore', 'members', 'org-structure']) assert.equal(canSee(section), true)
+  assert.equal(canSee('parser'), false)
+})

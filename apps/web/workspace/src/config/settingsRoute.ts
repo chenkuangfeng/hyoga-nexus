@@ -34,10 +34,20 @@ export function settingsQueryUnchanged(currentQuery: object, nextQuery: Settings
   return String(current.section ?? '') === String(nextQuery.section ?? '') && current.tab == null && nextQuery.tab == null && current.agentId == null && nextQuery.agentId == null && current.panel == null && nextQuery.panel == null
 }
 
-/** 已迁入独立管理应用的旧设置书签只保留说明，不重新挂载管理实现。 */
-export function isMigratedAdminSection(section: string): boolean { return section === 'org-structure' || section === 'members' }
+/** Fixed migration destinations; old bookmarks never supply an arbitrary target URL. */
+export const MIGRATED_ADMIN_SECTIONS = {
+  'org-structure': { target: 'organization', titleKey: 'adminOrganization.title', messageKey: 'adminMigration.organizationMoved' },
+  members: { target: 'members', titleKey: 'adminMembers.title', messageKey: 'adminMigration.membersMoved' },
+  storage: { target: 'storage', titleKey: 'adminStorage.title', messageKey: 'adminMigration.storageMoved' },
+  vectorstore: { target: 'vector-stores', titleKey: 'adminVector.title', messageKey: 'adminMigration.vectorStoreMoved' },
+} as const
+export type MigratedAdminSection = keyof typeof MIGRATED_ADMIN_SECTIONS
+/** 旧设置书签只保留迁移说明，不重新挂载管理实现。 */
+export function isMigratedAdminSection(section: string): section is MigratedAdminSection {
+  return Object.prototype.hasOwnProperty.call(MIGRATED_ADMIN_SECTIONS, section)
+}
 /** 已迁移管理功能的显式跨应用入口；目标由内部枚举决定，不接受任意外部 URL。 */
-export function adminSettingsLocation(base: string, origin: string, development: boolean, target: 'organization' | 'members' | 'audit'): string {
+export function adminSettingsLocation(base: string, origin: string, development: boolean, target: 'organization' | 'members' | 'audit' | 'storage' | 'vector-stores'): string {
   const path = `${base.replace(/\/+$/, '')}/admin/${target}`
   if (!development) return path
   const url = new URL(path, origin)

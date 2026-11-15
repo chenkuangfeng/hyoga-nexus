@@ -172,3 +172,9 @@ MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，�
 设置只挂载 Nexus 模型页，旧 WeKnora ModelSettings、ModelEditorDialog、ModelDebugDrawer 及独占的 modelProviders/modelProvidersState、modelEditorSourceState、modelCopyName、weknoraCloudModels、browserPairingOrigin 已删除。共享文案、解析器 Cloud 状态及通用 API 不按名称批量移除，依赖包仍被其他页面使用。
 
 聊天工具继续通过 pageDrafts 交付无凭据模型草稿。Nexus 页面等待当前目录加载后一次消费，显式映射 vllm→vision、asr→speech；local 来源提示不支持。模型深链接按实际 profile id 定位且校验 canManage。账号/企业/基础角色变化清空旧页面和表单；对话框以 scope key 重建，关闭/卸载或目标变化使旧测试、供应商→模型写链失效，凭据不保留在重试状态。仅 provider id 用于模型失败后的复用。
+
+## 企业存储与向量库入口隔离
+
+工作台不再导入 StorageBackendSettings/VectorStoreSettings。固定 MIGRATED_ADMIN_SECTIONS 注册表为旧部门、成员、存储与向量库书签提供标题、说明和 Admin 目标；hasOwnProperty 检查防止继承属性成为目标。Settings 保留旧 section 值，并对迁移说明绕过原写页面的角色与能力门槛，说明本身只消费身份 entries，不请求或写入配置。AdminSectionMoved 链接随当前身份变化，不自动跳转，成员旧书签仍提供独立审计入口。
+
+core 的 KBStorageSettings/KBVectorStoreSettings 继续通过真实目录适配器读取可用配置，现有绑定与快捷调用保留。共享适配器和文案不是旧页面的独占资源，不随治理页删除。

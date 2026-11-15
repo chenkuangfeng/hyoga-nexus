@@ -232,7 +232,7 @@ export default {
       "invalidDates": "请选择有效日期，开始不晚于结束，日期差最多 366 天。",
       "exported": "审计文件已交给浏览器下载。"
   },
-  adminMigration: {"membersMoved": "成员、邀请、加入申请审批和审计已迁入独立企业管理应用，具体功能仍需相应管理权限。", "organizationMoved": "部门组织管理已迁入独立的企业管理应用。请在管理后台维护部门与成员归属。", "openAdmin": "打开企业管理后台", "noEntry": "当前企业未授予管理后台入口，请联系企业管理员。"},
+  adminMigration: {storageMoved: "企業檔案儲存設定已移至獨立管理後台。知識庫仍可選擇既有儲存後端；此處不提供尚未實作的編輯或預設設定。", vectorStoreMoved: "企業向量庫設定已移至獨立管理後台。知識庫仍可選擇既有向量庫；維護設定需要相應管理權限。", "membersMoved": "成员、邀请、加入申请审批和审计已迁入独立企业管理应用，具体功能仍需相应管理权限。", "organizationMoved": "部门组织管理已迁入独立的企业管理应用。请在管理后台维护部门与成员归属。", "openAdmin": "打开企业管理后台", "noEntry": "当前企业未授予管理后台入口，请联系企业管理员。"},
   adminOrganization: {
     linkSourceLabel: '歸屬來源',
     linkSource: { manual: '手工維護', wecom: '企微同步', mixed: '手工與企微' },

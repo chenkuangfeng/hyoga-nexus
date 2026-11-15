@@ -38,3 +38,9 @@
 设置使用 `NexusModelSettings.vue` 和 `NexusModelEditorDialog.vue`，通过 Nexus Provider/模型档案接口维护个人模型。聊天工具的模型草稿在当前目录加载后一次消费；只预填名称、提供方名称、URL 和支持的类型，凭据由本人输入，local 草稿明确提示不支持。`model_id` 深链接只打开可管理档案。
 
 孤立的旧 ModelSettings、ModelEditorDialog、ModelDebugDrawer 及其独占目录缓存、Ollama/Cloud 和桌面浏览器配对辅助已删除。共享模型选择器、资源编辑器、解析器仍使用的 Cloud 状态和通用模型引用工具继续保留。身份切换和卸载使目录读取、测试及连续保存结果失效；已创建供应商而模型保存失败时，重试复用该供应商。
+
+## 企业存储与向量库配置
+
+企业文件存储和向量库治理已由 Admin 的 `/storage`、`/vector-stores` 承接，员工设置导航不再加载旧治理页面。`?section=storage`、`?section=vectorstore` 旧书签及知识库“管理配置”快捷调用显示迁移说明；只有当前身份具备 Admin 入口时显示显式链接，不自动跳转或请求治理目录。无管理入口时提示联系管理员。
+
+知识库编辑器继续读取并选择已有存储/向量库，保留原绑定。core 的目录适配器、共享文案和 providerLogo 仍有消费者；解析器及其他未完成迁移的设置保留后续任务。存储编辑、默认后端及未保存配置测试仍等待服务端实现，不能由旧页面的占位按钮推导为可用。

@@ -74,3 +74,15 @@ test('旧成员管理书签属于迁移说明，管理端成员和审计链接�
  assert.equal(adminSettingsLocation('/nexus/','https://example.test',false,'audit'),'/nexus/admin/audit')
  assert.equal(normalizeSettingsSection('members'),'members')
 })
+
+test('存储与向量库旧书签保留迁移说明，目标仅来自固定枚举', async () => {
+ const { isMigratedAdminSection, MIGRATED_ADMIN_SECTIONS, adminSettingsLocation } = await import('./settingsRoute')
+ for (const section of ['storage', 'vectorstore'] as const) {
+   assert.equal(isMigratedAdminSection(section), true)
+   assert.equal(normalizeSettingsSection(section), section)
+   assert.deepEqual(buildSettingsRouteQuery(section, { tab: 'old', panel: 'write', unrelated: 'keep' }), { section, unrelated: 'keep' })
+   const target = MIGRATED_ADMIN_SECTIONS[section].target
+   assert.equal(adminSettingsLocation('/nexus/', 'https://example.test', false, target), `/nexus/admin/${target}`)
+ }
+ for (const invalid of ['__proto__', 'constructor', 'https://evil.test/', 'vectorstore/../../']) assert.equal(isMigratedAdminSection(invalid), false)
+})

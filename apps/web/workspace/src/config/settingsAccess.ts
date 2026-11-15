@@ -13,9 +13,7 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   models: 'viewer',
   websearch: 'admin',
   chathistory: 'admin',
-  vectorstore: 'admin',
   parser: 'admin',
-  storage: 'admin',
   sandbox: 'admin',
   // Install writes a root shell into the sandbox image every session of
   // that config boots. Same Admin+ bar as the sandbox editor itself.

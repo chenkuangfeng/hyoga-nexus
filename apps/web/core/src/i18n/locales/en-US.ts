@@ -231,7 +231,7 @@ export default {
       "invalidDates": "Choose valid dates, with start no later than end and at most 366 days apart.",
       "exported": "The audit file was handed to the browser for download."
   },
-  adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
+  adminMigration: {storageMoved: "Enterprise file storage configuration has moved to the separate admin app. Knowledge bases can still select existing backends. Editing and default selection remain unavailable.", vectorStoreMoved: "Enterprise vector store configuration has moved to the separate admin app. Knowledge bases can still select existing stores; configuration requires management permission.", "membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
     linkSourceLabel: 'Association source',
     linkSource: { manual: 'Manual', wecom: 'WeCom', mixed: 'Manual and WeCom' },
