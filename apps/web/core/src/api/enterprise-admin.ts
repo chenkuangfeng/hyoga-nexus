@@ -40,7 +40,7 @@ export async function updateEnterprisePolicy(tenantId: string, changes: Partial<
 }
 /** 按名称展示组织节点，提交稳定 ID。要求 org:manage；失败时不得手工输入 ID 绕过。 */
 export async function listPolicyDepartments(tenantId: string): Promise<DepartmentChoice[]> {
-  const data: unknown = await get(`${tenantPath(tenantId)}/org-units/tree`)
+  const data: unknown = await get(`${tenantPath(tenantId)}/admin/org-units/tree`)
   if (!Array.isArray(data)) throw new Error('admin_response_invalid')
   return data.map(value => {
     const row = object(value)

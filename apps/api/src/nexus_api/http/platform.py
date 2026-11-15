@@ -45,6 +45,7 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.permissions import require_api_permission
 from nexus_api.dependencies.platform import get_database_session, get_principal, get_run_channels, get_tenant_header
+from nexus_api.http.admin_routes import tenant_admin_route
 from nexus_api.schemas.platform import (
     InputResponse,
     AgentDraftInput,
@@ -132,9 +133,8 @@ def list_tenants(
     return [tenant_view(row, role) for row, role in tenants.list_tenants(db, principal)]
 
 
-@router.post(
-    "/tenants/{tenant_id}/members", response_model=MemberView, status_code=status.HTTP_201_CREATED
-)
+@tenant_admin_route(router, "/tenants/{tenant_id}/members", methods=["POST"], response_model=MemberView,
+                    status_code=status.HTTP_201_CREATED)
 def add_tenant_member(
     tenant_id: UUID,
     body: MemberCreate,
@@ -148,7 +148,7 @@ def add_tenant_member(
         return _member_view(db, row)
 
 
-@router.get("/tenants/{tenant_id}/members", response_model=list[MemberView])
+@tenant_admin_route(router, "/tenants/{tenant_id}/members", methods=["GET"], response_model=list[MemberView])
 def list_tenant_members(
     tenant_id: UUID,
     principal: Principal = Depends(get_principal),
@@ -182,7 +182,7 @@ def _member_view(db: Session, row) -> MemberView:
     )
 
 
-@router.patch("/tenants/{tenant_id}/members/{member_id}", response_model=MemberView)
+@tenant_admin_route(router, "/tenants/{tenant_id}/members/{member_id}", methods=["PATCH"], response_model=MemberView)
 def update_tenant_member(
     tenant_id: UUID,
     member_id: UUID,
@@ -195,7 +195,7 @@ def update_tenant_member(
         return _member_view(db, row)
 
 
-@router.delete("/tenants/{tenant_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+@tenant_admin_route(router, "/tenants/{tenant_id}/members/{member_id}", methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT)
 def remove_tenant_member(
     tenant_id: UUID,
     member_id: UUID,
@@ -506,7 +506,7 @@ def get_run(
     return view
 
 
-@router.get("/tenants/{tenant_id}/admissions/unknown")
+@tenant_admin_route(router, "/tenants/{tenant_id}/admissions/unknown", methods=["GET"])
 def list_unknown_admissions(
     tenant_id: UUID,
     principal: Principal = Depends(get_principal),
@@ -516,7 +516,7 @@ def list_unknown_admissions(
     return unknown_runs.list_unknown(db, principal, tenant_id, side_effects_by_name())
 
 
-@router.post("/tenants/{tenant_id}/runs/{run_id}/resolve-unknown")
+@tenant_admin_route(router, "/tenants/{tenant_id}/runs/{run_id}/resolve-unknown", methods=["POST"])
 def resolve_unknown_run(
     tenant_id: UUID,
     run_id: UUID,
@@ -639,8 +639,8 @@ def cancel_run(
     return RunView.model_validate(runs.request_cancel(db, principal, tenant_id, run_id), from_attributes=True)
 
 
-@router.get("/tenants/{tenant_id}/audit-log", response_model=list[dict[str, Any]])
-@router.get("/tenants/{tenant_id}/audit", response_model=list[dict[str, Any]])
+@router.get("/tenants/{tenant_id}/audit-log", response_model=list[dict[str, Any]], deprecated=True)
+@tenant_admin_route(router, "/tenants/{tenant_id}/audit", methods=["GET"], response_model=list[dict[str, Any]])
 def list_audit_records(
     tenant_id: UUID,
     limit: int = Query(default=100, ge=1, le=500),

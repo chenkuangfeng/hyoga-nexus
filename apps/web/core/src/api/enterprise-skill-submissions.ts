@@ -14,7 +14,7 @@ function submission(value: unknown): SkillSubmissionRow {
   if (typeof row.updates_existing !== 'boolean') throw new Error('admin_response_invalid')
   return { id: string(row.id), name: string(row.name), description: string(row.description), origin: string(row.origin), state: string(row.state), verdict: string(row.verdict), findings: number(row.findings), review_reason: nullable(row.review_reason), created_at: string(row.created_at), updates_existing: row.updates_existing }
 }
-function base(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/skill-submissions` }
+function base(tenantId: string): string { return `/api/v1/tenants/${encodeURIComponent(tenantId)}/admin/skill-submissions` }
 /** 最多 200 条待审核项；没有游标时不虚构分页。 */
 export async function listEnterpriseSkillSubmissions(tenantId: string): Promise<SkillSubmissionRow[]> {
   const data: unknown = await get(`${base(tenantId)}?state=pending`)

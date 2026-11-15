@@ -16,6 +16,7 @@ from nexus_core.platform import Principal
 from nexus_platform.errors import InvalidConfiguration
 from nexus_platform.skills import service as skills
 from nexus_api.dependencies.platform import get_database_session, get_principal
+from nexus_api.http.admin_routes import tenant_admin_route
 
 router = APIRouter(prefix="/api/v1")
 
@@ -207,7 +208,7 @@ def submit_skill(tenant_id: UUID, body: SubmitRequest, principal: Principal = De
     return submissions.submit(db, principal, tenant_id, body.from_private)
 
 
-@router.get("/tenants/{tenant_id}/skill-submissions")
+@tenant_admin_route(router, "/tenants/{tenant_id}/skill-submissions", methods=["GET"], deprecated_legacy=False)
 def list_skill_submissions(tenant_id: UUID, mine: bool = False, state: str | None = Query(default="pending", max_length=16),
                            principal: Principal = Depends(get_principal),
                            db: Session = Depends(get_database_session)) -> list[dict[str, Any]]:
@@ -226,7 +227,7 @@ def get_skill_submission(tenant_id: UUID, submission_id: UUID, principal: Princi
     return submissions.get_mine(db, principal, tenant_id, submission_id)
 
 
-@router.get("/tenants/{tenant_id}/skill-submissions/{submission_id}/review")
+@tenant_admin_route(router, "/tenants/{tenant_id}/skill-submissions/{submission_id}/review", methods=["GET"])
 def review_skill_submission(tenant_id: UUID, submission_id: UUID, principal: Principal = Depends(get_principal),
                             db: Session = Depends(get_database_session)) -> dict[str, Any]:
     """Text, scan findings and the difference to the library version, for the reviewer (``tools:manage``)."""
@@ -241,7 +242,7 @@ def withdraw_skill_submission(tenant_id: UUID, submission_id: UUID, principal: P
     return submissions.withdraw(db, principal, tenant_id, submission_id)
 
 
-@router.post("/tenants/{tenant_id}/skill-submissions/{submission_id}/approve")
+@tenant_admin_route(router, "/tenants/{tenant_id}/skill-submissions/{submission_id}/approve", methods=["POST"])
 def approve_skill_submission(tenant_id: UUID, submission_id: UUID,
                              sandbox_profile: str | None = Query(default=None, max_length=32),
                              principal: Principal = Depends(get_principal),
@@ -251,7 +252,7 @@ def approve_skill_submission(tenant_id: UUID, submission_id: UUID,
     return submissions.approve(db, principal, tenant_id, submission_id, sandbox_profile)
 
 
-@router.post("/tenants/{tenant_id}/skill-submissions/{submission_id}/reject")
+@tenant_admin_route(router, "/tenants/{tenant_id}/skill-submissions/{submission_id}/reject", methods=["POST"])
 def reject_skill_submission(tenant_id: UUID, submission_id: UUID, body: RejectRequest,
                             principal: Principal = Depends(get_principal),
                             db: Session = Depends(get_database_session)) -> dict[str, Any]:

@@ -56,7 +56,7 @@ export async function listSessions(tenantId: string): Promise<SessionView[]> {
 export interface UnknownAdmission { admission_id: string; session_id: string; run_id: string; run_status: string; interrupted_at: string; safe: boolean }
 /** Sessions held by a Run whose worker disappeared; the endpoint limits non-admins to their own Runs. */
 export async function listUnknownAdmissions(tenantId: string): Promise<UnknownAdmission[]> {
-  const data: unknown = await get(`${tenantPath(tenantId)}/admissions/unknown`)
+  const data: unknown = await get(`${tenantPath(tenantId)}/admin/admissions/unknown`)
   if (!Array.isArray(data)) throw new Error('Unexpected unknown admission response')
   return data.map(value => {
     if (!isRecord(value) || typeof value.admission_id !== 'string' || typeof value.session_id !== 'string'
@@ -237,5 +237,5 @@ export async function streamRunEvents(tenantId: string, runId: string, options: 
 
 /** Release the session an interrupted Run left blocked. The Run is not replayed; the call is idempotent. */
 export async function resolveUnknownRun(tenantId: string, runId: string): Promise<void> {
-  await post(`${tenantPath(tenantId)}/runs/${encodeURIComponent(runId)}/resolve-unknown`, {})
+  await post(`${tenantPath(tenantId)}/admin/runs/${encodeURIComponent(runId)}/resolve-unknown`, {})
 }

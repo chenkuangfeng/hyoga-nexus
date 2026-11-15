@@ -25,7 +25,7 @@ test('策略接口限定企业路径，用 PATCH 显式传递 null；部门显�
   const org = setup([{ id: 'department', parent_id: null, name: '研发部', status: 'active' }])
   const rows = await org.api.listPolicyDepartments('tenant/a')
   assert.equal(rows[0].name, '研发部')
-  assert.equal(org.calls[0].url, '/api/v1/tenants/tenant%2Fa/org-units/tree')
+  assert.equal(org.calls[0].url, '/api/v1/tenants/tenant%2Fa/admin/org-units/tree')
 })
 
 test('错误的布尔值、枚举及保留天数不得作为可编辑策略消费', () => {

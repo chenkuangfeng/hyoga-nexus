@@ -16,7 +16,7 @@ function fields(value: unknown): Omit<OrganizationNode, 'member_count'> {
   if (!name.trim() || !['active', 'disabled'].includes(text(row.status)) || !['manual', 'wecom'].includes(text(row.source))) throw new Error('organization_response_invalid')
   return { id: id(row.id), parent_id: row.parent_id === null ? null : id(row.parent_id), name, status: row.status as OrganizationStatus, source: row.source as OrganizationSource }
 }
-function tenantPath(tenant: string): string { return `/api/v1/tenants/${encodeURIComponent(tenant)}/org-units` }
+function tenantPath(tenant: string): string { return `/api/v1/tenants/${encodeURIComponent(tenant)}/admin/org-units` }
 function unitPath(tenant: string, unit: string): string { return `${tenantPath(tenant)}/${encodeURIComponent(unit)}` }
 function detail(value: unknown, tenant: string): OrganizationUnit {
   const row = object(value), base = fields(row), root = id(row.root_id)

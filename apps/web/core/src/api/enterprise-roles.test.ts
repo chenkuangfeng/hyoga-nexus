@@ -20,7 +20,7 @@ test('部门分配使用真实端点与 role_id，并拒绝重叠或错误类型
   })
   const result = await api.assignDepartmentRole('tenant', 'dept', 'role')
   assert.equal(result.assigned.length, 1); assert.equal(result.skipped.length, 1)
-  assert.equal(calls[0].url, '/api/v1/tenants/tenant/org-units/dept/role-assignments')
+  assert.equal(calls[0].url, '/api/v1/tenants/tenant/admin/org-units/dept/role-assignments')
   assert.equal((calls[0].input as { role_id: string }).role_id, 'role')
   response = { assigned: ['a'], skipped: ['a'] }
   await assert.rejects(api.assignDepartmentRole('tenant', 'dept', 'role'), /roles_response_invalid/)

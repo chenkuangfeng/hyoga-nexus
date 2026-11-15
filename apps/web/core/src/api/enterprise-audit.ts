@@ -14,7 +14,7 @@ export function auditRecordsFromResponse(value: unknown): EnterpriseAuditRecord[
 const base = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}`
 export async function listEnterpriseAudit(tenant: string, limit: number): Promise<EnterpriseAuditRecord[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error('audit_limit_invalid')
-  return auditRecordsFromResponse(await get(`${base(tenant)}/audit-log`, { params: { limit } }))
+  return auditRecordsFromResponse(await get(`${base(tenant)}/admin/audit`, { params: { limit } }))
 }
 /** 严格自然日校验，不允许 Date 自动把无效日期归一化；与服务端日期差上限一致。 */
 export function validAuditExportRange(start: string, end: string): boolean {
