@@ -29,6 +29,10 @@ Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始
 
 智能体草稿的 `budgets.generation` 只接受 `temperature`（0–2）与 `reasoning_effort`（`off/auto/minimal/low/medium/high/xhigh/max`），其他键或越界值返回 422。Native 运行准备阶段与故障转移模型以智能体值覆盖模型档案的同名选项（`auto` 沿用模型档案，`off` 不发送思考参数）；上下文压缩使用的摘要模型不受影响。
 
+## 企业成员状态管理
+
+管理端列表 `GET /api/v1/tenants/{tenant_id}/admin/members` 返回 active 与 suspended 成员；状态写入 `PATCH /api/v1/tenants/{tenant_id}/admin/members/{member_id}/status` 接收 `{ "status": "active" | "suspended" }`，返回 `MemberView`（含 `suspended_at`）。两者都要求 `members:manage`。停用与恢复会保留角色、部门和历史；真实状态变化生成 `tenant.member_status_changed` 审计。永久移除仍使用 DELETE 并写为 revoked。
+
 ## 实时事件
 
 - SSE 路径：鉴权后立即 `db.close()`，之后的重放与状态检查各开短会话（`stream_run_events` 的 `page`、`status` 回调）；通道由 `get_run_channels` 提供（进程内已安装的非 database 通道优先，否则按应用的会话工厂构建 database 通道）。

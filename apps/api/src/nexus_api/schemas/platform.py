@@ -38,8 +38,14 @@ class MemberRoleUpdate(BaseModel):
     role: Literal["owner", "admin", "contributor", "viewer"]
 
 
+class MemberStatusUpdate(BaseModel):
+    """Explicit reversible membership transition; revoked memberships use DELETE."""
+
+    status: Literal["active", "suspended"]
+
+
 class MemberView(BaseModel):
-    """An active membership. `email`, `username` and `display_name` come from the user, so member lists can
+    """An active or suspended membership. `email`, `username` and `display_name` come from the user, so member lists can
     show who each person is; they are None when the user has no such field."""
 
     tenant_id: UUID
@@ -47,6 +53,7 @@ class MemberView(BaseModel):
     role: str
     status: str
     joined_at: datetime
+    suspended_at: datetime | None = None
     email: str | None = None
     username: str | None = None
     display_name: str | None = None

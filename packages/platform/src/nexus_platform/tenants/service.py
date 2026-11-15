@@ -155,11 +155,14 @@ def add_member(
         membership = session.get(MembershipRecord, (tenant_id, user.id))
         if membership and membership.status == "active":
             raise Conflict("User is already an active member")
+        if membership and membership.status == "suspended":
+            raise Conflict("Membership is suspended; restore it before rejoining")
         if membership:
             membership.role = role.value
             membership.status = "active"
             membership.joined_at = now
             membership.revoked_at = None
+            membership.suspended_at = None
         else:
             membership = MembershipRecord(
                 tenant_id=tenant_id,
@@ -212,7 +215,7 @@ def remove_member(session: Session, principal: Principal, tenant_id: UUID, membe
         actor_membership = require_membership(session, tenant_id, actor.id)
         require_api_permission(session, tenant_id, actor.id, "members:manage")
         member = session.get(MembershipRecord, (tenant_id, member_id))
-        if member is None or member.status != "active":
+        if member is None or member.status not in {"active", "suspended"}:
             raise NotFound("Tenant member not found")
         if member.role == TenantRole.OWNER.value:
             if actor_membership.role != TenantRole.OWNER.value:
@@ -228,7 +231,46 @@ def remove_member(session: Session, principal: Principal, tenant_id: UUID, membe
                 raise Conflict("Transfer ownership before removing the last owner")
         member.status = "revoked"
         member.revoked_at = now
+        member.suspended_at = None
         audit(session, tenant_id, actor.id, "tenant.member_removed", "user", str(member_id))
+
+
+def set_member_status(
+    session: Session, principal: Principal, tenant_id: UUID, member_id: UUID, status: str
+) -> MembershipRecord:
+    """Suspend or restore a member while preserving their role, organization links and history."""
+    if status not in {"active", "suspended"}:
+        raise ValueError("Member status must be active or suspended")
+    now = utc_now()
+    with session.begin():
+        actor = resolve_user(session, principal)
+        lock_tenant(session, tenant_id)
+        actor_membership = require_membership(session, tenant_id, actor.id)
+        require_api_permission(session, tenant_id, actor.id, "members:manage")
+        member = session.get(MembershipRecord, (tenant_id, member_id))
+        if member is None or member.status not in {"active", "suspended"}:
+            raise NotFound("Tenant member not found")
+        if member.role == TenantRole.OWNER.value and actor_membership.role != TenantRole.OWNER.value:
+            raise Forbidden("Only an owner can change owner membership status")
+        previous = member.status
+        if previous == status:
+            return member
+        if status == "suspended" and member.role == TenantRole.OWNER.value:
+            owner_count = session.scalar(
+                select(func.count()).select_from(MembershipRecord).where(
+                    MembershipRecord.tenant_id == tenant_id,
+                    MembershipRecord.status == "active",
+                    MembershipRecord.role == TenantRole.OWNER.value,
+                )
+            )
+            if owner_count <= 1:
+                raise Conflict("A tenant must keep at least one active owner")
+        member.status = status
+        member.suspended_at = now if status == "suspended" else None
+        audit(session, tenant_id, actor.id, "tenant.member_status_changed", "user", str(member_id), {
+            "from": previous, "to": status, "changed_at": now.isoformat(),
+        })
+    return member
 
 
 def lock_tenant(session: Session, tenant_id: UUID) -> TenantRecord:

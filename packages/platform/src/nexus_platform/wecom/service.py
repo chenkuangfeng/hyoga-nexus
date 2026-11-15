@@ -301,6 +301,8 @@ def _ensure_membership(db: Session, tenant_id: UUID, user_id: UUID, member: WeCo
     membership = db.get(MembershipRecord, (tenant_id, user_id))
     if membership is not None and membership.status == 'active':
         return
+    if membership is not None and membership.status == 'suspended':
+        raise Forbidden('Enterprise membership is suspended')
     if member is None or not member.active:
         raise Forbidden(NOT_SYNCED)
     if membership is None:
@@ -484,9 +486,10 @@ def revoke_member(db: Session, tenant_id: UUID, member: WeComMemberRecord, reaso
     if member.user_id is None:
         return False
     membership = db.get(MembershipRecord, (tenant_id, member.user_id))
-    if membership is None or membership.status != 'active' or membership.role == 'owner':
+    if membership is None or membership.status not in {'active', 'suspended'} or membership.role == 'owner':
         return False
     membership.status, membership.revoked_at = 'revoked', utc_now()
+    membership.suspended_at = None
     audit(db, tenant_id, _system_actor(db, tenant_id), 'wecom.member_left', 'user', str(member.user_id),
           {'userid': member.userid, 'reason': reason, 'by': 'wecom'})
     return True

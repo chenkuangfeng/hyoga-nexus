@@ -4,7 +4,7 @@ import { del, get, patch, post } from '../utils/request'
 export type MemberRole = 'owner' | 'admin' | 'contributor' | 'viewer'
 export type InviteRole = Exclude<MemberRole, 'owner'>
 export interface EnterpriseMember {
-  tenant_id: string; user_id: string; role: MemberRole; status: 'active'; joined_at: string
+  tenant_id: string; user_id: string; role: MemberRole; status: 'active' | 'suspended'; joined_at: string; suspended_at: string | null
   email: string | null; username: string | null; display_name: string | null
 }
 interface InvitationBase { id: string; role: InviteRole; status: 'pending'; created_at: string }
@@ -19,11 +19,11 @@ function nullable(value: unknown): string | null { return value == null ? null :
 function role(value: unknown): MemberRole { const text = string(value); if (!['owner', 'admin', 'contributor', 'viewer'].includes(text)) throw new Error('members_response_invalid'); return text as MemberRole }
 function inviteRole(value: unknown): InviteRole { const parsed = role(value); if (parsed === 'owner') throw new Error('members_response_invalid'); return parsed }
 function tenantAdminPath(id: string): string { return `/api/v1/tenants/${encodeURIComponent(id)}/admin` }
-/** 仅接受当前成员列表契约的 active 记录；不得把缺失字段转成默认授权状态。 */
+/** 仅接受管理端成员列表中的 active/suspended 记录；不得把缺失字段转成默认授权状态。 */
 export function memberFromResponse(value: unknown): EnterpriseMember {
   const row = object(value)
-  if (row.status !== 'active') throw new Error('members_response_invalid')
-  return { tenant_id: string(row.tenant_id), user_id: string(row.user_id), role: role(row.role), status: 'active', joined_at: string(row.joined_at), email: nullable(row.email), username: nullable(row.username), display_name: nullable(row.display_name) }
+  if (row.status !== 'active' && row.status !== 'suspended') throw new Error('members_response_invalid')
+  return { tenant_id: string(row.tenant_id), user_id: string(row.user_id), role: role(row.role), status: row.status, joined_at: string(row.joined_at), suspended_at: nullable(row.suspended_at), email: nullable(row.email), username: nullable(row.username), display_name: nullable(row.display_name) }
 }
 /** 邀请链接仅可指向已知加入页，拒绝外部地址或夹带额外参数的响应。 */
 export function invitationFromResponse(value: unknown): EnterpriseInvitation {
@@ -37,14 +37,14 @@ export function invitationFromResponse(value: unknown): EnterpriseInvitation {
   }
   return { ...base, kind: 'person', user_id: string(row.user_id), email: nullable(row.email), display_name: nullable(row.display_name) }
 }
-/** 服务端一次返回全部活跃成员，搜索和分页由页面完成；拒绝跨企业响应。 */
+/** 管理端一次返回活跃与停用成员；员工端候选接口仍只返回活跃成员。 */
 export async function listEnterpriseMembers(tenantId: string, admin = true): Promise<EnterpriseMember[]> {
   const path = admin ? `${tenantAdminPath(tenantId)}/members` : `/api/v1/tenants/${encodeURIComponent(tenantId)}/members`
   const data: unknown = await get(path)
   if (!Array.isArray(data)) throw new Error('members_response_invalid')
   const rows = data.map(memberFromResponse)
   if (rows.some(row => row.tenant_id !== tenantId)) throw new Error('members_response_invalid')
-  return rows
+  return admin ? rows : rows.filter(row => row.status === 'active')
 }
 /** 返回待处理人员邀请和未过期链接。链接仅供当前管理页面短时持有，不写入存储。 */
 export async function listEnterpriseInvitations(tenantId: string): Promise<EnterpriseInvitation[]> {
@@ -63,6 +63,12 @@ export async function addEnterpriseMember(tenantId: string, input: MemberEmailIn
 export async function changeEnterpriseMemberRole(tenantId: string, userId: string, nextRole: MemberRole): Promise<EnterpriseMember> {
   const row = memberFromResponse(await patch(`${tenantAdminPath(tenantId)}/members/${encodeURIComponent(userId)}`, { role: nextRole }))
   if (row.tenant_id !== tenantId || row.user_id !== userId) throw new Error('members_response_invalid')
+  return row
+}
+/** 显式停用或恢复成员；恢复不会改变角色或组织关联。 */
+export async function setEnterpriseMemberStatus(tenantId: string, userId: string, status: 'active' | 'suspended'): Promise<EnterpriseMember> {
+  const row = memberFromResponse(await patch(`${tenantAdminPath(tenantId)}/members/${encodeURIComponent(userId)}/status`, { status }))
+  if (row.tenant_id !== tenantId || row.user_id !== userId || row.status !== status) throw new Error('members_response_invalid')
   return row
 }
 /** 移除企业成员资格，不删除账号，不等同于可恢复的停用；调用方须先确认。 */

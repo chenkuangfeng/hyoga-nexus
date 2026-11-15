@@ -92,6 +92,8 @@ def _activate(session: Session, tenant_id: UUID, user_id: UUID, role: str, sourc
     membership = session.get(MembershipRecord, (tenant_id, user_id))
     if membership is not None and membership.status == "active":
         raise Conflict("The user is already a member of this space")
+    if membership is not None and membership.status == "suspended":
+        raise Conflict("Membership is suspended; restore it before rejoining")
     if membership is None:
         membership = MembershipRecord(tenant_id=tenant_id, user_id=user_id, role=role, status="active",
                                       source=source, joined_at=now)
@@ -99,6 +101,7 @@ def _activate(session: Session, tenant_id: UUID, user_id: UUID, role: str, sourc
     else:
         membership.role, membership.status, membership.source = role, "active", source
         membership.joined_at, membership.revoked_at = now, None
+        membership.suspended_at = None
     session.flush()
     if unit_id is not None:
         _place(session, tenant_id, user_id, unit_id, now)
@@ -139,6 +142,8 @@ def invite_existing_account(session: Session, principal: Principal, tenant_id: U
         membership = session.get(MembershipRecord, (tenant_id, user.id))
         if membership is not None and membership.status == "active":
             raise Conflict("The user is already a member of this space")
+        if membership is not None and membership.status == "suspended":
+            raise Conflict("Membership is suspended; restore it before rejoining")
         _ensure_no_pending(session, tenant_id, user.id)
         row = SpaceJoinRequestRecord(
             id=new_id(), tenant_id=tenant_id, user_id=user.id, direction="invitation", status=PENDING,

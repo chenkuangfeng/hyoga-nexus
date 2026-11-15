@@ -63,13 +63,13 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 管理端成员与邀请
 
-`/admin/members` 由 `views/members/MembersPage.vue` 和 `useMemberAdministration.ts` 组成，复用已接通的管理外壳与权限上下文。界面参考 WeKnora `TenantMembers.vue` 的成员/待邀请标签、搜索与角色操作、邀请表单和链接流程，按 Nexus 现有 DTO 重写；不导入工作台组件，审计由独立 AuditPage 承接，成员停用/恢复入口仍待后端接口。剪贴板函数迁到 `core`，原工作台路径保留转导出。
+`/admin/members` 由 `views/members/MembersPage.vue` 和 `useMemberAdministration.ts` 组成，复用已接通的管理外壳与权限上下文。界面参考 WeKnora `TenantMembers.vue` 的成员/待邀请标签、搜索与角色操作、邀请表单和链接流程，按 Nexus 现有 DTO 重写；不导入工作台组件，审计由独立 AuditPage 承接。成员列表展示 active/suspended，管理 API 以事务锁保护 owner 状态，停用和恢复确认后调用状态端点并刷新行；操作者修改自身状态后重校准认证与企业权限。剪贴板函数迁到 `core`，原工作台路径保留转导出。
 
-公共 `api/enterprise-members.ts` 调用现有 `/tenants/{id}/members`、`members/by-email`、`invitations` 和 `invite-links`，无需本批修改后端契约。成员列表一次返回全部活跃行，搜索分页在客户端完成；响应的企业 ID 必须匹配路径，修改角色的用户 ID 也须匹配请求。人员邀请与链接采用联合类型，链接路径仅允许 `/join?token=...`，不接受外部地址、片段或额外参数。
+公共 `api/enterprise-members.ts` 调用现有 `/tenants/{id}/members`、`members/by-email`、`invitations` 和 `invite-links`，无需本批修改后端契约。管理端成员列表一次返回全部 active/suspended 行，工作台候选接口仍只返回 active 行，搜索分页在客户端完成；响应的企业 ID 必须匹配路径，修改角色的用户 ID 也须匹配请求。人员邀请与链接采用联合类型，链接路径仅允许 `/join?token=...`，不接受外部地址、片段或额外参数。
 
 控制器分别消费两个列表的成功/失败结果；身份、企业、权限代次或管理权限变化立即清表单、临时密码和链接。所有 mutation 的结果与确认回调校验代次，关闭/卸载后旧确认不能发请求；表单秘密在提交时先清除。角色修改/移除要求成员行来自当前列表，前端提供 owner 规则与最后所有者保护，服务端仍在事务中授权。自身变更会刷新 `/auth/me` 与当前企业权限，即使默认企业发生变化也不复用旧权限。
 
-邮箱流程只在选择创建新账号时提交用户名和临时密码；返回值明确区分 invited 与 created。邀请链接的有效期按 1–30 天校验；撤销只影响未完成的邀请/后续链接使用。加入申请已在管理端接通；独立停用/恢复仍无后端接口，工作台旧成员治理页已删除，E2.8 仍需确认工作台产物隔离。
+邮箱流程只在选择创建新账号时提交用户名和临时密码；返回值明确区分 invited 与 created。邀请链接的有效期按 1–30 天校验；撤销只影响未完成的邀请/后续链接使用。加入申请已在管理端接通。停用只在 active 与 suspended 间转换，DELETE 仍写入 revoked；企微目录同步不能重激活人工停用成员，离职/移出范围仍撤销成员。工作台旧成员治理页已删除，E2.8 仍需确认工作台产物隔离。
 
 管理端 API 地址与静态页面路径分开：公共 `getApiBaseUrl` 去掉页面 base 末尾的 `/admin`，`/admin/` 请求 `/api/v1/...`，`/nexus/admin/` 请求 `/nexus/api/v1/...`；员工端与其他子路径部署继续保留自身前缀。这样管理页面不会请求不存在的 `/admin/api/v1/...`。
 

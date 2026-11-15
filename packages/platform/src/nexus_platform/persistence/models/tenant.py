@@ -35,7 +35,7 @@ class MembershipRecord(Base):
     __tablename__ = "tenant_memberships"
     __table_args__ = (
         CheckConstraint("role IN ('owner', 'admin', 'contributor', 'viewer')", name="ck_membership_role"),
-        CheckConstraint("status IN ('active', 'revoked')", name="ck_membership_status"),
+        CheckConstraint("status IN ('active', 'suspended', 'revoked')", name="ck_membership_status"),
         CheckConstraint("source IN ('manual', 'invitation', 'application', 'wecom')", name="ck_membership_source"),
         Index("ix_memberships_user_status", "user_id", "status"),
     )
@@ -48,6 +48,7 @@ class MembershipRecord(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # How the membership was created: manual (admin-created), invitation (accepted), application (approved).
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual", server_default="manual")
 

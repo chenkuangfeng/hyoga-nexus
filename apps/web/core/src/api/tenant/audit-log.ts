@@ -9,6 +9,7 @@ export type AuditAction =
   | 'rbac.member_added'
   | 'rbac.member_removed'
   | 'rbac.member_role_changed'
+  | 'rbac.member_status_changed'
   | 'rbac.member_left'
   | 'rbac.access_denied'
   | string // forward-compat: future namespaces shouldn't break the type

@@ -154,10 +154,10 @@
 
 本批涉及服务端权限规则变化，用户已明确确认实施，任务仍归原变更 E2.5.3.5。
 
-## E2.5.5 追加提案：企业成员临时停用与恢复（待确认）
+## E2.5.5 追加提案：企业成员临时停用与恢复（2026-11-15 已确认）
 
 现有成员管理只支持永久移除，不能暂时阻止成员访问后再恢复。拟增加 `suspended` 成员状态与 `suspended_at` 时间，提供 `PATCH /api/v1/tenants/{tenant_id}/admin/members/{member_id}/status`（`active | suspended`）。停用即拒绝后续企业身份、资源访问与新 Run，但保留角色、部门关系、资源和历史；已开始的 Run 不自动取消，后续操作继续受执行时授权检查。恢复显式设回 active，不重置角色或部门关系。
 
 状态写入要求 `members:manage`；owner 变更仍仅限 owner，并在租户事务锁内保护至少一名 active owner。永久移除仍写为 `revoked`。邀请或手工添加不得隐式恢复 suspended 成员；企微同步不得覆盖人工停用，确认离职仍按既有规则撤销。成员列表展示 active/suspended 并提供停用确认和恢复操作。完整需求与设计见 `specs/enterprise-member-status-administration/spec.md`、`design.md` E2.5.5。
 
-此追加扩大持久化状态、身份授权和企业微信同步行为，尚未获得确认；确认前不实施代码与迁移。
+用户已确认按此合同实施（2026-11-15）。实施状态及验收限制见 `tasks.md` E2.5.5。

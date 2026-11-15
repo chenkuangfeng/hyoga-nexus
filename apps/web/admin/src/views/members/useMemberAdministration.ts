@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { DialogPlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
-import { addEnterpriseMember, changeEnterpriseMemberRole, createEnterpriseInviteLink, listEnterpriseInvitations, listEnterpriseMembers, removeEnterpriseMember, revokeEnterpriseInvitation, type EnterpriseInvitation, type EnterpriseMember, type InviteRole, type MemberEmailInput, type MemberRole } from '@nexus-web/core/api/enterprise-members'
+import { addEnterpriseMember, changeEnterpriseMemberRole, createEnterpriseInviteLink, listEnterpriseInvitations, listEnterpriseMembers, removeEnterpriseMember, revokeEnterpriseInvitation, setEnterpriseMemberStatus, type EnterpriseInvitation, type EnterpriseMember, type InviteRole, type MemberEmailInput, type MemberRole } from '@nexus-web/core/api/enterprise-members'
 import { useAdminContext } from '../../stores/context'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
@@ -19,7 +19,7 @@ export function useMemberAdministration(t: Translate) {
   const form = reactive<{ email: string; role: InviteRole; username: string; password: string; display_name: string }>({ email: '', role: 'contributor', username: '', password: '', display_name: '' })
   const linkForm = reactive<{ role: InviteRole; days: number | undefined }>({ role: 'contributor', days: 7 })
   const canManage = computed(() => context.can('members:manage'))
-  const ownerCount = computed(() => members.value.filter(row => row.role === 'owner').length)
+  const ownerCount = computed(() => members.value.filter(row => row.role === 'owner' && row.status === 'active').length)
   const filteredMembers = computed(() => { const query = search.value.trim().toLowerCase(); return members.value.filter(row => [row.email, row.username, row.display_name].some(value => (value || '').toLowerCase().includes(query))) })
   const memberRows = computed(() => filteredMembers.value.slice((memberPage.value - 1) * pageSize, memberPage.value * pageSize))
   const invitationRows = computed(() => invitations.value.slice((invitePage.value - 1) * pageSize, invitePage.value * pageSize))
@@ -43,8 +43,9 @@ export function useMemberAdministration(t: Translate) {
   function memberName(row: EnterpriseMember): string { return row.display_name || row.username || row.email || t('adminMembers.unnamedMember') }
   function invitationName(row: EnterpriseInvitation): string { return row.kind === 'link' ? t('adminMembers.link') : row.display_name || row.email || t('adminMembers.unnamedMember') }
   function knownMember(row: EnterpriseMember): boolean { return membersReady.value && members.value.some(item => item.user_id === row.user_id) }
-  function canEditMember(row: EnterpriseMember): boolean { return canManage.value && knownMember(row) && (row.role !== 'owner' || auth.currentTenantRole === 'owner') }
-  function canRemoveMember(row: EnterpriseMember): boolean { return canEditMember(row) && (row.role !== 'owner' || ownerCount.value > 1) }
+  function canEditMember(row: EnterpriseMember): boolean { return canManage.value && knownMember(row) && row.status === 'active' && (row.role !== 'owner' || auth.currentTenantRole === 'owner') }
+  function canRemoveMember(row: EnterpriseMember): boolean { return canManage.value && knownMember(row) && (row.role !== 'owner' || auth.currentTenantRole === 'owner' && (row.status === 'suspended' || ownerCount.value > 1)) }
+  function canChangeStatus(row: EnterpriseMember): boolean { return canManage.value && knownMember(row) && (row.role !== 'owner' || auth.currentTenantRole === 'owner') && (row.status === 'suspended' || row.role !== 'owner' || ownerCount.value > 1) }
   function roleOptions(row: EnterpriseMember) { return (['owner', 'admin', 'contributor', 'viewer'] as const).filter(value => value !== 'owner' || auth.currentTenantRole === 'owner').map(value => ({ value, label: t(`tenantMember.role.${value}`), disabled: row.role === 'owner' && ownerCount.value <= 1 && value !== 'owner' })) }
   /** 对自身的角色/成员资格写入后重新校准身份，立即撤掉已经失去的管理能力。 */
   async function reconcileSelf(tenant: string, userId: string) {
@@ -85,6 +86,19 @@ export function useMemberAdministration(t: Translate) {
       if (row.user_id === auth.user?.id) await reconcileSelf(tenant, row.user_id)
     })
   }
+  function setStatus(row: EnterpriseMember, status: 'active' | 'suspended') {
+    if (!canChangeStatus(row) || row.status === status || !['active', 'suspended'].includes(row.status)) return
+    let updated: EnterpriseMember
+    const body = status === 'suspended'
+      ? t('adminMembers.suspendConfirm', { name: memberName(row) })
+      : t('adminMembers.resumeConfirm', { name: memberName(row) })
+    confirmAction(body, async tenant => { updated = await setEnterpriseMemberStatus(tenant, row.user_id, status) }, async tenant => {
+      members.value = members.value.map(item => item.user_id === row.user_id ? updated : item)
+      if (row.user_id === auth.user?.id) await reconcileSelf(tenant, row.user_id)
+    })
+  }
+  function suspend(row: EnterpriseMember) { setStatus(row, 'suspended') }
+  function resume(row: EnterpriseMember) { setStatus(row, 'active') }
   function remove(row: EnterpriseMember) {
     if (!canRemoveMember(row)) return
     confirmAction(t('adminMembers.removeConfirm', { name: memberName(row) }), tenant => removeEnterpriseMember(tenant, row.user_id), async tenant => {
@@ -127,5 +141,5 @@ export function useMemberAdministration(t: Translate) {
   watch(() => invitations.value.length, count => { invitePage.value = Math.min(invitePage.value, Math.max(1, Math.ceil(count / pageSize))) })
   watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.revision, canManage], () => { search.value = ''; memberPage.value = 1; invitePage.value = 1; void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { members, invitations, loading, busy, membersError, invitationsError, error, success, membersReady, invitationsReady, tab, search, memberPage, invitePage, pageSize, filteredMembers, memberRows, invitationRows, canManage, ownerCount, editorOpen, createAccount, form, linkOpen, linkForm, load, closeEditor, closeLink, memberName, invitationName, canEditMember, canRemoveMember, roleOptions, changeRole, remove, revoke, openEditor, openLink, submitMember, submitLink }
+  return { members, invitations, loading, busy, membersError, invitationsError, error, success, membersReady, invitationsReady, tab, search, memberPage, invitePage, pageSize, filteredMembers, memberRows, invitationRows, canManage, ownerCount, editorOpen, createAccount, form, linkOpen, linkForm, load, closeEditor, closeLink, memberName, invitationName, canEditMember, canRemoveMember, canChangeStatus, roleOptions, changeRole, suspend, resume, remove, revoke, openEditor, openLink, submitMember, submitLink }
 }

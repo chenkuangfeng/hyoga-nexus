@@ -55,6 +55,7 @@ from nexus_api.schemas.platform import (
     CredentialReferenceView,
     MemberCreate,
     MemberRoleUpdate,
+    MemberStatusUpdate,
     MemberView,
     ModelProfileCreate,
     ModelProfileUpdate,
@@ -188,7 +189,7 @@ def list_tenant_members(
         rows = list(
             db.scalars(
                 select(MembershipRecord)
-                .where(MembershipRecord.tenant_id == tenant_id, MembershipRecord.status == "active")
+                .where(MembershipRecord.tenant_id == tenant_id, MembershipRecord.status.in_(("active", "suspended")))
                 .order_by(MembershipRecord.joined_at)
             )
         )
@@ -203,6 +204,7 @@ def _member_view(db: Session, row) -> MemberView:
         UserIdentityRecord.user_id == row.user_id, UserIdentityRecord.provider == accounts.PASSWORD_PROVIDER))
     return MemberView(
         tenant_id=row.tenant_id, user_id=row.user_id, role=row.role, status=row.status, joined_at=row.joined_at,
+        suspended_at=row.suspended_at,
         email=user.email if user else None, username=username,
         display_name=user.display_name if user else None,
     )
@@ -217,6 +219,19 @@ def update_tenant_member(
     db: Session = Depends(get_database_session),
 ):
     row = tenants.update_member_role(db, principal, tenant_id, member_id, TenantRole(body.role))
+    with db.begin():
+        return _member_view(db, row)
+
+
+@tenant_admin_route(router, "/tenants/{tenant_id}/members/{member_id}/status", methods=["PATCH"], response_model=MemberView)
+def update_tenant_member_status(
+    tenant_id: UUID,
+    member_id: UUID,
+    body: MemberStatusUpdate,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    row = tenants.set_member_status(db, principal, tenant_id, member_id, body.status)
     with db.begin():
         return _member_view(db, row)
 
