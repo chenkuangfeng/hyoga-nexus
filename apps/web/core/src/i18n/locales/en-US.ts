@@ -986,6 +986,7 @@ export default {
       },
       requiresApproval: "Needs approval",
       pendingDowngrade: "Downgrade pending",
+      riskPolicy: "Risk level", riskAutomatic: "Automatic", approvalPolicy: "Require approval", riskDowngradeConfirm: "Lowering a tool risk below its recorded observation may reduce protections. Continue?",
       catalogError: "Catalog error",
       deleteConfirm: "Delete MCP service “{name}”? This cannot be undone.",
       deleted: "MCP service deleted",

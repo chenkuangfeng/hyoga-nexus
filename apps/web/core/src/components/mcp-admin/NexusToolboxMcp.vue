@@ -66,6 +66,10 @@
                 </span>
               </div>
               <p v-if="tool.description" class="tbm-tool-desc">{{ tool.description }}</p>
+              <div v-if="isAdmin" class="tbm-policy-controls">
+                <label><span>{{ $t('toolbox.mcp.riskPolicy') }}</span><t-select :value="tool.explicit_risk || ''" :options="riskOptions" :disabled="!!policyBusyId" size="small" @change="(value: unknown) => setRisk(service, tool, value)" /></label>
+                <label class="tbm-approval-control"><t-switch :value="tool.require_approval" size="small" :disabled="!!policyBusyId" :loading="policyBusyId === `${service.id}:${tool.tool_name}`" @change="(value: unknown) => setApproval(service, tool, value === true)" /><span>{{ $t('toolbox.mcp.approvalPolicy') }}</span></label>
+              </div>
             </div>
           </t-loading>
         </div>
@@ -78,11 +82,11 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import {
-  deleteMcpService, discoverMcpService, listMcpServiceTools, listMcpServices, setEnabledMcpTools,
+  deleteMcpService, discoverMcpService, listMcpServiceTools, listMcpServices, setEnabledMcpTools, setMcpToolPolicy,
   updateMcpService, type McpService, type McpServiceTool,
 } from '@nexus-web/core/api/nexus-mcp'
 import { getMyApiPermissions } from '@nexus-web/core/api/nexus-agents'
@@ -107,7 +111,12 @@ const openTools = ref('')
 const tools = ref<McpServiceTool[]>([])
 const toolsLoading = ref(false)
 const savingTools = ref(false)
+const policyBusyId = ref('')
 let generation = 0
+const riskOptions = computed(() => [
+  { value: '', label: t('toolbox.mcp.riskAutomatic') },
+  ...(['read', 'write', 'destructive'] as const).map(value => ({ value, label: t(`toolbox.mcp.risk.${value}`) })),
+])
 
 /** Translate a stable backend error code when the bundle knows it; otherwise show the raw message. */
 function failure(cause: unknown, fallbackKey: string): string {
@@ -247,6 +256,43 @@ async function setToolEnabled(service: McpService, tool: McpServiceTool, enabled
   }
 }
 
+function setRisk(service: McpService, tool: McpServiceTool, value: unknown) {
+  if (value !== '' && value !== 'read' && value !== 'write' && value !== 'destructive') return
+  const next = value === '' ? null : value
+  if (next === tool.explicit_risk) return
+  const declaredRisk = tool.observed_risk || (tool.read_only_hint ? 'read' : 'write')
+  const rank = { read: 0, write: 1, destructive: 2 } as const
+  const downgrade = rank[next || declaredRisk] < rank[tool.effective_risk]
+  if (!downgrade) { void savePolicy(service, tool, next, tool.require_approval); return }
+  const dialog = DialogPlugin.confirm({
+    header: t('toolbox.mcp.riskPolicy'), body: t('toolbox.mcp.riskDowngradeConfirm'),
+    onConfirm: () => { dialog.hide(); void savePolicy(service, tool, next, tool.require_approval, true) },
+    onClose: () => dialog.hide(),
+  })
+}
+
+function setApproval(service: McpService, tool: McpServiceTool, enabled: boolean) {
+  if (enabled !== tool.require_approval) void savePolicy(service, tool, tool.explicit_risk, enabled)
+}
+
+async function savePolicy(service: McpService, tool: McpServiceTool, risk: McpServiceTool['explicit_risk'], approval: boolean, confirmDowngrade = false) {
+  if (policyBusyId.value) return
+  const current = generation, key = `${service.id}:${tool.tool_name}`
+  policyBusyId.value = key; error.value = ''
+  try {
+    const result = await setMcpToolPolicy(props.tenantId, service.id, tool.tool_name, {
+      explicit_risk: risk, require_approval: approval, confirm_downgrade: confirmDowngrade,
+    })
+    if (current !== generation) return
+    tools.value = tools.value.map(row => row.tool_name === tool.tool_name ? {
+      ...row, explicit_risk: risk, effective_risk: result.effective_risk,
+      require_approval: result.require_approval, pending_downgrade: result.pending_downgrade,
+    } : row)
+  } catch (cause) {
+    if (current === generation) error.value = failure(cause, 'toolbox.mcp.actionFailed')
+  } finally { if (current === generation) policyBusyId.value = '' }
+}
+
 async function remove(service: McpService) {
   const current = generation
   error.value = ''
@@ -300,6 +346,10 @@ onBeforeUnmount(() => { generation++; dialogVisible.value = false })
 .tbm-tool-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .tbm-tool-name { font-family: var(--app-font-family-mono); }
 .tbm-tool-desc { margin: 2px 0 0 24px; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
+.tbm-policy-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 6px 0 2px 24px; }
+.tbm-policy-controls label { display: inline-flex; align-items: center; gap: 8px; color: var(--td-text-color-secondary); font-size: var(--app-text-xs); }
+.tbm-policy-controls label:first-child :deep(.t-select) { width: 132px; }
+.tbm-approval-control { min-height: 32px; }
 @media (max-width: 768px) {
   .tbm-head { flex-direction: column; align-items: stretch; }
 }

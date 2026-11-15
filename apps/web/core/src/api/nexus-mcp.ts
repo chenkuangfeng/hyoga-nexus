@@ -91,6 +91,18 @@ export interface McpServiceTool {
   pending_downgrade: boolean
 }
 
+export interface McpToolPolicyInput {
+  explicit_risk: McpToolRisk | null
+  require_approval: boolean
+  confirm_downgrade?: boolean
+}
+export interface McpToolPolicyResult {
+  tool_name: string
+  effective_risk: McpToolRisk
+  require_approval: boolean
+  pending_downgrade: boolean
+}
+
 export interface McpDiscoveryResult {
   service_id: string
   /** Discovered tool names, all disabled until an administrator enables them. */
@@ -253,4 +265,22 @@ export async function setEnabledMcpTools(
   tools: string[],
 ): Promise<string[]> {
   return textList(await put(`${servicePath(tenantId, serviceId)}/enabled-tools`, { tools }))
+}
+
+/** Set the explicit tool risk and approval requirement; the server retains observed risk history. */
+export async function setMcpToolPolicy(
+  tenantId: string,
+  serviceId: string,
+  toolName: string,
+  input: McpToolPolicyInput,
+): Promise<McpToolPolicyResult> {
+  const row = record(await put(
+    `${servicePath(tenantId, serviceId)}/tools/${encodeURIComponent(toolName)}/policy`, input,
+  ))
+  const risk = row.effective_risk
+  if (risk !== 'read' && risk !== 'write' && risk !== 'destructive') throw badResponse()
+  return {
+    tool_name: text(row.tool_name), effective_risk: risk, require_approval: flag(row.require_approval),
+    pending_downgrade: flag(row.pending_downgrade),
+  }
 }

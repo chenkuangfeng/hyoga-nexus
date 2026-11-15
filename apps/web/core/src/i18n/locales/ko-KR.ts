@@ -911,6 +911,7 @@ export default {
       },
       requiresApproval: "승인 필요",
       pendingDowngrade: "강등 확인 대기",
+      riskPolicy: '위험 수준', riskAutomatic: '자동', approvalPolicy: '실행 전 승인 필요', riskDowngradeConfirm: '새 위험 설정이 기록된 관찰값보다 낮아 보호 수준이 줄어들 수 있습니다. 계속할까요?',
       catalogError: "카탈로그 오류",
       deleteConfirm: "MCP 서비스 '{name}'을(를) 삭제할까요? 되돌릴 수 없습니다.",
       deleted: "MCP 서비스를 삭제했습니다",

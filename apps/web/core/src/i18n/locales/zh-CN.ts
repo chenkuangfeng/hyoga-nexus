@@ -993,6 +993,7 @@ export default {
       },
       requiresApproval: "需审批",
       pendingDowngrade: "待确认降级",
+      riskPolicy: '风险级别', riskAutomatic: '自动判定', approvalPolicy: '调用前要求审批', riskDowngradeConfirm: '新的风险级别低于工具已观察到的风险，可能降低保护。确认继续？',
       catalogError: "目录异常",
       deleteConfirm: "删除 MCP 服务「{name}」？此操作不可撤销。",
       deleted: "MCP 服务已删除",

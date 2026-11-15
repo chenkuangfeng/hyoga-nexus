@@ -911,6 +911,7 @@ export default {
       },
       requiresApproval: "需核准",
       pendingDowngrade: "待確認降級",
+      riskPolicy: "風險級別", riskAutomatic: "自動判定", approvalPolicy: "呼叫前要求核准", riskDowngradeConfirm: "新的風險級別低於工具已觀察到的風險，可能降低保護。確認繼續？",
       catalogError: "目錄異常",
       deleteConfirm: "刪除 MCP 服務「{name}」？此操作無法復原。",
       deleted: "MCP 服務已刪除",

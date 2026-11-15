@@ -911,6 +911,7 @@ export default {
       },
       requiresApproval: "Требует одобрения",
       pendingDowngrade: "Ожидает понижения",
+      riskPolicy: 'Уровень риска', riskAutomatic: 'Автоматически', approvalPolicy: 'Требовать подтверждение', riskDowngradeConfirm: 'Новый уровень ниже зафиксированного наблюдения и может снизить защиту. Продолжить?',
       catalogError: "Ошибка каталога",
       deleteConfirm: "Удалить MCP-сервис «{name}»? Это действие нельзя отменить.",
       deleted: "MCP-сервис удалён",
