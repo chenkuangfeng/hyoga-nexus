@@ -234,6 +234,11 @@ export default {
   },
   adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
+    linkSourceLabel: '소속 출처',
+    linkSource: { manual: '수동', wecom: 'WeCom', mixed: '수동 및 WeCom' },
+    removeManual: '수동 소속 해제',
+    removeManualConfirm: '“{department}”에서 “{name}”의 수동 소속을 해제할까요? WeCom 소속과 기본 부서 표시는 유지됩니다.',
+
     "title": "Organization",
     "description": "Manage this enterprise organization tree, department status and member positions.",
     "open": "Manage organization",
@@ -254,7 +259,7 @@ export default {
     "setPrimary": "Set as primary",
     "removeMember": "Remove position",
     "readOnly": "Read only",
-    "wecomReadOnly": "This WeCom department and its member positions are read only here. Maintain synchronized relationships in WeCom. Manual child departments can be created under active nodes.",
+    "wecomReadOnly": "부서 구조는 WeCom에서 관리합니다. 소속은 출처별로 관리되며 수동 소속 추가, 기본 부서 지정, 활성 부서 아래 수동 하위 부서 생성이 가능합니다.",
     "candidatePermission": "Adding positions requires a readable enterprise member list. Contact a member administrator. Existing positions can still be maintained.",
     "candidateFailed": "Enterprise member choices could not be loaded. Adding positions is unavailable; existing positions can still be maintained. Refresh to retry.",
     "chooseMember": "Select enterprise member",

@@ -38,3 +38,7 @@ Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始
 - SSE 路径：鉴权后立即 `db.close()`，之后的重放与状态检查各开短会话（`stream_run_events` 的 `page`、`status` 回调）；通道由 `get_run_channels` 提供（进程内已安装的非 database 通道优先，否则按应用的会话工厂构建 database 通道）。
 - 临时事件以 `ephemeral: true` 下发，`sequence` 为其前最后一个持久事件的序号，没有 SSE `id`；`stream.resync` 通知客户端丢弃未入库文本。
 - 嵌入模式在 lifespan 内创建引擎与会话工厂、安装通道并启动 `EmbeddedWorkers`，关闭时先停线程再重置通道。
+
+## 企业组织来源
+
+组织树与节点返回 sync_managed，source=wecom 或具有 external_id 的节点由通用更新/删除接口返回 409。归属列表和 PUT 回执增加 source（manual/wecom/mixed）；DELETE 只撤销手工贡献，mixed 保留企微关系，pure wecom 返回 409。权限维持 org:manage。现有 `/admin/wecom` 及 `/admin/wecom/sync` 提供同步状态和立即同步，不增加同步计划配置。

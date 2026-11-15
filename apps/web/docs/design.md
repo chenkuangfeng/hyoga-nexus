@@ -158,3 +158,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 管理端 `/mcp-endpoints` 复用 `core/api/enterprise-connections.ts` 的企业路径 API 和严格 DTO 解析，使用 `tools:manage` 权限上下文；令牌明文仅保存在页面临时状态，身份、企业或权限代次变化会作废请求并清空秘密。知识库选项以名称呈现，提交稳定 ID；端点执行期的白名单与访问范围仍由 MCP 服务端复核。
 
 MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，工作台工具箱通过兼容薄宿主接入，管理应用用独立 `/mcp-services` 页面组合；管理员权限由宿主服务端上下文注入，非管理成员的工作台保留只读目录。新工具发现后关闭启用状态；每个工具可设置风险和调用审批，降低风险前由界面确认、服务端保留观察风险并计算最终级别。存储配置与工作台产物隔离仍待后续。
+
+## 企微组织来源与状态刷新
+
+组织树与节点 DTO 使用 `sync_managed` 表达结构只读，包含映射外部部门的手工根。成员归属 DTO 使用 manual/wecom/mixed，界面允许设置主部门与撤销手工贡献，pure wecom 删除由前后端共同拒绝；混合来源撤销前提示保留企微贡献。WecomPage 在 requested 状态每 5 秒读取一次现有配置，最多 12 次；完成/失败停止，轮询不重置凭据草稿，代次保护账号、企业、权限、卸载与正在保存的配置。

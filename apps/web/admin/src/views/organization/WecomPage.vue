@@ -13,13 +13,31 @@ const tenant = computed(() => String(auth.effectiveTenantId || '')), canManage =
 const config = ref<WecomConfig | null>(null), loading = ref(false), saving = ref(false), syncing = ref(false), error = ref(''), ready = ref(false)
 const corpId = ref(''), callbackToken = ref(''), aesKey = ref('')
 let epoch = 0
+let pollGeneration = 0
+let pollTimer: ReturnType<typeof setTimeout> | undefined
+function stopPolling() { pollGeneration++; if (pollTimer) clearTimeout(pollTimer); pollTimer = undefined }
+/** Read status only while queued, at most 12 times; never clear an in-progress credential form. */
+function pollStatus(current: number, scope: string, remaining = 12) {
+  stopPolling()
+  if (!remaining || current !== epoch || !canManage.value || config.value?.sync_status !== 'requested') return
+  const generation = pollGeneration
+  pollTimer = setTimeout(async () => {
+    try {
+      const result = await getEnterpriseWecom(scope)
+      if (current !== epoch || generation !== pollGeneration || scope !== tenant.value || !canManage.value) return
+      config.value = result
+      pollStatus(current, scope, remaining - 1)
+    } catch { if (current === epoch && generation === pollGeneration) error.value = t('adminWecom.loadFailed') }
+  }, 5000)
+}
 function clearSecrets() { callbackToken.value = ''; aesKey.value = '' }
-function invalidate() { epoch++; config.value = null; loading.value = false; saving.value = false; syncing.value = false; ready.value = false; error.value = ''; corpId.value = ''; clearSecrets() }
+function invalidate() { stopPolling(); epoch++; config.value = null; loading.value = false; saving.value = false; syncing.value = false; ready.value = false; error.value = ''; corpId.value = ''; clearSecrets() }
 async function load() {
+  stopPolling()
   const current = ++epoch, scope = tenant.value; ready.value = false; error.value = ''; config.value = null; corpId.value = ''; clearSecrets()
   if (!scope || !canManage.value) return
   loading.value = true
-  try { const result = await getEnterpriseWecom(scope); if (current === epoch) { config.value = result; corpId.value = result.corp_id || ''; ready.value = true } }
+  try { const result = await getEnterpriseWecom(scope); if (current === epoch) { config.value = result; corpId.value = result.corp_id || ''; ready.value = true; pollStatus(current, scope) } }
   catch { if (current === epoch) error.value = t('adminWecom.loadFailed') }
   finally { if (current === epoch) loading.value = false }
 }
@@ -30,16 +48,16 @@ const valid = computed(() => /^[A-Za-z0-9_-]{4,64}$/.test(corpId.value.trim()) &
 async function save() {
   if (!canManage.value || !ready.value || saving.value || !valid.value) return
   const current = epoch, scope = tenant.value
-  saving.value = true; error.value = ''
+  stopPolling(); saving.value = true; error.value = ''
   try {
     const result = await saveEnterpriseWecom(scope, { corp_id: corpId.value.trim(), ...(callbackToken.value ? { callback_token: callbackToken.value } : {}), ...(aesKey.value ? { encoding_aes_key: aesKey.value } : {}) })
     if (current !== epoch || !canManage.value) return
     config.value = result; corpId.value = result.corp_id || ''; clearSecrets(); MessagePlugin.success(t('adminWecom.saved'))
   } catch { if (current === epoch) error.value = t('adminWecom.saveFailed') }
-  finally { if (current === epoch) saving.value = false }
+  finally { if (current === epoch) { saving.value = false; pollStatus(current, scope) } }
 }
 async function syncNow() {
-  if (!canManage.value || !ready.value || !config.value?.configured || saving.value || syncing.value) return
+  if (!canManage.value || !ready.value || !config.value?.configured || saving.value || syncing.value || config.value.sync_status === 'requested') return
   const current = epoch, scope = tenant.value; syncing.value = true; error.value = ''
   try { await requestEnterpriseWecomSync(scope); if (current !== epoch) return; syncing.value = false; MessagePlugin.success(t('adminWecom.syncQueued')); await load() }
   catch { if (current === epoch) error.value = t('adminWecom.syncFailed') }
@@ -67,7 +85,7 @@ function status(value: string) { return t(`adminWecom.syncStatus.${value}`, valu
           <div class="actions"><span v-if="config.configured" class="callback-state">{{ t(callbackReady ? 'adminWecom.callbackReady' : 'adminWecom.callbackMissing') }}</span><span class="spacer" /><t-button theme="primary" :loading="saving" :disabled="saving || !valid || (!config.configured && !corpId.trim())" @click="save">{{ t('adminWecom.saveCorp') }}</t-button></div>
         </section>
         <section v-if="config.configured" class="wecom-card">
-          <header><div><h3>{{ t('adminWecom.directoryTitle') }}</h3><p>{{ t('adminWecom.syncStatusLabel') }}：{{ status(config.sync_status || 'never') }}<span v-if="config.synced_at"> · {{ config.synced_at }}</span></p><p v-if="config.sync_error" class="sync-error">{{ config.sync_error }}</p></div><t-button variant="outline" :loading="syncing" :disabled="syncing || saving" @click="syncNow">{{ t('adminWecom.syncNow') }}</t-button></header>
+          <header><div><h3>{{ t('adminWecom.directoryTitle') }}</h3><p>{{ t('adminWecom.syncStatusLabel') }}：{{ status(config.sync_status || 'never') }}<span v-if="config.synced_at"> · {{ config.synced_at }}</span></p><p v-if="config.sync_error" class="sync-error">{{ config.sync_error }}</p></div><t-button variant="outline" :loading="syncing" :disabled="syncing || saving || config.sync_status === 'requested'" @click="syncNow">{{ t('adminWecom.syncNow') }}</t-button></header>
           <div class="callback-row"><div><strong>{{ t('adminWecom.callbackAddress') }}</strong><code>{{ config.callback_path }}</code></div><t-button variant="text" @click="copyPath(config.callback_path)">{{ t('adminWecom.copy') }}</t-button></div>
         </section>
         <section v-if="config.configured" class="wecom-card"><header><div><h3>{{ t('adminWecom.appsTitle') }}</h3><p>{{ t('adminWecom.appsHint') }}</p></div></header>

@@ -10,7 +10,7 @@ function setup(response: unknown) {
   runInNewContext(ts.transpileModule(readFileSync(new URL('./enterprise-organizations.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: (name: string) => { assert.equal(name, '../utils/request'); return { get: request('GET'), post: request('POST'), patch: request('PATCH'), put: request('PUT'), del: request('DELETE') } } })
   return { api: exports, calls }
 }
-const root = { id: 'root', parent_id: null, name: '公司', status: 'active', source: 'manual', member_count: 0 }
+const root = { id: 'root', parent_id: null, name: '公司', status: 'active', source: 'manual', sync_managed: false, member_count: 0 }
 const child = { ...root, id: 'child/a', parent_id: 'root', name: '研发' }
 const detail = { ...child, tenant_id: 'tenant/a', root_id: 'root' }
 
@@ -18,7 +18,7 @@ test('组织树拒绝重复根、缺失父节点、环、错误来源与成员�
   const { api } = setup(null)
   assert.equal(api.organizationTreeFromResponse([]).length, 0)
   assert.equal(api.organizationTreeFromResponse([root, child]).length, 2)
-  for (const bad of [null, {}, [root, root], [root, { ...child, parent_id: null }], [root, { ...child, parent_id: 'missing' }], [root, { ...child, parent_id: 'second' }, { ...child, id: 'second', parent_id: 'child/a' }], [{ ...root, source: 'unknown' }], [{ ...root, member_count: '0' }], [{ ...root, member_count: -1 }]]) assert.throws(() => api.organizationTreeFromResponse(bad), /organization_response_invalid/)
+  for (const bad of [null, {}, [root, root], [root, { ...child, parent_id: null }], [root, { ...child, parent_id: 'missing' }], [root, { ...child, parent_id: 'second' }, { ...child, id: 'second', parent_id: 'child/a' }], [{ ...root, source: 'unknown' }], [{ ...root, sync_managed: undefined }], [{ ...root, source: 'wecom', sync_managed: false }], [{ ...root, member_count: '0' }], [{ ...root, member_count: -1 }]]) assert.throws(() => api.organizationTreeFromResponse(bad), /organization_response_invalid/)
   const deep = [root, ...Array.from({ length: 12000 }, (_, index) => ({ ...child, id: `n${index}`, parent_id: index ? `n${index - 1}` : 'root' }))]
   assert.equal(api.organizationTreeFromResponse(deep).length, 12001)
 })
@@ -34,15 +34,25 @@ test('创建根不传父节点，子节点与修改回执限定企业、节点�
   await assert.rejects(setup(detail).api.createOrganizationUnit('tenant/a', { name: '研发', parent_id: 'wrong' }), /organization_response_invalid/)
 })
 test('成员归属读取校验布尔值与重复人员；首次归属可由服务端自动设为主部门', async () => {
-  const member = { user_id: 'person/a', display_name: '成员', is_primary: true }
+  const member = { user_id: 'person/a', display_name: '成员', is_primary: true, source: 'manual' }
   const s = setup([member]); await s.api.listOrganizationMembers('tenant/a', 'child/a')
   assert.equal(s.calls[0].url, '/api/v1/tenants/tenant%2Fa/admin/org-units/child%2Fa/members')
   await assert.rejects(setup([{ ...member, is_primary: 'false' }]).api.listOrganizationMembers('tenant/a', 'child/a'), /organization_response_invalid/)
   await assert.rejects(setup([member, member]).api.listOrganizationMembers('tenant/a', 'child/a'), /organization_response_invalid/)
-  const assign = setup({ user_id: 'person/a', unit_id: 'child/a', is_primary: true })
+  const assign = setup({ user_id: 'person/a', unit_id: 'child/a', is_primary: true, source: 'manual' })
   assert.equal((await assign.api.assignOrganizationMember('tenant/a', 'child/a', 'person/a', false)).is_primary, true)
   assert.equal(assign.calls[0].verb, 'PUT'); assert.deepEqual(JSON.parse(JSON.stringify(assign.calls[0].input)), { is_primary: false })
   await assign.api.removeOrganizationMember('tenant/a', 'child/a', 'person/a')
   assert.equal(assign.calls[1].verb, 'DELETE'); assert.equal(assign.calls[1].url, '/api/v1/tenants/tenant%2Fa/admin/org-units/child%2Fa/members/person%2Fa')
-  await assert.rejects(setup({ user_id: 'wrong', unit_id: 'child/a', is_primary: true }).api.assignOrganizationMember('tenant/a', 'child/a', 'person/a', true), /organization_response_invalid/)
+  await assert.rejects(setup({ user_id: 'wrong', unit_id: 'child/a', is_primary: true, source: 'manual' }).api.assignOrganizationMember('tenant/a', 'child/a', 'person/a', true), /organization_response_invalid/)
+})
+
+ test('同步根与混合成员来源得到保留，未知来源被拒绝', async () => {
+  const mapped = setup([{ ...root, sync_managed: true }]);
+  assert.equal((await mapped.api.listOrganizationUnits('tenant/a'))[0].sync_managed, true)
+  for (const source of ['manual', 'wecom', 'mixed']) {
+    const members = setup([{ user_id: 'u', display_name: null, is_primary: false, source }]);
+    assert.equal((await members.api.listOrganizationMembers('tenant/a', 'root'))[0].source, source)
+  }
+  await assert.rejects(setup([{ user_id: 'u', is_primary: false, source: 'other' }]).api.listOrganizationMembers('tenant/a', 'root'), /organization_response_invalid/)
 })

@@ -25,6 +25,7 @@ class NodeView(BaseModel):
     name: str
     status: str
     source: str
+    sync_managed: bool
     member_count: int = 0
 
 
@@ -36,6 +37,7 @@ class UnitView(BaseModel):
     name: str
     status: str
     source: str
+    sync_managed: bool
 
 
 class MemberLink(BaseModel):
@@ -43,12 +45,14 @@ class MemberLink(BaseModel):
 
 
 class LinkView(BaseModel):
+    source: Literal["manual", "wecom", "mixed"]
     user_id: UUID
     unit_id: UUID
     is_primary: bool
 
 
 class UnitMemberView(BaseModel):
+    source: Literal["manual", "wecom", "mixed"]
     user_id: UUID
     display_name: str | None
     is_primary: bool

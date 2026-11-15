@@ -72,6 +72,11 @@ def _unit(session: Session, tenant_id: UUID, unit_id: UUID) -> OrgUnitRecord:
     return unit
 
 
+def sync_managed(unit: OrgUnitRecord) -> bool:
+    """Include a manually created root mapped to the directory's top department."""
+    return unit.source == "wecom" or unit.external_id is not None
+
+
 def _root(session: Session, tenant_id: UUID) -> OrgUnitRecord | None:
     return session.scalar(select(OrgUnitRecord).where(
         OrgUnitRecord.tenant_id == tenant_id, OrgUnitRecord.id == OrgUnitRecord.root_id))
@@ -126,7 +131,7 @@ def get_tree(session: Session, principal: Principal, tenant_id: UUID) -> list[di
             .group_by(UserOrgUnitRecord.unit_id)
         ).all())
         return [{"id": n.id, "parent_id": n.parent_id, "name": n.name, "status": n.status,
-                 "source": n.source, "member_count": counts.get(n.id, 0)} for n in nodes]
+                 "source": n.source, "sync_managed": sync_managed(n), "member_count": counts.get(n.id, 0)} for n in nodes]
 
 
 def create_unit(session: Session, principal: Principal, tenant_id: UUID, name: str,
@@ -168,8 +173,10 @@ def update_unit(session: Session, principal: Principal, tenant_id: UUID, unit_id
     now = utc_now()
     with session.begin():
         actor = _manager(session, principal, tenant_id)
-        unit = _unit(session, tenant_id, unit_id)
         _lock_tree(session, tenant_id)
+        unit = _unit(session, tenant_id, unit_id)
+        if sync_managed(unit):
+            raise Conflict("Directory-managed nodes must be updated in WeCom")
         changes: dict[str, object] = {}
         new_name = unit.name
         if name is not None:
@@ -206,10 +213,12 @@ def delete_unit(session: Session, principal: Principal, tenant_id: UUID, unit_id
     """Delete a node only when it has no children and no members (including revoked ones)."""
     with session.begin():
         actor = _manager(session, principal, tenant_id)
+        _lock_tree(session, tenant_id)
         unit = _unit(session, tenant_id, unit_id)
+        if sync_managed(unit):
+            raise Conflict("Directory-managed nodes must be deleted in WeCom")
         if unit.parent_id is None:
             raise Conflict("The root node of an organization cannot be deleted")
-        _lock_tree(session, tenant_id)
         has_child = session.scalar(select(OrgUnitRecord.id).where(OrgUnitRecord.parent_id == unit.id).limit(1))
         has_member = session.scalar(select(UserOrgUnitRecord.unit_id).where(
             UserOrgUnitRecord.unit_id == unit.id).limit(1))
@@ -237,7 +246,7 @@ def list_unit_members(session: Session, principal: Principal, tenant_id: UUID, u
                    MembershipRecord.status == "active")
             .order_by(UserRecord.display_name, UserRecord.id)
         ).all()
-        return [{"user_id": user.id, "display_name": user.display_name, "is_primary": link.is_primary}
+        return [{"user_id": user.id, "display_name": user.display_name, "is_primary": link.is_primary, "source": link.source}
                 for user, link in rows]
 
 
@@ -247,15 +256,15 @@ def assign_member(session: Session, principal: Principal, tenant_id: UUID, unit_
     now = utc_now()
     with session.begin():
         actor = _manager(session, principal, tenant_id)
+        _lock_tree(session, tenant_id)
         unit = _unit(session, tenant_id, unit_id)
         if unit.status != "active":
             raise Conflict("The node is disabled")
         _active_membership(session, tenant_id, user_id)
-        _lock_tree(session, tenant_id)
         current_primary = session.scalar(select(UserOrgUnitRecord.unit_id).where(
             UserOrgUnitRecord.tenant_id == tenant_id, UserOrgUnitRecord.user_id == user_id,
             UserOrgUnitRecord.is_primary.is_(True)))
-        make_primary = is_primary or current_primary is None
+        make_primary = is_primary or current_primary is None or current_primary == unit_id
         if make_primary and current_primary is not None and current_primary != unit_id:
             session.execute(update(UserOrgUnitRecord).where(
                 UserOrgUnitRecord.tenant_id == tenant_id, UserOrgUnitRecord.user_id == user_id,
@@ -268,6 +277,8 @@ def assign_member(session: Session, principal: Principal, tenant_id: UUID, unit_
                                     is_primary=make_primary, created_at=now)
             session.add(row)
         else:
+            if row.source == "wecom":
+                row.source = "mixed"
             row.is_primary = make_primary
         session.flush()
         _audit_org(session, unit.root_id, actor.id, "org.member_assigned", "user", str(user_id),
@@ -276,13 +287,25 @@ def assign_member(session: Session, principal: Principal, tenant_id: UUID, unit_
 
 
 def unassign_member(session: Session, principal: Principal, tenant_id: UUID, unit_id: UUID, user_id: UUID) -> None:
-    """Remove a member from a node. A primary node can only be removed after another primary is chosen."""
+    """Remove the manual contribution; directory-only links raise Conflict.
+
+    Mixed links retain the directory relation and primary flag. Removing the last contribution to a
+    primary relation requires choosing another primary first when other relations exist.
+    """
     with session.begin():
         actor = _manager(session, principal, tenant_id)
+        _lock_tree(session, tenant_id)
         unit = _unit(session, tenant_id, unit_id)
         row = session.get(UserOrgUnitRecord, (tenant_id, user_id, unit_id))
         if row is None:
             raise NotFound("The member is not in this node")
+        if row.source == "wecom":
+            raise Conflict("Directory membership must be removed in WeCom")
+        if row.source == "mixed":
+            row.source = "wecom"
+            _audit_org(session, unit.root_id, actor.id, "org.member_unassigned", "user", str(user_id),
+                       {"unit_id": str(unit_id), "remaining_source": "wecom"})
+            return
         if row.is_primary:
             others = session.scalar(select(func.count()).select_from(UserOrgUnitRecord).where(
                 UserOrgUnitRecord.tenant_id == tenant_id, UserOrgUnitRecord.user_id == user_id,

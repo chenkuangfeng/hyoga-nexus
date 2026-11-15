@@ -65,6 +65,7 @@ class UserOrgUnitRecord(Base):
             ["tenant_id", "unit_id"], ["org_units.tenant_id", "org_units.id"],
             name="fk_user_org_units_unit", ondelete="RESTRICT",
         ),
+        CheckConstraint("source IN ('manual', 'wecom', 'mixed')", name="ck_user_org_units_source"),
         # Partial unique index: at most one primary row per member per enterprise. SQLite stores booleans as 0/1.
         Index("uq_user_org_units_primary", "tenant_id", "user_id", unique=True,
               sqlite_where=text("is_primary = 1"), postgresql_where=text("is_primary")),
@@ -74,6 +75,8 @@ class UserOrgUnitRecord(Base):
     user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     unit_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Both manual and directory contributions can keep the same relation alive.
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual", server_default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

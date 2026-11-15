@@ -450,16 +450,22 @@ def _apply_departments(db: Session, tenant_id: UUID, departments: list[dict]) ->
 
 
 def _place_member(db: Session, tenant_id: UUID, user_id: UUID, department_ids: list) -> None:
-    """Keep the member's WeCom-sourced positions equal to the directory; manual positions are untouched."""
+    """Reconcile directory contributions without removing independent manual associations."""
+    from nexus_platform.tenants.service import lock_tenant
+    lock_tenant(db, tenant_id)
     units = {unit.external_id: unit for unit in db.scalars(select(OrgUnitRecord).where(
         OrgUnitRecord.tenant_id == tenant_id, OrgUnitRecord.external_id.is_not(None)))}
     wanted = [units[str(dept)].id for dept in department_ids if str(dept) in units]
     current = db.scalars(select(UserOrgUnitRecord).where(UserOrgUnitRecord.tenant_id == tenant_id,
                                                          UserOrgUnitRecord.user_id == user_id)).all()
-    wecom_units = {unit.id for unit in units.values() if unit.source == 'wecom' or unit.external_id}
     for row in current:
-        if row.unit_id in wecom_units and row.unit_id not in wanted:
-            db.delete(row)
+        if row.source in {'wecom', 'mixed'} and row.unit_id not in wanted:
+            if row.source == 'mixed':
+                row.source = 'manual'
+            else:
+                db.delete(row)
+        elif row.unit_id in wanted and row.source == 'manual':
+            row.source = 'mixed'
     db.flush()
     present = {row.unit_id for row in db.scalars(select(UserOrgUnitRecord).where(
         UserOrgUnitRecord.tenant_id == tenant_id, UserOrgUnitRecord.user_id == user_id))}
@@ -469,7 +475,7 @@ def _place_member(db: Session, tenant_id: UUID, user_id: UUID, department_ids: l
     for unit_id in wanted:
         if unit_id not in present:
             db.add(UserOrgUnitRecord(tenant_id=tenant_id, user_id=user_id, unit_id=unit_id,
-                                     is_primary=not has_primary, created_at=utc_now()))
+                                     is_primary=not has_primary, source="wecom", created_at=utc_now()))
             has_primary = True
     db.flush()
 
@@ -498,6 +504,7 @@ def revoke_member(db: Session, tenant_id: UUID, member: WeComMemberRecord, reaso
 def sync_directory(db: Session, api: WeComApi, tenant_id: UUID) -> dict[str, int]:
     """Read departments and members through the sign-in app and mirror them. Network calls run outside a
     transaction; failures are recorded on the corp and re-raised as WeComError."""
+    from nexus_platform.tenants.service import lock_tenant
     with db.begin():
         corp, secret = _sync_secret(db, tenant_id)
         corp_id = corp.corp_id
@@ -518,6 +525,7 @@ def sync_directory(db: Session, api: WeComApi, tenant_id: UUID) -> dict[str, int
         raise
     stats = {'departments': len(departments), 'members': len(members), 'left': 0}
     with db.begin():
+        lock_tenant(db, tenant_id)
         _apply_departments(db, tenant_id, departments)
         now = utc_now()
         known = {row.userid: row for row in db.scalars(select(WeComMemberRecord).where(

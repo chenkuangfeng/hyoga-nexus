@@ -240,6 +240,11 @@ export default {
   },
   adminMigration: {"membersMoved": "成员、邀请、加入申请审批和审计已迁入独立企业管理应用，具体功能仍需相应管理权限。", "organizationMoved": "部门组织管理已迁入独立的企业管理应用。请在管理后台维护部门与成员归属。", "openAdmin": "打开企业管理后台", "noEntry": "当前企业未授予管理后台入口，请联系企业管理员。"},
   adminOrganization: {
+    linkSourceLabel: '归属来源',
+    linkSource: { manual: '手工维护', wecom: '企微同步', mixed: '手工与企微' },
+    removeManual: '撤销手工归属',
+    removeManualConfirm: '撤销“{name}”在“{department}”的手工归属？企微同步归属和主部门标记仍会保留。',
+
     "title": "部门组织",
     "description": "维护当前企业的组织结构、部门状态和成员归属。",
     "open": "管理部门组织",
@@ -260,7 +265,7 @@ export default {
     "setPrimary": "设为主部门",
     "removeMember": "移出部门",
     "readOnly": "只读",
-    "wecomReadOnly": "企微来源的部门信息与成员归属在本页只读。请在企微维护同步关系；可以在启用部门下新增手工子部门。",
+    "wecomReadOnly": "此部门结构由企微维护，请在企微修改名称、层级和状态。成员关联按来源分别维护；可添加手工归属、设置主部门，也可在启用节点下创建手工子部门。",
     "candidatePermission": "新增归属需要可读取的企业成员列表。请联系成员管理员；已有部门归属仍可维护。",
     "candidateFailed": "可选企业成员读取失败，暂不能新增归属；已有归属仍可维护，请刷新后重试。",
     "chooseMember": "选择企业成员",

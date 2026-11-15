@@ -234,6 +234,11 @@ export default {
   },
   adminMigration: {"membersMoved": "Members, invitations, join approvals and audit have moved to the separate enterprise admin application. Each feature still requires its management permission.", "organizationMoved": "Department administration has moved to the separate enterprise admin application. Manage departments and member placement there.", "openAdmin": "Open enterprise admin", "noEntry": "The current enterprise has not granted admin access. Contact your enterprise administrator."},
   adminOrganization: {
+    linkSourceLabel: 'Источник связи',
+    linkSource: { manual: 'Вручную', wecom: 'WeCom', mixed: 'Вручную и WeCom' },
+    removeManual: 'Убрать ручную связь',
+    removeManualConfirm: 'Убрать ручную связь «{name}» с «{department}»? Связь WeCom и основной отдел сохранятся.',
+
     "title": "Organization",
     "description": "Manage this enterprise organization tree, department status and member positions.",
     "open": "Manage organization",
@@ -254,7 +259,7 @@ export default {
     "setPrimary": "Set as primary",
     "removeMember": "Remove position",
     "readOnly": "Read only",
-    "wecomReadOnly": "This WeCom department and its member positions are read only here. Maintain synchronized relationships in WeCom. Manual child departments can be created under active nodes.",
+    "wecomReadOnly": "Структура отдела управляется в WeCom. Связи участников учитываются по источнику. Можно добавлять ручные связи, выбирать основной отдел и создавать ручные подразделения внутри активных отделов.",
     "candidatePermission": "Adding positions requires a readable enterprise member list. Contact a member administrator. Existing positions can still be maintained.",
     "candidateFailed": "Enterprise member choices could not be loaded. Adding positions is unavailable; existing positions can still be maintained. Refresh to retry.",
     "chooseMember": "Select enterprise member",

@@ -9,11 +9,11 @@ function setup(t: Parameters<typeof fixture>[0], options: Options = {}) {
   const f = fixture(t), auth = vue.reactive({ effectiveTenantId: 'a', user: { id: 'actor' } })
   const context = vue.reactive({ revision: 0, ready: true, permissions: options.permissions || ['org:manage', 'members:manage'], can(permission: string) { return this.ready && this.permissions.includes(permission) } })
   let nodes = options.empty ? [] : [
-    { id: 'r', parent_id: null, name: '公司', status: 'active', source: 'manual', member_count: 0 },
-    { id: 'd', parent_id: 'r', name: '研发', status: 'active', source: 'manual', member_count: 1 },
-    { id: 'e', parent_id: 'd', name: '子部门', status: 'active', source: 'manual', member_count: 1 },
-    { id: 'l', parent_id: 'r', name: '空部门', status: 'active', source: 'manual', member_count: 0 },
-    { id: 'w', parent_id: 'r', name: '企微部门', status: 'active', source: 'wecom', member_count: 1 },
+    { id: 'r', parent_id: null, name: '公司', status: 'active', source: 'manual', sync_managed: false, member_count: 0 },
+    { id: 'd', parent_id: 'r', name: '研发', status: 'active', source: 'manual', sync_managed: false, member_count: 1 },
+    { id: 'e', parent_id: 'd', name: '子部门', status: 'active', source: 'manual', sync_managed: false, member_count: 1 },
+    { id: 'l', parent_id: 'r', name: '空部门', status: 'active', source: 'manual', sync_managed: false, member_count: 0 },
+    { id: 'w', parent_id: 'r', name: '企微部门', status: 'active', source: 'wecom', sync_managed: true, member_count: 1 },
   ]
   const positions: Record<string, Array<{ user_id: string; display_name: string; is_primary: boolean }>> = { d: [{ user_id: 'p', display_name: '成员P', is_primary: true }], e: [{ user_id: 'p', display_name: '成员P', is_primary: false }], w: [{ user_id: 'sync', display_name: '同步成员', is_primary: true }] }
   const calls: Array<{ operation: string; tenant: string; unit?: string; user?: string; input?: any }> = []
@@ -27,7 +27,7 @@ function setup(t: Parameters<typeof fixture>[0], options: Options = {}) {
     '@nexus-web/core/api/enterprise-members': { listEnterpriseMembers: async (tenant: string) => { record('candidates', tenant); if (options.candidateFailure) throw new Error('failed'); return ['p', 'q', 'sync'].map(user_id => ({ tenant_id: tenant, user_id, role: 'contributor', status: 'active', display_name: user_id.toUpperCase(), username: user_id, email: `${user_id}@example.com` })) } },
     '@nexus-web/core/api/enterprise-organizations': {
       listOrganizationUnits: async (tenant: string) => { record('tree', tenant); if (options.treeFailure) throw new Error('failed'); return nodes.map(row => ({ ...row, member_count: (positions[row.id] || []).length })) },
-      listOrganizationMembers: (tenant: string, unit: string) => { record('members', tenant, unit); if (options.memberFailure) return Promise.reject(new Error('member failure')); return options.slowMembers && unit === 'd' ? new Promise(resolve => { finishMembers = resolve }) : Promise.resolve((positions[unit] || []).map(row => ({ ...row }))) },
+      listOrganizationMembers: (tenant: string, unit: string) => { record('members', tenant, unit); if (options.memberFailure) return Promise.reject(new Error('member failure')); return options.slowMembers && unit === 'd' ? new Promise(resolve => { finishMembers = resolve }) : Promise.resolve((positions[unit] || []).map(row => ({ ...row, source: unit === 'w' ? 'wecom' : 'manual' }))) },
       createOrganizationUnit: async (tenant: string, input: { name: string; parent_id?: string }) => { record('create', tenant, undefined, undefined, { ...input }); const row = { id: nodes.length ? 'new' : 'r', name: input.name, parent_id: input.parent_id || null, source: 'manual', status: 'active', member_count: 0 }; nodes.push(row); return row },
       updateOrganizationUnit: async (tenant: string, unit: string, input: object) => { record('update', tenant, unit, undefined, { ...input }); if (failed) throw new Error('conflict'); if (delayed) return await new Promise(resolve => { finishAction = resolve }); const row = nodes.find(row => row.id === unit)!; Object.assign(row, input); return { ...row } },
       deleteOrganizationUnit: async (tenant: string, unit: string) => { record('delete', tenant, unit); if (failed) throw new Error('historical positions'); nodes = nodes.filter(row => row.id !== unit) },
@@ -122,4 +122,20 @@ test('当前部门成员读取失败时，不把未知归属当作空部门来�
   assert.equal(s.vm.membersReady, false); assert.notEqual(s.vm.membersError, '')
   s.vm.assignment.user_id = 'p'; await s.vm.assign(); s.vm.removeUnit()
   assert.equal(s.vm.canAssign, false); assert.equal(s.vm.canDelete, false); assert.equal(s.mutations().length, 0)
+})
+
+test('映射企微顶级部门的手工根也由 sync_managed 保护', async t => {
+  const s = setup(t); await flush()
+  s.vm.units.find((row: { id: string }) => row.id === 'r').sync_managed = true
+  s.vm.selectUnit('r'); await flush(); s.vm.openEdit(); s.vm.toggleStatus(); s.vm.removeUnit()
+  assert.equal(s.vm.manual, false); assert.equal(s.vm.editorOpen, false); assert.equal(s.mutations().length, 0)
+  s.vm.openCreate('r'); assert.equal(s.vm.editorOpen, true)
+})
+test('混合归属可撤销手工贡献，同步节点的主部门仍可维护', async t => {
+  const s = setup(t); await flush(); s.vm.selectUnit('d'); await flush()
+  const row = s.vm.members[0]; row.source = 'mixed'; s.vm.removeMember(row)
+  await s.dialogs[0].onConfirm(); assert.equal(s.mutations()[0].operation, 'unassign')
+  s.vm.selectUnit('w'); await flush()
+  s.vm.members[0].is_primary = false; s.vm.setPrimary(s.vm.members[0]); await s.dialogs[1].onConfirm()
+  assert.equal(s.mutations()[1].operation, 'assign')
 })

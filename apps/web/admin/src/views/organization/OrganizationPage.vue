@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useOrganizationAdministration } from './useOrganizationAdministration'
 const { t } = useI18n()
 const state = reactive(useOrganizationAdministration(t))
-const columns = computed(() => [{ colKey: 'person', title: t('adminMembers.person'), minWidth: 200 }, { colKey: 'is_primary', title: t('adminOrganization.primary'), width: 120 }, { colKey: 'actions', title: t('adminMembers.operations'), minWidth: 230 }])
+const columns = computed(() => [{ colKey: 'person', title: t('adminMembers.person'), minWidth: 200 }, { colKey: 'source', title: t('adminOrganization.linkSourceLabel'), width: 150 }, { colKey: 'is_primary', title: t('adminOrganization.primary'), width: 120 }, { colKey: 'actions', title: t('adminMembers.operations'), minWidth: 230 }])
 const editorTitle = computed(() => t(state.editorMode === 'root' ? 'adminOrganization.createRoot' : state.editorMode === 'edit' ? 'adminOrganization.edit' : 'adminOrganization.createChild'))
 const rules = computed(() => ({ name: [{ required: true, message: t('adminOrganization.nameRequired'), type: 'error' }] }))
 function refresh() { if (!state.busy && !state.loading) void state.load(state.selectedId) }
@@ -35,10 +35,11 @@ function refresh() { if (!state.busy && !state.loading) void state.load(state.se
             <t-alert v-if="state.membersError" theme="error" :message="state.membersError"><template #operation><t-button variant="text" :disabled="state.busy" @click="state.selectUnit(state.selected.id)">{{ t('connectionUi.refresh') }}</t-button></template></t-alert>
             <div v-if="state.membersReady || state.membersLoading" class="data-table-shell"><t-table row-key="user_id" :data="state.members" :columns="columns" :loading="state.membersLoading" :empty="t('adminOrganization.noMembers')">
               <template #person="{ row }">{{ state.memberName(row) }}</template>
+              <template #source="{ row }">{{ t(`adminOrganization.linkSource.${row.source}`) }}</template>
               <template #is_primary="{ row }"><t-tag v-if="row.is_primary" theme="primary">{{ t('adminOrganization.primary') }}</t-tag><span v-else>{{ t('adminOrganization.secondary') }}</span></template>
-              <template #actions="{ row }"><div v-if="state.manual" class="organization-actions"><t-button variant="text" :disabled="state.busy || row.is_primary || state.selected.status !== 'active'" @click="state.setPrimary(row)">{{ t('adminOrganization.setPrimary') }}</t-button><t-button theme="danger" variant="text" :disabled="state.busy" @click="state.removeMember(row)">{{ t('adminOrganization.removeMember') }}</t-button></div><span v-else>{{ t('adminOrganization.readOnly') }}</span></template>
+              <template #actions="{ row }"><div class="organization-actions"><t-button variant="text" :disabled="state.busy || row.is_primary || state.selected.status !== 'active'" @click="state.setPrimary(row)">{{ t('adminOrganization.setPrimary') }}</t-button><t-button theme="danger" variant="text" :disabled="state.busy || row.source === 'wecom'" @click="state.removeMember(row)">{{ t(row.source === 'mixed' ? 'adminOrganization.removeManual' : 'adminOrganization.removeMember') }}</t-button></div></template>
             </t-table></div>
-            <template v-if="state.manual">
+            <template v-if="state.selected">
               <t-alert v-if="!state.canReadCandidates" theme="info" :message="t('adminOrganization.candidatePermission')" />
               <t-alert v-else-if="state.candidatesError" theme="warning" :message="t('adminOrganization.candidateFailed')" />
               <t-form v-else :data="state.assignment" layout="vertical" :disabled="state.busy || !state.canAssign" class="assignment-form" @submit="state.assign">

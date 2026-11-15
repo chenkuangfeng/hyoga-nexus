@@ -117,3 +117,7 @@ Redis 后端每个（事件循环，Run）一个共享的阻塞读取器，再�
 ### 部门批量角色分配的授权边界
 
 `tenants.membership.assign_role_to_unit` 在同一事务和企业锁内要求 `members:manage` 与 `roles:manage`，通过 `tenants.roles.require_grantable_role` 校验同企业角色及权限子集。单成员分配复用该校验助手，避免批量路径绕过既有授予范围约束。校验完成前不写入任何分配；启用部门的直接活跃非 owner 成员参与，已有分配跳过，不展开子树、不创建随组织变动继承的绑定，保留批量审计与 assigned/skipped 返回形状。
+
+## 企微组织归属来源
+
+`orgs.service.sync_managed` 把 source=wecom 或具有 external_id 的节点视为同步管理；更新/删除接口在企业锁内返回 Conflict，启用节点下仍可创建手工子部门。迁移 `a03b51d982ef` 为 user_org_units 增加 manual/wecom/mixed 来源，按现有 wecom_members.department_ids 精确回填企微来源，其余保守保留 manual。手工增加已有企微关联升为 mixed，删除 mixed 只去掉手工贡献；企微对账做相反的来源维护。主部门标记独立于来源，重复添加不会清掉原主部门。目录落库和手工组织写入复用企业锁与事务。现有数据无法追溯同一关联曾否被人工额外确认，回填以当前通讯录匹配结果为准。

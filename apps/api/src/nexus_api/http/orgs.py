@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/v1/tenants/{tenant_id}", tags=["Organizations"])
 
 def _unit_view(row) -> UnitView:
     return UnitView(id=row.id, tenant_id=row.tenant_id, root_id=row.root_id, parent_id=row.parent_id,
-                    name=row.name, status=row.status, source=row.source)
+                    name=row.name, status=row.status, source=row.source, sync_managed=orgs.sync_managed(row))
 
 
 @tenant_admin_route(router, "/org-units/tree", methods=["GET"], response_model=list[NodeView])
@@ -61,7 +61,7 @@ def assign_member(tenant_id: UUID, unit_id: UUID, user_id: UUID, body: MemberLin
                   principal: Principal = Depends(get_principal), db=Depends(get_database_session)):
     row = orgs.assign_member(db, principal, tenant_id, unit_id, user_id,
                              is_primary=bool(body and body.is_primary))
-    return LinkView(user_id=row.user_id, unit_id=row.unit_id, is_primary=row.is_primary)
+    return LinkView(user_id=row.user_id, unit_id=row.unit_id, is_primary=row.is_primary, source=row.source)
 
 
 @tenant_admin_route(router, "/org-units/{unit_id}/members/{user_id}", methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT)

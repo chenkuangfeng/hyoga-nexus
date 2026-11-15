@@ -2,19 +2,25 @@
 import { del, get, patch, post, put } from '../utils/request'
 export type OrganizationStatus = 'active' | 'disabled'
 export type OrganizationSource = 'manual' | 'wecom'
-export interface OrganizationNode { id: string; parent_id: string | null; name: string; status: OrganizationStatus; source: OrganizationSource; member_count: number }
+export interface OrganizationNode { id: string; parent_id: string | null; name: string; status: OrganizationStatus; source: OrganizationSource; sync_managed: boolean; member_count: number }
 export interface OrganizationUnit extends Omit<OrganizationNode, 'member_count'> { tenant_id: string; root_id: string }
-export interface OrganizationMember { user_id: string; display_name: string | null; is_primary: boolean }
-export interface OrganizationLink { unit_id: string; user_id: string; is_primary: boolean }
+export type OrganizationLinkSource = 'manual' | 'wecom' | 'mixed'
+export interface OrganizationMember { source: OrganizationLinkSource; user_id: string; display_name: string | null; is_primary: boolean }
+export interface OrganizationLink { source: OrganizationLinkSource; unit_id: string; user_id: string; is_primary: boolean }
 export interface OrganizationEdit { name?: string; parent_id?: string; status?: OrganizationStatus }
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('organization_response_invalid'); return value as Record<string, unknown> }
 function text(value: unknown): string { if (typeof value !== 'string') throw new Error('organization_response_invalid'); return value }
 function id(value: unknown): string { const result = text(value); if (!result.trim()) throw new Error('organization_response_invalid'); return result }
 function boolean(value: unknown): boolean { if (typeof value !== 'boolean') throw new Error('organization_response_invalid'); return value }
+function linkSource(value: unknown): OrganizationLinkSource {
+  if (value !== 'manual' && value !== 'wecom' && value !== 'mixed') throw new Error('organization_response_invalid')
+  return value
+}
 function fields(value: unknown): Omit<OrganizationNode, 'member_count'> {
   const row = object(value), name = text(row.name)
   if (!name.trim() || !['active', 'disabled'].includes(text(row.status)) || !['manual', 'wecom'].includes(text(row.source))) throw new Error('organization_response_invalid')
-  return { id: id(row.id), parent_id: row.parent_id === null ? null : id(row.parent_id), name, status: row.status as OrganizationStatus, source: row.source as OrganizationSource }
+  if (row.source === 'wecom' && row.sync_managed !== true) throw new Error('organization_response_invalid')
+  return { id: id(row.id), parent_id: row.parent_id === null ? null : id(row.parent_id), name, status: row.status as OrganizationStatus, source: row.source as OrganizationSource, sync_managed: boolean(row.sync_managed) }
 }
 function tenantPath(tenant: string, admin = true): string { return `/api/v1/tenants/${encodeURIComponent(tenant)}${admin ? '/admin' : ''}/org-units` }
 function unitPath(tenant: string, unit: string): string { return `${tenantPath(tenant)}/${encodeURIComponent(unit)}` }
@@ -61,7 +67,7 @@ export async function deleteOrganizationUnit(tenant: string, unit: string): Prom
 export async function listOrganizationMembers(tenant: string, unit: string): Promise<OrganizationMember[]> {
   const data: unknown = await get(`${unitPath(tenant, unit)}/members`)
   if (!Array.isArray(data)) throw new Error('organization_response_invalid')
-  const rows = data.map(value => { const row = object(value); return { user_id: id(row.user_id), display_name: row.display_name == null ? null : text(row.display_name), is_primary: boolean(row.is_primary) } })
+  const rows = data.map(value => { const row = object(value); return { source: linkSource(row.source), user_id: id(row.user_id), display_name: row.display_name == null ? null : text(row.display_name), is_primary: boolean(row.is_primary) } })
   if (new Set(rows.map(row => row.user_id)).size !== rows.length) throw new Error('organization_response_invalid')
   return rows
 }
@@ -69,7 +75,7 @@ export async function listOrganizationMembers(tenant: string, unit: string): Pro
 export async function assignOrganizationMember(tenant: string, unit: string, user: string, primary: boolean): Promise<OrganizationLink> {
   const row = object(await put(`${unitPath(tenant, unit)}/members/${encodeURIComponent(user)}`, { is_primary: primary }))
   if (id(row.unit_id) !== unit || id(row.user_id) !== user) throw new Error('organization_response_invalid')
-  return { unit_id: unit, user_id: user, is_primary: boolean(row.is_primary) }
+  return { source: linkSource(row.source), unit_id: unit, user_id: user, is_primary: boolean(row.is_primary) }
 }
 /** 只移除部门关联，不移出企业；主部门仍有其他关联时，后端要求先改设主部门。 */
 export async function removeOrganizationMember(tenant: string, unit: string, user: string): Promise<void> { await del(`${unitPath(tenant, unit)}/members/${encodeURIComponent(user)}`) }

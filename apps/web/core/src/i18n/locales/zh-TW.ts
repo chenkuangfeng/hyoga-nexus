@@ -234,6 +234,11 @@ export default {
   },
   adminMigration: {"membersMoved": "成员、邀请、加入申请审批和审计已迁入独立企业管理应用，具体功能仍需相应管理权限。", "organizationMoved": "部门组织管理已迁入独立的企业管理应用。请在管理后台维护部门与成员归属。", "openAdmin": "打开企业管理后台", "noEntry": "当前企业未授予管理后台入口，请联系企业管理员。"},
   adminOrganization: {
+    linkSourceLabel: '歸屬來源',
+    linkSource: { manual: '手工維護', wecom: '企微同步', mixed: '手工與企微' },
+    removeManual: '撤銷手工歸屬',
+    removeManualConfirm: '撤銷「{name}」在「{department}」的手工歸屬？企微同步歸屬和主部門標記仍會保留。',
+
     "title": "Organization",
     "description": "Manage this enterprise organization tree, department status and member positions.",
     "open": "Manage organization",
@@ -254,7 +259,7 @@ export default {
     "setPrimary": "Set as primary",
     "removeMember": "Remove position",
     "readOnly": "Read only",
-    "wecomReadOnly": "This WeCom department and its member positions are read only here. Maintain synchronized relationships in WeCom. Manual child departments can be created under active nodes.",
+    "wecomReadOnly": "此部門結構由企微維護，請在企微修改名稱、階層和狀態。成員關聯按來源分別維護；可新增手工歸屬、設定主部門，亦可在啟用節點下建立手工子部門。",
     "candidatePermission": "Adding positions requires a readable enterprise member list. Contact a member administrator. Existing positions can still be maintained.",
     "candidateFailed": "Enterprise member choices could not be loaded. Adding positions is unavailable; existing positions can still be maintained. Refresh to retry.",
     "chooseMember": "Select enterprise member",

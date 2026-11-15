@@ -23,15 +23,15 @@ export function useOrganizationAdministration(t: Translate) {
   const canReadCandidates = computed(() => context.can('members:manage'))
   const rows = computed(() => organizationRows(units.value))
   const selected = computed(() => units.value.find(row => row.id === selectedId.value) || null)
-  const manual = computed(() => selected.value?.source === 'manual')
-  const canAssign = computed(() => canManage.value && manual.value && selected.value?.status === 'active' && membersReady.value && candidatesReady.value)
+  const manual = computed(() => !!selected.value && !selected.value.sync_managed)
+  const canAssign = computed(() => canManage.value && selected.value?.status === 'active' && membersReady.value && candidatesReady.value)
   const canDelete = computed(() => { const row = selected.value; return !!row && canManage.value && manual.value && row.parent_id !== null && row.member_count === 0 && membersReady.value && members.value.length === 0 && !units.value.some(item => item.parent_id === row.id) })
   const parentOptions = computed(() => {
     const edited = units.value.find(row => row.id === editingId.value)
     const blocked = edited ? organizationSubtree(units.value, edited.id) : new Set<string>()
     return rows.value.filter(row => !blocked.has(row.node.id) && (row.node.status === 'active' || row.node.id === edited?.parent_id)).map(row => ({ label: row.path, value: row.node.id, disabled: row.node.status !== 'active' }))
   })
-  const candidateOptions = computed(() => { const present = new Set(members.value.map(row => row.user_id)); return candidates.value.filter(row => !present.has(row.user_id)).map(row => ({ value: row.user_id, label: row.display_name ? `${row.display_name}${row.email ? ` · ${row.email}` : ''}` : row.username || row.email || t('adminMembers.unnamedMember') })) })
+  const candidateOptions = computed(() => { const present = new Set(members.value.map(row => row.user_id)); return candidates.value.filter(row => row.status === 'active' && !present.has(row.user_id)).map(row => ({ value: row.user_id, label: row.display_name ? `${row.display_name}${row.email ? ` · ${row.email}` : ''}` : row.username || row.email || t('adminMembers.unnamedMember') })) })
   function memberName(row: OrganizationMember): string { const info = candidates.value.find(item => item.user_id === row.user_id); return row.display_name || info?.display_name || info?.username || info?.email || t('adminMembers.unnamedMember') }
   function path(id: string): string { return rows.value.find(row => row.node.id === id)?.path || t('adminOrganization.noParent') }
   function message(reason: unknown): string { return reason instanceof Error && !['organization_response_invalid', 'members_response_invalid'].includes(reason.message) ? reason.message : t('adminConsole.failed') }
@@ -92,7 +92,7 @@ export function useOrganizationAdministration(t: Translate) {
     const name = form.name.trim(), parent = form.parent_id, edited = units.value.find(row => row.id === editingId.value)
     if (editorMode.value === 'root') { if (units.value.length) return; await run(async tenant => (await createOrganizationUnit(tenant, { name })).id); return }
     if (editorMode.value === 'edit') {
-      if (!edited || edited.source !== 'manual') return
+      if (!edited || edited.sync_managed) return
       const input: OrganizationEdit = {}
       if (name !== edited.name) input.name = name
       if (edited.parent_id !== null && parent !== edited.parent_id) {
@@ -126,13 +126,13 @@ export function useOrganizationAdministration(t: Translate) {
   }
   function setPrimary(row: OrganizationMember) {
     const unit = selected.value
-    if (!unit || !canManage.value || !manual.value || unit.status !== 'active' || !membersReady.value || row.is_primary || !members.value.some(item => item.user_id === row.user_id)) return
+    if (!unit || !canManage.value || unit.status !== 'active' || !membersReady.value || row.is_primary || !members.value.some(item => item.user_id === row.user_id)) return
     confirm(t('adminOrganization.primaryConfirm', { name: memberName(row), department: path(unit.id) }), async tenant => { await assignOrganizationMember(tenant, unit.id, row.user_id, true); return unit.id })
   }
   function removeMember(row: OrganizationMember) {
     const unit = selected.value
-    if (!unit || !canManage.value || !manual.value || !membersReady.value || !members.value.some(item => item.user_id === row.user_id)) return
-    confirm(t('adminOrganization.removeConfirm', { name: memberName(row), department: path(unit.id) }), async tenant => { await removeOrganizationMember(tenant, unit.id, row.user_id); return unit.id })
+    if (!unit || !canManage.value || row.source === 'wecom' || !membersReady.value || !members.value.some(item => item.user_id === row.user_id)) return
+    confirm(t(row.source === 'mixed' ? 'adminOrganization.removeManualConfirm' : 'adminOrganization.removeConfirm', { name: memberName(row), department: path(unit.id) }), async tenant => { await removeOrganizationMember(tenant, unit.id, row.user_id); return unit.id })
   }
   watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.revision, canManage, canReadCandidates], () => { void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
