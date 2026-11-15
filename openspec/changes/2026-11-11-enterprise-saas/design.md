@@ -232,6 +232,16 @@ apps/web/                         pnpm workspace 根（不是应用）
 
 管理端采用与 workspace 一致的主框架、可折叠图标侧栏与左下角账户菜单，具体见 E2.5.10；不提供返回工作台或关闭入口。内容页面继续复用 core 的设置标题、标准设置行、列表工具按钮、表格框和主题，不产生应用间导入。权限、API、表单提交和确认规则保持不变。
 
+### E2.5.8 企微组织同步归属与只读保护（合同草案，待确认）
+
+**来源规则**：组织节点视为同步管理，当且仅当 `source = wecom` 或 `external_id IS NOT NULL`。后者覆盖手工根映射企微顶级部门的混合情形。树与节点 DTO 增加只读布尔值 `sync_managed`，避免客户端自行从 `source` 猜测；`source` 保留节点的创建来源。服务端 `update_unit` 对同步管理节点拒绝名称、父级和状态修改；`delete_unit` 拒绝删除。手工节点可继续改名、移动、启停和删除；同步节点下允许新增手工子节点，父节点需启用。所有拒绝在任何写入前发生。
+
+**成员归属来源**：`user_org_units` 增加受约束 `source`：`manual`、`wecom`、`mixed`。迁移按 `wecom_members.department_ids` 与有外部 ID 的节点匹配，能精确确认的现有关联标为 `wecom`；其余保守标为 `manual`，防止迁移静默删除管理人员工归属。同步与人工来源同时存在时为 `mixed`。企微对账只移除 `wecom` 贡献（mixed 降为 manual），只新增/恢复 wecom 贡献（manual 升为 mixed），不覆盖手工主部门；手工删除 mixed 关联只去掉 manual 贡献（降为 wecom），纯 wecom 关联由 API 返回冲突。手工分配同一企微归属时升为 mixed；成员详情 DTO 返回来源，管理端显示来源并只允许撤销手工贡献。`is_primary` 仍是单一成员属性，写入任何主部门变更前保持现有唯一性约束，来源删除若留下另一来源则保留主部门标记。
+
+**管理接口与同步状态**：所有成员归属写端点及节点 CRUD 在服务层复核来源，不能依赖 UI 禁用。复用现有 `GET /api/v1/tenants/{id}/admin/wecom` 返回的 `sync_status`（never/requested/ok/failed）、`sync_error`、`synced_at` 及 `POST /admin/wecom/sync`；WeComPage 展示刷新后的队列/完成/失败状态，提供有限间隔轮询，切换企业、账号、权限和卸载后停止旧轮询。不新增调度开关、同步频率或企微可见范围设置；当前 24 小时后台同步与同步应用可读范围维持原行为。权限仍为 `org:manage`，失败不伪报成功。
+
+**同步原子性与审计**：一次目录落库对节点和成员归属保持同一事务。组织 API 的手工变更沿用 `org_audit_records`；企微同步继续写 `wecom.directory_synced` 汇总审计，状态轮询不产生审计。配置或权限检查失败不得部分应用本轮同步。
+
 ### 部门组织界面的当前实现边界
 
 管理端 `/admin/organization` 消费既有 `/org-units` 契约，不新增权限：树、节点及归属操作需要 `org:manage`，全企业成员候选另需 `members:manage`。节点来源为 `wecom` 时界面只读，启用节点下可新增手工子部门；首次归属的主部门标记采用服务器刷新结果。根不可移动/删除，移动排除自身及子树，危险操作确认，切换选择或身份后旧响应与确认失效。

@@ -161,3 +161,12 @@
 状态写入要求 `members:manage`；owner 变更仍仅限 owner，并在租户事务锁内保护至少一名 active owner。永久移除仍写为 `revoked`。邀请或手工添加不得隐式恢复 suspended 成员；企微同步不得覆盖人工停用，确认离职仍按既有规则撤销。成员列表展示 active/suspended 并提供停用确认和恢复操作。完整需求与设计见 `specs/enterprise-member-status-administration/spec.md`、`design.md` E2.5.5。
 
 用户已确认按此合同实施（2026-11-15）。实施状态及验收限制见 `tasks.md` E2.5.5。
+
+
+## E2.5.8 追加提案：企微组织同步归属与只读保护（实施草案，待确认）
+
+当前组织页仅在前端把 `source=wecom` 节点设为只读；通用 API 仍可修改/删除这些节点。手工创建的企业根节点可能同时映射企微顶级部门（`source=manual` 且有 `external_id`），成员归属记录也没有来源字段，因此企微下一次同步可能覆盖管理员操作，或清掉手工归属。拟在服务端按同步来源保护节点与成员关联，并在现有企微设置页清楚呈现同步状态。
+
+方案草案见 `design.md` E2.5.8 和 `specs/enterprise-organization-sync-ownership/spec.md`：同步管理节点判定为 `source=wecom` 或具有企微 `external_id`；对名称、父级、启停、删除的手工写入返回冲突，允许在启用同步节点下创建手工子部门。树 DTO 增加 `sync_managed`，成员归属记录增加来源 `manual | wecom | mixed`，同步只撤销其来源贡献，手工移除只撤销手工贡献。历史归属保守回填，并对可由现有通讯录精确确认的企微关联建立同步来源。复用 `/admin/wecom` 的既有 `sync_status`、`sync_error`、`synced_at` 和立即同步接口；不增加调度开关、同步频率或通讯录范围配置。
+
+此变更涉及持久化模型、组织管理 API 与归属行为，用户确认后才实施。
