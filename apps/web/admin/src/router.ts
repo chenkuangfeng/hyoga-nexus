@@ -43,6 +43,7 @@ const router = createRouter({
       { path: 'knowledge', component: () => import('./views/knowledge/KnowledgePage.vue') },
       { path: 'knowledge/:kbId/content', component: () => import('./views/knowledge/KnowledgeContentPage.vue') },
       { path: 'agents', component: () => import('./views/agents/AgentsPage.vue') },
+      { path: 'channels', component: () => import('./views/agents/ChannelsPage.vue') },
       { path: 'audit', component: () => import('./views/audit/AuditPage.vue') },
       { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },
     ] },

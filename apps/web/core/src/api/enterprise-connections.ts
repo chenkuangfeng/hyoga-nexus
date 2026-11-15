@@ -2,10 +2,10 @@
 import { del, get, patch, post } from '../utils/request'
 
 export type ChannelKind = 'wecom_app' | 'wecom_bot' | 'wechat' | 'qq'
-export type ChannelStatus = 'active' | 'binding' | 'pending_review' | 'rejected' | 'disabled'
+export type ChannelStatus = 'active' | 'binding' | 'pending_review' | 'rejected' | 'disabled' | 'expired'
 export interface AgentChannel {
   id: string; agent_id: string; kind: ChannelKind; status: ChannelStatus; name: string
-  owner_user_id: string; bound: boolean; review_note: string | null
+  owner_user_id: string; bound: boolean; review_note: string | null; created_at?: string; updated_at?: string
 }
 export interface WecomAgentApp { id: string; name: string; purpose: string; nexus_agent_id: string | null; status: string }
 export interface Endpoint {
@@ -26,9 +26,10 @@ function strings(value: unknown): string[] { return array(value).map(string) }
 /** 校验渠道响应，仅保留非秘密字段；格式不符时抛出 connection_response_invalid。 */
 export function channelFromResponse(value: unknown): AgentChannel {
   const row = object(value)
-  if (!['wecom_app', 'wecom_bot', 'wechat', 'qq'].includes(string(row.kind)) || !['active', 'binding', 'pending_review', 'rejected', 'disabled'].includes(string(row.status))) throw new Error('connection_response_invalid')
+  if (!['wecom_app', 'wecom_bot', 'wechat', 'qq'].includes(string(row.kind)) || !['active', 'binding', 'pending_review', 'rejected', 'disabled', 'expired'].includes(string(row.status))) throw new Error('connection_response_invalid')
   return { id: string(row.id), agent_id: string(row.agent_id), kind: row.kind as ChannelKind, status: row.status as ChannelStatus,
-    name: string(row.name), owner_user_id: string(row.owner_user_id), bound: boolean(row.bound), review_note: row.review_note == null ? null : string(row.review_note) }
+    name: string(row.name), owner_user_id: string(row.owner_user_id), bound: boolean(row.bound), review_note: row.review_note == null ? null : string(row.review_note),
+    ...(row.created_at === undefined ? {} : { created_at: string(row.created_at) }), ...(row.updated_at === undefined ? {} : { updated_at: string(row.updated_at) }) }
 }
 /** 校验企业连接元数据并剔除 token，避免列表状态持有凭据。 */
 export function endpointFromResponse(value: unknown): Endpoint {
@@ -66,6 +67,25 @@ export async function beginWechatBinding(tenantId: string, id: string): Promise<
 export async function pollWechatBinding(tenantId: string, id: string) {
   const data = object(await get(`${channel(tenantId, id)}/wechat/status`))
   return { status: string(data.status), channel: data.channel ? channelFromResponse(data.channel) : null }
+}
+/** 企业智能体管理员读取渠道总览或指定状态的审核队列。 */
+export async function listEnterpriseChannels(tenantId: string, status?: ChannelStatus): Promise<AgentChannel[]> {
+  const query = status ? `?status_filter=${encodeURIComponent(status)}` : ''
+  return array(object(await get(`${tenant(tenantId)}/admin/channels${query}`)).items).map(channelFromResponse)
+}
+/** 读取调用者可见智能体的名称映射，供渠道总览显示可读名称而不展示 ID。 */
+export async function listChannelAgentNames(tenantId: string): Promise<Array<{ id: string; name: string }>> {
+  return array(await get(`${tenant(tenantId)}/agents`)).map(value => {
+    const row = object(value)
+    if (row.tenant_id !== tenantId || !['personal', 'enterprise'].includes(string(row.ownership))) throw new Error('connection_response_invalid')
+    return { id: string(row.id), name: string(row.name) }
+  })
+}
+/** 审核待处理的企业渠道；拒绝时服务端要求提供原因。 */
+export async function reviewEnterpriseChannel(tenantId: string, id: string, input: { approve: boolean; note?: string }): Promise<AgentChannel> {
+  const row = channelFromResponse(await post(`${tenant(tenantId)}/admin/channels/${encodeURIComponent(id)}/review`, input))
+  if (row.id !== id || row.status !== (input.approve ? 'active' : 'rejected')) throw new Error('connection_response_invalid')
+  return row
 }
 /** 读取当前企业内调用者的 API 权限，不根据角色名称推断权限。 */
 export async function fetchConnectionPermissions(tenantId: string): Promise<string[]> {

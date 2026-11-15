@@ -164,3 +164,9 @@
 `/wecom` 由 `org:manage` 控制，展示企业绑定、回调凭据配置状态、通讯录同步状态及已有自建应用。企业 Corp ID 首次绑定后不可直接变更；回调 Token 与 EncodingAESKey 只写不读，空输入保留已保存值。支持请求立即同步、复制回调地址和应用主页地址，并明确标示扫码登录应用。该页面不展示或保存企业微信应用 Secret。
 
 页面为 `src/views/organization/WecomPage.vue`，公共客户端为 `core/src/api/enterprise-wecom.ts`；服务端对配置、凭据和同步操作继续按 `org:manage` 授权。
+
+## 企业智能体渠道审核
+
+`/channels` 按 `enterprise_agents:manage` 展示当前企业渠道总览，并可按状态筛选；总览包含当前企业智能体渠道，包括成员个人智能体的渠道。待审核渠道可确认通过或填写原因拒绝，审批回执更新列表；渠道记录按稳定智能体 ID 关联当前可见名称，不展示内部 ID。服务端每次复核授权和待审核状态。
+
+页面位于 `src/views/agents/ChannelsPage.vue`，渠道管理 API 位于 `core/src/api/enterprise-connections.ts`。
