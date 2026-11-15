@@ -88,7 +88,7 @@
 - [x] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
-  - 复验（2026-11-15）：Node 22.23.4 / pnpm 10.34.9 与锁定版本一致。`pnpm build` 和 `NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @nexus-web/workspace build` 均在 Vite `transforming` 阶段以 exit 1 结束且无诊断，未产出工作台构建包；Core 与 Admin 类型检查通过，工作台全量类型检查以 exit 1 结束且无诊断。未启动 Admin 生产构建、未运行测试，E2.8 保持未完成。
+  - 复验（2026-11-15）：Node 22.23.4 / pnpm 10.34.9 与锁定版本一致。`pnpm build`、单独工作台构建和 `NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @nexus-web/admin build` 均在 Vite `transforming` 阶段以 exit 1 结束且无诊断，未得到可验收产物；Core 与 Admin 类型检查通过，工作台全量类型检查以 exit 1 结束且无诊断。未运行测试，E2.8 保持未完成。
 - [x] E2.9 文档：`AGENTS.md` 前端命令；`apps/web` 父模块文档与三个项目的 `README.md`；`docs/architecture.md` 1.4 与 2.15；反向代理示例；更正根 README 中的 Element Plus 描述。
   - Web 文档反映当前 Vue 3 / TypeScript / TDesign、core/workspace/admin 边界与现有管理页面；明确 embed 后端、个人 MCP endpoint 及 E2.8 验收限制。
   - 新增 Nginx 示例，分别处理 API/企微代理、`/admin/` 静态回退、`/embed/` 独立 HTML 回退及工作台 history 回退。
