@@ -146,3 +146,9 @@
 `/storage` 按 `enterprise_kbs:manage` 提供当前企业文件存储目录，列出内置后端和企业配置。当前服务端仅实现 `local` 提供方；可新建本地目录、测试已保存后端及删除自定义配置。配置路径不会在列表回显。服务端可能依据部署策略拒绝企业配置本地路径；被知识库引用的后端不能删除。编辑、默认后端选择和未保存配置测试尚无 API，不在页面提供。
 
 代码位于 `src/views/storage/StoragePage.vue`，运行时校验客户端位于 `core/src/api/enterprise-storage.ts`。管理页权限由前端控制显示，创建/删除仍由服务端管理角色校验。
+
+## 企业向量库
+
+`/vector-stores` 按 `enterprise_kbs:manage` 提供企业向量库目录、动态配置、保存配置编辑、草稿/已保存连接测试和删除。表单只开放能力目录中 `available` 的引擎，计划项只展示为不可操作状态；未验证的已实现引擎会明确标记。密钥由服务端脱敏回传，更新保留其掩码以沿用已有密钥；本地 SQLite 路径和私网地址仍受服务端部署策略限制。知识库正在使用的配置不能删除。
+
+页面为 `src/views/storage/VectorStoresPage.vue`，类型化客户端为 `core/src/api/enterprise-vector-stores.ts`。服务端最终校验角色、目标地址及配置可用性。

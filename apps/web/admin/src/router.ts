@@ -37,6 +37,7 @@ const router = createRouter({
       { path: 'mcp-endpoints', component: () => import('./views/connections/EndpointsPage.vue') },
       { path: 'mcp-services', component: () => import('./views/connections/McpServicesPage.vue') },
       { path: 'storage', component: () => import('./views/storage/StoragePage.vue') },
+      { path: 'vector-stores', component: () => import('./views/storage/VectorStoresPage.vue') },
       { path: 'knowledge', component: () => import('./views/knowledge/KnowledgePage.vue') },
       { path: 'knowledge/:kbId/content', component: () => import('./views/knowledge/KnowledgeContentPage.vue') },
       { path: 'agents', component: () => import('./views/agents/AgentsPage.vue') },
