@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy.orm import Session
 
 from nexus_api.dependencies.platform import get_database_session, get_principal
+from nexus_api.http.admin_routes import tenant_admin_route
 from nexus_core.platform import Principal, utc_now
 from nexus_core.runtime import ModelRequest, ModelMessage, RuntimeFault
 from nexus_platform.models import provider_settings as settings
@@ -22,7 +23,7 @@ from nexus_platform.identity.service import require_membership
 from nexus_runtimes.native.models.network import validate_url, provider_client
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 
-router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/model-settings', tags=['Model settings'])
+router = APIRouter(prefix='/api/v1/tenants/{tenant_id}', tags=['Model settings'])
 
 
 class ProviderInput(BaseModel):
@@ -92,32 +93,32 @@ def provider_values(body: ProviderInput) -> dict[str, object]:
     return dict(name=body.name.strip(), base_url=url, scope=body.scope, api_key=key)
 
 
-@router.get('')
+@tenant_admin_route(router, '/model-settings', methods=['GET'])
 def list_settings(tenant_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Return the authenticated caller’s visible models and defaults in the requested Tenant."""
     return settings.list_settings(db, principal, tenant_id)
 
 
-@router.post('/providers', status_code=201)
+@tenant_admin_route(router, '/model-settings/providers', methods=['POST'], status_code=201)
 def create_provider(tenant_id: UUID, body: ProviderInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Accept a write-only Key and return a masked, scoped provider after encrypted persistence."""
     return settings.save_provider(db, principal, tenant_id, **provider_values(body))
 
 
-@router.put('/providers/{provider_id}')
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}', methods=['PUT'])
 def update_provider(tenant_id: UUID, provider_id: UUID, body: ProviderInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Update metadata or rotate the Key after owner/administrator authorization."""
     return settings.save_provider(db, principal, tenant_id, provider_id=provider_id, **provider_values(body))
 
 
-@router.delete('/providers/{provider_id}')
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}', methods=['DELETE'])
 def delete_provider(tenant_id: UUID, provider_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Disable the provider and invalidate its defaults; historical configuration is retained."""
     settings.disable(db, principal, tenant_id, provider_id)
     return {'status': 'disabled'}
 
 
-@router.post('/providers/{provider_id}/models', status_code=201)
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}/models', methods=['POST'], status_code=201)
 def add_model(tenant_id: UUID, provider_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Create an immutable configured model under a manageable provider."""
     return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), model_options=body.options, model_type=body.model_type)
@@ -130,20 +131,20 @@ def model_name(value: str) -> str:
     return value.strip()
 
 
-@router.put('/providers/{provider_id}/models/{profile_id}')
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}', methods=['PUT'])
 def edit_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Append a model version; preserve already published AgentVersion references."""
     return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), profile_id, model_options=body.options, model_type=body.model_type)
 
 
-@router.delete('/providers/{provider_id}/models/{profile_id}')
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}', methods=['DELETE'])
 def delete_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Disable this model and clear its defaults without deleting historical runs."""
     settings.disable(db, principal, tenant_id, provider_id, profile_id)
     return {'status': 'disabled'}
 
 
-@router.put('/default')
+@tenant_admin_route(router, '/model-settings/default', methods=['PUT'])
 def set_default(tenant_id: UUID, body: DefaultInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Set or clear an authorized personal/space preference for one model type.
 
@@ -152,7 +153,7 @@ def set_default(tenant_id: UUID, body: DefaultInput, principal: Principal = Depe
     return {'status': 'saved'}
 
 
-@router.post('/agents', status_code=201)
+@tenant_admin_route(router, '/model-settings/agents', methods=['POST'], status_code=201)
 def create_native_agent(tenant_id: UUID, body: AgentInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Create and publish a Native Agent using explicit, personal or space-default selection.
 
@@ -235,7 +236,7 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
             await model.close()
 
 
-@router.post('/providers/{provider_id}/models/{profile_id}/test')
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}/test', methods=['POST'])
 async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Test an authorized saved model with a bounded minimal streaming request.
 
@@ -259,7 +260,7 @@ async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, 
     return await check_connection(key=key, base_url=base_url, model_name=name, options=dict(version.options), model_type=profile.model_type)
 
 
-@router.post('/test')
+@tenant_admin_route(router, '/model-settings/test', methods=['POST'])
 async def test_draft(tenant_id: UUID, body: DraftTestInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Test the configuration currently in the form, before anything is saved.
 

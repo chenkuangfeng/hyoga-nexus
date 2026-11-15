@@ -43,7 +43,7 @@ function providerFromResponse(value: unknown): ModelProviderResponse {
   return { id: string(row.id), name: string(row.name), base_url: string(row.base_url), scope: row.scope,
     key_configured: row.key_configured, key_mask: string(row.key_mask), models }
 }
-const root = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}/model-settings`
+const root = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}/admin/model-settings`
 
 /** Load settings for the selected enterprise and omit all personal-provider records. */
 export async function listEnterpriseModelSettings(tenant: string): Promise<EnterpriseModelSettings> {
