@@ -18,6 +18,7 @@
               </div>
             </template>
           </t-popup>
+          <t-button v-if="canManageShares" size="small" variant="outline" :disabled="submitting" @click="audienceOpen = true">{{ $t('agentAudience.assign') }}</t-button>
         </div>
       </div>
       <p class="share-panel-desc">{{ $t('organization.share.agentShareDesc') }}</p>
@@ -120,6 +121,7 @@
         </t-table>
       </div>
     </div>
+    <AgentAudienceDialog v-if="canManageShares && props.agentId" v-model:visible="audienceOpen" :tenant-id="currentTenantId" :agent-id="props.agentId" :agent-name="props.agent?.name || ''" :scope-key="audienceScopeKey" :can-manage="canManageAudience" :can-read-members="apiPermissions.includes('members:manage')" :can-read-organization="apiPermissions.includes('org:manage')" @saved="MessagePlugin.success($t('agentAudience.saved'))" />
   </div>
 </template>
 
@@ -128,6 +130,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
+import AgentAudienceDialog from '@nexus-web/core/components/agent-editor/AgentAudienceDialog.vue'
+import { getMyApiPermissions } from '@nexus-web/core/api/nexus-agents'
 import { listSharedSpaces } from '@nexus-web/core/api/shared-space/index'
 import type { SharedSpaceSummary } from '@nexus-web/core/api/shared-space/index'
 import {
@@ -158,6 +162,9 @@ const canManageShares = computed(() => {
   const membership = authStore.memberships.find(m => String(m.tenant_id) === currentTenantId.value)
   return membership?.kind === 'enterprise' && (membership.role === 'owner' || membership.role === 'admin')
 })
+const canManageAudience = computed(() => canManageShares.value)
+const audienceScopeKey = computed(() => JSON.stringify([currentTenantId.value, props.agentId, authStore.user?.id || '', authStore.memberships.find(m => String(m.tenant_id) === currentTenantId.value)?.role || '']))
+const apiPermissions = ref<string[]>([]), audienceOpen = ref(false)
 
 // Members run this agent's skills in this workspace's sandbox, with the
 // environment values its admins configured for them, and can have the model
@@ -187,6 +194,7 @@ const selectedSpaceId = ref('')
 const selectedLevel = ref<AgentShareLevel>('viewer')
 const shares = ref<AgentShare[]>([])
 const sharedSpaces = ref<SharedSpaceSummary[]>([])
+let scopeEpoch = 0
 
 const levelOptions = computed(() => [
   { value: 'viewer', label: t('organization.share.level.viewer') },
@@ -224,77 +232,88 @@ function errorMessage(e: unknown, fallback: string) {
   return e instanceof Error && e.message ? e.message : fallback
 }
 
-async function loadSharedSpaces() {
+async function loadSharedSpaces(request = scopeEpoch) {
+  const userId = String(authStore.user?.id || '')
   loadingSpaces.value = true
   try {
-    sharedSpaces.value = (await listSharedSpaces()) as unknown as SharedSpaceSummary[]
+    const rows = (await listSharedSpaces()) as unknown as SharedSpaceSummary[]
+    if (request === scopeEpoch && userId === String(authStore.user?.id || '')) sharedSpaces.value = rows
   } catch (e) {
-    MessagePlugin.error(errorMessage(e, t('organization.share.loadFailed')))
+    if (request === scopeEpoch && userId === String(authStore.user?.id || '')) MessagePlugin.error(errorMessage(e, t('organization.share.loadFailed')))
   } finally {
-    loadingSpaces.value = false
+    if (request === scopeEpoch) loadingSpaces.value = false
   }
 }
 
-async function loadShares() {
+async function loadShares(request = scopeEpoch) {
   if (!props.agentId || !currentTenantId.value || !canManageShares.value) {
-    shares.value = []
+    shares.value = []; apiPermissions.value = []; audienceOpen.value = false; loadingShares.value = false
     return
   }
+  const tenant = currentTenantId.value, agentId = props.agentId, userId = String(authStore.user?.id || '')
   loadingShares.value = true
-  try {
-    shares.value = await listAgentShares(currentTenantId.value, props.agentId)
-  } catch (e) {
-    MessagePlugin.error(errorMessage(e, t('organization.share.loadFailed')))
-  } finally {
-    loadingShares.value = false
-  }
+  const [shareResult, permissionResult] = await Promise.allSettled([listAgentShares(tenant, agentId), getMyApiPermissions(tenant)])
+  if (request !== scopeEpoch || tenant !== currentTenantId.value || agentId !== props.agentId || userId !== String(authStore.user?.id || '') || !canManageShares.value) return
+  if (shareResult.status === 'fulfilled') shares.value = shareResult.value
+  else MessagePlugin.error(errorMessage(shareResult.reason, t('organization.share.loadFailed')))
+  apiPermissions.value = permissionResult.status === 'fulfilled' ? permissionResult.value : []
+  loadingShares.value = false
 }
 
 async function handleShare() {
   if (!selectedSpaceId.value) return
+  const request = scopeEpoch, tenant = currentTenantId.value, agentId = props.agentId, userId = String(authStore.user?.id || '')
   submitting.value = true
   try {
-    await shareAgent(currentTenantId.value, props.agentId, {
+    await shareAgent(tenant, agentId, {
       shared_space_id: selectedSpaceId.value,
       level: selectedLevel.value,
     })
+    if (request !== scopeEpoch || tenant !== currentTenantId.value || agentId !== props.agentId || userId !== String(authStore.user?.id || '')) return
     MessagePlugin.success(t('organization.share.shareSuccess'))
     selectedSpaceId.value = ''
     selectedLevel.value = 'viewer'
     addPopupVisible.value = false
-    await loadShares()
+    await loadShares(request)
   } catch (e) {
-    MessagePlugin.error(errorMessage(e, t('organization.share.shareFailed')))
+    if (request === scopeEpoch) MessagePlugin.error(errorMessage(e, t('organization.share.shareFailed')))
   } finally {
-    submitting.value = false
+    if (request === scopeEpoch) submitting.value = false
   }
 }
 
 /** 修改已共享空间的级别：后端对同一 (agent, space) 做 upsert，直接重新提交即可。 */
 async function handleLevelChange(share: AgentShare, level: AgentShareLevel) {
   if (level === share.level) return
+  const request = scopeEpoch, tenant = currentTenantId.value, agentId = props.agentId
   try {
-    await shareAgent(currentTenantId.value, props.agentId, { shared_space_id: share.shared_space_id, level })
+    await shareAgent(tenant, agentId, { shared_space_id: share.shared_space_id, level })
+    if (request !== scopeEpoch || tenant !== currentTenantId.value || agentId !== props.agentId) return
     MessagePlugin.success(t('organization.share.levelUpdated'))
-    await loadShares()
+    await loadShares(request)
   } catch (e) {
-    MessagePlugin.error(errorMessage(e, t('organization.share.shareFailed')))
-    await loadShares()
+    if (request === scopeEpoch) { MessagePlugin.error(errorMessage(e, t('organization.share.shareFailed'))); await loadShares(request) }
   }
 }
 
 async function handleUnshare(share: AgentShare) {
+  const request = scopeEpoch, tenant = currentTenantId.value, agentId = props.agentId
   try {
-    await unshareAgent(currentTenantId.value, props.agentId, share.shared_space_id)
+    await unshareAgent(tenant, agentId, share.shared_space_id)
+    if (request !== scopeEpoch || tenant !== currentTenantId.value || agentId !== props.agentId) return
     MessagePlugin.success(t('organization.share.unshareSuccess'))
-    await loadShares()
+    await loadShares(request)
   } catch (e) {
-    MessagePlugin.error(errorMessage(e, t('organization.share.unshareFailed')))
+    if (request === scopeEpoch) MessagePlugin.error(errorMessage(e, t('organization.share.unshareFailed')))
   }
 }
 
-watch(() => [props.agentId, currentTenantId.value] as const, async ([newId]) => {
-  if (newId) await Promise.all([loadSharedSpaces(), loadShares()])
+watch(() => [props.agentId, currentTenantId.value, authStore.user?.id, canManageShares.value] as const, async ([newId]) => {
+  scopeEpoch++
+  const request = scopeEpoch
+  audienceOpen.value = false; apiPermissions.value = []
+  shares.value = []; sharedSpaces.value = []; loadingShares.value = false; loadingSpaces.value = false; submitting.value = false
+  if (newId) await Promise.all([loadSharedSpaces(request), loadShares(request)])
 })
 
 onMounted(async () => {

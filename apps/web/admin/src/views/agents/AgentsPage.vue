@@ -1,15 +1,19 @@
 <script setup lang="ts">
 /** 管理应用组合共享编辑器；不依赖工作台路由或聊天状态。 */
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import AgentAvatar from '@nexus-web/core/components/AgentAvatar.vue'
 import NexusAgentEditorModal from '@nexus-web/core/components/agent-editor/NexusAgentEditorModal.vue'
+import AgentAudienceDialog from '@nexus-web/core/components/agent-editor/AgentAudienceDialog.vue'
 import { useAgentAdministration } from './useAgentAdministration'
 import { useAdminContext } from '../../stores/context'
 const { t } = useI18n()
 const router = useRouter(), adminContext = useAdminContext()
 const { loading, ready, busy, error, search, editor, selected, revision, tenant, canManage, canGrant, filtered, load, open, archive } = useAgentAdministration()
+const audienceAgent = ref<(typeof filtered.value)[number] | null>(null), audienceOpen = ref(false)
+watch(() => `${tenant.value}:${adminContext.revision}:${canManage.value}`, () => { audienceOpen.value = false; audienceAgent.value = null })
 function openModelSettings() {
   if (adminContext.can('models:manage')) void router.push('/models')
   else void MessagePlugin.info(t('adminAgents.modelsPermission'))
@@ -28,12 +32,13 @@ function openModelSettings() {
           <article v-for="row in filtered" :key="row.id" class="agent-card">
             <header><AgentAvatar :name="row.name" size="medium" /><h3>{{ row.name }}</h3><t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light">{{ t(`adminAgents.${row.status}`) }}</t-tag></header>
             <p>{{ row.description || t('adminAgents.noDescription') }}</p>
-            <footer><span>{{ t('adminAgents.version', { version: row.version_counter }) }}</span><div class="actions"><t-button variant="text" :disabled="busy || editor || !row.can_maintain" @click="open(row)">{{ t('adminAgents.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="busy || editor || !row.can_maintain" @click="archive(row)">{{ t('adminAgents.archive') }}</t-button></div></footer>
+          <footer><span>{{ t('adminAgents.version', { version: row.version_counter }) }}</span><div class="actions"><t-button variant="text" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="open(row)">{{ t('adminAgents.edit') }}</t-button><t-button variant="text" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="audienceAgent = row; audienceOpen = true">{{ t('agentAudience.assign') }}</t-button><t-button variant="text" theme="danger" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="archive(row)">{{ t('adminAgents.archive') }}</t-button></div></footer>
           </article>
         </div>
         <div v-else-if="ready" class="empty"><t-icon :name="search.trim() ? 'search' : 'app'" size="40px" /><p>{{ t(search.trim() ? 'adminAgents.noMatch' : 'adminAgents.empty') }}</p></div>
       </t-loading>
       <NexusAgentEditorModal v-if="editor" :key="revision" :visible="editor" :tenant-id="tenant" :agent-id="selected" creation-scope="enterprise" @close="editor = false" @saved="load" @open-model-settings="openModelSettings" />
+      <AgentAudienceDialog v-if="audienceAgent" v-model:visible="audienceOpen" :tenant-id="tenant" :agent-id="audienceAgent.id" :agent-name="audienceAgent.name" :scope-key="`${tenant}:${audienceAgent.id}:${adminContext.revision}`" :can-manage="canManage && !!audienceAgent.can_maintain" :can-read-members="adminContext.can('members:manage')" :can-read-organization="adminContext.can('org:manage')" @saved="MessagePlugin.success(t('agentAudience.saved'))" />
     </template>
   </section>
 </template>
