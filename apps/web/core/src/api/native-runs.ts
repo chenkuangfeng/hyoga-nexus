@@ -53,6 +53,20 @@ export async function listSessions(tenantId: string): Promise<SessionView[]> {
   return data as SessionView[]
 }
 
+export interface UnknownAdmission { admission_id: string; session_id: string; run_id: string; run_status: string; interrupted_at: string; safe: boolean }
+/** Sessions held by a Run whose worker disappeared; the endpoint limits non-admins to their own Runs. */
+export async function listUnknownAdmissions(tenantId: string): Promise<UnknownAdmission[]> {
+  const data: unknown = await get(`${tenantPath(tenantId)}/admissions/unknown`)
+  if (!Array.isArray(data)) throw new Error('Unexpected unknown admission response')
+  return data.map(value => {
+    if (!isRecord(value) || typeof value.admission_id !== 'string' || typeof value.session_id !== 'string'
+        || typeof value.run_id !== 'string' || typeof value.run_status !== 'string'
+        || typeof value.interrupted_at !== 'string' || typeof value.safe !== 'boolean') throw new Error('Unexpected unknown admission response')
+    return { admission_id: value.admission_id, session_id: value.session_id, run_id: value.run_id,
+      run_status: value.run_status, interrupted_at: value.interrupted_at, safe: value.safe }
+  })
+}
+
 export async function createSession(tenantId: string, agentVersionId: string, title: string): Promise<SessionView> {
   return post<SessionView>(`${tenantPath(tenantId)}/sessions`, { agent_version_id: agentVersionId, title })
 }

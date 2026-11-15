@@ -161,6 +161,11 @@
 - [x] E6.1 `usage_ledger` 累加与用量报表（成员、智能体、模型、日期、部门）。
 - [x] E6.2 三级月度上限的准入检查。
 - [ ] E6.3 管理端企业用量与月度上限：复用 `models:manage` 报表/限额接口，提供日期与可授权分组、企业/部门/成员上限维护、确认和作用域隔离；不展示未实现的费用金额，完整真实 API 与生产构建浏览器验收保留 E2.8。
+- [ ] E2.5 企业运行状况管理端接入
+  - [x] 复用 unknown admissions 清单和解除接口，owner/admin 可见本企业阻塞会话及 session 标题、安全状态。
+  - [x] 安全与潜在副作用情形使用不同确认，明确解除不重放任务，并隔离企业/账号/角色变化。
+  - [x] 新增 `enterprise-runtime-health-administration` 规格并更新管理端/core 模块文档。
+  - [ ] 真实 worker 中断恢复、浏览器和完整生产构建验收保留 E2.8。
 - 实施说明（2026-11-12）：迁移 `d0e1f2a3b4c5_usage`；`nexus_platform/usage/service.py`；接口 `apps/api/.../http/usage.py`。Run 结束时 worker 把该 Run 的 `model.completed` 事件中归一后的用量加入当天的（企业、成员、智能体、模型）行，每个 Run 只加一次；空闲任务补记漏掉的 Run（也会逐步补记迁移前已结束的 Run）。上限按“输入 + 输出”计算，缓存计数只报告不计入；部门上限统计检查时位于该部门及其下级的成员。超出时提交 Run 返回 429 `quota_exhausted`，进行中的 Run 不受影响。按部门的报表按成员的主部门归类。测试 `tests/test_usage.py`（4 项）。
   - 局限：没有费用（金额）统计，只有 Token；上限只在提交时检查，一个 Run 内的用量可以超过剩余额度。
 

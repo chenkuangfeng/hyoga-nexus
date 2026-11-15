@@ -36,6 +36,7 @@ const router = createRouter({
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
       { path: 'models', component: () => import('./views/models/ModelsPage.vue') },
       { path: 'usage', component: () => import('./views/usage/UsagePage.vue') },
+      { path: 'runtime', component: () => import('./views/runtime/RuntimeHealthPage.vue') },
       { path: 'mcp-endpoints', component: () => import('./views/connections/EndpointsPage.vue') },
       { path: 'mcp-services', component: () => import('./views/connections/McpServicesPage.vue') },
       { path: 'storage', component: () => import('./views/storage/StoragePage.vue') },
