@@ -38,6 +38,7 @@ export function settingsQueryUnchanged(currentQuery: object, nextQuery: Settings
 export const MIGRATED_ADMIN_SECTIONS = {
   'org-structure': { target: 'organization', titleKey: 'adminOrganization.title', messageKey: 'adminMigration.organizationMoved' },
   members: { target: 'members', titleKey: 'adminMembers.title', messageKey: 'adminMigration.membersMoved' },
+  parser: { target: 'parsers', titleKey: 'adminParsers.title', messageKey: 'adminMigration.parsersMoved' },
   storage: { target: 'storage', titleKey: 'adminStorage.title', messageKey: 'adminMigration.storageMoved' },
   vectorstore: { target: 'vector-stores', titleKey: 'adminVector.title', messageKey: 'adminMigration.vectorStoreMoved' },
 } as const
@@ -47,7 +48,7 @@ export function isMigratedAdminSection(section: string): section is MigratedAdmi
   return Object.prototype.hasOwnProperty.call(MIGRATED_ADMIN_SECTIONS, section)
 }
 /** 已迁移管理功能的显式跨应用入口；目标由内部枚举决定，不接受任意外部 URL。 */
-export function adminSettingsLocation(base: string, origin: string, development: boolean, target: 'organization' | 'members' | 'audit' | 'storage' | 'vector-stores'): string {
+export function adminSettingsLocation(base: string, origin: string, development: boolean, target: 'organization' | 'members' | 'audit' | 'storage' | 'vector-stores' | 'parsers'): string {
   const path = `${base.replace(/\/+$/, '')}/admin/${target}`
   if (!development) return path
   const url = new URL(path, origin)

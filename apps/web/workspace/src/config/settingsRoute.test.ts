@@ -77,7 +77,7 @@ test('旧成员管理书签属于迁移说明，管理端成员和审计链接�
 
 test('存储与向量库旧书签保留迁移说明，目标仅来自固定枚举', async () => {
  const { isMigratedAdminSection, MIGRATED_ADMIN_SECTIONS, adminSettingsLocation } = await import('./settingsRoute')
- for (const section of ['storage', 'vectorstore'] as const) {
+ for (const section of ['storage', 'vectorstore', 'parser'] as const) {
    assert.equal(isMigratedAdminSection(section), true)
    assert.equal(normalizeSettingsSection(section), section)
    assert.deepEqual(buildSettingsRouteQuery(section, { tab: 'old', panel: 'write', unrelated: 'keep' }), { section, unrelated: 'keep' })

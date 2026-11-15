@@ -19,6 +19,7 @@ export const PHASE1_SETTINGS_SECTIONS: ReadonlySet<string> = new Set([
   'org-structure',
   'vectorstore', // 旧设置书签的 Admin 迁移说明，知识库选择器仍使用真实目录。
   'storage',
+  'parser', // 旧书签的独立 Admin 迁移说明。
 ])
 
 export function isPhase1Section(key: string): boolean {

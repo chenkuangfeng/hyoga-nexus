@@ -107,11 +107,6 @@
           <EnvVarSettings />
         </div>
 
-        <!-- 解析引擎 -->
-        <div v-if="currentSection === 'parser' && isPhase1Section('parser')" class="section">
-          <ParserEngineSettings />
-        </div>
-
         <!-- 沙箱 -->
         <div v-if="currentSection === 'sandbox' && isPhase1Section('sandbox')" class="section">
           <SandboxSettings />
@@ -163,7 +158,6 @@ import ChatHistorySettings from './ChatHistorySettings.vue'
 import NexusMemorySettings from './NexusMemorySettings.vue'
 import EnvVarSettings from './EnvVarSettings.vue'
 import NexusMemoryWorkspaceSettings from './NexusMemoryWorkspaceSettings.vue'
-import ParserEngineSettings from './ParserEngineSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
 import AdminSectionMoved from './AdminSectionMoved.vue'
 import { SETTINGS_SECTION_MIN_ROLE } from '@/config/settingsAccess'
@@ -266,7 +260,6 @@ const navItems = computed(() => {
     { key: 'websearch', icon: 'search', label: t('settings.webSearchConfig') },
     { key: 'chathistory', icon: 'chat', label: t('chatHistorySettings.title') },
     { key: 'memory', icon: 'bulletpoint', label: t('memoryWorkspaceSettings.title') },
-    { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
     { key: 'sandbox', icon: 'code', label: t('settings.sandbox.title') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
@@ -308,7 +301,6 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'parser',
         'sandbox',
         'websearch',
       ]),

@@ -23,7 +23,7 @@ function setup(t: Parameters<typeof fixture>[0], section: routes.MigratedAdminSe
 
 test('存储/向量库旧书签指向独立 Admin，无治理请求和自动跳转', async t => {
   const shared = fixture(t)
-  for (const [section, target, title] of [['storage', 'storage', 'adminStorage.title'], ['vectorstore', 'vector-stores', 'adminVector.title']] as const) {
+  for (const [section, target, title] of [['storage', 'storage', 'adminStorage.title'], ['vectorstore', 'vector-stores', 'adminVector.title'], ['parser', 'parsers', 'adminParsers.title']] as const) {
     const s = setup(t, section, undefined, shared); await flush()
     assert.equal(s.vm.destination.titleKey, title)
     assert.equal(s.vm.href, `http://127.0.0.1:5174/admin/${target}`)

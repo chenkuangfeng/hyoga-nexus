@@ -24,3 +24,5 @@
 `src/api/enterprise-agent-audience.ts` 校验智能体部门/成员受众并封装整体替换接口；`src/components/agent-editor/AgentAudienceDialog.vue` 在管理端智能体目录和工作台共享设置中复用，并按宿主应用选择 `/admin/...` 或工作台兼容路径。受众直接授予 view/run，不覆盖角色授权；候选按成员和组织目录权限分别读取，无权或失败时保留对应已有项，避免空列表覆盖。
 
 `api/enterprise-info.ts` 校验当前企业详情及可空 `code`，保留真实编码或 null；缺失或错误类型显式报响应错误。两个应用继续使用同一详情 DTO，管理端提供编码只读复制。
+
+`api/enterprise-parsers.ts` 校验企业解析目录和脱敏配置，封装管理端读写路径。全量替换时保留配置快照和兼容字段，密钥以六星占位保留或显式删除，布尔 false 与使用默认值分别提交。表单仅列出现有执行器读取的参数。

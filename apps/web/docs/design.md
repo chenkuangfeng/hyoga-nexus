@@ -169,7 +169,7 @@ MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，�
 
 ## 工作台旧模型孤立实现清理
 
-设置只挂载 Nexus 模型页，旧 WeKnora ModelSettings、ModelEditorDialog、ModelDebugDrawer 及独占的 modelProviders/modelProvidersState、modelEditorSourceState、modelCopyName、weknoraCloudModels、browserPairingOrigin 已删除。共享文案、解析器 Cloud 状态及通用 API 不按名称批量移除，依赖包仍被其他页面使用。
+设置只挂载 Nexus 模型页，旧 WeKnora ModelSettings、ModelEditorDialog、ModelDebugDrawer 及独占的 modelProviders/modelProvidersState、modelEditorSourceState、modelCopyName、weknoraCloudModels、browserPairingOrigin 已删除。共享文案及通用 API 不按名称批量移除，依赖包仍被其他页面使用。
 
 聊天工具继续通过 pageDrafts 交付无凭据模型草稿。Nexus 页面等待当前目录加载后一次消费，显式映射 vllm→vision、asr→speech；local 来源提示不支持。模型深链接按实际 profile id 定位且校验 canManage。账号/企业/基础角色变化清空旧页面和表单；对话框以 scope key 重建，关闭/卸载或目标变化使旧测试、供应商→模型写链失效，凭据不保留在重试状态。仅 provider id 用于模型失败后的复用。
 
@@ -182,3 +182,9 @@ core 的 KBStorageSettings/KBVectorStoreSettings 继续通过真实目录适配�
 ## Sandbox 表单的模板状态桥接
 
 `SandboxConfigEditorDrawer.vue` 的 Cube、E2B、Docker 配置和已存密钥标记仍由原来的 reactive 对象管理。模板通过 `connectionForms` Ref 容器读取这些同一代理，使条件分支的模板类型生成与 Vue 自动解包一致；脚本侧校验、密钥占位处理和载荷收集继续读取原对象，不复制表单状态或增加提交字段。
+
+## 企业解析配置
+
+Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路径的目录及脱敏配置，owner/admin 角色与服务端写入授权一致。PUT 是全量替换：合并服务端快照，保留兼容字段，已保存密钥使用六星占位保留或明确删除，布尔值以三态处理。DocReader、mineru_tier 和自托管 mineru_enable_ocr 等未被当前执行器消费的字段只保留，不开放编辑。
+
+保存确认与请求绑定身份代次；切换企业、账号、角色、权限上下文或卸载清空草稿，迟到响应失效。一次性新密钥提交时从表单清除，回执必须脱敏，保存结果与后续目录刷新分别反馈。MIGRATED_ADMIN_SECTIONS 将 parser 旧入口映射到独立 Admin `/parsers`，不自动跳转。

@@ -517,3 +517,14 @@ Admin 的 StoragePage 已承接本地后端列表/新增/删除/已保存测试�
 保留 storage/vectorstore 旧查询参数和知识库编辑器的 openSettings 快捷调用，统一挂载 AdminSectionMoved 迁移说明，按 currentEntries.admin 提供显式 /admin/storage 或 /admin/vector-stores 链接；没有管理入口则提示联系管理员，不自动跨应用导航、不读取目录或修改配置。迁移说明对所有有效成员可见，不受已移除写页面的旧 admin 门槛或部署能力开关阻断。标题/描述/目标使用固定枚举映射，未知键不能生成任意 URL。部门/成员和审计旧入口保持原行为。
 
 知识库编辑器的存储/向量库读取、选择和已有绑定继续使用 core 适配器，因此不删除这些公共 API、共享字段和 providerLogo。解析器等尚无完整 Admin 承接的页面留待后续；本批不扩展存储后端契约。
+
+
+### 企业解析引擎管理接入
+
+Admin `/parsers` 使用 `/api/v1/tenants/{id}/admin/knowledge/parser-engines` 与 `parser-engine-config`；GET/PUT 为已有资源别名，PUT 替换整个配置。页面入口和写入按当前 owner/admin 基础角色，服务端继续复核。客户端校验目录、可空字符串/布尔配置及既有密钥占位 `******`；不接收已知密钥字段的明文读取响应。
+
+覆盖既有 DocReader、MinerU 自建/云服务和 PaddleOCR-VL 自建/云服务字段。已存密钥用空输入表示保留，显式勾选清除才删除；新值只保留当前表单内存，发起提交后清空，失败需重填。全量替换以前次快照为基础，保留未编辑的字段和未知扩展，布尔值保留未设置/开启/关闭三态。提交前确认，身份/企业/权限变化、刷新或卸载作废确认及迟到结果，写入失败保留非密钥草稿。写入回执成功与目录刷新失败分开反馈。目录 Available 仅表示配置完整度，不能宣称网络连接验证成功。
+
+不调用尚不存在的 `/system/parser-engines/check`、`docreader/reconnect` 或 WeKnora Cloud 凭据状态。工作台移除旧 ParserEngineSettings 页面及普通导航，parser 书签走统一 Admin 迁移说明；知识库解析规则选择器与 core API 保留。
+
+配置表单仅列出现有执行器实际读取的字段。DocReader、mineru_tier 与自托管 mineru_enable_ocr 等兼容字段原样保留，不提供编辑入口，避免保存后不生效的误导。

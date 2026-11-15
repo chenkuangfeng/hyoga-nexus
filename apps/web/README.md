@@ -40,3 +40,5 @@ corepack pnpm dev:admin     # 5174/admin/
 - [设计](docs/design.md)
 - [实施任务](../../openspec/changes/2026-11-11-enterprise-saas/tasks.md)
 - [部署与反向代理](docs/nginx.example.conf)
+
+企业解析引擎治理由 Admin `/parsers` 提供，面向当前企业 owner/admin。工作台旧 parser 书签显示管理应用迁移说明；知识库内选择解析规则继续保留。目录状态表示配置是否齐全，服务连通测试仍待后端契约。
