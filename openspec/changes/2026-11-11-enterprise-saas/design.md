@@ -445,6 +445,16 @@ channel_identities / channel_session_bindings：沿用架构 2.14 的 ChannelIde
 
 删除工作台旧成员治理页及仅由它引用的 JoinApplicationsPanel，移除 members 设置导航和未使用的成员管理快捷阈值；保留 members 旧书签/内部快捷调用的迁移说明，复用旧部门迁移组件，提供显式管理端成员与审计链接，入口按当前企业 entries.admin 显示，具体权限由 admin 校准。不自动跨应用跳转，不加载成员/邀请/申请/审计接口。保留共享空间、加入企业、个人邀请、账号成员身份和退出企业，以及仍被其他模块使用的 API 与角色/审计翻译。
 
+### E2.5.5 企业成员临时停用与恢复（合同草案，待确认）
+
+现有 `tenant_memberships.status` 只有 `active` 与 `revoked`；`revoked` 表示永久移除，重新加入会复用同一成员记录。增加可逆状态 `suspended`，并存储 `suspended_at`。管理端提供 `PATCH /api/v1/tenants/{tenant_id}/admin/members/{member_id}/status`，输入 `{ "status": "active" | "suspended" }`，需要 `members:manage`，返回含状态和时间的成员 DTO。列表返回 `active` 与 `suspended`，不显示 `revoked`。
+
+停用后立即拒绝该成员的后续企业身份、成员名单、资源读取和新 Run；保留角色、部门关联、资源、审计与运行历史。已有 Run 不主动取消，其后续操作仍由既有执行时授权检查处理。恢复只把状态设回 `active`，不重置角色或部门关系。重复设置为当前状态幂等，不重复审计；实际状态转换记录 actor、目标、旧/新状态与时间。
+
+owner 的状态变更沿用现有成员治理边界：只有 owner 可变更 owner；事务锁内确保企业始终至少有一个 active owner，不满足时返回冲突。停用不等同 DELETE：现有移除接口继续将成员设为 `revoked`。已停用账号不得通过重新邀请/手工添加路径被隐式恢复，返回稳定冲突并提示使用恢复操作。企微同步不得覆盖管理端手动 `suspended` 状态；企微明确离职/移出范围仍按既有规则设为 `revoked`。
+
+管理端成员列表显示状态并为 suspended 行提供恢复入口；active 行提供带成员名称和访问影响说明的停用确认。状态变化后刷新成员数据；若操作者停用了自身且仍有其他 active owner，当前身份立即失效并重新校准入口。该方案增加数据库约束迁移、身份入口/企业选择过滤、审计事件与前端 API/UI，实施仍待确认。
+
 此批完成两个旧治理页的收尾，不代表模型、工具、存储等管理配置均迁移，也不提前宣称工作台生产产物已隔离所有管理代码；相关功能及完整构建门禁继续保留。
 
 

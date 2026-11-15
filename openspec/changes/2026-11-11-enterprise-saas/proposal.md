@@ -153,3 +153,11 @@
 随后在 `/admin/roles` 增加按部门路径选择、角色选择、范围提示、确认和结果反馈。只处理当前部门直接关联的活跃成员，不含下级；跳过 owner 与已分配成员。页面另需 `org:manage` 读取组织树，不允许手填部门 ID。不增加按部门持续继承、批量撤销、子树分配或后台新任务。
 
 本批涉及服务端权限规则变化，用户已明确确认实施，任务仍归原变更 E2.5.3.5。
+
+## E2.5.5 追加提案：企业成员临时停用与恢复（待确认）
+
+现有成员管理只支持永久移除，不能暂时阻止成员访问后再恢复。拟增加 `suspended` 成员状态与 `suspended_at` 时间，提供 `PATCH /api/v1/tenants/{tenant_id}/admin/members/{member_id}/status`（`active | suspended`）。停用即拒绝后续企业身份、资源访问与新 Run，但保留角色、部门关系、资源和历史；已开始的 Run 不自动取消，后续操作继续受执行时授权检查。恢复显式设回 active，不重置角色或部门关系。
+
+状态写入要求 `members:manage`；owner 变更仍仅限 owner，并在租户事务锁内保护至少一名 active owner。永久移除仍写为 `revoked`。邀请或手工添加不得隐式恢复 suspended 成员；企微同步不得覆盖人工停用，确认离职仍按既有规则撤销。成员列表展示 active/suspended 并提供停用确认和恢复操作。完整需求与设计见 `specs/enterprise-member-status-administration/spec.md`、`design.md` E2.5.5。
+
+此追加扩大持久化状态、身份授权和企业微信同步行为，尚未获得确认；确认前不实施代码与迁移。
