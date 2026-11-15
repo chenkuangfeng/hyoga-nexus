@@ -153,3 +153,6 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 
 管理端 `/models` 使用 `core/src/api/enterprise-models.ts` 校验企业路径下的模型设置 DTO，并过滤个人 Provider。页面按 `models:manage` 控制访问；服务端继续负责不可变版本、默认值类型匹配、密钥加密与停用治理。身份/企业/权限变化会作废旧请求。
+
+
+管理端 `/mcp-endpoints` 复用 `core/api/enterprise-connections.ts` 的企业路径 API 和严格 DTO 解析，使用 `tools:manage` 权限上下文；令牌明文仅保存在页面临时状态，身份、企业或权限代次变化会作废请求并清空秘密。知识库选项以名称呈现，提交稳定 ID；端点执行期的白名单与访问范围仍由 MCP 服务端复核。

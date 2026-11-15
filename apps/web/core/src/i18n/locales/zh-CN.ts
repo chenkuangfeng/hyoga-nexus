@@ -179,6 +179,9 @@ export default {
     save: '保存'
   },
 
+  adminConnections: {
+    description: '管理当前企业对外提供的只读 MCP 连接。', scopeHint: '连接只暴露所选只读工具和知识库。知识库范围留空时，调用者可访问其有权访问的全部知识库。', noDescription: '暂无说明。', createTitle: '创建 MCP 连接', editTitle: '编辑 MCP 连接', allowedTools: '允许 {count} 个工具', selectedKnowledge: '已选择 {count} 个知识库', saved: 'MCP 连接已更新。', deleted: 'MCP 连接已删除。', tokenRevoked: 'MCP 连接令牌已撤销。'
+  },
   adminAgents: {
     "title": "企业智能体",
     "description": "管理企业智能体的配置、发布版本与归档。",

@@ -34,6 +34,7 @@ const router = createRouter({
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
       { path: 'models', component: () => import('./views/models/ModelsPage.vue') },
+      { path: 'mcp-endpoints', component: () => import('./views/connections/EndpointsPage.vue') },
       { path: 'knowledge', component: () => import('./views/knowledge/KnowledgePage.vue') },
       { path: 'knowledge/:kbId/content', component: () => import('./views/knowledge/KnowledgeContentPage.vue') },
       { path: 'agents', component: () => import('./views/agents/AgentsPage.vue') },

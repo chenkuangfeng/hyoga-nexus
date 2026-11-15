@@ -172,6 +172,9 @@ export default {
     types: { chat: 'Chat', embedding: 'Embedding', rerank: 'Rerank', vision: 'Vision', speech: 'Speech' },
     protocols: { openai_chat_completions: 'OpenAI Chat Completions', openai_responses: 'OpenAI Responses', anthropic_messages: 'Anthropic Messages' }, save: 'Save'
   },
+  adminConnections: {
+    description: 'Manage external read-only MCP access for this enterprise.', scopeHint: 'Endpoints expose only the selected read-only tools and knowledge bases. An empty knowledge scope means all knowledge bases available to the calling identity.', noDescription: 'No description provided.', createTitle: 'Create MCP endpoint', editTitle: 'Edit MCP endpoint', allowedTools: '{count} allowed tools', selectedKnowledge: '{count} knowledge bases selected', saved: 'MCP endpoint updated.', deleted: 'MCP endpoint deleted.', tokenRevoked: 'MCP endpoint token revoked.'
+  },
   adminAgents: {
     "title": "Enterprise agents",
     "description": "Configure, publish and archive enterprise agents.",
