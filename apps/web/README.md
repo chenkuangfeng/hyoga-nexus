@@ -32,7 +32,7 @@ corepack pnpm dev:admin     # 5174/admin/
 - 生产静态部署的 Nginx 路由示例见 [nginx.example.conf](docs/nginx.example.conf)。
 - `pnpm check-i18n`：检查公共语言包；语言键扫描覆盖三个项目。
 
-完整构建与工作台类型检查需要内存充足的机器。本地约 1.9GB RAM 环境曾发生退出码 137；降低 Node 堆限制后，工作台类型检查仍触及堆上限。SFC 编译与依赖边界检查不能代替完整构建、类型检查和浏览器验收。已接入 `pnpm test:browser`：串行启动双应用并运行 Playwright。首次执行 `pnpm test:browser:install` 准备 Chromium，可通过 `test:browser:workspace` / `test:browser:admin` 单独回归；`pnpm type-check:browser` 检查测试代码。首批使用模拟 API，不能替代 E2.8 真实服务、生产包和全部业务验收；静态 `.browser.test.mjs` 仍不算浏览器测试。运行方式、覆盖范围和报告见 [浏览器回归说明](e2e/README.md)。
+构建和类型检查通过串行工具控制内存峰值：构建使用同源预打包依赖，类型检查保留全部源码/模板并按原生引用工程运行。Node 默认堆为 768MB，环境 `NODE_OPTIONS` 可覆盖；小内存机器上请依次运行类型检查、完整构建和全量测试，不并行启动这些任务。实现和限制见 [设计](docs/design.md)。浏览器测试使用 `pnpm test:browser`；生产构建后使用 `pnpm test:browser:preview`。首次执行 `pnpm test:browser:install` 准备 Chromium，`pnpm type-check:browser` 检查测试代码。模拟 API 回归不替代真实服务与全部业务验收；静态 `.browser.test.mjs` 不算浏览器测试。详见 [浏览器回归说明](e2e/README.md)。
 
 ## 文档
 

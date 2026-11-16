@@ -622,7 +622,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon } from 'tdesign-icons-vue-next'
+import AddIcon from 'tdesign-icons-vue-next/esm/components/add.js';
 import { useI18n } from 'vue-i18n'
 import ModelSelector from '@nexus-web/core/components/ModelSelector.vue'
 import SkillInstallTimeline from '@/components/SkillInstallTimeline.vue'

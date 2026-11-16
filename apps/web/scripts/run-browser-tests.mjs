@@ -5,12 +5,14 @@ import { dirname, join } from 'node:path'
 const require = createRequire(import.meta.url)
 const cli = join(dirname(require.resolve('@playwright/test/package.json')), 'cli.js')
 const args = process.argv.slice(2)
+const preview = args[0] === 'preview'
+if (preview) args.shift()
 const selected = args[0] && !args[0].startsWith('-') ? args.shift() : undefined
 if (selected && !['admin', 'workspace'].includes(selected)) throw new Error('Expected app: admin or workspace')
 const apps = selected ? [selected] : ['workspace', 'admin']
 for (const app of apps) {
   const child = spawn(process.execPath, [cli, 'test', `--project=${app}`, ...args], {
-    stdio: 'inherit', env: { ...process.env, NEXUS_E2E_APP: app },
+    stdio: 'inherit', env: { ...process.env, NEXUS_E2E_APP: app, ...(preview ? { NEXUS_E2E_PREVIEW: '1' } : {}) },
   })
   // 交给 Playwright 关闭自己启动的服务；不扫描或终止其他开发进程。
   const stop = signal => child.kill(signal)

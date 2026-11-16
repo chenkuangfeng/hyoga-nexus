@@ -19,7 +19,7 @@ function setup(t: Parameters<typeof fixture>[0]) {
     addModel: async (tenant: string) => { calls.push(`model:${tenant}`); if (failAdd) throw new Error('failed'); return {} },
     editModel: async () => {}, updateProvider: async () => {}, testDraftConnection: async () => ({ ok: true, message: 'ok' }),
   }
-  const deps = { 'tdesign-icons-vue-next': { AddIcon: {} }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { warning: (key: string) => warnings.push(key), error() {}, success() {} } },
+  const deps = { 'tdesign-icons-vue-next/esm/components/add.js': { default: {} }, 'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { warning: (key: string) => warnings.push(key), error() {}, success() {} } },
     '@nexus-web/core/stores/auth': { useAuthStore: () => auth }, 'vue-router': { useRoute: () => route },
     '@/stores/pageDrafts': { usePageDraftStore: () => drafts }, './nexusModelCards': helpers,
     '@nexus-web/core/api/nexus-models': api,

@@ -5,21 +5,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm dev:workspace",
-    "dev:workspace": "pnpm --filter @nexus-web/workspace dev",
-    "dev:admin": "pnpm --filter @nexus-web/admin dev",
-    "build": "pnpm --filter @nexus-web/workspace build && pnpm --filter @nexus-web/admin build",
-    "type-check": "pnpm --filter @nexus-web/core type-check && pnpm --filter @nexus-web/workspace type-check && pnpm --filter @nexus-web/admin type-check",
-    "test": "tsx --test --test-concurrency=1 scripts/*.test.* && pnpm --filter @nexus-web/core test && pnpm --filter @nexus-web/workspace test && pnpm --filter @nexus-web/admin test",
-    "preview": "pnpm --filter @nexus-web/workspace preview",
-    "check-i18n": "pnpm --filter @nexus-web/core exec tsx --test src/i18n/localeKeyAudit.test.ts",
-    "scan-i18n-gaps": "pnpm --filter @nexus-web/core exec tsx src/i18n/localeGapScan.ts",
-    "regenerate-i18n-locales": "pnpm --filter @nexus-web/core exec tsx src/i18n/regeneratePrunedLocales.ts",
+    "dev": "corepack pnpm dev:workspace",
+    "dev:workspace": "corepack pnpm --filter @nexus-web/workspace dev",
+    "dev:admin": "corepack pnpm --filter @nexus-web/admin dev",
+    "build": "node scripts/build.mjs",
+    "type-check": "node scripts/type-check.mjs",
+    "test": "tsx --test --test-concurrency=1 scripts/*.test.* && corepack pnpm --filter @nexus-web/core test && corepack pnpm --filter @nexus-web/workspace test && corepack pnpm --filter @nexus-web/admin test",
+    "preview": "corepack pnpm --filter @nexus-web/workspace preview",
+    "check-i18n": "corepack pnpm --filter @nexus-web/core exec tsx --test src/i18n/localeKeyAudit.test.ts",
+    "scan-i18n-gaps": "corepack pnpm --filter @nexus-web/core exec tsx src/i18n/localeGapScan.ts",
+    "regenerate-i18n-locales": "corepack pnpm --filter @nexus-web/core exec tsx src/i18n/regeneratePrunedLocales.ts",
     "test:browser": "node scripts/run-browser-tests.mjs",
     "test:browser:admin": "node scripts/run-browser-tests.mjs admin",
     "test:browser:workspace": "node scripts/run-browser-tests.mjs workspace",
     "test:browser:install": "playwright install chromium",
-    "type-check:browser": "tsc --noEmit -p tsconfig.browser.json"
+    "type-check:browser": "tsc --noEmit -p tsconfig.browser.json",
+    "test:browser:preview": "node scripts/run-browser-tests.mjs preview"
   },
   "devDependencies": {
     "@intlify/core-base": "catalog:",
@@ -61,6 +62,9 @@
       "@vue-office/pptx",
       "esbuild",
       "vue-demi"
-    ]
+    ],
+    "patchedDependencies": {
+      "tdesign-vue-next@1.20.10": "patches/tdesign-vue-next@1.20.10.patch"
+    }
   }
 }

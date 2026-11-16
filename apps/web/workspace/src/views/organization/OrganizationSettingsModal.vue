@@ -1203,7 +1203,7 @@ const memberSecondaryLabel = (m: OrganizationMember): string => {
 // rule is still better than nothing.
 const isOwnerMember = (member: OrganizationMember): boolean => {
   const ownerTenantID = orgInfo.value?.owner_tenant_id
-  if (ownerTenantID && ownerTenantID > 0) {
+  if (ownerTenantID) {
     return member.tenant_id === ownerTenantID
   }
   return member.user_id === orgInfo.value?.owner_id

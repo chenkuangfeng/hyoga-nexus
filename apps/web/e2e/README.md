@@ -25,3 +25,9 @@ Linux 缺少系统库时可先执行 `corepack pnpm exec playwright install --wi
 模拟接口通过只说明覆盖的前端行为正常，不替代服务端授权、真实解析服务、完整生产构建或 E2.8 全部业务验收。工作台迁移链接保留应用现有开发端口 5174，测试不点击它，以免访问本地其他开发服务。
 
 失败截图、trace 与 HTML 报告分别位于 `test-results/<app>/` 和 `playwright-report/<app>/`，均由 Git 忽略。可用 `corepack pnpm exec playwright show-report playwright-report/admin` 查看报告；按失败日志中的命令打开 trace。
+
+## 生产产物回归
+
+执行 `corepack pnpm build` 后运行 `corepack pnpm test:browser:preview`。也可追加 `workspace` 或 `admin` 只验证一个应用。该模式使用真实 `dist` 与应用原预览配置，不使用测试专用依赖优化；报告保存在 `playwright-report/preview-<app>/`。
+
+除相同的登录、解析保存与旧书签用例外，工作台还实际执行发布的 Mermaid 渲染、PDF.js worker 解析、完整高亮器、KaTeX 公式和 SheetJS 表格读写，并检查 VueOffice 模块加载。模拟 API 不覆盖真实服务，也不代表所有文件格式的真实文档验收完成。

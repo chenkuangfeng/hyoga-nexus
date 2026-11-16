@@ -85,13 +85,8 @@ import type { InjectionKey } from 'vue'
 // Skill manage (and similar) panels teleport compact header actions here so
 // they sit on the title row without each drawer re-declaring the chrome.
 export const SETTING_DRAWER_HEADER_ACTIONS_ID: InjectionKey<string> = Symbol('settingDrawerHeaderActionsId')
-</script>
-
-<script setup lang="ts">
-import { ref, computed, provide, useAttrs, useId, onMounted, onUnmounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-
-interface Props {
+/** 设置抽屉公开属性；声明生成与应用检查复用同一类型。 */
+export interface SettingDrawerProps {
   visible: boolean
   title: string
   description?: string
@@ -137,9 +132,16 @@ interface Props {
   placement?: 'right' | 'center'
 }
 
+</script>
+
+<script setup lang="ts">
+import { ref, computed, provide, useAttrs, useId, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+
 defineOptions({ inheritAttrs: false })
 
-const props = withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<SettingDrawerProps>(), {
   description: '',
   icon: '',
   width: '560px',

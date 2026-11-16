@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { BrowseIcon } from 'tdesign-icons-vue-next';
+import BrowseIcon from 'tdesign-icons-vue-next/esm/components/browse.js';
 import ContentPopup from './ContentPopup.vue';
 
 interface ChunkContent {

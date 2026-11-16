@@ -99,7 +99,7 @@ const authStore = useAuthStore()
 const invitations = ref<TenantInvitation[]>([])
 const loading = ref(false)
 const error = ref('')
-const acting = ref<number | null>(null)
+const acting = ref<TenantInvitation['id'] | null>(null)
 
 function roleTagTheme(role: TenantRole): 'primary' | 'warning' | 'success' | 'default' {
   switch (role) {

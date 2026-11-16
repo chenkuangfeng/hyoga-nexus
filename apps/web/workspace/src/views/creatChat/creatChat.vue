@@ -86,7 +86,7 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useI18n } from 'vue-i18n';
-import KnowledgeBaseEditorModal from '@nexus-web/core/components/knowledge-editor/KnowledgeBaseEditorModal.vue';
+import KnowledgeBaseEditorModal from '@/views/knowledge/KnowledgeBaseEditorModal.vue';
 import { useKnowledgeBaseCreationNavigation } from '@/hooks/useKnowledgeBaseCreationNavigation';
 
 const router = useRouter();

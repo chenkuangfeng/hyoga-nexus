@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CloseIcon } from 'tdesign-icons-vue-next'
+import CloseIcon from 'tdesign-icons-vue-next/esm/components/close.js';
 import type { CollaborationTaskView } from '@/utils/collaborationDisplay'
 const props = defineProps<{ tabs: Array<{ id: string; task: CollaborationTaskView }>; activeId: string; attention?: boolean; headerMode?: boolean }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string] }>()

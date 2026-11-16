@@ -120,11 +120,12 @@
 - [x] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
+  - [x] 定位构建/类型检查内存占用并修复，完成双应用完整构建、源码依赖/产物边界核对及生产预览浏览器回归。
   - [x] 接入 Playwright 命令、独立应用项目、严格接口模拟及首批登录/解析保存/旧书签浏览器回归；记录执行结果和真实环境边界。
   - [x] 修复完整 Settings 定向类型检查暴露的 SandboxConfigEditorDrawer.vue TS2339（value 属性）错误。
     - 修复记录（2026-11-15）：模板通过显式 Ref 容器 connectionForms 读取原有 Cube/E2B/Docker 和 storedSecrets 响应式代理，使条件分支的模板类型生成与自动解包一致；脚本侧验证、密钥占位及载荷收集继续读取原代理，无 API/权限/运行语义变化。属于局部类型缺陷修复。
     - 验证：包含完整 Settings 和 Sandbox 编辑器的定向 vue-tsc 通过；原有模板/网络/分配回归 19 项通过；提取真实组件状态声明进行代理身份与双向更新检查通过。锁文件安装和 diff 检查通过，临时类型配置已移除。
-  - [ ] 完成工作台全量类型检查与生产构建的环境门禁；本轮两者在 1024MB 堆下均被系统终止（exit 137），不能视为全量通过。
+  - [x] 完成工作台全量类型检查与生产构建的环境门禁；2026-11-16 原生引用工程覆盖全部文件与模板，双应用串行生产构建通过，详见本次内存门禁记录。
   - 复验（2026-11-15）：Node 22.23.4 / pnpm 10.34.9 与锁定版本一致。`pnpm build`、单独工作台构建和 `NODE_OPTIONS=--max-old-space-size=1024 pnpm --filter @nexus-web/admin build` 均在 Vite `transforming` 阶段以 exit 1 结束且无诊断，未得到可验收产物；Core 与 Admin 类型检查通过，工作台全量类型检查以 exit 1 结束且无诊断。未运行测试，E2.8 保持未完成。
 - [x] E2.9 文档：`AGENTS.md` 前端命令；`apps/web` 父模块文档与三个项目的 `README.md`；`docs/architecture.md` 1.4 与 2.15；反向代理示例；更正根 README 中的 Element Plus 描述。
   - Web 文档反映当前 Vue 3 / TypeScript / TDesign、core/workspace/admin 边界与现有管理页面；明确 embed 后端、个人 MCP endpoint 及 E2.8 验收限制。
@@ -382,3 +383,9 @@
   - 已修复浏览器发现的局部窄屏缺陷：共享登录卡片使用 border-box，整页设置路由解除背景主布局 600px 最小宽度；正常对话路由约束不变。
   - 验证：锁文件安装、测试代码严格 TypeScript 检查、命令枚举及 5 项已有路由/迁移说明回归通过。完整 `test:browser` 串行运行的 4 项 Chromium 用例通过；清理依赖解析警告后 Admin 2 项复验通过。覆盖两应用登录页、解析配置确认保存/密钥占位及 false 保留、旧 parser 显式管理链接/无治理请求，并检查 1440/720/375px 无页面横向溢出。使用当前环境匹配的 Chromium 可执行文件，接口全部模拟，不连接本地数据库。
   - 限制：完整生产构建在工作台 Vite transforming 阶段触及 768MB Node 堆上限，报 JavaScript heap out of memory / SIGABRT（exit 134）；没有产出完整双应用构建。默认开发配置、真实 API、真实服务与其他业务浏览器验收继续保留，E2.8 不整体勾选，变更不归档。
+
+- E2.8 内存门禁批（2026-11-16）：重型依赖串行预打包为同源 ESM，共享唯一官方 Vue 运行时；Mermaid 发布完整官方模块闭包，PDF worker 与 wasm 保留。TDesign 补丁只调整两处类型引用，应用图标改为原组件子路径。类型检查使用原生引用工程：core 完整检查，workspace 456 个业务文件（含 214 个 Vue 模板）分 50 组，admin 38 个业务文件分 3 组，保留严格选项、全局声明与循环依赖约束；声明依赖解析审计及保留旧声明后的重建检查通过。
+  - 修复完整类型检查发现的 UUID 企业身份比较、owner 判断、浏览器定时器类型、共享组件声明生成及知识库编辑器宿主参数；清理已失效桌面更新调用和过时测试断言。
+  - 验证：固定锁文件安装通过；完整 `corepack pnpm type-check`、浏览器测试类型检查通过；完整 `corepack pnpm test` 共 2181 项，2176 项通过、5 项跳过、0 失败。`corepack pnpm build` 串行产出 workspace/dist 与 admin/dist，分别转换 1238/439 个模块、耗时 55.76/27.47 秒；两应用实际模块图互不引用对方源码。
+  - 生产浏览器：`corepack pnpm test:browser:preview` 的 workspace 3 项、admin 2 项全部通过；包括实际生产依赖的 Mermaid 渲染、PDF worker 文本解析、完整高亮器/KaTeX/SheetJS 执行和 VueOffice 加载，以及现有登录/解析保存/旧入口窄屏回归。API 明确模拟，不访问本地数据库。
+  - 环境与范围：约 1.9GB RAM、4GB Swap，Node 默认堆 768MB；构建与全量测试重叠曾触发系统 OOM，改为分别串行后通过。仍有大文件分块提示。真实 API、真实外部服务、全部业务浏览器覆盖及剩余治理功能清理继续保留 E2.8；不整体勾选父任务或归档变更。`nexus.db` 不纳入提交。

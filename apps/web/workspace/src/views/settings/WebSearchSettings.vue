@@ -311,7 +311,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAssistantDataChange } from '@nexus-web/core/utils/assistantDataChange'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { AddIcon } from 'tdesign-icons-vue-next'
+import AddIcon from 'tdesign-icons-vue-next/esm/components/add.js';
 import {
   listWebSearchProviderTypes,
   createWebSearchProvider,

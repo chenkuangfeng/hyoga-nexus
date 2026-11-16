@@ -224,10 +224,8 @@ const hasConfigChanged = (): boolean => {
 const saveConfig = async () => {
   if (!hasConfigChanged()) return
   try {
-    const response = await updateTenantRetrievalConfig({ ...localConfig })
-    if (response.data) {
-      initialConfig = { ...localConfig }
-    }
+    await updateTenantRetrievalConfig({ ...localConfig })
+    initialConfig = { ...localConfig }
     MessagePlugin.success(t('retrievalSettings.toasts.saveSuccess'))
   } catch (error: any) {
     console.error('Failed to save retrieval config:', error)

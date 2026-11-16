@@ -1,8 +1,11 @@
 import { fileURLToPath, URL } from 'node:url'
 import { resolve, dirname } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { copyPdfJsWasm } from './scripts/copy-pdfjs-wasm.mjs'
+import { bundledMermaid } from './scripts/bundled-mermaid'
+import { prebundledVendors, type BrowserVendor } from './scripts/prebundled-vendors'
+import { buildBoundaries } from './scripts/build-boundaries'
 import { createRequire } from 'node:module'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -89,6 +92,36 @@ function pdfJsWasmAssets(): Plugin {
   }
 }
 
+/** 使用依赖自身的 ESM 入口，保留全部导出；VueOffice 明确使用同一 Vue 3 入口。 */
+function browserImportEntry(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return
+  const conditions = value as Record<string, unknown>
+  for (const key of ['browser', 'import', 'default']) {
+    const entry = browserImportEntry(conditions[key])
+    if (entry) return entry
+  }
+}
+
+function browserVendor(name: string, entry?: string): BrowserVendor {
+  // 某些发行包不导出 package.json，从真实入口向上定位其清单。
+  let directory = dirname(require.resolve(name))
+  while (true) {
+    const path = resolve(directory, 'package.json')
+    if (existsSync(path)) {
+      const manifest = JSON.parse(readFileSync(path, 'utf8')) as { name: string; version: string; module?: string; exports?: unknown }
+      if (manifest.name === name) {
+        const exports = manifest.exports && typeof manifest.exports === 'object' ? manifest.exports as Record<string, unknown> : undefined
+        const module = browserImportEntry(exports?.['.'] ?? manifest.exports) || manifest.module
+        return { name, version: manifest.version, entry: entry || (module ? resolve(directory, module) : require.resolve(name)) }
+      }
+    }
+    const parent = dirname(directory)
+    if (parent === directory) throw new Error(`browser_vendor_manifest_missing:${name}`)
+    directory = parent
+  }
+}
+
 /** 创建共享构建配置，保持两个应用的独立入口、部署路径和相同的 API 代理行为。 */
 export function createWebConfig(app: 'workspace' | 'admin') {
   const appRoot = resolve(__dirname, app)
@@ -150,6 +183,16 @@ export function createWebConfig(app: 'workspace' | 'admin') {
       vueJsx(),
       embedHtmlDevFallback(),
       pdfJsWasmAssets(),
+      buildBoundaries(__dirname, app),
+      bundledMermaid(dirname(require.resolve('mermaid')), (require('mermaid/package.json') as { version: string }).version),
+      prebundledVendors(
+        browserVendor('vue', resolve(dirname(require.resolve('vue/package.json')), 'dist/vue.runtime.esm-browser.prod.js')),
+        browserVendor('vue-demi'),
+        [browserVendor('tdesign-vue-next'), browserVendor('highlight.js'), browserVendor('katex'),
+          browserVendor('xlsx'), browserVendor('@vue-office/pptx', resolveVueOfficePptxEntry()),
+          { ...browserVendor('pdfjs-dist', require.resolve('pdfjs-dist/legacy/build/pdf.mjs')), name: 'pdfjs-dist/legacy/build/pdf.mjs' },
+          { ...browserVendor('pdfjs-dist', require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')), name: 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url' }],
+      ),
     ],
     resolve: {
       dedupe: ['vue', 'vue-demi'],

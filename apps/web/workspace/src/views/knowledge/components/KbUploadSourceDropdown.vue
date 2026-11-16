@@ -69,7 +69,12 @@
 import { ref, computed, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, FileAddIcon, UploadIcon, FolderAddIcon, LinkIcon, EditIcon } from 'tdesign-icons-vue-next'
+import AddIcon from 'tdesign-icons-vue-next/esm/components/add.js';
+import FileAddIcon from 'tdesign-icons-vue-next/esm/components/file-add.js';
+import UploadIcon from 'tdesign-icons-vue-next/esm/components/upload.js';
+import FolderAddIcon from 'tdesign-icons-vue-next/esm/components/folder-add.js';
+import LinkIcon from 'tdesign-icons-vue-next/esm/components/link.js';
+import EditIcon from 'tdesign-icons-vue-next/esm/components/edit.js';
 import { filterUploadFiles } from '../utils/uploadSources'
 
 const props = withDefaults(defineProps<{

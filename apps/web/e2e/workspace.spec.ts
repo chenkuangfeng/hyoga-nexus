@@ -28,7 +28,7 @@ test('旧解析书签只显示显式管理链接，不读取治理配置', async
   await page.goto('/platform/settings?section=parser')
   const link = page.locator('a[href$="/admin/parsers"]')
   await expect(link).toBeVisible()
-  await expect(link).toHaveAttribute('href', 'http://127.0.0.1:5174/admin/parsers')
+  await expect(link).toHaveAttribute('href', process.env.NEXUS_E2E_PREVIEW === '1' ? '/admin/parsers' : 'http://127.0.0.1:5174/admin/parsers')
   await expect(page).toHaveURL(/5193\/platform\/settings\?section=parser$/)
   expect(api.requests.some(path => /parser-engine|\/admin\//.test(path))).toBe(false)
   await expectResponsive(page)

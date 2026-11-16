@@ -9,5 +9,5 @@ const auth = useAuthStore(), ui = useUIStore()
 function openSettings(section:string, tab?:string) { ui.openSettings(section, tab) }
 </script>
 <template>
-  <SharedKnowledgeBaseEditorModal v-bind="props" :key="String(auth.effectiveTenantId) + ':' + auth.user?.id" :tenant-id="String(auth.effectiveTenantId || '')" :initial-section="ui.kbEditorInitialSection" :settings-visible="ui.showSettingsModal" @open-settings="openSettings" @update:visible="emit('update:visible', $event)" @success="emit('success', $event)" />
+  <SharedKnowledgeBaseEditorModal v-bind="props" :key="String(auth.effectiveTenantId) + ':' + auth.user?.id" :tenant-id="String(auth.effectiveTenantId || '')" :initial-section="ui.kbEditorInitialSection ?? undefined" :settings-visible="ui.showSettingsModal" @open-settings="openSettings" @update:visible="emit('update:visible', $event)" @success="emit('success', $event)" />
 </template>

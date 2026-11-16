@@ -111,7 +111,7 @@ import { useRoute } from 'vue-router'
 import { usePageDraftStore, type ModelFormDraft } from '@/stores/pageDrafts'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon } from 'tdesign-icons-vue-next'
+import AddIcon from 'tdesign-icons-vue-next/esm/components/add.js';
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
   deleteModel, getModelSettings, setDefaultModel, testSavedConnection,

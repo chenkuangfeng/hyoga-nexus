@@ -51,7 +51,7 @@
 - **生产构建**：`pnpm build`（串行产出 `workspace/dist` 和 `admin/dist`）
 - **单元与边界测试**：`pnpm test`
 - **预览生产构建**：`pnpm preview`
-- **浏览器测试**：`pnpm test:browser` 串行运行两个应用的 Playwright 回归，首次先执行 `pnpm test:browser:install`；当前模拟接口用例不替代 E2.8 真实服务和生产包验收，详见 [Web 使用说明](apps/web/README.md)。
+- **浏览器测试**：`pnpm test:browser` 串行运行两个应用的 Playwright 回归，首次先执行 `pnpm test:browser:install`；生产构建后可执行 `pnpm test:browser:preview` 验证真实产物；模拟接口用例不替代 E2.8 真实服务与完整业务验收，详见 [Web 使用说明](apps/web/README.md)。
 
 ### 本地运行（换一台电脑时）
 

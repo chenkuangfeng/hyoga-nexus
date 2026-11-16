@@ -385,7 +385,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, DeleteIcon, FolderIcon } from 'tdesign-icons-vue-next'
+import AddIcon from 'tdesign-icons-vue-next/esm/components/add.js';
+import DeleteIcon from 'tdesign-icons-vue-next/esm/components/delete.js';
+import FolderIcon from 'tdesign-icons-vue-next/esm/components/folder.js';
 import { useI18n } from 'vue-i18n'
 import SandboxSkillsPanel from '@/components/SandboxSkillsPanel.vue'
 import SkillFilesDrawer from '@/components/SkillFilesDrawer.vue'

@@ -84,7 +84,7 @@
 import ChatTimelineIcon from '@/components/ChatTimelineIcon.vue'
 import { computed, inject, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { CheckIcon } from 'tdesign-icons-vue-next'
+import CheckIcon from 'tdesign-icons-vue-next/esm/components/check.js';
 import { useI18n } from 'vue-i18n'
 import { resolveAgentPrompt } from '@nexus-web/core/api/mcp-service'
 import { useNexusChatActions } from '@/composables/nexusChatActions'

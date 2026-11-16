@@ -313,9 +313,9 @@ const showTenantSwitcher = computed(() => {
   return switchableMemberships.value.length >= 1
 })
 
-const isCurrentTenant = (id: number) => {
+const isCurrentTenant = (id: Membership['tenant_id']) => {
   const active = authStore.effectiveTenantId
-  return active != null && Number(active) === Number(id)
+  return active != null && String(active) === String(id)
 }
 
 const tenantDisplayName = (m: Membership) =>

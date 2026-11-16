@@ -61,7 +61,7 @@ async function fixture(initial: SkillCatalogItem[], host = false) {
     '@nexus-web/core/utils/index': {},
     '@/types/mention': { SKILL_ICON: 'tools' },
     '@nexus-web/core/utils/assistantDataChange': { useAssistantDataChange() {} },
-    'tdesign-icons-vue-next': {},
+    'tdesign-icons-vue-next/esm/components/add.js': {}, 'tdesign-icons-vue-next/esm/components/delete.js': {}, 'tdesign-icons-vue-next/esm/components/folder.js': {},
   }
   runInNewContext(compiled, {
     exports,

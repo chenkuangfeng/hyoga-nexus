@@ -194,3 +194,15 @@ Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路�
 根包维护 Playwright 和独立类型检查配置，`scripts/run-browser-tests.mjs` 按应用串行启动，`playwright.config.ts` 仅为当前项目启动对应 Vite 服务，不复用其他开发进程。测试使用真实路由与 Vue/TDesign；测试 Vite 配置仅限制依赖扫描/预打包，仍复用应用配置且不替换业务模块。`e2e/fixtures.ts` 统一隔离浏览器身份、明确模拟 API、捕获未声明请求和页面脚本错误。失败截图、trace、HTML 报告按应用归档并由 Git 忽略；浏览器路径可由环境提供，仓库不写机器专属路径。
 
 首批回归修复共享登录卡片的 border-box 缺失，以及整页设置路由背后主布局 600px 最小宽度造成的窄屏溢出；后者仅调整设置路由，不改变正常对话页面布局约束。
+
+## 构建与类型检查资源控制
+
+`build.mjs` 逐个构建两个应用。`prebundled-vendors.ts` 在主 Rollup 图之前使用同版本 esbuild 串行预打包 TDesign、完整高亮器、KaTeX、SheetJS、VueOffice、PDF.js 和 worker，发布同源、带内容摘要的 ESM。所有模块共用同一官方 Vue 生产运行时与 VueDemi；检测到额外响应式运行时即失败。TDesign CSS 仍由两应用 main.ts 导入；其他预打包依赖若出现未处理 CSS 则失败。VueOffice 保持 Vue 3 入口，PDF worker URL 与 wasm 复制流程保留。Mermaid 发布官方浏览器 ESM 的完整模块闭包，统一 .js 扩展与相对引用，不依赖 CDN。
+
+`build-boundaries.ts` 检查实际生产模块图，禁止工作台包含 admin/src，反向同样禁止。它验证应用源码边界，不代替剩余企业治理功能迁移。
+
+`type-check.mjs` 先完整检查 core 并生成临时声明，然后按原 tsconfig 枚举应用的全部源文件。`type-projects.mjs` 根据静态/动态导入和类型导入构建依赖图，将强连通分量保留在同一工程，按依赖优先的原生 TypeScript 引用工程依次运行 vue-tsc。每个业务源文件恰为一个工程的根文件，全部全局声明与模板检查保留；不使用 noCheck 或模板跳过选项。每个编译进程结束后释放模板虚拟代码，临时声明和构建信息仅在各包 node_modules/.cache/nexus-types。本组根文件的别名始终指向源码，只有已检查的依赖使用声明，防止重建时读取自身旧声明并覆盖输入。
+
+声明保留原包的依赖解析位置；`verify-type-resolution.mjs` 验证公共声明的包引用可解析，防止依赖丢失后退化为 any。TDesign 仅有两处类型子路径补丁，见 patches/README.md。此方案采用 Vue 支持的 vue-tsc 声明生成与 [TypeScript 项目引用](https://www.typescriptlang.org/docs/handbook/project-references.html)，不修改业务权限或运行时契约。
+
+Node 默认堆为 768MB，Go 预打包器默认 GOMEMLIMIT=192MiB/GOMAXPROCS=2，均可通过已有环境覆盖；在小内存机器上，构建、类型检查、全量测试与生产浏览器回归应依次执行。子进程被信号终止时会明确输出信号和对应退出码。

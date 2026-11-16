@@ -95,7 +95,7 @@ const tenantListRef = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 
 const loading = ref(false)
-const searchTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const searchTimer = ref<number | null>(null)
 
 const selectedTenantId = computed(() => authStore.selectedTenantId)
 // home 空间 id 来自 user.tenant_id（注册时分配、永不变）。不要读

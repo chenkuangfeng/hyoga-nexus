@@ -246,7 +246,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useI18n } from 'vue-i18n';
 import { useUIStore } from '@/stores/ui';
-import KnowledgeBaseEditorModal from '@nexus-web/core/components/knowledge-editor/KnowledgeBaseEditorModal.vue';
+import KnowledgeBaseEditorModal from '@/views/knowledge/KnowledgeBaseEditorModal.vue';
 import { useKnowledgeBaseCreationNavigation } from '@/hooks/useKnowledgeBaseCreationNavigation';
 import { useChatStreamHandler, isAwaitingInput, isPromptCard } from '@/composables/useChatStreamHandler';
 import { useChatScrollFollow } from '@/composables/useChatScrollFollow';

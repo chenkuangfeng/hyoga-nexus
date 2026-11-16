@@ -53,6 +53,15 @@ import {
   reviewMemberCountDelta
 } from './organizationState'
 
+/** 指定需要失效的组织资源缓存，不改变其他资源快照。 */
+export interface InvalidateOrganizationDataOptions {
+  organizations?: boolean
+  sharedKnowledgeBases?: boolean
+  sharedAgents?: boolean
+  searchableOrganizations?: boolean
+  excludeSearchableOrganizationId?: string
+}
+
 export const useOrganizationStore = defineStore('organization', () => {
   // State
   const organizations = ref<Organization[]>([])
@@ -507,13 +516,7 @@ export const useOrganizationStore = defineStore('organization', () => {
     return sharedAgents.value
   }
 
-  interface InvalidateOrganizationDataOptions {
-    organizations?: boolean
-    sharedKnowledgeBases?: boolean
-    sharedAgents?: boolean
-    searchableOrganizations?: boolean
-    excludeSearchableOrganizationId?: string
-  }
+
 
   function invalidateSearchableOrganizations(organizationId?: string) {
     searchableOrganizationCache.clear()

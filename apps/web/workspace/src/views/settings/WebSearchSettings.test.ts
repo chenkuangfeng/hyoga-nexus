@@ -13,7 +13,7 @@ test('assistant provider changes refresh settings and the shared picker snapshot
   const { vm, close } = f.component(new URL('./WebSearchSettings.vue', import.meta.url), {
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     'tdesign-vue-next': { MessagePlugin: { error: assert.fail } },
-    'tdesign-icons-vue-next': {},
+    'tdesign-icons-vue-next/esm/components/add.js': {}, 'tdesign-icons-vue-next/esm/components/delete.js': {}, 'tdesign-icons-vue-next/esm/components/folder.js': {},
     '@nexus-web/core/stores/auth': { useAuthStore: () => ({ hasRole: () => true }) },
     '@nexus-web/core/stores/chatResources': { useChatResourcesStore: () => resources },
     '@/components/settings/useConfirmDelete': { useConfirmDelete: () => ({}) },

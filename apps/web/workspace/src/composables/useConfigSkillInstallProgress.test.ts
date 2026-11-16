@@ -202,7 +202,7 @@ async function panelFixture(
       if (name === '@/utils/skillUpgrade') return skillUpgrade
       if (name === '@nexus-web/core/utils/assistantDataChange') return { useAssistantDataChange() {} }
       if (name === '@/views/settings/envVarState') return { skillHasDeclaredEnvs: () => false }
-      if (name.endsWith('.vue') || ['@/types/mention', '@nexus-web/core/utils/index', 'tdesign-icons-vue-next'].includes(name)) return { default: {}, SETTING_DRAWER_HEADER_ACTIONS_ID: 'header' }
+      if (name.startsWith('tdesign-icons-vue-next/esm/components/') || name.endsWith('.vue') || ['@/types/mention', '@nexus-web/core/utils/index', 'tdesign-icons-vue-next'].includes(name)) return { default: {}, SETTING_DRAWER_HEADER_ACTIONS_ID: 'header' }
       throw new Error(`Unexpected import: ${name}`)
     },
   })

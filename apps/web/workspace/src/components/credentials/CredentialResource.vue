@@ -157,7 +157,8 @@ export interface CredentialResourceApi<K extends string = string> {
   remove: (field: K) => Promise<void>
 }
 
-interface Props {
+/** 凭据表单的公开泛型属性，字段键与 API/meta 保持同一约束。 */
+export interface CredentialResourceProps<K extends string = string> {
   fields: CredentialFieldDef<K>[]
   api: CredentialResourceApi<K>
   // Initial per-field "configured?" map, sourced from the parent resource's
@@ -166,15 +167,16 @@ interface Props {
   meta: Record<K, { configured: boolean }>
 }
 
-interface Emits {
+/** 成功保存或删除后的资源刷新通知。 */
+export interface CredentialResourceEmits {
   // Fires after every successful save or remove so the parent can refresh
   // any derived view (e.g. badges that depend on credential state) or just
   // reload the main resource to keep `meta` in sync.
   (e: 'changed'): void
 }
 
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
+const props = defineProps<CredentialResourceProps<K>>()
+const emit = defineEmits<CredentialResourceEmits>()
 const { t } = useI18n()
 
 type State = 'configured' | 'unconfigured' | 'editing'

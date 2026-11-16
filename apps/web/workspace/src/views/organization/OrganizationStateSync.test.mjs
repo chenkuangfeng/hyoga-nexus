@@ -45,14 +45,14 @@ test('organization settings writes use store actions', () => {
   }
 })
 
-test('knowledge base and agent share editors use store actions', () => {
+test('knowledge base shares use store actions and agent shares use the dedicated API', () => {
   assert.match(kbShareSource, /orgStore\.shareKnowledgeBase\(/)
   assert.match(kbShareSource, /orgStore\.unshareKnowledgeBase\(/)
   assert.match(kbShareSource, /orgStore\.changeKnowledgeBaseSharePermission\(/)
   // 智能体共享已改为直接调用 agent-share API（见 AgentShareSettings.vue 与 api/agent-share）。
   assert.match(agentShareSource, /from '@nexus-web\/core\/api\/agent-share\/index'/)
-  assert.match(agentShareSource, /await shareAgent\(currentTenantId/)
-  assert.match(agentShareSource, /await unshareAgent\(currentTenantId/)
+  assert.match(agentShareSource, /await shareAgent\(/)
+  assert.match(agentShareSource, /await unshareAgent\(/)
 })
 
 test('store invalidates all affected organization caches after sharing', () => {

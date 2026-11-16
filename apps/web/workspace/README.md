@@ -50,3 +50,5 @@
 企业解析参数由 Admin `/parsers` 承接；旧 `?section=parser` 书签显示迁移说明，有 Admin 入口的身份可显式打开独立管理应用。旧 ParserEngineSettings 已删除，知识库中的解析规则选择继续保留。检测、DocReader 重连及 WeKnora Cloud 凭据状态没有现行接口，不提供操作。
 
 浏览器回归：在 Web 根目录执行 `corepack pnpm test:browser:workspace`，覆盖真实登录页及旧解析书签的迁移说明；使用模拟 API，不替代真实服务验收。准备步骤与报告位置见 [回归说明](../e2e/README.md)。
+
+构建和类型检查命令由 Web 根的串行工具执行；本应用 type-check 会先校验 core，再逐个运行覆盖全部源文件的原生引用工程。生成声明仅存于本包 node_modules 缓存。生产构建后可在 Web 根运行 `corepack pnpm test:browser:preview workspace` 验证真实产物；完整流程见 [Web 设计](../docs/design.md)。
