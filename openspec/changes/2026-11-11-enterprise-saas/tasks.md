@@ -120,6 +120,7 @@
 - [x] E2.7 外部向量库与存储后端连接接入网络出口策略，并补私有地址被拒的测试。
   - 实施说明（2026-11-12）：`knowledge/connections.py` 在保存与测试向量库、原文件存储、图存储时检查地址：`url`、`dsn`、`endpoint` 的主机必须全部解析为公网地址，否则须列入 `[model_network].private_host_allowlist`。**追加**：发现企业管理员可以新建以任意服务器路径为存储的 `sqlite` 向量库与 `local` 原文件存储，SaaS 下等于读写宿主机文件，现默认拒绝，`[knowledge].allow_tenant_local_stores = true` 时放行（只适合单企业部署）。局限：只在保存与测试时检查，不对之后的每次连接固定地址（DNS 之后变化不会被发现）。`/auth/me` 与登录响应的每个成员身份增加 `entries`（`workspace`，有治理权限时加 `admin`）。测试 `tests/test_store_connections.py`。
 - [ ] E2.8 构建与测试：`pnpm build` 产出两份产物且工作台不含管理后台代码；`pnpm type-check`、`pnpm test`、两个应用的浏览器测试；记录本机构建的内存情况。
+  - [x] 接入 Playwright 命令、独立应用项目、严格接口模拟及首批登录/解析保存/旧书签浏览器回归；记录执行结果和真实环境边界。
   - [x] 修复完整 Settings 定向类型检查暴露的 SandboxConfigEditorDrawer.vue TS2339（value 属性）错误。
     - 修复记录（2026-11-15）：模板通过显式 Ref 容器 connectionForms 读取原有 Cube/E2B/Docker 和 storedSecrets 响应式代理，使条件分支的模板类型生成与自动解包一致；脚本侧验证、密钥占位及载荷收集继续读取原代理，无 API/权限/运行语义变化。属于局部类型缺陷修复。
     - 验证：包含完整 Settings 和 Sandbox 编辑器的定向 vue-tsc 通过；原有模板/网络/分配回归 19 项通过；提取真实组件状态声明进行代理身份与双向更新检查通过。锁文件安装和 diff 检查通过，临时类型配置已移除。
@@ -376,3 +377,8 @@
 - E2.5.3.3 解析引擎批（2026-11-15）：Admin `/parsers` 接入现有管理端目录和全量替换配置接口，按 owner/admin 授权。四类已实现解析器使用实际生效参数；密钥保留/显式清除/轮换、布尔三态、保存确认及身份代次隔离已实现。工作台旧 ParserEngineSettings 删除，旧 parser 书签走独立管理应用迁移说明，知识库解析规则选择保留。
   - 验证：依赖锁定安装通过；57 项前端行为、兼容入口、目录边界和多语言测试，以及 8 项后端解析引擎测试通过；新页面及客户端定向 vue-tsc 通过。真实 Admin 应用在接口模拟下完成确认保存、密钥占位与 false 保留、1440/720/375px 布局验证，无页面脚本错误。
   - 限制：完整 Admin 类型检查及生产构建被系统终止（exit 137）；完整构建、真实解析服务连接和真实 API 端到端验收继续保留 E2.8，不整体勾选父任务。
+
+- E2.8 浏览器回归入口批（2026-11-16）：Web 根包通过 catalog 锁定 Playwright，新增 `test:browser`、按应用运行/安装及测试类型检查命令。默认逐个启动实际 workspace/admin Vite 应用，单 worker 执行，不复用未知进程；测试只限定依赖扫描/预打包，未替换路由、Vue/TDesign 或业务模块。严格模拟已声明 API，未声明请求与页面脚本错误使测试失败，失败 trace/截图与按应用 HTML 报告由 Git 忽略。
+  - 已修复浏览器发现的局部窄屏缺陷：共享登录卡片使用 border-box，整页设置路由解除背景主布局 600px 最小宽度；正常对话路由约束不变。
+  - 验证：锁文件安装、测试代码严格 TypeScript 检查、命令枚举及 5 项已有路由/迁移说明回归通过。完整 `test:browser` 串行运行的 4 项 Chromium 用例通过；清理依赖解析警告后 Admin 2 项复验通过。覆盖两应用登录页、解析配置确认保存/密钥占位及 false 保留、旧 parser 显式管理链接/无治理请求，并检查 1440/720/375px 无页面横向溢出。使用当前环境匹配的 Chromium 可执行文件，接口全部模拟，不连接本地数据库。
+  - 限制：完整生产构建在工作台 Vite transforming 阶段触及 768MB Node 堆上限，报 JavaScript heap out of memory / SIGABRT（exit 134）；没有产出完整双应用构建。默认开发配置、真实 API、真实服务与其他业务浏览器验收继续保留，E2.8 不整体勾选，变更不归档。

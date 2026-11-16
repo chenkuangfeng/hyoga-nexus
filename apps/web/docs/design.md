@@ -188,3 +188,9 @@ core 的 KBStorageSettings/KBVectorStoreSettings 继续通过真实目录适配�
 Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路径的目录及脱敏配置，owner/admin 角色与服务端写入授权一致。PUT 是全量替换：合并服务端快照，保留兼容字段，已保存密钥使用六星占位保留或明确删除，布尔值以三态处理。DocReader、mineru_tier 和自托管 mineru_enable_ocr 等未被当前执行器消费的字段只保留，不开放编辑。
 
 保存确认与请求绑定身份代次；切换企业、账号、角色、权限上下文或卸载清空草稿，迟到响应失效。一次性新密钥提交时从表单清除，回执必须脱敏，保存结果与后续目录刷新分别反馈。MIGRATED_ADMIN_SECTIONS 将 parser 旧入口映射到独立 Admin `/parsers`，不自动跳转。
+
+## 浏览器回归
+
+根包维护 Playwright 和独立类型检查配置，`scripts/run-browser-tests.mjs` 按应用串行启动，`playwright.config.ts` 仅为当前项目启动对应 Vite 服务，不复用其他开发进程。测试使用真实路由与 Vue/TDesign；测试 Vite 配置仅限制依赖扫描/预打包，仍复用应用配置且不替换业务模块。`e2e/fixtures.ts` 统一隔离浏览器身份、明确模拟 API、捕获未声明请求和页面脚本错误。失败截图、trace、HTML 报告按应用归档并由 Git 忽略；浏览器路径可由环境提供，仓库不写机器专属路径。
+
+首批回归修复共享登录卡片的 border-box 缺失，以及整页设置路由背后主布局 600px 最小宽度造成的窄屏溢出；后者仅调整设置路由，不改变正常对话页面布局约束。

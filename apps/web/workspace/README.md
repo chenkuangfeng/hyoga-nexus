@@ -48,3 +48,5 @@
 ## 企业解析引擎配置
 
 企业解析参数由 Admin `/parsers` 承接；旧 `?section=parser` 书签显示迁移说明，有 Admin 入口的身份可显式打开独立管理应用。旧 ParserEngineSettings 已删除，知识库中的解析规则选择继续保留。检测、DocReader 重连及 WeKnora Cloud 凭据状态没有现行接口，不提供操作。
+
+浏览器回归：在 Web 根目录执行 `corepack pnpm test:browser:workspace`，覆盖真实登录页及旧解析书签的迁移说明；使用模拟 API，不替代真实服务验收。准备步骤与报告位置见 [回归说明](../e2e/README.md)。

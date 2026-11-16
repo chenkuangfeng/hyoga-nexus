@@ -528,3 +528,9 @@ Admin `/parsers` 使用 `/api/v1/tenants/{id}/admin/knowledge/parser-engines` �
 不调用尚不存在的 `/system/parser-engines/check`、`docreader/reconnect` 或 WeKnora Cloud 凭据状态。工作台移除旧 ParserEngineSettings 页面及普通导航，parser 书签走统一 Admin 迁移说明；知识库解析规则选择器与 core API 保留。
 
 配置表单仅列出现有执行器实际读取的字段。DocReader、mineru_tier 与自托管 mineru_enable_ocr 等兼容字段原样保留，不提供编辑入口，避免保存后不生效的误导。
+
+### 双应用浏览器回归
+
+Playwright 由 Web 根包管理，使用实际 Vue/TDesign 应用。workspace/admin 使用独立测试端口，测试项目按应用分组并单 worker 串行执行以限制内存。测试默认自行启动服务且不复用未知进程，支持单应用项目筛选。凭据与业务 API 在浏览器上下文中模拟，不接触本地数据库；未声明的 API 请求显式返回错误并使测试失败。测试 Vite 配置只限定依赖扫描/预打包，不替换路由或业务模块，默认开发/生产配置的完整验收继续单独保留。浏览器使用 Playwright 安装命令准备，受限环境可指定 Chromium 可执行文件。失败保留 trace/截图，产物不提交。
+
+首批窄屏回归同时修复两处局部样式缺陷：共享登录卡片显式使用 border-box，避免工作台中 padding 叠加宽度；仅在整页设置路由解除背景主布局的桌面最小宽度，其他对话路由约束不变。

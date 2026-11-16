@@ -14,10 +14,16 @@
     "preview": "pnpm --filter @nexus-web/workspace preview",
     "check-i18n": "pnpm --filter @nexus-web/core exec tsx --test src/i18n/localeKeyAudit.test.ts",
     "scan-i18n-gaps": "pnpm --filter @nexus-web/core exec tsx src/i18n/localeGapScan.ts",
-    "regenerate-i18n-locales": "pnpm --filter @nexus-web/core exec tsx src/i18n/regeneratePrunedLocales.ts"
+    "regenerate-i18n-locales": "pnpm --filter @nexus-web/core exec tsx src/i18n/regeneratePrunedLocales.ts",
+    "test:browser": "node scripts/run-browser-tests.mjs",
+    "test:browser:admin": "node scripts/run-browser-tests.mjs admin",
+    "test:browser:workspace": "node scripts/run-browser-tests.mjs workspace",
+    "test:browser:install": "playwright install chromium",
+    "type-check:browser": "tsc --noEmit -p tsconfig.browser.json"
   },
   "devDependencies": {
     "@intlify/core-base": "catalog:",
+    "@playwright/test": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",

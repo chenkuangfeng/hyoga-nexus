@@ -713,6 +713,7 @@ onMounted(async () => {
 }
 
 .form-card {
+  box-sizing: border-box;
   width: 100%;
   max-width: 400px;
   padding: 32px;
