@@ -52,3 +52,5 @@
 浏览器回归：在 Web 根目录执行 `corepack pnpm test:browser:workspace`，覆盖真实登录页及旧解析书签的迁移说明；使用模拟 API，不替代真实服务验收。准备步骤与报告位置见 [回归说明](../e2e/README.md)。
 
 构建和类型检查命令由 Web 根的串行工具执行；本应用 type-check 会先校验 core，再逐个运行覆盖全部源文件的原生引用工程。生成声明仅存于本包 node_modules 缓存。生产构建后可在 Web 根运行 `corepack pnpm test:browser:preview workspace` 验证真实产物；完整流程见 [Web 设计](../docs/design.md)。
+
+提供方卡片样式、SVG 和查找工具由 core 统一维护；原 components/css/provider-card.less 与 views/settings/providerLogos.ts 保留兼容入口。

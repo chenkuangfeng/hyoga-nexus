@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { logout } from '@nexus-web/core/api/auth'
 import { useAdminContext } from './stores/context'
+import { visibleAdminNavigation } from './navigation'
 // 管理端仅复用公共契约，不引入工作台的会话、邀请和资源状态。
 const collapsed = ref(false), accountOpen = ref(false)
 let narrow = false
@@ -49,6 +50,8 @@ onUnmounted(() => {
 const auth = useAuthStore(), context = useAdminContext(), router = useRouter()
 const { t } = useI18n()
 const switching = ref(false), error = ref('')
+const navGroups = computed(() => auth.currentEntries.includes('admin')
+  ? visibleAdminNavigation(auth.currentTenantRole || '', permission => context.can(permission)) : [])
 const choices = computed(() => auth.memberships.map(row => ({ label: row.tenant_name || t('adminConsole.unnamedEnterprise'), value: String(row.tenant_id) })))
 async function refresh(): Promise<boolean> {
   context.invalidate(); error.value = ''
@@ -85,30 +88,14 @@ async function signOut() {
         </button>
       </header>
       <nav id="admin-navigation" class="sidebar-nav" :aria-label="t('adminConsole.title')">
-        <template v-if="auth.currentEntries.includes('admin')">
-          <RouterLink v-if="auth.currentTenantRole === 'owner'" class="nav-item" to="/enterprise" active-class="active" :aria-label="t('adminEnterprise.title')" :title="collapsed ? t('adminEnterprise.title') : undefined"><t-icon name="info-circle" class="nav-icon" /><span v-if="!collapsed">{{ t('adminEnterprise.title') }}</span></RouterLink>
-          <RouterLink class="nav-item" to="/" exact-active-class="active" :aria-label="t('adminConsole.overview')" :title="collapsed ? t('adminConsole.overview') : undefined"><t-icon name="home" class="nav-icon" /><span v-if="!collapsed">{{ t('adminConsole.overview') }}</span></RouterLink>
-          <RouterLink v-if="context.can('org:manage')" class="nav-item" to="/organization" active-class="active" :aria-label="t('adminOrganization.title')" :title="collapsed ? t('adminOrganization.title') : undefined"><t-icon name="view-organization" class="nav-icon" /><span v-if="!collapsed">{{ t('adminOrganization.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('org:manage')" class="nav-item" to="/wecom" active-class="active" :aria-label="t('adminWecom.title')" :title="collapsed ? t('adminWecom.title') : undefined"><t-icon name="link" class="nav-icon" /><span v-if="!collapsed">{{ t('adminWecom.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('members:manage')" class="nav-item" to="/members" active-class="active" :aria-label="t('adminMembers.title')" :title="collapsed ? t('adminMembers.title') : undefined"><t-icon name="usergroup" class="nav-icon" /><span v-if="!collapsed">{{ t('adminMembers.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('roles:manage')" class="nav-item" to="/roles" active-class="active" :aria-label="t('adminRoles.title')" :title="collapsed ? t('adminRoles.title') : undefined"><t-icon name="user-safety" class="nav-icon" /><span v-if="!collapsed">{{ t('adminRoles.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('models:manage')" class="nav-item" to="/models" active-class="active" :aria-label="t('adminModels.title')" :title="collapsed ? t('adminModels.title') : undefined"><t-icon name="control-platform" class="nav-icon" /><span v-if="!collapsed">{{ t('adminModels.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('models:manage')" class="nav-item" to="/usage" active-class="active" :aria-label="t('adminUsage.title')" :title="collapsed ? t('adminUsage.title') : undefined"><t-icon name="chart-bar" class="nav-icon" /><span v-if="!collapsed">{{ t('adminUsage.title') }}</span></RouterLink>
-          <RouterLink v-if="auth.currentTenantRole === 'owner' || auth.currentTenantRole === 'admin'" class="nav-item" to="/runtime" active-class="active" :aria-label="t('adminRuntime.title')" :title="collapsed ? t('adminRuntime.title') : undefined"><t-icon name="dashboard" class="nav-icon" /><span v-if="!collapsed">{{ t('adminRuntime.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('tools:manage')" class="nav-item" to="/mcp-endpoints" active-class="active" :aria-label="t('connectionUi.endpoints')" :title="collapsed ? t('connectionUi.endpoints') : undefined"><t-icon name="link" class="nav-icon" /><span v-if="!collapsed">{{ t('connectionUi.endpoints') }}</span></RouterLink>
-          <RouterLink v-if="context.can('tools:manage')" class="nav-item" to="/mcp-services" active-class="active" :aria-label="t('mcpSettings.title')" :title="collapsed ? t('mcpSettings.title') : undefined"><t-icon name="tools" class="nav-icon" /><span v-if="!collapsed">{{ t('mcpSettings.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('tools:manage')" class="nav-item" to="/skill-submissions" active-class="active" :aria-label="t('adminSkillReview.title')" :title="collapsed ? t('adminSkillReview.title') : undefined"><t-icon name="check-circle" class="nav-icon" /><span v-if="!collapsed">{{ t('adminSkillReview.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('tools:manage')" class="nav-item" to="/tools" active-class="active" :aria-label="t('adminToolCatalog.title')" :title="collapsed ? t('adminToolCatalog.title') : undefined"><t-icon name="tools" class="nav-icon" /><span v-if="!collapsed">{{ t('adminToolCatalog.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('enterprise_kbs:manage')" class="nav-item" to="/knowledge" active-class="active" :aria-label="t('adminKnowledge.title')" :title="collapsed ? t('adminKnowledge.title') : undefined"><t-icon name="folder" class="nav-icon" /><span v-if="!collapsed">{{ t('adminKnowledge.title') }}</span></RouterLink>
-          <RouterLink v-if="['owner','admin'].includes(auth.currentTenantRole || '')" class="nav-item" to="/parsers" active-class="active" :aria-label="t('adminParsers.title')" :title="collapsed ? t('adminParsers.title') : undefined"><t-icon name="file-search" class="nav-icon" /><span v-if="!collapsed">{{ t('adminParsers.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('enterprise_kbs:manage')" class="nav-item" to="/storage" active-class="active" :aria-label="t('adminStorage.title')" :title="collapsed ? t('adminStorage.title') : undefined"><t-icon name="folder-open" class="nav-icon" /><span v-if="!collapsed">{{ t('adminStorage.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('enterprise_kbs:manage')" class="nav-item" to="/vector-stores" active-class="active" :aria-label="t('adminVector.title')" :title="collapsed ? t('adminVector.title') : undefined"><t-icon name="database" class="nav-icon" /><span v-if="!collapsed">{{ t('adminVector.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('enterprise_kbs:manage')" class="nav-item" to="/graph-stores" active-class="active" :aria-label="t('adminGraph.title')" :title="collapsed ? t('adminGraph.title') : undefined"><t-icon name="chart-bubble" class="nav-icon" /><span v-if="!collapsed">{{ t('adminGraph.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('enterprise_agents:manage')" class="nav-item" to="/agents" active-class="active" :aria-label="t('adminAgents.title')" :title="collapsed ? t('adminAgents.title') : undefined"><t-icon name="app" class="nav-icon" /><span v-if="!collapsed">{{ t('adminAgents.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('enterprise_agents:manage')" class="nav-item" to="/channels" active-class="active" :aria-label="t('adminChannels.title')" :title="collapsed ? t('adminChannels.title') : undefined"><t-icon name="chat" class="nav-icon" /><span v-if="!collapsed">{{ t('adminChannels.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('audit:read')" class="nav-item" to="/audit" active-class="active" :aria-label="t('adminAudit.title')" :title="collapsed ? t('adminAudit.title') : undefined"><t-icon name="file-search" class="nav-icon" /><span v-if="!collapsed">{{ t('adminAudit.title') }}</span></RouterLink>
-          <RouterLink v-if="context.can('policy:manage')" class="nav-item" to="/policy" active-class="active" :aria-label="t('adminConsole.policy')" :title="collapsed ? t('adminConsole.policy') : undefined"><t-icon name="setting" class="nav-icon" /><span v-if="!collapsed">{{ t('adminConsole.policy') }}</span></RouterLink>
-        </template>
+        <section v-for="group in navGroups" :key="group.key" class="nav-group" :aria-label="t(group.label)">
+          <div v-if="!collapsed" class="nav-group-title">{{ t(group.label) }}</div>
+          <RouterLink v-for="item in group.items" :key="item.path" class="nav-item" :to="item.path"
+            :class="{ active: item.path === '/' ? $route.path === '/' : $route.path === item.path || $route.path.startsWith(`${item.path}/`) }"
+            :aria-label="t(item.label)" :title="collapsed ? t(item.label) : undefined">
+            <t-icon :name="item.icon" class="nav-icon" /><span v-if="!collapsed" class="nav-label">{{ t(item.label) }}</span>
+          </RouterLink>
+        </section>
       </nav>
       <div ref="accountRoot" class="account-root" @focusout="(event) => { if (event.relatedTarget && !accountRoot?.contains(event.relatedTarget as Node)) closeAccount() }">
         <button ref="accountButton" type="button" class="account-button" :aria-label="[tenantName, userName].filter(Boolean).join(' · ')" :aria-expanded="accountOpen" aria-controls="admin-account-panel" @click="accountOpen = !accountOpen">
@@ -145,8 +132,12 @@ button { font: inherit; border: 0; background: transparent; cursor: pointer; bor
 button:hover, .nav-item:hover { background: var(--td-bg-color-container-hover); }
 button:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
 .sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; }
-.nav-item { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 8px 6px 10px; margin-bottom: 6px; color: var(--td-text-color-primary); text-decoration: none; border-radius: var(--app-radius-xs); }
-.nav-item.active { background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); }
+.nav-group-title { padding: 8px 14px 2px; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); font-weight: 600; letter-spacing: .02em; }
+.nav-group:first-child .nav-group-title { padding-top: 2px; }
+.is-collapsed .nav-group + .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--td-component-stroke); }
+.nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 6px 12px; margin-bottom: 2px; color: var(--td-text-color-primary); text-decoration: none; border-radius: var(--app-radius-sm); font-size: var(--app-text-base); user-select: none; transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease; }
+.nav-item.active { font-weight: 500; background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); }
 .nav-icon { font-size: 18px; flex-shrink: 0; }
 .account-root { position: relative; flex-shrink: 0; }
 .account-button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; text-align: left; color: var(--td-text-color-primary); }

@@ -28,3 +28,5 @@
 `api/enterprise-parsers.ts` 校验企业解析目录和脱敏配置，封装管理端读写路径。全量替换时保留配置快照和兼容字段，密钥以六星占位保留或显式删除，布尔 false 与使用默认值分别提交。表单仅列出现有执行器读取的参数。
 
 类型检查使用 `tsconfig.types.json` 完整检查并生成声明到本包 node_modules/.cache/nexus-types/core，供两个应用的引用工程复用。缓存保留本包的依赖解析位置，不提交；公共接口的声明生成错误必须修复，不能忽略。
+
+提供方卡片样式位于 src/styles/provider-card.less，原 SVG 位于 src/assets/img/providers，通过 src/utils/providerLogos.ts 查找；两应用共用同一份 WeKnora 资源，不跨应用导入。

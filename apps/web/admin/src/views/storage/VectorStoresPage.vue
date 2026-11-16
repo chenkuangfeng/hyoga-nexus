@@ -3,11 +3,17 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { providerLogo } from '@nexus-web/core/utils/providerLogos'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useAdminContext } from '../../stores/context'
 import { createEnterpriseVectorStore, deleteEnterpriseVectorStore, listEnterpriseVectorStores, listEnterpriseVectorTypes, testEnterpriseVectorDraft, testEnterpriseVectorStore, updateEnterpriseVectorStore, type EnterpriseVectorStore, type VectorField, type VectorType } from '@nexus-web/core/api/enterprise-vector-stores'
 
 const { t } = useI18n(), auth = useAuthStore(), context = useAdminContext()
+/** 沿用原版的官方 SVG / 单色 mask 与未知提供方字母回退。 */
+const resolveLogo = (id: string) => providerLogo('vectorstore', id)
+const badgeClass = (id: string) => ({ 'store-card__badge--logo': !!resolveLogo(id), 'store-card__badge--mono': resolveLogo(id)?.mode === 'mono' })
+const badgeStyle = (id: string) => resolveLogo(id)?.mode === 'mono' ? { '--logo-url': `url("${resolveLogo(id)!.url}")` } : {}
 const tenant = computed(() => String(auth.effectiveTenantId || ''))
 const canManage = computed(() => context.can('enterprise_kbs:manage'))
 const rows = ref<EnterpriseVectorStore[]>([]), types = ref<VectorType[]>([]), ready = ref(false), loading = ref(false), busy = ref(false), error = ref('')
@@ -118,37 +124,39 @@ function remove(row: EnterpriseVectorStore) {
 
 <template>
   <section class="vector-page">
-    <header class="section-header"><div><h2>{{ t('adminVector.title') }}</h2><p>{{ t('adminVector.description') }}</p></div><div class="actions"><t-button theme="primary" :disabled="!ready || busy || !availableTypes.length" @click="openCreate"><t-icon name="add" />{{ t('adminVector.add') }}</t-button><t-button variant="outline" :loading="loading" :disabled="busy" @click="load">{{ t('connectionUi.refresh') }}</t-button></div></header>
+    <header class="section-header"><div><h2>{{ t('adminVector.title') }}</h2><p>{{ t('adminVector.description') }}</p></div><div class="actions"><t-button variant="outline" :loading="loading" :disabled="busy" @click="load">{{ t('connectionUi.refresh') }}</t-button></div></header>
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert theme="info" :message="t('adminVector.scopeHint')" />
       <t-alert v-if="error" theme="error" :message="error" />
-      <t-loading :loading="loading"><div v-if="ready" class="table-shell"><table><thead><tr><th>{{ t('adminVector.name') }}</th><th>{{ t('adminVector.engine') }}</th><th>{{ t('adminVector.kind') }}</th><th>{{ t('adminVector.actions') }}</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id"><td>{{ row.name }}</td><td>{{ row.engine }}</td><td>{{ t(row.builtin ? 'adminVector.builtin' : 'adminVector.custom') }}</td><td><t-button variant="text" :disabled="busy" @click="testSaved(row)">{{ t('adminVector.test') }}</t-button><t-button v-if="!row.builtin" variant="text" :disabled="busy" @click="openEdit(row)">{{ t('adminVector.edit') }}</t-button><t-button v-if="!row.builtin" variant="text" theme="danger" :disabled="busy" @click="remove(row)">{{ t('adminVector.delete') }}</t-button></td></tr><tr v-if="!rows.length"><td colspan="4">{{ t('adminVector.empty') }}</td></tr></tbody></table></div></t-loading>
+      <t-loading :loading="loading"><div v-if="ready" class="store-grid">
+        <article v-for="row in rows" :key="row.id" class="store-card" :class="[`store-card--${row.engine}`, { 'store-card--clickable': !row.builtin, 'store-card--env': row.builtin }]"
+          :role="!row.builtin ? 'button' : undefined" :tabindex="!row.builtin ? 0 : undefined" @click="openEdit(row)" @keydown.enter.self="openEdit(row)" @keydown.space.prevent.self="openEdit(row)">
+          <div class="store-card__main"><span class="store-card__badge" :class="badgeClass(row.engine)" :style="badgeStyle(row.engine)" :aria-label="row.engine"><img v-if="resolveLogo(row.engine)?.mode === 'color'" :src="resolveLogo(row.engine)!.url" :alt="row.engine" class="store-card__badge-img" /><template v-else-if="!resolveLogo(row.engine)">{{ row.engine.charAt(0).toUpperCase() }}</template></span><div class="store-card__body"><div class="store-card__header"><h3 class="store-card__title">{{ row.name }}</h3><span v-if="row.builtin" class="store-card__pill">{{ t('adminVector.builtin') }}</span>
+            <div class="store-card__actions" @click.stop @keydown.stop><t-dropdown trigger="click" placement="bottom-right" :options="[{content:t('adminVector.test'),value:'test'}, ...(!row.builtin ? [{content:t('adminVector.edit'),value:'edit'},{content:t('adminVector.delete'),value:'delete',theme:'error' as const}] : [])]" @click="(option: { value?: unknown }) => option.value === 'delete' ? remove(row) : option.value === 'edit' ? openEdit(row) : testSaved(row)"><t-button class="store-card__more" variant="text" shape="square" :disabled="busy" :aria-label="`${row.name} · ${t('adminVector.actions')}`"><t-icon name="ellipsis" /></t-button></t-dropdown></div>
+          </div><div class="store-card__subtitle"><span class="store-card__type">{{ row.engine }}</span></div></div></div>
+        </article>
+        <button type="button" class="store-card store-card--add" :disabled="busy || !availableTypes.length" @click="openCreate"><span class="store-card--add__icon"><t-icon name="add" /></span><span class="store-card--add__label">{{ t('adminVector.add') }}</span></button>
+      </div></t-loading>
       <section v-if="plannedTypes.length" class="planned"><h3>{{ t('adminVector.planned') }}</h3><p>{{ plannedTypes.map(row => row.display_name).join('、') }}</p></section>
-      <section v-if="editor" class="editor"><header class="section-header"><div><h3>{{ t(editing ? 'adminVector.edit' : 'adminVector.add') }}</h3><p v-if="selectedType && !selectedType.verified">{{ t('adminVector.unverified') }}</p></div><t-button variant="text" :disabled="busy || testing" @click="editor = false">{{ t('common.close') }}</t-button></header>
+      <SettingDrawer v-model:visible="editor" :title="t(editing ? 'adminVector.edit' : 'adminVector.add')" icon="data-base" :confirm-loading="busy" :confirm-disabled="busy || testing || !validForm()" :cancel-disabled="busy || testing" @confirm="save" @cancel="editor = false">
+        <t-alert v-if="error" theme="error" :message="error" /><p v-if="selectedType && !selectedType.verified">{{ t('adminVector.unverified') }}</p>
         <div class="fields"><label>{{ t('adminVector.name') }}<t-input v-model="name" :maxlength="160" :disabled="busy" /></label><label>{{ t('adminVector.engine') }}<t-select :value="engine" :options="availableTypes.map(row => ({ label: row.display_name, value: row.type }))" :disabled="!!editing || busy" @change="changeEngine" /></label></div>
         <h4>{{ t('adminVector.connection') }}</h4><div class="fields"><label v-for="field in selectedType?.connection_fields || []" :key="`c-${field.name}`">{{ fieldLabel(field) }}<t-select v-if="field.enum?.length" v-model="connection[field.name]" :options="field.enum.map(value => ({ label: value, value }))" :disabled="!!editing || busy" /><t-switch v-else-if="field.type === 'boolean'" :value="connection[field.name] === true" :disabled="!!editing || busy" @change="connection[field.name] = $event" /><t-input-number v-else-if="field.type === 'number'" :value="typeof connection[field.name] === 'number' ? connection[field.name] as number : undefined" :min="field.min" :disabled="!!editing || busy" @change="setNumber(connection, field, $event)" /><t-input v-else v-model="connection[field.name]" :type="field.sensitive ? 'password' : 'text'" :disabled="!!editing || busy" :placeholder="field.sensitive ? t('adminVector.secretHint') : ''" /></label><p v-if="!selectedType?.connection_fields.length">{{ t('adminVector.noFields') }}</p></div>
         <h4>{{ t('adminVector.indexConfig') }}</h4><div class="fields"><label v-for="field in selectedType?.index_fields || []" :key="`i-${field.name}`">{{ fieldLabel(field) }}<t-select v-if="field.enum?.length" v-model="index[field.name]" :options="field.enum.map(value => ({ label: value, value }))" :disabled="!!editing || busy" /><t-switch v-else-if="field.type === 'boolean'" :value="index[field.name] === true" :disabled="!!editing || busy" @change="index[field.name] = $event" /><t-input-number v-else-if="field.type === 'number'" :value="typeof index[field.name] === 'number' ? index[field.name] as number : undefined" :min="field.min" :disabled="!!editing || busy" @change="setNumber(index, field, $event)" /><t-input v-else v-model="index[field.name]" :disabled="!!editing || busy" /></label><p v-if="!selectedType?.index_fields.length">{{ t('adminVector.noIndexFields') }}</p></div>
-        <div class="actions editor-actions"><t-button v-if="!editing" variant="outline" :loading="testing" :disabled="busy || testing || !validForm()" @click="testDraft">{{ t('adminVector.testDraft') }}</t-button><span class="spacer" /><t-button variant="outline" :disabled="busy || testing" @click="editor = false">{{ t('common.cancel') }}</t-button><t-button theme="primary" :loading="busy" :disabled="busy || testing || !validForm()" @click="save">{{ t('common.save') }}</t-button></div>
-      </section>
+        <template #footer-left><t-button v-if="!editing" variant="outline" :loading="testing" :disabled="busy || testing || !validForm()" @click="testDraft">{{ t('adminVector.testDraft') }}</t-button><t-button v-else variant="outline" :disabled="busy || testing" @click="testSaved(editing)">{{ t('adminVector.test') }}</t-button></template>
+      </SettingDrawer>
     </template>
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="less">
+@import './VectorStoresPage.reference.less';
 .vector-page { min-width: 0; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.table-shell { max-width: 100%; overflow-x: auto; margin-top: 20px; }
-table { width: 100%; min-width: 620px; border-collapse: collapse; text-align: left; }
-th, td { padding: 12px; border-bottom: 1px solid var(--td-component-stroke); }
-th { background: var(--td-bg-color-secondarycontainer); font-weight: 500; }
-.planned, .editor { margin-top: 24px; padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); background: var(--td-bg-color-container); }
-.planned p, .editor p { color: var(--td-text-color-secondary); }
-.editor h4 { margin: 24px 0 12px; }
-.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+.planned { margin-top: 24px; }
+.planned p { color: var(--td-text-color-secondary); }
+.fields { display: grid; gap: 16px; margin: 20px 0; }
 .fields label { display: grid; gap: 8px; min-width: 0; }
 .fields :deep(.t-input), .fields :deep(.t-select), .fields :deep(.t-input-number) { width: 100%; }
-.editor-actions { margin-top: 24px; }
-.spacer { flex: 1; }
-@media (max-width: 600px) { .editor, .planned { padding: 16px; } .section-header { align-items: flex-start; gap: 12px; } }
 </style>

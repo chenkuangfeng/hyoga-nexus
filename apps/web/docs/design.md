@@ -206,3 +206,17 @@ Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路�
 声明保留原包的依赖解析位置；`verify-type-resolution.mjs` 验证公共声明的包引用可解析，防止依赖丢失后退化为 any。TDesign 仅有两处类型子路径补丁，见 patches/README.md。此方案采用 Vue 支持的 vue-tsc 声明生成与 [TypeScript 项目引用](https://www.typescriptlang.org/docs/handbook/project-references.html)，不修改业务权限或运行时契约。
 
 Node 默认堆为 768MB，Go 预打包器默认 GOMEMLIMIT=192MiB/GOMAXPROCS=2，均可通过已有环境覆盖；在小内存机器上，构建、类型检查、全量测试与生产浏览器回归应依次执行。子进程被信号终止时会明确输出信号和对应退出码。
+
+## 管理端设置目录与界面来源
+
+导航数据位于 admin/src/navigation.ts。分组顺序沿用 WeKnora e1f9a6166 的 views/settings/Settings.vue：账户、空间、模型、发布集成、数据与扩展、系统管理、平台；没有管理端账户配置，因此隐藏该空组。空间收纳信息、成员、部门、角色、策略和资源；模型保留模型管理；发布集成收纳企微、渠道、MCP endpoint；数据与扩展保留原版向量库→解析→文件存储顺序，并收纳图存储与工具；系统管理为运行和审计，平台为概览。每项权限与角色条件沿用原入口，过滤后隐藏空组。
+
+分组标题及菜单行的字重、间距和状态来自 components/SettingsModalShell.vue，外层继续使用已确认的工作台式折叠侧栏与底部账户区。折叠后分组显示分隔线，菜单保留可访问名称与悬停提示。名称不重复企业修饰词，企业微信产品名保留，业务说明仍明确真实作用域。
+
+| 管理页面 | 固定版本来源 | 必要适配 |
+| --- | --- | --- |
+| ParserPage | views/settings/ParserEngineSettings.vue | 保留实际服务端四组参数、密钥三态与全量配置确认；状态仅表示配置完整度，不能当作网络连通 |
+| StoragePage | views/settings/StorageBackendSettings.vue | 保留卡片、新增卡片、更多操作与配置抽屉；当前 API 仅支持本地创建、已保存测试与删除，无编辑和默认后端动作 |
+| VectorStoresPage | views/settings/VectorStoreSettings.vue | 保留提供方卡片、键盘打开与 SettingDrawer；字段和计划状态读取服务端能力目录，内置项只读 |
+
+三页的 .reference.less 保留对应原版卡片样式；只对 grid 最小宽度作窄屏适配。provider-card.less 与原 SVG/查找工具抽入 core，工作台保留兼容导出入口，两应用不互相引用源码。原版不存在的 Nexus 管理能力保留现有设置组件，不伪造上游页面或服务端操作。后续所有来源于 WeKnora 的页面调整也须先阅读对应原文件，并记录必要差异。

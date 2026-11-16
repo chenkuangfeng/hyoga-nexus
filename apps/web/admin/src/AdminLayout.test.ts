@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { reactive } from 'vue'
+import { visibleAdminNavigation } from './navigation'
 import { fixture } from '@nexus-web/core/test-utils/vueFixture'
 
 function setup(t: Parameters<typeof fixture>[0], authenticated = true) {
@@ -10,6 +11,7 @@ function setup(t: Parameters<typeof fixture>[0], authenticated = true) {
     setSelectedTenant(id: string) { this.effectiveTenantId = id }, refreshFromAuthMe: async () => authenticated, logout() { logouts++ } })
   const f = fixture(t)
   const mounted = f.component(new URL('./AdminLayout.vue', import.meta.url), {
+    './navigation': { visibleAdminNavigation },
     '@nexus-web/core/stores/auth': { useAuthStore: () => auth },
     './stores/context': { useAdminContext: () => ({ invalidate: () => { invalidations++ }, load: async () => { loads++ } }) },
     '@nexus-web/core/api/auth': { logout: async () => { throw new Error('offline') } },

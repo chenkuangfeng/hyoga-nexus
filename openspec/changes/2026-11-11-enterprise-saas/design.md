@@ -548,3 +548,7 @@ Mermaid 采用官方浏览器 ESM 分发文件的相对模块闭包作为本地�
 进一步诊断表明预览库的既有 ESM 发行包仍会占用主 Rollup 的大型 AST。构建阶段先串行使用 esbuild 预打包 TDesign、完整高亮器、KaTeX、SheetJS、VueOffice 和 PDF.js，再作为带内容摘要的同源 ESM 资产发布；保留所有导出和语言/格式支持。两应用与各预打包库共用唯一的官方 Vue 生产运行时和 VueDemi，发现第二份响应式运行时即终止构建。TDesign 完整 CSS 继续由应用 main.ts 交给 Vite，其他库出现未处理 CSS 即失败。PDF worker 保留 module worker URL 语义，wasm 仍沿用既有复制流程。
 
 工作台 214 个 Vue 模板的虚拟代码会在单进程中累计数百 MB。类型工程按原 tsconfig 的全部文件构建依赖图，强连通分量保持在同一工程，依赖优先生成声明并逐个运行原生 vue-tsc。每个业务源文件必须恰为一个工程的根文件；相互引用不通过声明切断检查。生成声明放在各包自己的 node_modules 缓存内，保持 Vue/Pinia 等依赖的解析上下文，避免因解析失败而退化为 any。每个工程保留原严格选项、全部全局声明与模板检查，不使用 noCheck 或模板跳过选项。
+
+### 管理导航与参考页面还原
+
+来源为本地 WeKnora e1f9a6166 frontend/src/views/settings/Settings.vue 的 navGroups、components/SettingsModalShell.vue 导航样式，以及 ParserEngineSettings.vue、StorageBackendSettings.vue、VectorStoreSettings.vue 和 components/css/provider-card.less。分组顺序为账户、空间、模型、发布集成、数据与扩展、系统管理、平台；管理端没有账户配置则不渲染空组。现有企业资源归空间，连接与渠道归发布集成，存储/解析/工具归数据与扩展，运行/审计归系统管理。权限过滤后再次隐藏空组。折叠时隐藏分组文字、保留分隔线与菜单可访问名称。菜单标题移除企业修饰词，产品名企业微信保留。原版页面采用其卡片、徽章、更多操作和 SettingDrawer，不把配置直接平铺在主页面；原版没有的 Nexus 业务保留现有实现。仅适配真实后端字段与动作，不伪造连接成功或未提供的编辑功能。

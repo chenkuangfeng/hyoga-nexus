@@ -1,0 +1,144 @@
+// 来源：WeKnora e1f9a6166 ParserEngineSettings.vue，保留原版卡片视觉。
+
+@import (reference) '../../../../core/src/styles/provider-card.less';
+
+@import (reference) '../../../../core/src/styles/settings-section.less';
+
+.parser-engine-settings {
+  width: 100%;
+}
+
+.section-header {
+  .settings-section-header();
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 0;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-base);
+}
+
+.error-inline {
+  padding: 16px 0;
+}
+
+.empty-state {
+  padding: 48px 0;
+  text-align: center;
+
+  .empty-text {
+    font-size: var(--app-text-base);
+    color: var(--td-text-color-placeholder);
+    margin: 0;
+  }
+}
+
+// ---- 引擎卡片布局 ----
+.engine-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+// 与 ModelSettings / WebSearchSettings / McpSettings 同形的提供者卡片。
+// 这里整张卡是一个 button —— 单击即打开配置抽屉；active 状态用品牌色描边。
+.engine-card {
+  .provider-card();
+  .provider-card-interactive();
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+
+  &--active {
+    border-color: var(--td-brand-color);
+    background: var(--td-brand-color-1);
+  }
+}
+
+.engine-card__badge {
+  .provider-card-badge();
+  .provider-card-badge-color(#0052d9);
+}
+
+// 解析引擎徽章配色 —— 内置/官方系绿，外部工具按性质各取一色。
+.engine-card--builtin .engine-card__badge,
+.engine-card--weknoracloud .engine-card__badge {
+  .provider-card-badge-color(#07c05f);
+}
+.engine-card--simple .engine-card__badge {
+  .provider-card-badge-color(#464646);
+}
+.engine-card--markitdown .engine-card__badge {
+  .provider-card-badge-color(#0089ff);
+}
+.engine-card--mineru .engine-card__badge,
+.engine-card--mineru_cloud .engine-card__badge,
+.engine-card--paddleocr_vl .engine-card__badge,
+.engine-card--paddleocr_vl_cloud .engine-card__badge {
+  .provider-card-badge-color(#6235bb);
+}
+
+.engine-card__body {
+  .provider-card-body();
+}
+
+.engine-card__header {
+  .provider-card-header();
+}
+
+.engine-card__title {
+  .provider-card-title();
+}
+
+// 与 McpSettings 一致的 dot+文字状态徽章。on=绿、err=红、help 用 cursor:help 提示。
+.engine-card__status {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px 1px 6px;
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  line-height: 16px;
+  border-radius: var(--app-radius-lg);
+  background: var(--td-bg-color-secondarycontainer);
+
+  &--on {
+    color: var(--td-success-color-7);
+
+    .engine-card__status-dot { background: var(--td-success-color); }
+  }
+
+  &--err {
+    color: var(--td-error-color-7);
+
+    .engine-card__status-dot { background: var(--td-error-color); }
+  }
+
+  &--help {
+    cursor: help;
+  }
+}
+
+.engine-card__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.engine-card__desc {
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+  margin: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
