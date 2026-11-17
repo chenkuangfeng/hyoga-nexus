@@ -552,3 +552,7 @@ Mermaid 采用官方浏览器 ESM 分发文件的相对模块闭包作为本地�
 ### 管理导航与参考页面还原
 
 来源为本地 WeKnora e1f9a6166 frontend/src/views/settings/Settings.vue 的 navGroups、components/SettingsModalShell.vue 导航样式，以及 ParserEngineSettings.vue、StorageBackendSettings.vue、VectorStoreSettings.vue 和 components/css/provider-card.less。分组顺序为账户、空间、模型、发布集成、数据与扩展、系统管理、平台；管理端没有账户配置则不渲染空组。现有企业资源归空间，连接与渠道归发布集成，存储/解析/工具归数据与扩展，运行/审计归系统管理。权限过滤后再次隐藏空组。折叠时隐藏分组文字、保留分隔线与菜单可访问名称。菜单标题移除企业修饰词，产品名企业微信保留。原版页面采用其卡片、徽章、更多操作和 SettingDrawer，不把配置直接平铺在主页面；原版没有的 Nexus 业务保留现有实现。仅适配真实后端字段与动作，不伪造连接成功或未提供的编辑功能。
+
+### 用量页面收尾与确认快照
+
+E6.3 已有 UsagePage 与 enterprise-usage 客户端，本批修复其状态边界并补验收，不新增接口。确认框绑定发起时的企业、账号、权限、范围与正整数额度快照，重复确认不可生成第二条写链；目录权限变化与卸载立即使旧确认及异步结果失效。报表记录返回数据对应的分组，不以尚未提交的筛选草稿解释旧行。成员/部门可选目录失败单独提示，不伪装为真实空目录，不阻断企业范围用量和限额。页面沿用现有 Nexus 用量布局与公共设置样式；WeKnora 固定版本的 ModelSettings 用量弹窗展示的是资源引用冲突，不能当作 Token 报表复制。

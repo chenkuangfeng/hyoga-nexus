@@ -16,7 +16,7 @@ function rowsFromResponse(value: unknown): EnterpriseUsageRow[] {
 function limitsFromResponse(value: unknown): EnterpriseUsageLimit[] {
   const items = object(value).items
   if (!Array.isArray(items)) throw new Error('usage_response_invalid')
-  return items.map(item => { const row = object(item); if (!['tenant', 'org_unit', 'user'].includes(String(row.scope_kind))) throw new Error('usage_response_invalid'); return { id: text(row.id), scope_kind: row.scope_kind as EnterpriseUsageLimit['scope_kind'], scope_id: text(row.scope_id), monthly_tokens: count(row.monthly_tokens), used_this_month: count(row.used_this_month) } })
+  return items.map(item => { const row = object(item); if (!['tenant', 'org_unit', 'user'].includes(String(row.scope_kind)) || count(row.monthly_tokens) < 1) throw new Error('usage_response_invalid'); return { id: text(row.id), scope_kind: row.scope_kind as EnterpriseUsageLimit['scope_kind'], scope_id: text(row.scope_id), monthly_tokens: count(row.monthly_tokens), used_this_month: count(row.used_this_month) } })
 }
 /** 日期为闭区间自然日；接口返回已归一化的 Run 计数和 Token 数。 */
 export async function getEnterpriseUsage(tenant: string, groupBy: UsageGroup, start: string, end: string): Promise<EnterpriseUsageRow[]> {
@@ -27,7 +27,7 @@ export async function getEnterpriseUsage(tenant: string, groupBy: UsageGroup, st
 export async function listEnterpriseUsageLimits(tenant: string): Promise<EnterpriseUsageLimit[]> { return limitsFromResponse(await get(`${base(tenant)}/limits`)) }
 /** null 移除该范围限额；tenant 范围不提交 scope_id。 */
 export async function saveEnterpriseUsageLimit(tenant: string, scopeKind: EnterpriseUsageLimit['scope_kind'], scopeId: string | null, monthlyTokens: number | null): Promise<void> {
-  if ((scopeKind === 'tenant' && scopeId !== null) || (scopeKind !== 'tenant' && !scopeId)
+  if (!['tenant', 'org_unit', 'user'].includes(scopeKind) || (scopeKind === 'tenant' && scopeId !== null) || (scopeKind !== 'tenant' && !scopeId)
       || (monthlyTokens !== null && (!Number.isSafeInteger(monthlyTokens) || monthlyTokens < 1))) throw new Error('usage_limit_invalid')
   await put(`${base(tenant)}/limits`, { scope_kind: scopeKind, ...(scopeId ? { scope_id: scopeId } : {}), monthly_tokens: monthlyTokens })
 }

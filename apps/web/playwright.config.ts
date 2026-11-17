@@ -25,7 +25,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'workspace', testMatch: preview ? ['workspace.spec.ts', 'workspace-preview.spec.ts'] : 'workspace.spec.ts', use: { baseURL: 'http://127.0.0.1:5193' } },
-    { name: 'admin', testMatch: 'admin.spec.ts', use: { baseURL: 'http://127.0.0.1:5194/admin/' } },
+    { name: 'admin', testMatch: ['admin.spec.ts', 'admin-usage.spec.ts'], use: { baseURL: 'http://127.0.0.1:5194/admin/' } },
   ],
   webServer: [
     { command: preview ? 'corepack pnpm --filter @nexus-web/workspace exec vite preview --host 127.0.0.1 --port 5193 --strictPort' : 'corepack pnpm exec vite --config e2e/vite.config.ts --host 127.0.0.1 --port 5193 --strictPort', url: 'http://127.0.0.1:5193/login', reuseExistingServer: false, env: { ...serverEnv, NEXUS_E2E_APP: 'workspace' }, timeout: 90_000 },
