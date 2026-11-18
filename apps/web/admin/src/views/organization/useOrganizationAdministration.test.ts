@@ -4,7 +4,7 @@ import test from 'node:test'
 import * as vue from 'vue'
 import { fixture, flush } from '@nexus-web/core/test-utils/vueFixture'
 
-type Options = { permissions?: string[]; treeFailure?: boolean; candidateFailure?: boolean; memberFailure?: boolean; slowMembers?: boolean; empty?: boolean }
+type Options = { permissions?: string[]; treeFailure?: boolean; candidateFailure?: boolean; memberFailure?: boolean; slowMembers?: boolean; empty?: boolean; includeMembers?: boolean }
 function setup(t: Parameters<typeof fixture>[0], options: Options = {}) {
   const f = fixture(t), auth = vue.reactive({ effectiveTenantId: 'a', user: { id: 'actor' } })
   const context = vue.reactive({ revision: 0, ready: true, permissions: options.permissions || ['org:manage', 'members:manage'], can(permission: string) { return this.ready && this.permissions.includes(permission) } })
@@ -35,7 +35,7 @@ function setup(t: Parameters<typeof fixture>[0], options: Options = {}) {
       removeOrganizationMember: async (tenant: string, unit: string, user: string) => { record('unassign', tenant, unit, user); if (failed) throw new Error('choose primary first'); positions[unit] = (positions[unit] || []).filter(row => row.user_id !== user) },
     },
   })
-  const mounted = f.mount({ setup: () => compiled.useOrganizationAdministration((key: string) => key) })
+  const mounted = f.mount({ setup: () => compiled.useOrganizationAdministration((key: string) => key, { includeMembers: options.includeMembers }) })
   return { ...mounted, auth, context, calls, dialogs, fail: () => { failed = true }, delay: () => { delayed = true }, finish: (value: unknown) => finishAction(value), finishMembers: () => finishMembers([{ user_id: 'old', display_name: 'old', is_primary: true }]), mutations: () => calls.filter(row => ['create', 'update', 'delete', 'assign', 'unassign'].includes(row.operation)) }
 }
 
@@ -138,4 +138,20 @@ test('混合归属可撤销手工贡献，同步节点的主部门仍可维护',
   s.vm.selectUnit('w'); await flush()
   s.vm.members[0].is_primary = false; s.vm.setPrimary(s.vm.members[0]); await s.dialogs[1].onConfirm()
   assert.equal(s.mutations()[1].operation, 'assign')
+})
+
+
+test('企业组织页只读节点，编辑下级后保留父组织并限制删除', async t => {
+  const s = setup(t, { includeMembers: false })
+  await flush()
+  assert.deepEqual(s.calls.map(call => call.operation), ['tree'])
+  const node = (id: string) => s.vm.units.find((row: { id: string }) => row.id === id)
+  assert.equal(s.vm.canDeleteUnit(node('d')), false)
+  assert.equal(s.vm.canDeleteUnit(node('l')), true)
+  s.vm.openEdit('l')
+  s.vm.form.name = '新组织名'
+  await s.vm.save({ validateResult: true })
+  assert.equal(s.vm.selectedId, 'r')
+  assert.equal(node('l').name, '新组织名')
+  assert.equal(s.calls.some(call => ['members', 'candidates'].includes(call.operation)), false)
 })

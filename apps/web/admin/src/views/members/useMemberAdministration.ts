@@ -26,6 +26,7 @@ export function useMemberAdministration(t: Translate) {
   let epoch = 0
   let confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
   function message(reason: unknown): string { return reason instanceof Error && reason.message !== 'members_response_invalid' ? reason.message : t('adminConsole.failed') }
+  function cancelConfirmation() { confirmation?.hide(); confirmation = undefined }
   function closeEditor() { editorOpen.value = false; Object.assign(form, { email: '', role: 'contributor', username: '', password: '', display_name: '' }); createAccount.value = false }
   function closeLink() { linkOpen.value = false; Object.assign(linkForm, { role: 'contributor', days: 7 }) }
   function invalidate() { epoch++; confirmation?.hide(); confirmation = undefined; closeEditor(); closeLink(); members.value = []; invitations.value = []; membersReady.value = false; invitationsReady.value = false; loading.value = false; busy.value = false; membersError.value = ''; invitationsError.value = ''; error.value = ''; success.value = '' }
@@ -141,5 +142,5 @@ export function useMemberAdministration(t: Translate) {
   watch(() => invitations.value.length, count => { invitePage.value = Math.min(invitePage.value, Math.max(1, Math.ceil(count / pageSize))) })
   watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.revision, canManage], () => { search.value = ''; memberPage.value = 1; invitePage.value = 1; void load() }, { immediate: true, flush: 'sync' })
   onBeforeUnmount(invalidate)
-  return { members, invitations, loading, busy, membersError, invitationsError, error, success, membersReady, invitationsReady, tab, search, memberPage, invitePage, pageSize, filteredMembers, memberRows, invitationRows, canManage, ownerCount, editorOpen, createAccount, form, linkOpen, linkForm, load, closeEditor, closeLink, memberName, invitationName, canEditMember, canRemoveMember, canChangeStatus, roleOptions, changeRole, suspend, resume, remove, revoke, openEditor, openLink, submitMember, submitLink }
+  return { cancelConfirmation, members, invitations, loading, busy, membersError, invitationsError, error, success, membersReady, invitationsReady, tab, search, memberPage, invitePage, pageSize, filteredMembers, memberRows, invitationRows, canManage, ownerCount, editorOpen, createAccount, form, linkOpen, linkForm, load, closeEditor, closeLink, memberName, invitationName, canEditMember, canRemoveMember, canChangeStatus, roleOptions, changeRole, suspend, resume, remove, revoke, openEditor, openLink, submitMember, submitLink }
 }

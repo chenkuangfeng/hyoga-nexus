@@ -561,3 +561,7 @@ E6.3 已有 UsagePage 与 enterprise-usage 客户端，本批修复其状态边�
 来源：WeKnora e1f9a6166 `views/toolbox/Toolbox.vue`、`views/settings/{SkillSettings,McpSettings,ModelSettings,MemoryWorkspaceSettings}.vue`、`views/{agent/AgentList,knowledge/KnowledgeBaseList}.vue`、`components/css/resource-card.less`。工具箱按技能/MCP 注册拆分，同管理工具组成指定三项；不引入浏览器连接或未实现的服务。
 公共资源卡片与编辑容器置于 core，管理应用保持不导入 workspace。管理端注入编辑偏好，弹窗/抽屉共享内容，替换路由时记录 editor 查询参数，返回关闭编辑；员工设置始终弹窗。主题继续复用公共 useTheme。空间记忆使用现有服务端 memory-settings 权限与 API。
 员工端移除额外页面路由，旧地址回到新对话；设置只载入三个账户面板，旧迁移书签可保留显式说明但不执行治理请求。知识库创建 HTTP 入口拒绝个人创建，企业创建继续使用 admin 入口；已有库及内容维护不做删除或迁移。智能体列表不加载编辑器或管理动作。产物面板只查询当前会话、按会话键卸载预览，错误可重试，切换会话清空旧结果。
+
+### 2026-11-18 企业组织与用户管理布局
+沿用 WeKnora e1f9a6166 OrganizationSettingsModal.vue、TenantMembers.vue 的目录/表格与模态编辑，以及 Settings.vue、SettingsModalShell.vue、GeneralSettings.vue 的设置壳、content-wrapper 和设置行样式。企业组织不是参考项目的共享空间，按 Nexus 树接口适配为左树右子组织列表。组织页不再请求或展示成员目录，成员归属移到用户管理。两页复用管理应用内的组织树展示组件和既有控制器；用户页的成员候选复用已加载的企业成员，不重复读取成员目录。组织筛选采用接口的直接活跃成员，全部用户保留停用记录；同步来源只读、混合来源只撤销手工部分、主组织调整及权限隔离保持现有规则。用户编辑只提供真实接口支持的角色/状态及组织归属，不伪造管理员修改账号资料的能力。
+员工设置恢复独立 overlay-class 的 1280×900 覆盖和内容留白，不改变其他编辑器尺寸，窄屏保留可用的响应式布局。主题色选择器抽到 core，由员工常规设置和管理端系统设置共同使用。品牌色、主题模式及编辑方式继续按当前账号保存在浏览器；系统设置使用与员工相同的标题、设置行、说明和 280px 控件布局。

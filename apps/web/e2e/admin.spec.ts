@@ -159,3 +159,73 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
   await page.screenshot({ path: testInfo.outputPath('mcp-reference-cards.png') })
   await expectResponsive(page)
 })
+
+test('企业组织维护节点，用户管理按组织筛选并在抽屉编辑', async ({ page, api }) => {
+  await api.signIn()
+  const base = '/api/v1/tenants/a/admin'
+  const root = { id: 'root', parent_id: null, name: 'Acme', status: 'active', source: 'manual', sync_managed: false, member_count: 0 }
+  const department = { ...root, id: 'research', parent_id: 'root', name: 'Research', member_count: 1 }
+  const nodes = [root, department]
+  const members = ['Alice', 'Bob'].map(name => ({ tenant_id: 'a', user_id: name, role: 'contributor', status: 'active', joined_at: '2026-11-18', display_name: name }))
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === base + '/org-units/tree') return { body: nodes }
+    if (path === base + '/org-units' && request.method() === 'POST') {
+      const row = { ...department, ...request.postDataJSON(), member_count: 0, id: 'created' }
+      nodes.push(row)
+      return { body: { ...row, tenant_id: 'a', root_id: 'root' } }
+    }
+    if (path === base + '/org-units/created' && request.method() === 'PATCH') {
+      const row = nodes.find(value => value.id === 'created')!
+      Object.assign(row, request.postDataJSON())
+      return { body: { ...row, tenant_id: 'a', root_id: 'root' } }
+    }
+    if (path === base + '/members') return { body: members }
+    if (path === base + '/invitations') return { body: [] }
+    if (path === base + '/org-units/research/members') return { body: [{ user_id: 'Alice', display_name: 'Alice', source: 'manual', is_primary: true }] }
+  })
+  await page.goto('organization')
+  await expect(page.getByRole('heading', { name: '企业组织', exact: true })).toBeVisible()
+  const organizationRows = page.locator('.organization-content tbody')
+  await expect(organizationRows).toContainText('Research')
+  await page.getByRole('button', { name: '新增组织' }).click()
+  const dialog = page.locator('.t-dialog:visible')
+  await dialog.locator('input').first().fill('Finance')
+  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  const finance = organizationRows.locator('tr').filter({ hasText: 'Finance' })
+  await expect(finance).toBeVisible()
+  await finance.getByRole('button', { name: '编辑', exact: true }).click()
+  await dialog.locator('input').first().fill('Finance operations')
+  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(organizationRows).toContainText('Finance operations')
+  expect(api.requests.some(path => path.endsWith('/members'))).toBe(false)
+  await page.goto('settings')
+  await page.locator('.setting-row').filter({ hasText: '二级编辑界面' }).locator('.t-select').click()
+  await page.locator('.t-select-option:visible').filter({ hasText: '抽屉' }).click()
+  await page.goto('members')
+  const userRows = page.locator('.user-management-content tbody')
+  await expect(userRows).toContainText('Bob')
+  await page.locator('.organization-tree').getByRole('button', { name: /Research/ }).click()
+  await expect(userRows).toContainText('Alice')
+  await expect(userRows).not.toContainText('Bob')
+  await userRows.getByRole('button', { name: '编辑', exact: true }).click()
+  const drawer = page.locator('.t-drawer--open')
+  await expect(drawer).toContainText('编辑用户')
+  await expect(drawer).toContainText('组织归属')
+  await expect(drawer.locator('input[readonly]').first()).toHaveValue('Alice')
+  await expectResponsive(page)
+})
+
+test('系统设置主题色即时应用，刷新后保留', async ({ page, api }) => {
+  await api.signIn()
+  await page.goto('settings')
+  const swatches = page.getByRole('radiogroup', { name: '主题色' })
+  await expect(swatches.getByRole('radio')).toHaveCount(12)
+  const blue = swatches.getByRole('radio', { name: '蓝色', exact: true })
+  await blue.click()
+  await expect(blue).toHaveAttribute('aria-checked', 'true')
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--td-brand-color'))).not.toBe('')
+  await page.reload()
+  await expect(blue).toHaveAttribute('aria-checked', 'true')
+  await expectResponsive(page)
+})

@@ -1,19 +1,57 @@
 <script setup lang="ts">
 /** 管理端成员与邀请列表。分页/搜索基于后端完整列表，所有操作交由作用域隔离的控制器。 */
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { copyToClipboard } from '@nexus-web/core/utils/clipboard'
-import type { LinkInvitation } from '@nexus-web/core/api/enterprise-members'
+import type { LinkInvitation, EnterpriseMember } from '@nexus-web/core/api/enterprise-members'
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
+import OrganizationTree from '../../components/OrganizationTree.vue'
+import { useOrganizationAdministration } from '../organization/useOrganizationAdministration'
 import JoinRequestsPanel from './JoinRequestsPanel.vue'
 import { useMemberAdministration } from './useMemberAdministration'
 const props = withDefaults(defineProps<{ workspaceHref?: string }>(), { workspaceHref: '/' })
 const { t, locale } = useI18n(), auth = useAuthStore()
 const state = reactive(useMemberAdministration(t))
+const organization = reactive(useOrganizationAdministration(t, { candidateMembers: () => state.membersReady ? state.members : null }))
+const organizationFilter = ref(''), editingUserId = ref(''), editRole = ref(''), assignmentOpen = ref(false)
+const editingUser = computed(() => state.members.find(row => row.user_id === editingUserId.value) || null)
+const currentLink = computed(() => organization.members.find(row => row.user_id === editingUserId.value))
+const displayMembers = computed(() => {
+  if (!organizationFilter.value) return state.filteredMembers
+  if (organization.selectedId !== organizationFilter.value || !organization.membersReady) return []
+  const ids = new Set(organization.members.map(row => row.user_id))
+  return state.filteredMembers.filter(row => ids.has(row.user_id))
+})
+const displayRows = computed(() => displayMembers.value.slice((state.memberPage - 1) * state.pageSize, state.memberPage * state.pageSize))
+function selectOrganization(id: string) {
+  if (state.busy || organization.busy) return
+  state.cancelConfirmation(); organization.cancelConfirmation()
+  editingUserId.value = ''; assignmentOpen.value = false; organizationFilter.value = id; state.memberPage = 1
+  if (id) organization.selectUnit(id)
+  else organization.clearSelection()
+}
+function openUser(row: EnterpriseMember) {
+  if (!state.canManage || !state.membersReady || state.busy || organization.busy || !state.members.some(item => item.user_id === row.user_id)) return
+  editRole.value = row.role; editingUserId.value = row.user_id
+}
+function closeUser() {
+  if (state.busy || organization.busy) return
+  state.cancelConfirmation()
+  organization.cancelConfirmation()
+  editingUserId.value = ''
+}
+async function assignMember() {
+  await organization.assign()
+  if (organization.success && !organization.error) assignmentOpen.value = false
+}
+watch(() => editingUser.value?.role, role => { if (role) editRole.value = role })
+watch(() => displayMembers.value.length, count => { state.memberPage = Math.min(state.memberPage, Math.max(1, Math.ceil(count / state.pageSize))) })
+watch([() => auth.effectiveTenantId, () => auth.user?.id, () => state.canManage, () => organization.canManage], () => { editingUserId.value = ''; assignmentOpen.value = false; organizationFilter.value = '' }, { flush: 'sync' })
 const applicationsBusy = ref(false), applicationsRefresh = ref(0)
-async function refreshLists() { if (applicationsBusy.value) return; applicationsRefresh.value++; await state.load() }
+async function refreshLists() { if (applicationsBusy.value) return; applicationsRefresh.value++; await Promise.all([state.load(), organization.load(organizationFilter.value)]) }
 const inviteRoles = computed(() => ['admin', 'contributor', 'viewer'].map(value => ({ value, label: t(`tenantMember.role.${value}`) })))
-const memberColumns = computed(() => [{ colKey: 'person', title: t('adminMembers.person'), minWidth: 220 }, { colKey: 'status', title: t('adminMembers.status'), width: 100 }, { colKey: 'joined_at', title: t('adminMembers.joined'), width: 190 }, { colKey: 'actions', title: t('adminMembers.roleActions'), minWidth: 390 }])
+const memberColumns = computed(() => [{ colKey: 'person', title: t('adminMembers.person'), minWidth: 220 }, { colKey: 'role', title: t('adminMembers.role'), width: 120 }, { colKey: 'status', title: t('adminMembers.status'), width: 100 }, { colKey: 'joined_at', title: t('adminMembers.joined'), width: 190 }, { colKey: 'actions', title: t('adminMembers.roleActions'), minWidth: 180 }])
 const invitationColumns = computed(() => [{ colKey: 'person', title: t('adminMembers.invitee'), minWidth: 220 }, { colKey: 'role', title: t('adminMembers.role'), width: 120 }, { colKey: 'created_at', title: t('adminMembers.sent'), width: 190 }, { colKey: 'details', title: t('adminMembers.details'), minWidth: 240 }, { colKey: 'actions', title: t('adminMembers.operations'), width: 160 }])
 const rules = computed(() => ({
   email: [{ required: true, message: t('adminMembers.emailInvalid'), type: 'error' }, { pattern: /^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$/, message: t('adminMembers.emailInvalid'), type: 'error' }],
@@ -35,22 +73,30 @@ async function copyLink(row: LinkInvitation) {
 </script>
 <template>
   <section class="members-page">
-    <header class="section-header section-header--list"><div><h2>{{ t('adminMembers.title') }}</h2><p>{{ t('adminMembers.description') }}</p></div><div class="member-actions"><t-button class="settings-list-button" theme="default" variant="outline" :disabled="state.busy || applicationsBusy" :loading="state.loading" @click="refreshLists">{{ t('connectionUi.refresh') }}</t-button><t-button class="settings-list-button" theme="default" variant="outline" v-if="state.canManage" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openEditor">{{ t('adminMembers.invite') }}</t-button><t-button class="settings-list-button" theme="default" v-if="state.canManage" variant="outline" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openLink">{{ t('adminMembers.createLink') }}</t-button></div></header>
+    <header class="section-header section-header--list"><div><h2>{{ t('consoleLayout.members') }}</h2><p>{{ t('adminMembers.description') }}</p></div><div class="member-actions"><t-button class="settings-list-button" theme="default" variant="outline" :disabled="state.busy || applicationsBusy" :loading="state.loading" @click="refreshLists">{{ t('connectionUi.refresh') }}</t-button><t-button class="settings-list-button" theme="default" variant="outline" v-if="state.canManage" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openEditor">{{ t('adminMembers.invite') }}</t-button><t-button class="settings-list-button" theme="default" v-if="state.canManage" variant="outline" :disabled="state.busy || state.loading || applicationsBusy" @click="state.openLink">{{ t('adminMembers.createLink') }}</t-button></div></header>
     <t-alert v-if="!state.canManage" theme="warning" :message="t('adminMembers.denied')" />
     <template v-else>
       <t-alert v-if="state.error" theme="error" :message="state.error" />
       <t-alert v-if="state.success" theme="success" :message="state.success" />
+      <div class="user-management-layout" :class="{ 'without-organization': !organization.canManage }">
+      <OrganizationTree v-if="organization.canManage" :nodes="organization.units" :selected-id="organizationFilter" :disabled="organization.busy || state.busy || organization.loading" show-all @select="selectOrganization" />
+      <section class="user-management-content">
+      <t-alert v-if="!organization.canManage" theme="info" :message="t('enterpriseLayout.noOrganizationPermission')" />
+      <t-alert v-else-if="organization.error" theme="warning" :message="organization.error"><template #operation><t-button variant="text" @click="organization.load(organization.selectedId)">{{ t('common.retry') }}</t-button></template></t-alert>
       <t-tabs v-model="state.tab">
         <t-tab-panel value="members" :label="t('adminMembers.membersCount', { count: state.members.length })">
-          <div class="member-toolbar"><t-input v-model="state.search" :aria-label="t('adminMembers.search')" :placeholder="t('adminMembers.search')" clearable><template #prefix-icon><t-icon name="search" /></template></t-input></div>
+          <div class="member-toolbar"><t-input v-model="state.search" :aria-label="t('adminMembers.search')" :placeholder="t('adminMembers.search')" clearable><template #prefix-icon><t-icon name="search" /></template></t-input><t-button v-if="organizationFilter && organization.canManage" variant="outline" :disabled="!organization.canAssign || state.busy" @click="assignmentOpen = true">{{ t('enterpriseLayout.addExistingUser') }}</t-button></div>
+          <p v-if="organizationFilter">{{ organization.path(organizationFilter) }} · {{ t('enterpriseLayout.directMembersHint') }}</p>
+          <t-alert v-if="organizationFilter && organization.membersError" theme="error" :message="organization.membersError"><template #operation><t-button variant="text" @click="organization.selectUnit(organizationFilter)">{{ t('common.retry') }}</t-button></template></t-alert>
           <t-alert v-if="state.membersError" theme="error" :message="state.membersError" />
-          <div class="data-table-shell"><t-table row-key="user_id" :data="state.memberRows" :columns="memberColumns" :loading="state.loading" :empty="state.search ? t('adminMembers.noMatch') : t('adminMembers.noMembers')">
+          <div class="data-table-shell"><t-table row-key="user_id" :data="displayRows" :columns="memberColumns" :loading="state.loading || !!organizationFilter && organization.membersLoading" :empty="state.search ? t('adminMembers.noMatch') : t('adminMembers.noMembers')">
             <template #person="{ row }"><strong>{{ state.memberName(row) }}</strong> <t-tag v-if="row.user_id === auth.user?.id" size="small">{{ t('common.me') }}</t-tag><p class="person-detail">{{ row.email || row.username || '—' }}</p></template>
             <template #status="{ row }"><t-tag :theme="row.status === 'active' ? 'success' : 'warning'">{{ t(row.status === 'active' ? 'adminMembers.active' : 'adminMembers.suspended') }}</t-tag></template>
             <template #joined_at="{ row }">{{ date(row.joined_at) }}</template>
-            <template #actions="{ row }"><div class="member-actions"><t-select v-if="state.canEditMember(row)" class="member-role" :value="row.role" :options="state.roleOptions(row)" :aria-label="t('adminMembers.changeRoleLabel', { name: state.memberName(row) })" :disabled="state.busy || state.loading" @change="(value: unknown) => state.changeRole(row, value)" /><span v-else>{{ t(`tenantMember.role.${row.role}`) }}</span><t-button v-if="row.status === 'active'" variant="text" :disabled="state.busy || state.loading || !state.canChangeStatus(row)" @click="state.suspend(row)">{{ t('adminMembers.suspend') }}</t-button><t-button v-else variant="text" theme="primary" :disabled="state.busy || state.loading || !state.canChangeStatus(row)" @click="state.resume(row)">{{ t('adminMembers.resume') }}</t-button><t-button variant="text" theme="danger" :disabled="state.busy || state.loading || !state.canRemoveMember(row)" @click="state.remove(row)">{{ t('adminMembers.remove') }}</t-button></div><small v-if="row.role === 'owner' && state.ownerCount <= 1">{{ t('adminMembers.lastOwner') }}</small></template>
+            <template #role="{ row }">{{ t(`tenantMember.role.${row.role}`) }}</template>
+            <template #actions="{ row }"><div class="member-actions"><t-button variant="text" :disabled="state.busy || organization.busy || state.loading" @click="openUser(row)">{{ t('common.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="state.busy || state.loading || !state.canRemoveMember(row)" @click="state.remove(row)">{{ t('adminMembers.remove') }}</t-button></div><small v-if="row.role === 'owner' && state.ownerCount <= 1">{{ t('adminMembers.lastOwner') }}</small></template>
           </t-table></div>
-          <t-pagination v-if="state.filteredMembers.length > state.pageSize" v-model="state.memberPage" :page-size="state.pageSize" :total="state.filteredMembers.length" :show-page-size="false" />
+          <t-pagination v-if="displayMembers.length > state.pageSize" v-model="state.memberPage" :page-size="state.pageSize" :total="displayMembers.length" :show-page-size="false" />
         </t-tab-panel>
         <t-tab-panel value="invitations" :label="t('adminMembers.invitationsCount', { count: state.invitations.length })">
           <p>{{ t('adminMembers.invitationHint') }}</p>
@@ -67,8 +113,9 @@ async function copyLink(row: LinkInvitation) {
         <t-tab-panel value="applications" :label="t('adminApplications.title')"><JoinRequestsPanel v-if="state.tab === 'applications'" :refresh-key="applicationsRefresh" @approved="state.load" @busy="applicationsBusy = $event" /></t-tab-panel>
       </t-tabs>
       <t-alert theme="info" :message="t('adminMembers.limits')" />
+      </section></div>
     </template>
-    <t-dialog :visible="state.editorOpen" :header="t('adminMembers.invite')" :footer="false" @close="state.closeEditor">
+    <EditorDialog :visible="state.editorOpen" :header="t('adminMembers.invite')" :footer="false" @close="state.closeEditor">
       <t-alert v-if="state.error" theme="error" :message="state.error" />
       <t-form :data="state.form" :rules="rules" layout="vertical" :disabled="state.busy" @submit="state.submitMember">
         <t-form-item :label="t('adminMembers.createAccount')"><t-switch v-model="state.createAccount" :aria-label="t('adminMembers.createAccount')" /></t-form-item>
@@ -82,8 +129,8 @@ async function copyLink(row: LinkInvitation) {
         </template>
         <t-button type="submit" theme="primary" :loading="state.busy">{{ state.createAccount ? t('adminMembers.createAndJoin') : t('adminMembers.sendInvite') }}</t-button>
       </t-form>
-    </t-dialog>
-    <t-dialog :visible="state.linkOpen" :header="t('adminMembers.createLink')" :footer="false" @close="state.closeLink">
+    </EditorDialog>
+    <EditorDialog :visible="state.linkOpen" :header="t('adminMembers.createLink')" :footer="false" @close="state.closeLink">
       <t-alert v-if="state.error" theme="error" :message="state.error" />
       <t-form :data="state.linkForm" layout="vertical" :disabled="state.busy" @submit="state.submitLink">
         <t-alert theme="warning" :message="t('adminMembers.linkHint')" />
@@ -91,7 +138,16 @@ async function copyLink(row: LinkInvitation) {
         <t-form-item :label="t('adminMembers.expiryDays')"><t-input-number v-model="state.linkForm.days" :min="1" :max="30" :decimal-places="0" /></t-form-item>
         <t-button type="submit" theme="primary" :loading="state.busy" :disabled="!Number.isInteger(state.linkForm.days) || !state.linkForm.days || state.linkForm.days < 1 || state.linkForm.days > 30">{{ t('adminMembers.createLink') }}</t-button>
       </t-form>
-    </t-dialog>
+    </EditorDialog>
+    <EditorDialog :visible="!!editingUser" :header="t('enterpriseLayout.editUser')" :footer="false" :close-btn="!state.busy && !organization.busy" :close-on-overlay-click="!state.busy && !organization.busy" @close="closeUser">
+      <template v-if="editingUser">
+        <t-alert v-if="state.error" theme="error" :message="state.error" /><t-alert v-if="state.success" theme="success" :message="state.success" />
+        <t-form layout="vertical"><t-form-item :label="t('adminMembers.displayName')"><t-input :value="state.memberName(editingUser)" readonly /></t-form-item><t-form-item :label="t('adminMembers.email')"><t-input :value="editingUser.email || ''" readonly /></t-form-item><p>{{ t('enterpriseLayout.profileReadOnly') }}</p><t-form-item :label="t('adminMembers.role')"><t-select v-model="editRole" :options="state.roleOptions(editingUser)" :disabled="state.busy || !state.canEditMember(editingUser)" /></t-form-item><div class="member-actions"><t-button theme="primary" :disabled="state.busy || !state.canEditMember(editingUser) || editRole === editingUser.role" @click="state.changeRole(editingUser, editRole)">{{ t('enterpriseLayout.saveRole') }}</t-button><t-button v-if="editingUser.status === 'active'" variant="outline" :disabled="state.busy || !state.canChangeStatus(editingUser)" @click="state.suspend(editingUser)">{{ t('adminMembers.suspend') }}</t-button><t-button v-else variant="outline" :disabled="state.busy || !state.canChangeStatus(editingUser)" @click="state.resume(editingUser)">{{ t('adminMembers.resume') }}</t-button></div></t-form>
+        <section v-if="organizationFilter && organization.canManage" class="user-organization-editor"><h3>{{ t('enterpriseLayout.organizationMembership') }}</h3><p>{{ organization.path(organizationFilter) }}</p><t-alert v-if="organization.error" theme="error" :message="organization.error" /><template v-if="currentLink"><p>{{ t(`adminOrganization.linkSource.${currentLink.source}`) }} · {{ t(currentLink.is_primary ? 'adminOrganization.primary' : 'adminOrganization.secondary') }}</p><div class="member-actions"><t-button variant="outline" :disabled="organization.busy || currentLink.is_primary || organization.selected?.status !== 'active'" @click="organization.setPrimary(currentLink)">{{ t('adminOrganization.setPrimary') }}</t-button><t-button variant="text" theme="danger" :disabled="organization.busy || currentLink.source === 'wecom'" @click="organization.removeMember(currentLink)">{{ t(currentLink.source === 'mixed' ? 'adminOrganization.removeManual' : 'adminOrganization.removeMember') }}</t-button></div></template><p v-else>{{ t('enterpriseLayout.notLinked') }}</p></section><p v-else>{{ t('enterpriseLayout.chooseOrganizationHint') }}</p>
+      </template>
+    </EditorDialog>
+    <EditorDialog :visible="assignmentOpen" :header="t('enterpriseLayout.addExistingUser')" :footer="false" :close-btn="!organization.busy" :close-on-overlay-click="!organization.busy" @close="!organization.busy && (assignmentOpen = false)"><t-alert v-if="organization.error" theme="error" :message="organization.error" /><t-form v-if="organizationFilter" layout="vertical" :disabled="organization.busy" @submit="assignMember"><p>{{ organization.path(organizationFilter) }}</p><t-form-item :label="t('adminOrganization.chooseMember')"><t-select v-model="organization.assignment.user_id" :options="organization.candidateOptions" filterable /></t-form-item><t-form-item :label="t('adminOrganization.makePrimary')"><t-switch v-model="organization.assignment.is_primary" :aria-label="t('adminOrganization.makePrimary')" /></t-form-item><t-button type="submit" theme="primary" :loading="organization.busy" :disabled="!organization.canAssign || !organization.assignment.user_id">{{ t('adminOrganization.assign') }}</t-button></t-form></EditorDialog>
+
   </section>
 </template>
 <style scoped>
@@ -101,10 +157,19 @@ async function copyLink(row: LinkInvitation) {
 .members-page > :deep(.t-tabs) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .members-page :deep(.t-tabs__content) { flex: 1; min-height: 0; overflow: auto; }
 .member-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.member-toolbar { margin: 0 0 16px; max-width: 320px; }
+.member-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
+.member-toolbar :deep(.t-input__wrap) { max-width: 320px; }
 .member-role { width: 150px; }
 .person-detail { margin: 2px 0; font-size: var(--app-text-sm); overflow-wrap: anywhere; }
 .members-page :deep(.t-table__content) { overflow-x: auto; }
 .members-page :deep(.t-pagination) { margin: 16px 0; }
 small { display: block; margin-top: 8px; color: var(--td-text-color-secondary); }
+</style>
+
+<style scoped>
+.user-management-layout { display: grid; grid-template-columns: 240px minmax(0,1fr); border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); overflow: hidden; min-height: 520px; }
+.user-management-layout.without-organization { grid-template-columns: minmax(0,1fr); }
+.user-management-content { padding: 20px; min-width: 0; }
+.user-organization-editor { border-top: 1px solid var(--td-component-stroke); padding-top: 20px; margin-top: 24px; }
+@media(max-width:720px) { .user-management-layout { grid-template-columns: minmax(0,1fr); } .user-management-content { padding: 16px; } }
 </style>

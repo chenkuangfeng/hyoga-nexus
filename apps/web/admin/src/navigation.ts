@@ -5,7 +5,7 @@ const groups: AdminNavigationGroup[] = [
   { key: 'enterprise', label: 'consoleLayout.enterprise', items: [
     { path: '/enterprise', label: 'consoleLayout.space', icon: 'user-circle', roles: ['owner', 'admin'] },
     { path: '/policy', label: 'consoleLayout.policy', icon: 'setting', permission: 'policy:manage' },
-    { path: '/organization', label: 'adminOrganization.title', icon: 'view-organization', permission: 'org:manage' },
+    { path: '/organization', label: 'enterpriseLayout.enterpriseOrganization', icon: 'view-organization', permission: 'org:manage' },
   ] },
   { key: 'agents', label: 'consoleLayout.agents', items: [
     { path: '/agents', label: 'consoleLayout.agentManagement', icon: 'app', permission: 'enterprise_agents:manage' },

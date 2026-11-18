@@ -84,7 +84,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 管理端部门组织
 
-`/admin/organization` 由 `OrganizationPage.vue` 和 `useOrganizationAdministration.ts` 组合，承接原工作台部门页的节点与成员归属流程，以及 WeKnora 组织设置的表格、反馈和确认模式。公共 `enterprise-organizations.ts` 调用当前企业 `/org-units` 的树、节点和成员归属接口，运行时校验单根、唯一节点、完整父引用、无环连通结构及回执企业/节点/成员。树遍历与子树排除采用迭代算法，避免深层组织递归溢出。
+`/admin/organization` 由 `OrganizationPage.vue` 和 `useOrganizationAdministration.ts` 组合，管理组织节点，成员归属流程由用户管理承接，以及 WeKnora 组织设置的表格、反馈和确认模式。公共 `enterprise-organizations.ts` 调用当前企业 `/org-units` 的树、节点和成员归属接口，运行时校验单根、唯一节点、完整父引用、无环连通结构及回执企业/节点/成员。树遍历与子树排除采用迭代算法，避免深层组织递归溢出。
 
 完整树与可选企业成员并行加载且分别反馈失败；所选节点的直接成员另用请求序号，阻止迟到响应覆盖新选择。企业、账号和权限代次变化同步清空状态；确认还绑定节点选择及成员请求序号。写入后重读树、候选和节点成员，首次分配自动设为主部门等规则由服务端结果决定。移动只提交变化字段，保留未变的停用父节点；根不提供父节点选择。删除既检查已读直接成员，也保留服务端历史关联冲突反馈。
 
@@ -247,3 +247,7 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 | EndpointsPage | views/integrations/McpServerIntegrationSettings.vue、components/css/channel-panel-list.less | 保留发布卡片及操作菜单；签发、轮换、撤销及一次性令牌使用 Nexus 契约 |
 | GraphStoresPage | components/css/provider-card.less、views/knowledge/settings/GraphSettings.vue | 原版图谱设置属于单知识库，没有企业图存储登记页；企业页沿用提供方卡片和配置容器，不伪造图抽取功能 |
 | SpaceMemorySettings | views/settings/MemoryWorkspaceSettings.vue | 使用既有空间记忆契约、企业模型目录与显式保存；身份变化丢弃旧请求，无定时延迟写入 |
+
+企业组织和用户管理共用管理端 `OrganizationTree.vue`。组织维护只读节点目录，依据直接子节点展示列表。删除是否允许仍由后端校验历史成员关联。用户管理复用已授权的成员目录作为分配候选，按节点成员接口过滤当前列表，权限或身份变化后清理筛选、编辑及待确认操作。表格和编辑交互参照 WeKnora e1f9a6166 的 `TenantMembers.vue` 与 `OrganizationSettingsModal.vue`，组织树采用 Nexus 的单根节点契约。
+
+员工设置使用 `Settings.vue` 的原有专用尺寸和内容留白。管理端系统设置按员工 `GeneralSettings.vue` 使用标题、说明、设置行和同宽控件，两端复用 `BrandColorPicker.vue`，窄屏按可用空间换行。

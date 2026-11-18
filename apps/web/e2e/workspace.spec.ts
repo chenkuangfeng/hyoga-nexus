@@ -61,6 +61,8 @@ test('员工主菜单仅三项，设置弹出且账户仅三项，旧工具地�
   await page.locator('.user-button').click()
   await page.locator('.user-dropdown .menu-item').filter({ hasText: '设置' }).click()
   await expect(page.locator('.settings-modal-shell')).toBeVisible()
+  await expect(page.locator('.workspace-account-settings > .settings-modal')).toHaveCSS('max-width', '1280px')
+  await expect(page.locator('.workspace-account-settings .content-wrapper')).toHaveCSS('padding-left', '48px')
   await expect(page.locator('.settings-modal-shell')).not.toHaveClass(/settings-page/)
   await expect(page.locator('.settings-nav .nav-item')).toHaveCount(3)
   await expect(page.locator('.settings-nav .nav-group-title')).toHaveText(['账户'])

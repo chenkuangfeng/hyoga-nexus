@@ -40,12 +40,27 @@ const shell = useModalShell({ visible: () => visible.value, close })
 
 </script>
 <template>
-  <SettingsModalShell :visible="visible" :title="t('general.settings')" :model-value="section" :nav-groups="groups" @update:model-value="select" @close="shell.requestClose">
-    <div class="section">
+  <SettingsModalShell :visible="visible" overlay-class="all-settings-overlay workspace-account-settings" :title="t('general.settings')" :model-value="section" :nav-groups="groups" @update:model-value="select" @close="shell.requestClose">
+    <div class="content-wrapper" :class="{ 'content-wrapper--resource-list': section === 'mymemory' }"><div class="section">
       <GeneralSettings v-if="section === 'general'" />
       <UserProfile v-else-if="section === 'userprofile'" />
       <NexusMemorySettings v-else-if="section === 'mymemory'" />
       <AdminSectionMoved v-else-if="isMigratedAdminSection(section)" :section="section" />
-    </div>
+    </div></div>
   </SettingsModalShell>
 </template>
+
+<style lang="less">
+/* 恢复 WeKnora Settings.vue 的设置专用尺寸，保持其他资源编辑器的壳尺寸独立。 */
+.settings-modal-shell.workspace-account-settings > .settings-modal { max-width: 1280px; height: 900px; }
+.workspace-account-settings .settings-body { padding: 0; }
+</style>
+<style scoped>
+.content-wrapper { width: 100%; min-width: 0; box-sizing: border-box; padding: 40px 48px; }
+.content-wrapper--resource-list { flex: 1; min-height: 0; padding: 20px 28px 0; }
+.section { animation: workspace-account-enter .3s ease; }
+@keyframes workspace-account-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media(max-width:720px) { .content-wrapper { padding: 24px; } .content-wrapper--resource-list { padding: 16px 16px 0; } }
+@media(max-width:600px) { .content-wrapper { padding: 16px; } }
+@media(prefers-reduced-motion:reduce) { .section { animation: none; } }
+</style>

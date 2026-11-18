@@ -1,85 +1,48 @@
 <script setup lang="ts">
-/** 管理端部门组织页：可读组织路径、节点维护与当前节点的直接成员归属。 */
-import { computed, reactive } from 'vue'
+/** 企业组织维护仅处理组织节点，成员及组织归属统一在用户管理维护。 */
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import OrganizationTree from '../../components/OrganizationTree.vue'
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 import { useOrganizationAdministration } from './useOrganizationAdministration'
-const { t } = useI18n()
-const state = reactive(useOrganizationAdministration(t))
-const columns = computed(() => [{ colKey: 'person', title: t('adminMembers.person'), minWidth: 200 }, { colKey: 'source', title: t('adminOrganization.linkSourceLabel'), width: 150 }, { colKey: 'is_primary', title: t('adminOrganization.primary'), width: 120 }, { colKey: 'actions', title: t('adminMembers.operations'), minWidth: 230 }])
+const { t } = useI18n(), state = reactive(useOrganizationAdministration(t, { includeMembers: false }))
+const search = ref('')
+const children = computed(() => state.units.filter(row => row.parent_id === state.selectedId && row.name.toLowerCase().includes(search.value.trim().toLowerCase())))
+const edited = computed(() => state.units.find(row => row.id === state.editingId))
 const editorTitle = computed(() => t(state.editorMode === 'root' ? 'adminOrganization.createRoot' : state.editorMode === 'edit' ? 'adminOrganization.edit' : 'adminOrganization.createChild'))
+const columns = computed(() => [{ colKey: 'name', title: t('adminOrganization.name'), minWidth: 180 }, { colKey: 'source', title: t('enterpriseLayout.source'), width: 130 }, { colKey: 'status', title: t('adminMembers.status'), width: 100 }, { colKey: 'actions', title: t('adminMembers.operations'), minWidth: 230 }])
 const rules = computed(() => ({ name: [{ required: true, message: t('adminOrganization.nameRequired'), type: 'error' }] }))
-function refresh() { if (!state.busy && !state.loading) void state.load(state.selectedId) }
+function refresh() { if (!state.busy) void state.load(state.selectedId) }
 </script>
 <template>
   <section class="organization-page">
-    <header class="section-header"><div><h2>{{ t('adminOrganization.title') }}</h2><p>{{ t('adminOrganization.description') }}</p></div><div class="organization-actions"><t-button class="settings-list-button" theme="default" variant="outline" :disabled="state.busy" :loading="state.loading" @click="refresh">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="state.canManage && state.treeReady && !state.units.length" :disabled="state.busy || state.loading" @click="state.openCreate(null)">{{ t('adminOrganization.createRoot') }}</t-button></div></header>
+    <header class="section-header"><div><h2>{{ t('enterpriseLayout.enterpriseOrganization') }}</h2><p>{{ t('enterpriseLayout.organizationDescription') }}</p></div></header>
     <t-alert v-if="!state.canManage" theme="warning" :message="t('adminOrganization.denied')" />
     <template v-else>
       <t-alert v-if="state.error" theme="error" :message="state.error" />
       <t-alert v-if="state.success" theme="success" :message="state.success" />
-      <t-loading :loading="state.loading">
-        <t-empty v-if="state.treeReady && !state.units.length" :description="t('adminOrganization.empty')" />
-        <div v-else-if="state.treeReady" class="organization-layout">
-          <nav class="organization-tree" :aria-label="t('adminOrganization.treeLabel')">
-            <button v-for="row in state.rows" :key="row.node.id" type="button" :aria-current="state.selectedId === row.node.id ? 'true' : undefined" :class="{ selected: state.selectedId === row.node.id }" :style="{ paddingLeft: `${12 + Math.min(row.depth, 12) * 12}px` }" :title="row.path" :disabled="state.busy || state.loading" @click="state.selectUnit(row.node.id)"><span>{{ row.node.name }}</span><small>{{ row.node.member_count }}</small><t-tag v-if="row.node.status === 'disabled'" theme="warning" size="small">{{ t('adminOrganization.status.disabled') }}</t-tag></button>
-          </nav>
-          <section v-if="state.selected" class="organization-detail">
-            <header><div><h2>{{ state.selected.name }}</h2><p>{{ state.path(state.selected.id) }}</p></div><div class="organization-actions"><t-tag :theme="state.selected.status === 'active' ? 'success' : 'warning'">{{ t(`adminOrganization.status.${state.selected.status}`) }}</t-tag><t-tag>{{ t(`adminOrganization.source.${state.selected.source}`) }}</t-tag></div></header>
-            <t-alert v-if="!state.manual" theme="info" :message="t('adminOrganization.wecomReadOnly')" />
-            <div class="organization-actions">
-              <t-button variant="outline" :disabled="state.busy || state.selected.status !== 'active'" @click="state.openCreate(state.selected.id)">{{ t('adminOrganization.createChild') }}</t-button>
-              <template v-if="state.manual"><t-button variant="outline" :disabled="state.busy" @click="state.openEdit">{{ t('adminOrganization.edit') }}</t-button><t-button variant="outline" :disabled="state.busy" @click="state.toggleStatus">{{ t(state.selected.status === 'active' ? 'adminOrganization.disable' : 'adminOrganization.enable') }}</t-button><t-button theme="danger" variant="outline" :disabled="state.busy || !state.canDelete" @click="state.removeUnit">{{ t('adminOrganization.delete') }}</t-button></template>
-            </div>
-            <p v-if="state.selected.parent_id === null">{{ t('adminOrganization.rootHint') }}</p>
-            <h3>{{ t('adminOrganization.members') }}</h3>
-            <t-alert v-if="state.membersError" theme="error" :message="state.membersError"><template #operation><t-button variant="text" :disabled="state.busy" @click="state.selectUnit(state.selected.id)">{{ t('connectionUi.refresh') }}</t-button></template></t-alert>
-            <div v-if="state.membersReady || state.membersLoading" class="data-table-shell"><t-table row-key="user_id" :data="state.members" :columns="columns" :loading="state.membersLoading" :empty="t('adminOrganization.noMembers')">
-              <template #person="{ row }">{{ state.memberName(row) }}</template>
-              <template #source="{ row }">{{ t(`adminOrganization.linkSource.${row.source}`) }}</template>
-              <template #is_primary="{ row }"><t-tag v-if="row.is_primary" theme="primary">{{ t('adminOrganization.primary') }}</t-tag><span v-else>{{ t('adminOrganization.secondary') }}</span></template>
-              <template #actions="{ row }"><div class="organization-actions"><t-button variant="text" :disabled="state.busy || row.is_primary || state.selected.status !== 'active'" @click="state.setPrimary(row)">{{ t('adminOrganization.setPrimary') }}</t-button><t-button theme="danger" variant="text" :disabled="state.busy || row.source === 'wecom'" @click="state.removeMember(row)">{{ t(row.source === 'mixed' ? 'adminOrganization.removeManual' : 'adminOrganization.removeMember') }}</t-button></div></template>
-            </t-table></div>
-            <template v-if="state.selected">
-              <t-alert v-if="!state.canReadCandidates" theme="info" :message="t('adminOrganization.candidatePermission')" />
-              <t-alert v-else-if="state.candidatesError" theme="warning" :message="t('adminOrganization.candidateFailed')" />
-              <t-form v-else :data="state.assignment" layout="vertical" :disabled="state.busy || !state.canAssign" class="assignment-form" @submit="state.assign">
-                <t-form-item :label="t('adminOrganization.chooseMember')"><t-select v-model="state.assignment.user_id" :options="state.candidateOptions" filterable /></t-form-item>
-                <t-form-item :label="t('adminOrganization.makePrimary')"><t-switch v-model="state.assignment.is_primary" :aria-label="t('adminOrganization.makePrimary')" /></t-form-item>
-                <p>{{ t('adminOrganization.primaryHint') }}</p>
-                <t-button type="submit" theme="primary" :disabled="!state.canAssign || !state.assignment.user_id" :loading="state.busy">{{ t('adminOrganization.assign') }}</t-button>
-              </t-form>
-            </template>
-          </section>
-        </div>
-      </t-loading>
-      <p>{{ t('adminOrganization.deleteHint') }}</p>
+      <div class="organization-layout">
+        <OrganizationTree :nodes="state.units" :selected-id="state.selectedId" :disabled="state.busy || state.loading" @select="state.selectUnit" />
+        <section class="organization-content">
+          <div class="organization-toolbar"><t-input v-model="search" clearable :placeholder="t('enterpriseLayout.searchOrganizations')" :aria-label="t('enterpriseLayout.searchOrganizations')"><template #prefix-icon><t-icon name="search" /></template></t-input><div class="organization-actions"><t-button variant="outline" :loading="state.loading" :disabled="state.busy" @click="refresh">{{ t('connectionUi.refresh') }}</t-button><template v-if="state.selected && !state.selected.sync_managed">
+            <t-button variant="outline" :disabled="state.busy" @click="state.openEdit()">{{ t('enterpriseLayout.editCurrent') }}</t-button>
+            <t-button v-if="state.selected.parent_id === null" variant="outline" :disabled="state.busy" @click="state.toggleStatus()">{{ t(state.selected.status === 'active' ? 'adminOrganization.disable' : 'adminOrganization.enable') }}</t-button>
+          </template><t-button theme="primary" :disabled="state.busy || !state.treeReady || state.loading || !!state.selected && state.selected.status !== 'active'" @click="state.openCreate(state.selected?.id || null)"><t-icon name="add" />{{ t('enterpriseLayout.addOrganization') }}</t-button></div></div>
+          <p v-if="state.selected" class="organization-path">{{ state.path(state.selected.id) }}</p>
+          <t-alert v-if="state.selected?.sync_managed" theme="info" :message="t('adminOrganization.wecomReadOnly')" />
+          <div class="data-table-shell"><t-table row-key="id" :data="children" :columns="columns" :loading="state.loading" :empty="t('enterpriseLayout.noChildOrganizations')"><template #name="{ row }"><t-button variant="text" @click="state.selectUnit(row.id)"><t-icon name="folder" />{{ row.name }}</t-button></template><template #source="{ row }">{{ t(`adminOrganization.source.${row.source}`) }}</template><template #status="{ row }"><t-tag :theme="row.status === 'active' ? 'success' : 'warning'">{{ t(`adminOrganization.status.${row.status}`) }}</t-tag></template><template #actions="{ row }"><div v-if="!row.sync_managed" class="organization-actions"><t-button variant="text" :disabled="state.busy" @click="state.openEdit(row.id)">{{ t('common.edit') }}</t-button><t-button variant="text" :disabled="state.busy" @click="state.toggleStatus(row.id)">{{ t(row.status === 'active' ? 'adminOrganization.disable' : 'adminOrganization.enable') }}</t-button><t-button variant="text" theme="danger" :disabled="state.busy || !state.canDeleteUnit(row)" @click="state.removeUnit(row.id)">{{ t('common.delete') }}</t-button></div><span v-else>{{ t('adminOrganization.wecomReadOnly') }}</span></template></t-table></div>
+          <p>{{ t('adminOrganization.deleteHint') }}</p>
+        </section>
+      </div>
     </template>
-    <t-dialog :visible="state.editorOpen" :header="editorTitle" :footer="false" :close-btn="!state.busy" :close-on-overlay-click="!state.busy" :close-on-esc-keydown="!state.busy" @close="state.closeEditor">
-      <t-alert v-if="state.error" theme="error" :message="state.error" />
-      <t-form :data="state.form" :rules="rules" layout="vertical" :disabled="state.busy" @submit="state.save">
-        <t-form-item name="name" :label="t('adminOrganization.name')"><t-input v-model="state.form.name" :maxlength="160" /></t-form-item>
-        <t-form-item v-if="state.editorMode === 'create' || (state.editorMode === 'edit' && state.selected?.parent_id !== null)" :label="t('adminOrganization.parent')"><t-select v-model="state.form.parent_id" :options="state.parentOptions" filterable /></t-form-item>
-        <p v-else>{{ t('adminOrganization.rootHint') }}</p>
-        <div class="organization-actions"><t-button type="submit" theme="primary" :loading="state.busy" :disabled="!state.form.name.trim()">{{ t('common.save') }}</t-button><t-button variant="outline" :disabled="state.busy" @click="state.closeEditor">{{ t('common.cancel') }}</t-button></div>
-      </t-form>
-    </t-dialog>
+    <EditorDialog :visible="state.editorOpen" :header="editorTitle" :footer="false" :close-btn="!state.busy" :close-on-overlay-click="!state.busy" @close="state.closeEditor"><t-alert v-if="state.error" theme="error" :message="state.error" /><t-form :data="state.form" :rules="rules" layout="vertical" :disabled="state.busy" @submit="state.save"><t-form-item name="name" :label="t('adminOrganization.name')"><t-input v-model="state.form.name" :maxlength="160" /></t-form-item><t-form-item v-if="state.editorMode === 'create' || state.editorMode === 'edit' && edited?.parent_id !== null" :label="t('adminOrganization.parent')"><t-select v-model="state.form.parent_id" :options="state.parentOptions" filterable /></t-form-item><p v-else>{{ t('adminOrganization.rootHint') }}</p><div class="organization-actions"><t-button type="submit" theme="primary" :loading="state.busy" :disabled="!state.form.name.trim()">{{ t('common.save') }}</t-button><t-button variant="outline" :disabled="state.busy" @click="state.closeEditor">{{ t('common.cancel') }}</t-button></div></t-form></EditorDialog>
   </section>
 </template>
 <style scoped>
-.organization-page { display: grid; gap: 20px; }
-.organization-page header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
-h2,h3 { margin: 0 0 8px; font-size: var(--app-text-xl); font-weight: 600; }
-.organization-tree button:hover { background: var(--td-bg-color-container-hover); }
-p { color: var(--td-text-color-secondary); line-height: 1.6; overflow-wrap: anywhere; }
-.organization-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; }
-.organization-tree { border: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); border-radius: var(--app-radius-lg); padding: 12px; min-height: 320px; align-self: start; }
-.organization-tree button { width: 100%; padding: 6px 8px; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--td-text-color-primary); text-align: left; cursor: pointer; border-radius: var(--app-radius-md); }
-.organization-tree button span { flex: 1; overflow-wrap: anywhere; min-width: 0; }
-.organization-tree button.selected { color: var(--td-brand-color); background: var(--td-brand-color-light); }
-.organization-tree button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
-.organization-tree button:disabled { cursor: wait; }
-.organization-detail { border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); padding: 12px; min-height: 320px; min-width: 0; display: grid; align-content: start; gap: 16px; }
-.organization-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.assignment-form { margin: 0; padding-top: 16px; border-top: 1px solid var(--td-component-stroke); }
-@media(max-width: 1000px) { .organization-layout { grid-template-columns: 1fr; } }
+.organization-page { width: 100%; min-width: 0; }
+.organization-layout { display: grid; grid-template-columns: 240px minmax(0,1fr); border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); overflow: hidden; min-height: 520px; }
+.organization-content { min-width: 0; padding: 20px; } .organization-toolbar, .organization-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.organization-toolbar { justify-content: space-between; margin-bottom: 20px; gap: 16px; } .organization-toolbar :deep(.t-input__wrap) { width: 240px; max-width: 100%; }
+p { color: var(--td-text-color-secondary); line-height: 1.6; overflow-wrap: anywhere; } .organization-path { margin: 0 0 16px; }
+@media(max-width:720px) { .organization-layout { grid-template-columns: minmax(0,1fr); } .organization-content { padding: 16px; } }
 </style>
