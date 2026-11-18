@@ -113,36 +113,19 @@ test('refreshes Wiki pages, selected content and statistics for its own KB only'
   assert.equal(vm.selectedPage.title, 'Updated title')
 })
 
-test('refreshes the mounted KB list with force for knowledge_base changes only', async t => {
+test('refreshes the employee KB directory for knowledge_base changes only', async t => {
   const f = fixture(t)
-  const fetchKnowledgeBasesForList = t.mock.fn(async (_params: unknown, _force: boolean) => [{ id: 'kb', name: 'Updated KB' }])
+  const listKnowledgeBases = t.mock.fn(async () => ({ data: [{ id: 'kb', name: 'Updated KB' }] }))
   const { vm } = f.component(new URL('./KnowledgeBaseList.vue', import.meta.url), {
-    'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({}) },
+    'vue-router': { useRouter: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
-    'tdesign-vue-next': { MessagePlugin: {} },
-    '@nexus-web/core/stores/auth': { useAuthStore: () => ({ hasRole: () => true }) },
-    '@/stores/ui': { useUIStore: () => ({}) },
-    '@nexus-web/core/stores/organization': { useOrganizationStore: () => ({
-      sharedKnowledgeBases: [], async fetchOrganizations() {}, async fetchSharedKnowledgeBases() {},
-    }) },
-    '@nexus-web/core/stores/chatResources': { useChatResourcesStore: () => ({ fetchKnowledgeBasesForList }) },
-    '@/components/settings/useConfirmDelete': { useConfirmDelete: () => ({}) },
-    '@/composables/useTenantModelReadiness': { useTenantModelReadiness: () => ({ loaded: vue.ref(true), isReadyForDocumentKb: vue.ref(true) }) },
-    '@/composables/useListUrlState': { useListUrlState: () => ({ scope: vue.ref('all'), creator: vue.ref('all'), query: vue.ref('') }) },
-    '@/composables/useResourcePins': { useResourcePins: () => ({ favorites: vue.ref([]), recents: vue.ref([]) }) },
-    '@nexus-web/core/api/knowledge-base/index': {}, '@nexus-web/core/api/organization/index': {}, '@nexus-web/core/config/contextualGuides': {},
-    '@nexus-web/core/utils/index': {}, '@/utils/kbPermission': {},
-    '@/utils/resourceListSearch': {}, '@/utils/card-list-badge': {}, '@/utils/resourceSorting': sorting,
+    '@nexus-web/core/stores/auth': { useAuthStore: () => ({ effectiveTenantId: 'a', user: { id: 'u' }, currentTenantRole: 'owner' }) },
+    '@nexus-web/core/api/knowledge-base/index': { listKnowledgeBases },
   })
-  await flush()
-  fetchKnowledgeBasesForList.mock.resetCalls()
-  f.emit(change('unknown.update'))
-  t.mock.timers.tick(300)
-  assert.equal(fetchKnowledgeBasesForList.mock.callCount(), 0)
-  f.emit(change('knowledge_base.generate_profile'))
-  t.mock.timers.tick(300)
-  await flush()
-  assert.equal(fetchKnowledgeBasesForList.mock.callCount(), 1)
-  assert.equal(fetchKnowledgeBasesForList.mock.calls[0].arguments[1], true)
-  assert.equal(vm.kbs[0].name, 'Updated KB')
+  await flush(); listKnowledgeBases.mock.resetCalls()
+  f.emit(change('unknown.update')); t.mock.timers.tick(300)
+  assert.equal(listKnowledgeBases.mock.callCount(), 0)
+  f.emit(change('knowledge_base.generate_profile')); t.mock.timers.tick(300); await flush()
+  assert.equal(listKnowledgeBases.mock.callCount(), 1)
+  assert.equal(vm.rows[0].name, 'Updated KB')
 })

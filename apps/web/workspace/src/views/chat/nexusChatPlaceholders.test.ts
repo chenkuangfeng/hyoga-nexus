@@ -22,7 +22,10 @@ test('page provides Nexus actions and the WeKnora prompt dock', () => {
   assert.match(page, /provideNexusChatActions\(/)
   assert.match(page, /providePromptDock\(/)
   assert.doesNotMatch(page, /planned\('askAssistant'\)/)
-  for (const entry of ['suggestedQuestions', 'sandboxPanel', 'fork', 'rewind']) {
+  assert.match(page, /id="session-artifacts"/)
+  assert.match(page, /listSessionArtifacts\(sessionId\)/)
+  assert.doesNotMatch(page, /planned\('sandboxPanel'\)/)
+  for (const entry of ['suggestedQuestions', 'fork', 'rewind']) {
     assert.match(page, new RegExp(`planned\\('${entry}'\\)`), entry)
   }
 })

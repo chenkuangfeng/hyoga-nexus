@@ -8,7 +8,6 @@
  */
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { downloadArtifactFile, type ArtifactLibraryItem } from '@nexus-web/core/api/artifacts'
 import { resolveFilePreviewExt, resolvePreviewKind } from '@/utils/filePreview'
@@ -19,7 +18,6 @@ import ArtifactFileIcon from './ArtifactFileIcon.vue'
 
 const props = defineProps<{ items: ArtifactLibraryItem[] }>()
 const { t } = useI18n()
-const router = useRouter()
 
 const expanded = ref(false)
 const downloading = reactive<Record<string, boolean>>({})
@@ -77,9 +75,6 @@ async function download(item: ArtifactLibraryItem) {
   }
 }
 
-function openLibrary() {
-  void router.push('/platform/artifacts')
-}
 
 defineExpose({ openPreview, download, expanded, previewBlob, previewFailed, previewVisible, view })
 </script>
@@ -88,7 +83,7 @@ defineExpose({ openPreview, download, expanded, previewBlob, previewFailed, prev
   <div v-if="items.length" class="run-artifacts" data-testid="run-artifacts">
     <div class="run-artifacts__head">
       <span class="run-artifacts__title">{{ t('nexusChat.artifacts.title', { count: items.length }) }}</span>
-      <button type="button" class="run-artifacts__library" @click="openLibrary">{{ t('nexusChat.artifacts.library') }}</button>
+
     </div>
     <ul class="run-artifacts__list">
       <li v-for="item in view.shown" :key="item.id" class="run-artifacts__item">

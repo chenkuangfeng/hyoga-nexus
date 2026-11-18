@@ -15,3 +15,5 @@ API 提供认证上下文下的空间、模型、智能体、会话、运行、�
 ## 企业编码只读展示
 
 企业元数据应返回已保存的真实可空编码，不能用内部 UUID 替代；通过基本信息编辑不能修改编码。
+
+员工工作台的知识库创建入口 `POST /tenants/{tenant_id}/knowledge/bases` 在校验当前成员后返回 403。企业建库使用 `POST /tenants/{tenant_id}/admin/knowledge/bases` 并检查 `enterprise_kbs:manage`。已有库不迁移或删除，指定维护员的内容维护接口与权限保持不变。

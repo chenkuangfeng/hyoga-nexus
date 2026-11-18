@@ -24,7 +24,7 @@ test('解析配置确认后保存，保留既有密钥与关闭状态', async ({
   })
   await page.goto('parsers')
   await expect(page.locator('.engine-card')).toHaveCount(4)
-  await expect(page.locator('.nav-group-title')).toHaveText(['空间', '发布集成', '数据与扩展', '系统管理', '平台'])
+  await expect(page.locator('.nav-group-title')).toHaveText(['企业', '知识库', '发布集成', '数据和扩展', '权限', '系统'])
   await page.locator('.engine-card').first().click()
   await expect(page.locator('.setting-drawer')).toBeVisible()
   await expect(page.locator('.parser-group')).toHaveCount(1)
@@ -32,7 +32,7 @@ test('解析配置确认后保存，保留既有密钥与关闭状态', async ({
   const endpoint = page.locator('.parser-group').first().locator('input').first()
   await endpoint.fill('https://updated.example.test'); await endpoint.blur()
   await page.locator('.setting-drawer__footer-right button').last().click()
-  await expect(page.locator('.t-dialog')).toBeVisible(); expect(writes).toHaveLength(0)
+  await expect(page.locator('.t-dialog:visible').last()).toBeVisible(); expect(writes).toHaveLength(0)
   await page.locator('.t-dialog__footer button').last().click()
   await expect(page.locator('.setting-drawer .t-alert--success')).toBeVisible()
   expect(writes).toEqual([{ mineru_api_key: '******', mineru_endpoint: 'https://updated.example.test', mineru_enable_table: false }])
@@ -45,17 +45,17 @@ test('分组菜单保留权限入口，折叠后仍可通过图标名称访问',
     ? { body: { apis: ['org:manage', 'members:manage', 'roles:manage', 'models:manage', 'tools:manage', 'enterprise_kbs:manage', 'enterprise_agents:manage', 'audit:read', 'policy:manage'] } } : undefined)
   await page.goto('')
   const navigation = page.locator('#admin-navigation')
-  await expect(navigation.locator('.nav-group-title')).toHaveText(['空间', '模型', '发布集成', '数据与扩展', '系统管理', '平台'])
-  await expect(navigation.locator('a')).toHaveCount(22)
+  await expect(navigation.locator('.nav-group-title')).toHaveText(['企业', '智能体', '知识库', '模型', '发布集成', '数据和扩展', '工具箱', '权限', '系统'])
+  await expect(navigation.locator('a')).toHaveCount(20)
   await page.screenshot({ path: testInfo.outputPath('grouped-navigation.png') })
   const labels = await navigation.locator('a').allTextContents()
-  expect(labels.filter(label => label.includes('企业'))).toEqual(['企业微信'])
+  expect(labels.filter(label => label.includes('企业'))).toEqual(['企业空间', '企业策略', '企业微信'])
   await page.getByRole('button', { name: '收起侧边栏' }).click()
   await expect(navigation.locator('.nav-group-title')).toHaveCount(0)
   await expect(navigation.getByRole('link', { name: '解析引擎' })).toHaveAttribute('title', '解析引擎')
   await page.getByRole('button', { name: '展开侧边栏' }).focus()
   await page.keyboard.press('Enter')
-  await expect(navigation.locator('.nav-group-title')).toHaveCount(6)
+  await expect(navigation.locator('.nav-group-title')).toHaveCount(9)
 })
 
 test('存储与向量库使用原版卡片和抽屉，保留创建及键盘编辑流程', async ({ page, api }) => {
@@ -79,7 +79,7 @@ test('存储与向量库使用原版卡片和抽屉，保留创建及键盘编�
   })
   await page.goto('storage')
   await expect(page.locator('.backend-card--add')).toBeVisible()
-  await expect(page.locator('.setting-drawer')).toHaveCount(0)
+  await expect(page.locator('.setting-drawer:visible')).toHaveCount(0)
   await page.locator('.backend-card--add').click()
   const drawer = page.locator('.setting-drawer')
   await drawer.locator('input').nth(0).fill('Local documents')
@@ -100,5 +100,62 @@ test('存储与向量库使用原版卡片和抽屉，保留创建及键盘编�
   expect(writes).toEqual([{ name: 'Renamed Qdrant', connection_config: {}, index_config: {} }])
   await expectResponsive(page)
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  await expectResponsive(page)
+})
+
+
+test('系统设置保存编辑展示偏好，抽屉与替换路由保持同一表单，返回关闭编辑', async ({ page, api }, testInfo) => {
+  await api.signIn()
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
+    if (path === '/api/v1/tenants/a/admin/model-settings') return { body: { providers: [], defaults: {}, can_manage_tenant: true } }
+  })
+  await page.goto('settings')
+  const selectMode = async (label: string) => {
+    await page.locator('.setting-row').filter({ hasText: '二级编辑界面' }).locator('.t-select').click()
+    await page.locator('.t-select-option:visible').filter({ hasText: label }).click()
+  }
+  await selectMode('抽屉')
+  await page.locator('#admin-navigation').getByRole('link', { name: '模型管理', exact: true }).click()
+  await page.getByRole('button', { name: '添加服务商', exact: true }).click()
+  await expect(page.locator('.t-drawer--open')).toBeVisible()
+  await page.locator('.t-drawer--open .t-drawer__close-btn').click()
+  await page.locator('#admin-navigation').getByRole('link', { name: '系统设置', exact: true }).click()
+  await selectMode('替换路由')
+  await page.locator('#admin-navigation').getByRole('link', { name: '模型管理', exact: true }).click()
+  await page.getByRole('button', { name: '添加服务商', exact: true }).click()
+  await expect(page).toHaveURL(/models\?editor=edit-[^&]+$/)
+  await expect(page.locator('.editor-dialog-route:visible')).toBeVisible()
+  await expect.poll(async () => await page.locator('.editor-dialog-route:visible .t-dialog').evaluate(element => { const rect = element.getBoundingClientRect(); return Math.abs(rect.top) <= 1 && rect.bottom <= innerHeight + 1 && rect.height >= innerHeight - 2 })).toBe(true)
+  await expect(page.locator('.editor-dialog-route:visible .t-dialog__footer')).toBeInViewport()
+  await page.screenshot({ path: testInfo.outputPath('route-editor.png') })
+  await page.goBack()
+  await expect(page).toHaveURL(/models$/)
+  await expect(page.locator('.editor-dialog-route:visible')).toHaveCount(0)
+  await expectResponsive(page)
+})
+
+
+test('知识库、智能体与技能使用参考资源卡片，MCP注册独立于发布', async ({ page, api }, testInfo) => {
+  await api.signIn()
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['enterprise_kbs:manage', 'enterprise_agents:manage', 'tools:manage'] } }
+    if (path === '/api/v1/tenants/a/admin/knowledge/bases') return { body: { items: [{ id: 'kb1', tenant_id: 'a', ownership: 'enterprise', shared: false, name: 'Knowledge reference', description: 'Knowledge content', type: 'document', visibility: 'tenant', knowledge_count: 3, can_manage: true }] } }
+    if (path === '/api/v1/tenants/a/admin/agents') return { body: [{ id: 'agent1', tenant_id: 'a', ownership: 'enterprise', can_maintain: true, name: 'Agent reference', description: 'Agent content', status: 'draft', runtime_type: 'native', instructions: '', published_version_id: null, model_profile_version_id: null, version_counter: 0, budgets: {}, resource_bindings: [], created_at: '2026-11-18', updated_at: '2026-11-18' }] }
+    if (path === '/api/v1/tenants/a/skills') return { body: [{ name: 'Skill reference', source: 'builtin', scope: 'builtin', source_tenant_id: 'a', version: 1, version_id: 'v1', tools: [], execution: 'sandbox', model_invocable: true, description: 'Skill content', disabled: false }] }
+    if (path === '/api/v1/tenants/a/mcp-services') return { body: [{ id: 'm1', tenant_id: 'a', name: 'MCP reference', description: 'MCP content', transport: 'streamable_http', config: { url: 'https://mcp.example.test' }, enabled: true, config_epoch: 'e1', created_by: 'u', created_at: '2026-11-18', updated_at: '2026-11-18' }] }
+  })
+  await page.goto('knowledge')
+  await expect(page.locator('.resource-directory-card')).toContainText('Knowledge reference')
+  await page.locator('#admin-navigation').getByRole('link', { name: '智能体管理' }).click()
+  await expect(page.locator('.resource-directory-card')).toContainText('Agent reference')
+  await page.locator('#admin-navigation').getByRole('link', { name: '技能管理' }).click()
+  await expect(page.locator('.skill-card')).toContainText('Skill reference')
+  await page.locator('#admin-navigation').getByRole('link', { name: 'MCP服务注册' }).click()
+  await expect(page.locator('.service-card')).toContainText('MCP reference')
+  await expect(page.locator('#admin-navigation').getByRole('link', { name: 'MCP服务发布' })).toHaveAttribute('href', /mcp-endpoints$/)
+  await page.screenshot({ path: testInfo.outputPath('mcp-reference-cards.png') })
   await expectResponsive(page)
 })

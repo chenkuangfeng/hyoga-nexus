@@ -42,7 +42,7 @@
   </div>
 
   <!-- Conversation (WeKnora views/chat/index.vue). -->
-  <div v-else class="chat" :class="{ 'is-embedded': compact }">
+  <div v-else class="chat" :class="{ 'is-embedded': compact, 'has-artifact-panel': artifactsOpen && !compact }">
     <div v-if="!compact" class="chat-topbar">
       <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
       <!-- Nexus: tools allowed for the rest of this session (openspec 2026-11-06-tool-call-hardening 7.3). -->
@@ -63,20 +63,12 @@
           </div>
         </template>
       </t-popup>
-      <div class="sandbox-header-toggle" :class="{ 'after-grants': toolGrants.length }">
-        <t-tooltip placement="bottom">
-          <template #content>{{ $t('chatHeader.toggleSandboxPanel') }}</template>
-          <button type="button" class="sandbox-header-toggle__btn" :aria-label="$t('chatHeader.toggleSandboxPanel')"
-            data-testid="chat-planned-sandbox" @click="planned('sandboxPanel')">
-            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor" stroke-width="1.2" />
-              <line x1="12.5" y1="1.5" x2="12.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
-              <line x1="16" y1="7.5" x2="16" y2="12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-        </t-tooltip>
-      </div>
+      <button type="button" class="artifact-panel-toggle" :aria-label="$t('consoleLayout.artifacts')" :aria-expanded="artifactsOpen" aria-controls="session-artifacts" @click="artifactsOpen = !artifactsOpen"><t-icon name="folder" />{{ $t('consoleLayout.artifacts') }}<span v-if="sessionArtifacts.length">{{ sessionArtifacts.length }}</span></button>
     </div>
+    <aside v-if="artifactsOpen && !compact" id="session-artifacts" class="session-artifacts" :aria-label="$t('consoleLayout.artifacts')">
+      <header><h3>{{ $t('consoleLayout.artifacts') }}</h3><t-button variant="text" shape="square" :aria-label="$t('common.close')" @click="artifactsOpen = false"><t-icon name="close" /></t-button></header>
+      <t-loading :loading="artifactsLoading"><t-alert v-if="artifactsError" theme="error" :message="$t('consoleLayout.artifactFailed')"><template #operation><t-button variant="text" @click="loadArtifacts(activeSessionId)">{{ $t('common.retry') }}</t-button></template></t-alert><RunArtifactCards v-if="sessionArtifacts.length" :key="`${tenantId}:${authStore.user?.id}:${activeSessionId}`" :items="sessionArtifacts" /><t-empty v-else-if="!artifactsLoading && !artifactsError" :description="$t('consoleLayout.artifactEmpty')" /></t-loading>
+    </aside>
     <div class="chat_thread" :style="{ '--chat-composer-height': `${composerHeight}px`, '--chat-scrollbar-gutter': `${scrollbarGutter}px` }">
       <div ref="scrollContainer" class="chat_scroll_box" @scroll="handleScroll">
         <div class="chat_scroll_content">
@@ -121,8 +113,6 @@
                   @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
                   @rewind="planned('rewind')" />
                 <KnowledgeCitations v-if="row.citations?.length" :citations="row.citations" />
-                <RunArtifactCards v-if="row.run_id && artifactsByRun.get(row.run_id)?.length"
-                  :items="artifactsByRun.get(row.run_id)!" />
               </div>
             </div>
 
@@ -203,7 +193,6 @@ import botmsg from '@/views/chat/components/botmsg.vue'
 import PendingPromptDock from '@/views/chat/components/PendingPromptDock.vue'
 import { shouldShowConversationTimestamp } from '@/utils/messageTimestamp'
 import { listSessionArtifacts, type ArtifactLibraryItem } from '@nexus-web/core/api/artifacts'
-import { groupArtifactsByRun } from '@/utils/runArtifacts'
 import { copyWithToast } from '@/utils/clipboard'
 import { deriveSessionTitle } from '@/utils/nexusChatTitle'
 import { summarizeAskUserAnswer, type AskUserQuestion } from '@/utils/askUser'
@@ -379,15 +368,16 @@ async function loadRunEvents(sessionId: string) {
 
 /** Files the session's Runs left under /outputs (openspec 2026-11-07-tool-expansion 4.6), shown under their answers. */
 const sessionArtifacts = ref<ArtifactLibraryItem[]>([])
-const artifactsByRun = computed(() => groupArtifactsByRun(sessionArtifacts.value))
+const artifactsOpen = ref(false), artifactsLoading = ref(false), artifactsError = ref(false)
+let artifactRequest = 0
 
 async function loadArtifacts(sessionId: string) {
-  try {
-    const items = await listSessionArtifacts(sessionId)
-    if (activeSessionId.value === sessionId) sessionArtifacts.value = items
-  } catch {
-    /* the answer is complete without its file cards; the artifacts page still lists them */
-  }
+  const request = ++artifactRequest
+  artifactsError.value = false; artifactsLoading.value = true
+  if (!sessionId) { sessionArtifacts.value = []; artifactsLoading.value = false; return }
+  try { const items = await listSessionArtifacts(sessionId); if (request === artifactRequest && activeSessionId.value === sessionId) sessionArtifacts.value = items }
+  catch { if (request === artifactRequest && activeSessionId.value === sessionId) artifactsError.value = true }
+  finally { if (request === artifactRequest && activeSessionId.value === sessionId) artifactsLoading.value = false }
 }
 
 async function openSession() {
@@ -658,6 +648,7 @@ watch(activeSessionId, (id) => {
   if (!id) {
     messages.value = []
     eventsByRun.value = new Map()
+    artifactRequest++; artifactsError.value = false; artifactsLoading.value = false
     sessionArtifacts.value = []
     errorText.value = ''
     void loadAgents()
@@ -666,16 +657,18 @@ watch(activeSessionId, (id) => {
   void openSession()
 })
 
-watch(tenantId, () => {
+watch([tenantId, () => authStore.user?.id], () => {
+  artifactRequest++; sessionArtifacts.value = []; artifactsError.value = false; artifactsLoading.value = false
   if (isWelcome.value) void loadAgents()
   else void openSession()
-})
+}, { flush: 'sync' })
 
 onMounted(() => {
   if (isWelcome.value) void loadAgents()
   else void openSession()
 })
 onBeforeUnmount(() => {
+  artifactRequest++
   native.dispose()
   composerObserver?.disconnect()
 })
@@ -1390,4 +1383,13 @@ defineExpose({ sendText })
   width: 100%;
 }
 
+</style>
+
+<style scoped>
+.artifact-panel-toggle { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-md); padding: 8px 12px; color: var(--td-text-color-primary); cursor: pointer; }
+.artifact-panel-toggle:focus-visible { outline: 2px solid var(--td-brand-color); }
+.session-artifacts { position: absolute; top: 56px; right: 0; bottom: 0; z-index: 10; width: min(360px,100%); box-sizing: border-box; padding: 16px; overflow: auto; border-left: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); }
+.session-artifacts header { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .session-artifacts h3 { font-size: var(--app-text-md); }
+.has-artifact-panel .chat_thread { margin-right: 360px; }
+@media(max-width:900px) { .has-artifact-panel .chat_thread { margin-right: 0; } }
 </style>

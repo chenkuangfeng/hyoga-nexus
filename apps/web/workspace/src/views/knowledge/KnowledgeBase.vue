@@ -15,7 +15,6 @@ import { useAuthStore } from '@nexus-web/core/stores/auth';
 import { permissionCanEditKB, permissionCanManageKB } from '@/utils/kbPermission';
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources';
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources';
-import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue';
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
 const authStore = useAuthStore();
@@ -261,11 +260,6 @@ const unsupportedFileTypes = computed<string[]>(() => {
   return [...allTypes].filter(ft => !supported.has(ft)).sort()
 })
 
-const goToParserSettings = () => {
-  if (kbId.value) {
-    uiStore.openKBSettings(kbId.value, 'parser')
-  }
-}
 
 // Permission control: check if current user owns this KB or has edit/manage permission
 //
@@ -338,14 +332,7 @@ const canEdit = computed(() => {
 // Can manage (delete, settings, etc.): same permission-first rule. For
 // shared KBs only an 'admin' share grant qualifies — editor/viewer (and
 // even being the creator viewed via share) never grant delete/settings.
-const canManage = computed(() => {
-  const permission = effectiveKBPermission.value;
-  if (permission) return permissionCanManageKB(permission);
-  if (isViaShare.value) return orgStore.canManageKB(kbId.value, false);
-  if (isOwner.value) return true;
-  if (authStore.hasRole('admin')) return true;
-  return orgStore.canManageKB(kbId.value, false);
-});
+
 
 // The activity feed exposes owner-side actor and configuration summaries.
 // It lives in KB settings (KnowledgeBaseEditorModal) for Owner/Admin in the home tenant.
@@ -1901,13 +1888,6 @@ const handleManualCreate = () => {
   });
 };
 
-const handleOpenKBSettings = () => {
-  if (!kbId.value) {
-    MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
-    return;
-  }
-  uiStore.openKBSettings(kbId.value);
-};
 
 const handleNavigateToKbList = () => {
   router.push('/platform/knowledge-bases');
@@ -2357,15 +2337,6 @@ watch(cardList, () => {
   }
 }, { deep: false });
 
-// 处理知识库编辑成功后的回调
-const handleKBEditorSuccess = (kbIdValue: string) => {
-  chatResources.invalidateKnowledgeBaseDetail(kbIdValue);
-  chatResources.invalidate('knowledgeBases');
-  loadKnowledgeList();
-  if (kbIdValue === kbId.value) {
-    loadKnowledgeBaseInfo(kbIdValue, true);
-  }
-};
 </script>
 
 <template>
@@ -2416,26 +2387,21 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
             <div class="kb-title-actions">
               <KBInfoPopover v-if="kbInfo && !authStore.isLiteMode" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
-              <t-tooltip v-if="canManage" :content="$t('knowledgeBase.settings')" placement="top">
-                <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.settings')" :disabled="!kbId" @click="handleOpenKBSettings">
-                  <t-icon name="setting" size="16px" />
-                </button>
-              </t-tooltip>
             </div>
           </div>
           <p v-if="kbInfo?.description" class="document-subtitle">{{ kbInfo.description }}</p>
-          <p v-if="canEdit && unsupportedFileTypes.length" class="parser-hint" @click="goToParserSettings">
+          <p v-if="canEdit && unsupportedFileTypes.length" class="parser-hint">
             <t-icon name="info-circle" class="parser-hint-icon" />
             <span>{{$t('knowledgeBase.unsupportedTypesHint', {
               types: unsupportedFileTypes.map(t => '.' + t).join('、')
             })
               }}</span>
-            <span class="parser-hint-link">{{ $t('knowledgeBase.goToParserSettings') }} →</span>
+            <span>{{ $t('consoleLayout.contactAdmin') }}</span>
           </p>
-          <p v-if="missingStorageEngine" class="storage-engine-warning" @click="handleOpenKBSettings">
+          <p v-if="missingStorageEngine" class="storage-engine-warning">
             <t-icon name="info-circle" class="warning-icon" />
             <span>{{ $t('knowledgeBase.missingStorageEngine') }}</span>
-            <span class="warning-link">{{ $t('knowledgeBase.goToStorageSettings') }} →</span>
+            <span>{{ $t('consoleLayout.contactAdmin') }}</span>
           </p>
         </div>
       </div>
@@ -2741,10 +2707,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
     </div>
   </template>
 
-  <!-- 知识库编辑器（创建/编辑统一组件） -->
-  <KnowledgeBaseEditorModal :visible="uiStore.showKBEditorModal" :mode="uiStore.kbEditorMode"
-    :kb-id="uiStore.currentKBId || undefined" :initial-type="uiStore.kbEditorType"
-    @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
 
   <ContextualGuide tour="kbDetail" :when="showKbDetailContextualGuide" />
 
@@ -3562,4 +3524,8 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
 }
 
+</style>
+
+<style scoped>
+.parser-hint, .storage-engine-warning { cursor: default; }
 </style>

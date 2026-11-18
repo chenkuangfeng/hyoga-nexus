@@ -1,122 +1,58 @@
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
-import test from 'node:test'
-import { runInNewContext } from 'node:vm'
-import ts from 'typescript'
-import { computed } from 'vue'
+import { existsSync, readFileSync } from 'node:fs'
+import test, { type TestContext } from 'node:test'
+import { reactive } from 'vue'
+import { fixture } from '@nexus-web/core/test-utils/vueFixture'
+import { isMigratedAdminSection } from '../../config/settingsRoute'
 
-// Exercise the actual sidebar grouping without mounting the settings panels.
-const source = readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8')
-const script = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]!
-const ast = ts.createSourceFile('Settings.ts', script, ts.ScriptTarget.Latest, true)
-const grouping = ast.statements.find((statement) =>
-  ts.isVariableStatement(statement) && statement.declarationList.declarations.some(
-    (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === 'navGroups',
-  ),
-)
-assert.ok(grouping, 'Settings must define sidebar groups')
-const compiled = ts.transpileModule(grouping.getText(ast), {
-  compilerOptions: { target: ts.ScriptTarget.ES2022 },
-}).outputText
-
-test('MCP 连接位于账户设置，取消集成分组', () => {
-  const groups = runInNewContext(`${compiled}\nnavGroups.value`, {
-    computed, navItems: { value: ['general', 'mcp-endpoints', 'integration-im', 'integration-api'].map(key => ({ key })) }, t: (key: string) => key,
-  }) as Array<{ key: string; items: Array<{ key: string }> }>
-  assert.deepEqual(Array.from(groups.find(group => group.key === 'account')?.items || [], item => item.key), ['general', 'mcp-endpoints'])
-  assert.equal(groups.some(group => group.key === 'integrations'), false)
-})
-
-// Keep navigation tests tied to the real close handler, without mounting
-// settings panels that require backend services.
-const closeHandler = ast.statements.find((statement) =>
-  ts.isVariableStatement(statement) && statement.declarationList.declarations.some(
-    (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === 'handleClose',
-  ),
-)
-assert.ok(closeHandler, 'Settings must define a close handler')
-const compiledClose = ts.transpileModule(closeHandler.getText(ast), {
-  compilerOptions: { target: ts.ScriptTarget.ES2022 },
-}).outputText
-
-function closeSettings(back: unknown, section = 'members', path = '/platform/settings'): string[] {
-  const actions: string[] = []
-  class FocusedElement {
-    blur() { actions.push('blur') }
-  }
-  runInNewContext(`${compiledClose}\nhandleClose()`, {
-    document: { activeElement: new FocusedElement() },
-    HTMLElement: FocusedElement,
-    route: { path, query: { section } },
-    uiStore: { closeSettings: () => actions.push('close') },
-    router: {
-      options: { history: { state: { back } } },
-      push: (target: string) => actions.push(`push:${target}`),
-      back: () => actions.push('back'),
-    },
+const fixtures = new WeakMap<TestContext, ReturnType<typeof fixture>>()
+function setup(t: TestContext, path = '/platform/settings', back: unknown = null) {
+  const actions: string[] = [], route = reactive({ path, query: { section: 'general' } })
+  const ui = reactive({ showSettingsModal: false, settingsInitialSection: 'general', closeSettings: () => actions.push('close'), openSettings: (value: string) => { ui.settingsInitialSection = value } })
+  if (!fixtures.has(t)) fixtures.set(t, fixture(t))
+  const mounted = fixtures.get(t)!.component(new URL('./Settings.vue', import.meta.url), {
+    'vue-router': { useRoute: () => route, useRouter: () => ({ options: { history: { state: { back } } }, back: () => actions.push('back'), replace: (value: unknown) => actions.push(`replace:${typeof value === 'string' ? value : JSON.stringify(value)}`) }) },
+    'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
+    '@/stores/ui': { useUIStore: () => ui },
+    '@nexus-web/core/composables/useModalShell': { useModalShell: () => ({ requestClose() {} }) },
+    '@/config/settingsRoute': { isMigratedAdminSection },
   })
-  return actions
+  return { ...mounted, route, ui, actions }
 }
 
-test('closing a directly opened settings route stays in the application', () => {
-  for (const back of [null, undefined, '', 'https://example.com/', '//example.com/', '/login']) {
-    assert.deepEqual(closeSettings(back), ['blur', 'close', 'push:/platform/knowledge-bases'])
+test('账户设置只有三个面板，未知及空间记忆查询回到常规设置', t => {
+  const s = setup(t)
+  assert.equal(s.vm.groups.length, 1)
+  assert.equal(s.vm.groups[0].key, 'account')
+  assert.deepEqual(Array.from(s.vm.groups[0].items, (item: { key: string }) => item.key), ['general', 'userprofile', 'mymemory'])
+  for (const value of ['models', 'sandbox', 'memory', 'mcp-endpoints', 'skills']) {
+    s.route.query.section = value; assert.equal(s.vm.section, 'general')
   }
 })
 
-test('closing settings preserves a known in-app previous route', () => {
-  for (const back of ['/platform/knowledge-bases', '/platform/chat/session-123']) {
-    assert.deepEqual(closeSettings(back), ['blur', 'close', 'back'])
+test('关闭直接打开的设置页回到新对话；关闭弹出设置保留底层会话', t => {
+  const direct = setup(t); direct.vm.close()
+  assert.deepEqual(direct.actions, ['close', 'replace:/platform/creatChat'])
+  const overlay = setup(t, '/platform/chat/session'); overlay.vm.close()
+  assert.deepEqual(overlay.actions, ['close'])
+})
+
+test('关闭设置只返回已知应用内路径，不返回另一个设置地址或外站', t => {
+  const known = setup(t, '/platform/settings', '/platform/chat/session'); known.vm.close()
+  assert.deepEqual(known.actions, ['close', 'back'])
+  for (const back of ['https://example.com', '//example.com', '/login', '/platform/settings?section=general']) {
+    const s = setup(t, '/platform/settings', back); s.vm.close()
+    assert.deepEqual(s.actions, ['close', 'replace:/platform/creatChat'])
   }
 })
 
-
-test('closing an overlaid settings panel leaves the underlying route alone', () => {
-  assert.deepEqual(closeSettings(null, 'general', '/platform/chat/session-123'), ['blur', 'close'])
-})
-
-test('已迁移的部门写页面不再进入工作台导航或模块依赖，旧书签保留迁移说明', () => {
-  const groups = runInNewContext(`${compiled}\nnavGroups.value`, {
-    computed, navItems: { value: ['tenant', 'members', 'org-structure'].map(key => ({ key })) }, t: (key: string) => key,
-  }) as Array<{ items: Array<{ key: string }> }>
-  assert.equal(groups.some(group => group.items.some(item => item.key === 'org-structure')), false)
-  assert.equal(source.includes("import OrgStructure"), false)
-  assert.equal(existsSync(new URL('./OrgStructure.vue', import.meta.url)), false)
-})
-
-test('旧企业治理页不再随工作台设置加载，账户资料保留本人企业操作', () => {
-  assert.equal(source.includes('import TenantInfo'),false)
-  assert.equal(existsSync(new URL('./TenantInfo.vue',import.meta.url)),false)
-  const profile=readFileSync(new URL('./UserProfile.vue',import.meta.url),'utf8')
-  assert.ok(profile.includes('CurrentEnterpriseMembership'))
-})
-
-test('工作台不再打包旧成员治理页或独占审批组件，普通入口不保留成员管理导航', () => {
- const groups=runInNewContext(`${compiled}\nnavGroups.value`,{computed,navItems:{value:['members','chathistory'].map(key=>({key}))},t:(key:string)=>key}) as Array<{items:Array<{key:string}>}>
- assert.equal(groups.some(group=>group.items.some(item=>item.key==='members')),false)
- assert.equal(existsSync(new URL('./TenantMembers.vue',import.meta.url)),false)
- assert.equal(existsSync(new URL('../../components/tenant/JoinApplicationsPanel.vue',import.meta.url)),false)
- assert.equal(source.includes('import TenantMembers'),false)
-})
-
-test('文件存储和向量库治理不进入员工设置导航，旧书签使用统一迁移说明', () => {
-  const groups = runInNewContext(`${compiled}\nnavGroups.value`, {
-    computed, navItems: { value: ['storage', 'vectorstore', 'general'].map(key => ({ key })) }, t: (key: string) => key,
-  }) as Array<{ items: Array<{ key: string }> }>
-  assert.equal(groups.some(group => group.items.some(item => ['storage', 'vectorstore'].includes(item.key))), false)
-  for (const name of ['StorageBackendSettings', 'VectorStoreSettings']) {
-    assert.equal(source.includes(`import ${name}`), false)
-    assert.equal(existsSync(new URL(`./${name}.vue`, import.meta.url)), false)
+test('旧治理书签仅展示说明，不进入导航或加载写页面', t => {
+  const s = setup(t)
+  for (const section of ['storage', 'vectorstore', 'parser', 'members', 'org-structure']) {
+    s.route.query.section = section; assert.equal(s.vm.section, section)
+    assert.equal(s.vm.groups[0].items.some((item: { key: string }) => item.key === section), false)
   }
-})
-
- test('旧治理书签仅展示迁移说明，不再要求原写页面的 admin 角色', async () => {
-  const { isMigratedAdminSection } = await import('../../config/settingsRoute')
-  const { SETTINGS_SECTION_MIN_ROLE } = await import('../../config/settingsAccess')
-  const declaration = ast.statements.find(statement => ts.isVariableStatement(statement) && statement.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === 'canSeeSection'))
-  assert.ok(declaration)
-  const js = ts.transpileModule(declaration.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-  const canSee = runInNewContext(`${js}\ncanSeeSection`, { isMigratedAdminSection, SETTINGS_SECTION_MIN_ROLE, authStore: { canAccessAllTenants: false, hasRole: () => false } })
-  for (const section of ['storage', 'vectorstore', 'parser', 'members', 'org-structure']) assert.equal(canSee(section), true)
-  assert.equal(canSee('sandbox'), false)
+  const source = readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8')
+  for (const component of ['OrgStructure', 'TenantMembers', 'StorageBackendSettings', 'VectorStoreSettings', 'NexusMemoryWorkspaceSettings']) assert.equal(source.includes(`import ${component}`), false)
+  assert.equal(existsSync(new URL('./NexusMemoryWorkspaceSettings.vue', import.meta.url)), false)
 })

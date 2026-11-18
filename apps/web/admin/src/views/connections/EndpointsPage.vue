@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 /** 企业 MCP 只读工具端点管理；令牌仅在签发后的当前页面内存中短暂保存。 */
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -137,23 +138,23 @@ onBeforeUnmount(() => { invalidate() })
 
 <template>
   <section class="endpoints-page">
-    <header class="section-header"><div><h2>{{ t('connectionUi.endpoints') }}</h2><p>{{ t('adminConnections.description') }}</p></div><div class="actions"><t-button variant="outline" :loading="loading" :disabled="busy" @click="load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="canManage" theme="primary" :disabled="!ready || busy" @click="openEditor()"><t-icon name="add" />{{ t('connectionUi.create') }}</t-button></div></header>
+    <header class="section-header"><div><h2>{{ t('consoleLayout.mcpPublish') }}</h2><p>{{ t('adminConnections.description') }}</p></div><div class="actions"><t-button variant="outline" :loading="loading" :disabled="busy" @click="load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="canManage" theme="primary" :disabled="!ready || busy" @click="openEditor()"><t-icon name="add" />{{ t('connectionUi.create') }}</t-button></div></header>
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert theme="info" :message="t('adminConnections.scopeHint')" />
       <t-alert v-if="error" theme="error" :message="error" />
       <t-loading :loading="loading">
         <div v-if="ready && !endpoints.length" class="empty-state"><t-icon name="link" size="40px" /><p>{{ t('connectionUi.noEndpoints') }}</p><t-button theme="primary" @click="openEditor()">{{ t('connectionUi.create') }}</t-button></div>
-        <div v-else-if="ready" class="endpoint-list">
-          <article v-for="row in endpoints" :key="row.id" class="endpoint-card">
-            <header><div><h3>{{ row.name }} <t-tag v-if="!row.enabled" theme="warning">{{ t('connectionUi.status.disabled') }}</t-tag></h3><p>{{ row.description || t('adminConnections.noDescription') }}</p><code>{{ endpointUrl(row) }}</code></div><t-button variant="text" @click="copyWithToast(endpointUrl(row), 'common.copied')">{{ t('common.copy') }}</t-button></header>
-            <p class="scope-summary">{{ t('adminConnections.allowedTools', { count: row.tool_allowlist.length }) }} · {{ row.kb_ids.length ? t('adminConnections.selectedKnowledge', { count: row.kb_ids.length }) : t('connectionUi.knowledgeScope') }}</p>
-            <div class="actions"><t-button variant="outline" :disabled="busy" @click="openEditor(row)">{{ t('common.edit') }}</t-button><t-button variant="outline" :disabled="busy" @click="confirmAction(row, 'toggle')">{{ t(row.enabled ? 'common.off' : 'common.on') }}</t-button><t-button variant="outline" :disabled="busy" @click="confirmAction(row, 'rotate')">{{ t('connectionUi.endpointActions.rotate') }}</t-button><t-button variant="outline" :disabled="busy" @click="confirmAction(row, 'revoke')">{{ t('connectionUi.endpointActions.revoke') }}</t-button><t-button variant="text" theme="danger" :disabled="busy" @click="confirmAction(row, 'delete')">{{ t('connectionUi.endpointActions.delete') }}</t-button></div>
+        <div v-else-if="ready" class="channel-grid">
+          <article v-for="row in endpoints" :key="row.id" class="channel-card channel-card--clickable" role="button" tabindex="0" @click="!busy && openEditor(row)" @keydown.enter.self.prevent="!busy && openEditor(row)" @keydown.space.self.prevent="!busy && openEditor(row)">
+            <div class="channel-card__badge"><t-icon name="tools" size="22px" /></div><div class="channel-card__body"><div class="channel-card__header"><h3 class="channel-card__title">{{ row.name }}</h3><t-tag v-if="!row.enabled" theme="warning">{{ t('connectionUi.status.disabled') }}</t-tag></div><span class="channel-card__agent-name">{{ t('adminConnections.allowedTools', { count: row.tool_allowlist.length }) }} · {{ row.kb_ids.length ? t('adminConnections.selectedKnowledge', { count: row.kb_ids.length }) : t('connectionUi.knowledgeScope') }}</span></div>
+            <div class="channel-card__actions" @click.stop @keydown.stop><t-dropdown :options="[{content:t('common.edit'),value:'edit'},{content:t(row.enabled?'common.off':'common.on'),value:'toggle'},{content:t('connectionUi.endpointActions.rotate'),value:'rotate'},{content:t('connectionUi.endpointActions.revoke'),value:'revoke'},{content:t('connectionUi.endpointActions.delete'),value:'delete'}]" :disabled="busy" @click="(option: { value?: string | number }) => { if(option.value === 'edit') openEditor(row); if(option.value === 'toggle' || option.value === 'rotate' || option.value === 'revoke' || option.value === 'delete') confirmAction(row, option.value) }"><t-button variant="text" shape="square" :aria-label="t('common.expand')"><t-icon name="ellipsis" /></t-button></t-dropdown><t-button variant="text" shape="square" :aria-label="t('common.copy')" @click="copyWithToast(endpointUrl(row),'common.copied')"><t-icon name="copy" /></t-button></div>
           </article>
+          <button type="button" class="channel-card channel-card--add" :disabled="busy" @click="openEditor()"><span class="channel-card__badge"><t-icon name="add" /></span><span class="channel-card__body">{{ t('connectionUi.create') }}</span></button>
         </div>
       </t-loading>
     </template>
-    <t-dialog :visible="editorOpen" :header="t(editingId ? 'adminConnections.editTitle' : 'adminConnections.createTitle')" :footer="false" :close-btn="!busy" :close-on-overlay-click="!busy" @close="!busy && closeEditor()">
+    <EditorDialog :visible="editorOpen" :header="t(editingId ? 'adminConnections.editTitle' : 'adminConnections.createTitle')" :footer="false" :close-btn="!busy" :close-on-overlay-click="!busy" @close="!busy && closeEditor()">
       <t-form :data="form" :rules="rules" :disabled="busy" layout="vertical" @submit="save">
         <t-form-item name="name" :label="t('connectionUi.name')"><t-input v-model="form.name" :maxlength="64" /></t-form-item>
         <t-form-item :label="t('connectionUi.description')"><t-textarea v-model="form.description" :maxlength="4000" /></t-form-item>
@@ -161,14 +162,15 @@ onBeforeUnmount(() => { invalidate() })
         <t-form-item :label="t('connectionUi.knowledge')"><t-select v-model="form.kb_ids" :options="knowledgeOptions" multiple filterable /></t-form-item>
         <p class="field-hint">{{ t('connectionUi.knowledgeScope') }}</p><t-button type="submit" theme="primary" :loading="busy">{{ t('common.save') }}</t-button>
       </t-form>
-    </t-dialog>
-    <t-dialog :visible="!!freshToken" :header="t('connectionUi.tokenTitle')" :footer="false" :close-on-overlay-click="false" @close="clearToken">
+    </EditorDialog>
+    <EditorDialog :visible="!!freshToken" :header="t('connectionUi.tokenTitle')" :footer="false" :close-on-overlay-click="false" @close="clearToken">
       <p>{{ t('connectionUi.tokenOnce') }}</p><pre class="token-snippet">{{ tokenSnippet }}</pre><div class="actions"><t-button theme="primary" @click="copyWithToast(tokenSnippet, 'common.copied')">{{ t('common.copy') }}</t-button><t-button variant="outline" @click="clearToken">{{ t('common.close') }}</t-button></div>
-    </t-dialog>
+    </EditorDialog>
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="less">
+@import '@nexus-web/core/styles/channel-panel-list.less';
 .endpoints-page { min-width: 0; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .endpoint-list { display: grid; gap: 16px; margin-top: 20px; }

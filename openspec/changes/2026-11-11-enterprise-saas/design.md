@@ -551,8 +551,13 @@ Mermaid 采用官方浏览器 ESM 分发文件的相对模块闭包作为本地�
 
 ### 管理导航与参考页面还原
 
-来源为本地 WeKnora e1f9a6166 frontend/src/views/settings/Settings.vue 的 navGroups、components/SettingsModalShell.vue 导航样式，以及 ParserEngineSettings.vue、StorageBackendSettings.vue、VectorStoreSettings.vue 和 components/css/provider-card.less。分组顺序为账户、空间、模型、发布集成、数据与扩展、系统管理、平台；管理端没有账户配置则不渲染空组。现有企业资源归空间，连接与渠道归发布集成，存储/解析/工具归数据与扩展，运行/审计归系统管理。权限过滤后再次隐藏空组。折叠时隐藏分组文字、保留分隔线与菜单可访问名称。菜单标题移除企业修饰词，产品名企业微信保留。原版页面采用其卡片、徽章、更多操作和 SettingDrawer，不把配置直接平铺在主页面；原版没有的 Nexus 业务保留现有实现。仅适配真实后端字段与动作，不伪造连接成功或未提供的编辑功能。
+来源为本地 WeKnora e1f9a6166 frontend/src/views/settings/Settings.vue 的 navGroups、components/SettingsModalShell.vue 导航样式，以及 ParserEngineSettings.vue、StorageBackendSettings.vue、VectorStoreSettings.vue 和 components/css/provider-card.less。分组顺序为企业、智能体、知识库、模型、发布集成、数据和扩展、工具箱、权限、系统；具体子项按 2026-11-18 范围调整，技能与 MCP 注册归工具箱，MCP 发布归发布集成。权限过滤后再次隐藏空组。折叠时隐藏分组文字、保留分隔线与菜单可访问名称。菜单标题移除企业修饰词，产品名企业微信保留。原版页面采用其卡片、徽章、更多操作和 SettingDrawer，不把配置直接平铺在主页面；原版没有的 Nexus 业务保留现有实现。仅适配真实后端字段与动作，不伪造连接成功或未提供的编辑功能。
 
 ### 用量页面收尾与确认快照
 
 E6.3 已有 UsagePage 与 enterprise-usage 客户端，本批修复其状态边界并补验收，不新增接口。确认框绑定发起时的企业、账号、权限、范围与正整数额度快照，重复确认不可生成第二条写链；目录权限变化与卸载立即使旧确认及异步结果失效。报表记录返回数据对应的分组，不以尚未提交的筛选草稿解释旧行。成员/部门可选目录失败单独提示，不伪装为真实空目录，不阻断企业范围用量和限额。页面沿用现有 Nexus 用量布局与公共设置样式；WeKnora 固定版本的 ModelSettings 用量弹窗展示的是资源引用冲突，不能当作 Token 报表复制。
+
+### 2026-11-18 导航、编辑容器与工作台边界
+来源：WeKnora e1f9a6166 `views/toolbox/Toolbox.vue`、`views/settings/{SkillSettings,McpSettings,ModelSettings,MemoryWorkspaceSettings}.vue`、`views/{agent/AgentList,knowledge/KnowledgeBaseList}.vue`、`components/css/resource-card.less`。工具箱按技能/MCP 注册拆分，同管理工具组成指定三项；不引入浏览器连接或未实现的服务。
+公共资源卡片与编辑容器置于 core，管理应用保持不导入 workspace。管理端注入编辑偏好，弹窗/抽屉共享内容，替换路由时记录 editor 查询参数，返回关闭编辑；员工设置始终弹窗。主题继续复用公共 useTheme。空间记忆使用现有服务端 memory-settings 权限与 API。
+员工端移除额外页面路由，旧地址回到新对话；设置只载入三个账户面板，旧迁移书签可保留显式说明但不执行治理请求。知识库创建 HTTP 入口拒绝个人创建，企业创建继续使用 admin 入口；已有库及内容维护不做删除或迁移。智能体列表不加载编辑器或管理动作。产物面板只查询当前会话、按会话键卸载预览，错误可重试，切换会话清空旧结果。

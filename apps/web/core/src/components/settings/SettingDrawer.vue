@@ -137,6 +137,7 @@ export interface SettingDrawerProps {
 <script setup lang="ts">
 import { ref, computed, provide, useAttrs, useId, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useEditorPresentation } from '../../composables/useEditorPresentation'
 
 
 defineOptions({ inheritAttrs: false })
@@ -241,7 +242,8 @@ const effectiveWidth = computed(() =>
 // ---------- placement ----------
 // 中间弹出不参与宽度持久化：对话框宽度固定取 width 属性，只在视口不够宽时收缩，
 // 避免与右侧抽屉共用的 localStorage 宽度互相影响。
-const isCenter = computed(() => props.placement === 'center')
+const { mode: editorMode } = useEditorPresentation(() => props.visible, () => emit('update:visible', false))
+const isCenter = computed(() => editorMode.value ? editorMode.value !== 'drawer' : props.placement === 'center')
 const popupTag = computed(() => (isCenter.value ? 't-dialog' : 't-drawer'))
 const centerWidth = computed(() => {
   const cap = Math.max(320, viewportWidth.value - 48)
@@ -259,7 +261,7 @@ const popupProps = computed(() => {
     footer: !props.hideFooter,
     zIndex: props.zIndex,
   }
-  if (isCenter.value) return { ...base, width: centerWidth.value }
+  if (isCenter.value) return { ...base, width: editorMode.value === 'route' ? '100%' : centerWidth.value }
   return { ...base, size: effectiveWidth.value, placement: 'right' }
 })
 
@@ -279,8 +281,9 @@ const drawerResizing = ref(false)
 
 const drawerClass = computed(() => [
   'setting-drawer',
+  { 'editor-dialog-route': editorMode.value === 'route' },
   attrs.class,
-  { 'setting-drawer--resizing': drawerResizing.value, 'setting-drawer--center': props.placement === 'center' },
+  { 'setting-drawer--resizing': drawerResizing.value, 'setting-drawer--center': isCenter.value },
 ])
 
 let resizeStartX = 0
@@ -691,4 +694,8 @@ const handleCancel = () => {
 .t-drawer.setting-drawer--resizing .t-drawer__content {
   transition: none !important;
 }
+</style>
+
+<style>
+@import '../../styles/editor-presentation.css';
 </style>

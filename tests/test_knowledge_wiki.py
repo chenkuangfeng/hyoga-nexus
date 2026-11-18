@@ -241,11 +241,11 @@ def test_wiki_http_api(database, deployment_config, tmp_path, monkeypatch):
     try:
         with TestClient(app) as client:
             base = f'/api/v1/tenants/{tenant.id}/knowledge'
-            plain = client.post(base + '/bases', json={'visibility': 'tenant', 'name': '普通', 'indexing_strategy': {'vector': False, 'keyword': True}}).json()
+            plain = client.post(base.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant', 'name': '普通', 'indexing_strategy': {'vector': False, 'keyword': True}}).json()
             assert client.get(f'{base}/bases/{plain["id"]}/wiki/pages').status_code == 404  # wiki is not enabled
-            missing = client.post(base + '/bases', json={'visibility': 'tenant', 'name': 'w0', 'type': 'wiki', 'indexing_strategy': {'vector': False, 'keyword': True}})
+            missing = client.post(base.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant', 'name': 'w0', 'type': 'wiki', 'indexing_strategy': {'vector': False, 'keyword': True}})
             assert missing.status_code == 422
-            kb = client.post(base + '/bases', json={'visibility': 'tenant', 
+            kb = client.post(base.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant',
                 'name': 'w', 'type': 'wiki', 'indexing_strategy': {'vector': False, 'keyword': True},
                 'settings': {'wiki_config': {'synthesis_model_id': str(uuid4())}}})
             assert kb.status_code == 201, kb.text

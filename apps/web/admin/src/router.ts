@@ -28,12 +28,14 @@ const router = createRouter({
       },
     })),
     { path: '/', component: () => import('./AdminLayout.vue'), children: [
-      { path: '', component: () => import('./Home.vue') },
-      { path: 'enterprise', component: () => import('./views/EnterpriseInfo.vue') },
+      { path: '', redirect: '/settings' },
+      { path: 'enterprise', component: () => import('./views/EnterpriseSpacePage.vue') },
       { path: 'organization', component: () => import('./views/organization/OrganizationPage.vue') },
       { path: 'wecom', component: () => import('./views/organization/WecomPage.vue') },
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
+      { path: 'settings', component: () => import('./views/SystemSettingsPage.vue') },
+      { path: 'skills', component: () => import('./views/skills/SkillsPage.vue') },
       { path: 'models', component: () => import('./views/models/ModelsPage.vue') },
       { path: 'usage', component: () => import('./views/usage/UsagePage.vue') },
       { path: 'runtime', component: () => import('./views/runtime/RuntimeHealthPage.vue') },
@@ -55,9 +57,13 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', component: () => import('@nexus-web/core/components/NotFound.vue'), meta: { public: true } },
   ],
 })
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   const auth = useAuthStore()
   if (to.meta.public) return true
+  // 只跳过同页编辑历史变化；其他业务导航继续校准身份与权限。
+  if (to.path === from?.path && to.query.editor !== from.query.editor && !auth.user?.must_change_password
+    && [...new Set([...Object.keys(to.query), ...Object.keys(from.query)])].filter(key => key !== 'editor').every(key => JSON.stringify(to.query[key]) === JSON.stringify(from.query[key]))
+    && localStorage.getItem('weknora_token') && useAdminContext().ready) return true
   useAdminContext().invalidate()
   if (!localStorage.getItem('weknora_token')) return '/login'
   try {

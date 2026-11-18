@@ -48,6 +48,8 @@ export const test = base.extend<{ api: ApiMock }>({
         localStorage.setItem('weknora_selected_tenant_id', 'a')
       })
     } })
+    // 先关闭页面停止轮询，再释放路由，避免收尾期间的请求穿透模拟接口。
+    if (!page.isClosed()) await page.close()
     expect(unexpected, '用例必须显式声明所有 API 请求').toEqual([])
     expect(errors, '真实页面不应有脚本错误').toEqual([])
   }, { auto: true }],

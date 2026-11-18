@@ -1,5 +1,5 @@
 <template>
-    <div class="main" :class="{ 'main--settings': route.path === '/platform/settings' }" ref="dropzone" :style="{ '--sidebar-width': `${uiStore.sidebarDisplayWidth}px` }">
+    <div class="main" ref="dropzone" :style="{ '--sidebar-width': `${uiStore.sidebarDisplayWidth}px` }">
         <Menu></Menu>
         <div v-if="isRouterAlive" class="platform-route-outlet">
             <RouterView />
@@ -15,7 +15,7 @@
         <!-- 知识库文件上传进度浮层：上传队列放在 store 里，切换页面不中断 -->
         <UploadTasksPanel />
         <!-- 带遮罩层的新手引导：首次进入自动开启，可从用户菜单顶部昵称旁帮助按钮重新打开 -->
-        <NewUserGuide />
+
     </div>
 </template>
 <script setup lang="ts">
@@ -26,7 +26,6 @@ import UploadMask from '@/components/upload-mask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import UploadTasksPanel from '@/components/upload-tasks/UploadTasksPanel.vue'
-import NewUserGuide from '@/components/NewUserGuide.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources'
 import { useUIStore } from '@/stores/ui'
@@ -218,14 +217,12 @@ onUnmounted(() => {
     align-items: stretch;
     width: 100%;
     height: 100%;
-    min-width: 600px;
+    min-width: 0;
     min-height: 0;
     /* 统一整页背景，让左侧菜单与右侧内容区视觉连贯 */
     background: var(--td-bg-color-container);
 }
 
-/* 设置整页已覆盖主界面，背景的桌面最小宽度不应撑宽手机视口。 */
-.main--settings { min-width: 0; }
 
 /* 右侧路由区：占满剩余宽度与整列高度，并把 min-height:0 传给子页面以便内部 flex 滚动 */
 .platform-route-outlet {

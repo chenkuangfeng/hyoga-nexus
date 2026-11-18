@@ -2,7 +2,8 @@
 
 All routes live under ``/api/v1/tenants/{tenant_id}/knowledge`` and act from the caller's current space
 ``tenant_id``: bases of the space plus bases shared into it are readable; only bases of the space can be
-changed. Every search goes through the same Pre-Filter as the agent tools (``nexus_platform.knowledge.search``).
+changed. Workspace base creation is forbidden; enterprise creation uses the admin API. Every search
+goes through the same Pre-Filter as the agent tools (``nexus_platform.knowledge.search``).
 
 Choosing a feature the capability catalog marks ``planned`` answers 422 ``capability_planned``.
 """
@@ -22,7 +23,7 @@ from nexus_core.platform import Principal
 from nexus_knowledge import capabilities
 from nexus_knowledge import index as _engines  # noqa: F401  (registers the vector engines in the catalog)
 from nexus_platform.configuration import knowledge_settings
-from nexus_platform.errors import NotFound
+from nexus_platform.errors import Forbidden, NotFound
 from nexus_platform.identity.service import require_membership, resolve_user
 from nexus_platform.knowledge import access, faq as faq_service, organize, search as knowledge_search, service, stores
 from nexus_platform.persistence.models import (AuditRecord, KnowledgeBaseRecord, KnowledgeDocumentRecord,
@@ -98,15 +99,9 @@ admin_router.add_api_route('/bases', list_bases, methods=['GET'], name='admin_li
 @router.post('/bases', status_code=201)
 def create_base(tenant_id: UUID, body: BaseInput, principal: Principal = Depends(get_principal),
                 db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    with db.begin():
-        user = _user(db, principal, tenant_id)
-        kb = service.create_base(
-            db, tenant_id, user.id, name=body.name, description=body.description, kb_type=body.type,
-            indexing=body.indexing_strategy, vector_store_id=body.vector_store_id,
-            storage_backend_id=body.storage_backend_id, embedding_model_id=body.embedding_model_id,
-            chunk_size=body.chunking_config.chunk_size, chunk_overlap=body.chunking_config.chunk_overlap,
-            settings=body.settings, visibility=body.visibility)
-    return service.base_view(db, kb, tenant_id, user.id)
+    """员工工作台仅维护已有库；企业建库使用具有独立权限校验的 admin 入口。"""
+    _user(db, principal, tenant_id)
+    raise Forbidden('Create knowledge bases in enterprise administration')
 
 
 @router.get('/bases/{kb_id}')

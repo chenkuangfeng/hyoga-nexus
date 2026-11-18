@@ -2,7 +2,7 @@
   <div class="user-menu" :class="{ 'user-menu--collapsed': uiStore.sidebarCollapsed }" ref="menuRef">
     <div class="user-bar">
     <!-- 用户按钮 -->
-    <div class="user-button" data-guide="user-menu" @click="toggleMenu">
+    <button type="button" class="user-button" data-guide="user-menu" aria-haspopup="menu" :aria-expanded="menuVisible" @click="toggleMenu">
       <div class="user-avatar">
         <img v-if="userAvatar" :src="userAvatar" :alt="$t('common.avatar')" />
         <span v-else class="avatar-placeholder">{{ userInitial }}</span>
@@ -24,7 +24,7 @@
             <div class="user-email">{{ userEmail }}</div>
           </template>
         </div>
-    </div>
+    </button>
     <GlobalInvitationBell v-if="!uiStore.sidebarCollapsed" v-slot="{ count, open }">
       <t-tooltip :content="t('notifications.title')" placement="top">
         <button type="button" class="user-notify" :class="{ 'is-open': open }"
@@ -60,12 +60,6 @@
           <div class="dropdown-user-meta">
             <div class="dropdown-user-name-row">
               <span class="dropdown-user-name">{{ userName }}</span>
-              <t-tooltip :content="$t('newUserGuide.reopen')" placement="top">
-                <button type="button" class="dropdown-guide-btn" :aria-label="$t('newUserGuide.reopen')"
-                  @click.stop="reopenGuide">
-                  <t-icon name="help-circle" size="14px" />
-                </button>
-              </t-tooltip>
             </div>
             <span v-if="userEmail" class="dropdown-user-email">{{ userEmail }}</span>
           </div>
@@ -241,13 +235,13 @@ const toggleMenu = () => {
 // 快捷导航到设置的特定部分
 const handleQuickNav = (section: string) => {
   menuVisible.value = false
-  router.push({ path: '/platform/settings', query: { section } })
+  uiStore.openSettings(section)
 }
 
-// 打开设置：整页替换主界面（/platform/settings 由 Settings.vue 以整页模式渲染），左上角可返回。
+// 员工设置以账户弹窗打开，保留当前会话或目录路由。
 const handleSettings = () => {
   menuVisible.value = false
-  router.push('/platform/settings')
+  uiStore.openSettings('general')
 }
 
 // Hover-driven submenu controls. A small hide delay tolerates the pointer
@@ -1228,4 +1222,9 @@ onUnmounted(() => {
     }
   }
 }
+</style>
+
+<style scoped>
+.user-button { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.user-button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 </style>

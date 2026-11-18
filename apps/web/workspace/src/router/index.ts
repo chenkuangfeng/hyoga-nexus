@@ -5,8 +5,6 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@nexus-web/core/i18n/index'
-import { legacyIntegrationLocation } from '@/config/settingsRoute'
-import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
 import PlannedPage from '@/views/placeholder/PlannedPage.vue'
 // 主对话页：WeKnora 风格布局 + 平台 Native API（会话、Run、事件）。
 const NexusChatRoutePage = () => import('@/views/chat/NexusChatRoutePage.vue')
@@ -28,7 +26,7 @@ const router = createRouter({
     { path: "/:pathMatch(.*)*", component: () => import("@nexus-web/core/components/NotFound.vue"), meta: { requiresAuth: false, requiresInit: false } },
     {
       path: "/",
-      redirect: "/platform/settings",
+      redirect: "/platform/creatChat",
     },
     {
       path: "/login",
@@ -76,7 +74,7 @@ const router = createRouter({
     {
       path: "/platform",
       name: "Platform",
-      redirect: "/platform/knowledge-bases",
+      redirect: "/platform/creatChat",
       component: () => import("../views/platform/index.vue"),
       meta: { requiresInit: true, requiresAuth: true },
       children: [
@@ -114,26 +112,9 @@ const router = createRouter({
             }
           },
         },
-        {
-          path: "artifacts",
-          name: "artifactLibrary",
-          // Files Runs left under /outputs, on the Nexus artifacts API (openspec 2026-11-07-tool-expansion 4.6).
-          component: () => import("../views/artifacts/ArtifactLibrary.vue"),
-          meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'settings.sandbox' }
-        },
-        {
-          path: "toolbox/:section?",
-          name: "toolbox",
-          component: () => import("../views/toolbox/NexusToolbox.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "automations/:automationId?",
-          name: "automationList",
-          // Scheduled tasks on the Nexus API (openspec 2026-11-07-tool-expansion 8.2a); the WeKnora pages are adapted.
-          component: () => import("../views/automation/AutomationList.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
+        { path: "artifacts", redirect: "/platform/creatChat" },
+        { path: "toolbox/:section?", redirect: "/platform/creatChat" },
+        { path: "automations/:automationId?", redirect: "/platform/creatChat" },
         {
           // 旧的 Native 运行页已并入主对话页（views/chat/NexusChatPage.vue）；旧地址保留为重定向。
           path: "native",
@@ -150,15 +131,10 @@ const router = createRouter({
           component: () => import("../views/agent/NexusAgentList.vue"),
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
         },
-        {
-          path: "agents/:agentId/channels",
-          name: "agentChannels",
-          component: () => import('../views/agent/AgentChannels.vue'),
-          meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
-        },
+        { path: "agents/:agentId/channels", redirect: "/platform/creatChat" },
         {
           path: "integrations",
-          redirect: (to) => legacyIntegrationLocation(to.query.section || 'integrations', to.query.tab, to.query.agentId) || { path: '/platform/settings', query: { section: 'general' } },
+          redirect: "/platform/creatChat",
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -178,15 +154,10 @@ const router = createRouter({
           component: NexusChatRoutePage,
           meta: { requiresInit: true, requiresAuth: true }
         },
-        {
-          path: "shared-spaces",
-          name: "sharedSpaces",
-          component: () => import("../views/shared-space/SharedSpaceList.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
+        { path: "shared-spaces", redirect: "/platform/creatChat" },
         {
           path: "organizations",
-          redirect: "/platform/shared-spaces",
+          redirect: "/platform/creatChat",
         },
       ],
     },
@@ -226,18 +197,6 @@ router.beforeEach(async (to, from, next) => {
   // 如果这里先按“未登录”拦截到 /login，会导致回调结果没有机会落盘。
   if (hasPendingOIDCCallback()) {
     next()
-    return
-  }
-
-  if (to.path === '/platform/settings') {
-    const moved = legacyIntegrationLocation(to.query.section, to.query.tab, to.query.agentId)
-    if (moved) { next({ ...moved, replace: true }); return }
-  }
-
-  // Preserve bookmarks for tools that have moved out of Settings.
-  if (to.path === '/platform/settings' && isToolboxSection(to.query.section)) {
-    next({ ...toolboxLocation(to.query.section,
-      typeof to.query.sandboxId === 'string' ? to.query.sandboxId : undefined), replace: true })
     return
   }
 

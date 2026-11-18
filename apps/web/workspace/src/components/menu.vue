@@ -408,7 +408,7 @@ const getIconActiveState = (itemPath: string) => {
 };
 
 // 分离上下两部分菜单（使用 visibleMenuArr 以便 lite 模式过滤 logout）
-const TOP_MENU_PATHS = new Set(['creatChat', 'knowledge-bases', 'artifacts', 'agents', 'automations', 'toolbox', 'organizations']);
+const TOP_MENU_PATHS = new Set(['creatChat', 'knowledge-bases', 'agents']);
 
 const topMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => TOP_MENU_PATHS.has(item.path));
@@ -734,7 +734,17 @@ const handleSessionMutation = (event: Event) => {
     }
 };
 
+// 窄屏首次进入时折叠侧栏，避免目录或会话产物只剩很窄的可用区域。
+let narrowViewport = false
+const onViewportResize = () => {
+    const narrow = window.innerWidth <= 600
+    if (narrow && !narrowViewport) uiStore.sidebarCollapsed = true
+    narrowViewport = narrow
+}
+
 onMounted(async () => {
+    onViewportResize();
+    window.addEventListener('resize', onViewportResize);
     sessionActivity.restore();
     void sessionActivity.refresh();
     sessionActivityTimer = setInterval(() => { void sessionActivity.refresh(); }, 5000);
@@ -754,13 +764,10 @@ onMounted(async () => {
         ensureSessionInSidebar(initialChatId);
         await syncActiveBucketFromChat(initialChatId);
     }
-    // 若组织列表未加载则拉取一次，用于侧栏「待审批」角标
-    if (deploymentCapabilities.isSupported('organizations') && orgStore.organizations.length === 0) {
-        orgStore.fetchOrganizations();
-    }
 });
 
 onUnmounted(() => {
+    window.removeEventListener('resize', onViewportResize);
     clearInterval(sessionActivityTimer);
     clearTimeout(forkRevealTimer);
     sessionActivity.clear();
@@ -837,6 +844,7 @@ const getIcon = (path: string) => {
 }
 getIcon(typeof route.name === 'string' ? route.name as string : (route.name ? String(route.name) : ''))
 const handleMenuClick = async (path: string) => {
+    if (window.innerWidth <= 600) uiStore.sidebarCollapsed = true
     if (path === 'knowledge-bases') {
         // 知识库菜单项：如果在知识库内部，跳转到当前知识库文件页；否则跳转到知识库列表
         const kbId = await getCurrentKbId()

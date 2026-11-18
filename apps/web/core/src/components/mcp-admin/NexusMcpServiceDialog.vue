@@ -4,7 +4,7 @@
     The form collects connection parameters only; credential references stay references and the
     OAuth client secret is carried over from the stored config, never displayed.
   -->
-  <t-dialog :visible="visible" :header="title" width="640px" :footer="false" :close-on-overlay-click="false"
+  <EditorDialog :visible="visible" :header="title" width="640px" :footer="false" :close-on-overlay-click="false"
     :z-index="2000" @close="close">
     <t-alert v-if="error" theme="error" :message="error" class="mcp-dialog-alert" />
 
@@ -75,10 +75,11 @@
       <t-button variant="outline" :disabled="saving" @click="close">{{ $t('common.cancel') }}</t-button>
       <t-button theme="primary" :loading="saving" @click="save">{{ $t('common.save') }}</t-button>
     </div>
-  </t-dialog>
+  </EditorDialog>
 </template>
 
 <script setup lang="ts">
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {

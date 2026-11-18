@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 /** 配置企业知识库的部门/成员读取受众；保留当前用户无权枚举的既有记录。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -111,7 +112,7 @@ onBeforeUnmount(reset)
 </script>
 
 <template>
-  <t-dialog :visible="visible" :header="t('adminKnowledge.audienceTitle')" width="min(760px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminKnowledge.audienceSave'), disabled: !canSave, loading: saving }" :cancel-btn="{ content: t('common.cancel'), disabled: saving }" :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving" :close-btn="!saving" @confirm="save" @close="close">
+  <EditorDialog :visible="visible" :header="t('adminKnowledge.audienceTitle')" width="min(760px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminKnowledge.audienceSave'), disabled: !canSave, loading: saving }" :cancel-btn="{ content: t('common.cancel'), disabled: saving }" :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving" :close-btn="!saving" @confirm="save" @close="close">
     <p class="hint">{{ t('adminKnowledge.audienceDescription', { kb: knowledgeBase.name }) }}</p>
     <t-alert v-if="knowledgeBase.visibility !== 'scoped'" theme="warning" :message="t('adminKnowledge.audienceInactive')" />
     <t-alert v-if="knowledgeBase.visibility === 'scoped' && selectedUsers.length + selectedUnits.length === 0" theme="warning" :message="t('adminKnowledge.audienceRequired')" />
@@ -129,7 +130,7 @@ onBeforeUnmount(reset)
         <p v-if="membersReady && !memberOptions.length">{{ t('adminKnowledge.audienceNoMembers') }}</p>
       </section>
     </t-loading>
-  </t-dialog>
+  </EditorDialog>
 </template>
 
 <style scoped>

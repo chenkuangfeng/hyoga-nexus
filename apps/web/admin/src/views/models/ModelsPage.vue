@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UsagePage from '../usage/UsagePage.vue'
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 /** 企业模型目录：只管理当前企业共享 Provider、模型版本和租户默认值。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -17,6 +19,8 @@ const auth = useAuthStore(), context = useAdminContext(), { t } = useI18n()
 const tenant = computed(() => String(auth.effectiveTenantId || ''))
 const canManage = computed(() => context.can('models:manage'))
 const settings = ref<EnterpriseModelSettings | null>(null), loading = ref(false), busy = ref(false), error = ref(''), ready = ref(false)
+const activeTab = ref('models'), activeType = ref<EnterpriseModelType>('chat'), modelQuery = ref('')
+const filteredModels = computed(() => models.value.filter(({ model, provider }) => model.model_type === activeType.value && `${model.name} ${provider.name}`.toLowerCase().includes(modelQuery.value.toLowerCase())))
 const types: EnterpriseModelType[] = ['chat', 'embedding', 'rerank', 'vision', 'speech']
 const defaultsDraft = ref<Partial<Record<EnterpriseModelType, string>>>({})
 const providerDialog = ref(false), providerEditId = ref<string | null>(null)
@@ -174,7 +178,7 @@ onBeforeUnmount(invalidate)
 <template>
   <section class="models-page">
     <header class="section-header">
-      <div><h2>{{ t('adminModels.title') }}</h2><p>{{ t('adminModels.description') }}</p></div>
+      <div><h2>{{ t('consoleLayout.modelManagement') }}</h2><p>{{ t('adminModels.description') }}</p></div>
       <div class="actions"><t-button variant="outline" :loading="loading" :disabled="busy" @click="load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="canManage" theme="primary" :disabled="!ready || busy" @click="openProvider()"><t-icon name="add" />{{ t('adminModels.addProvider') }}</t-button></div>
     </header>
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
@@ -182,37 +186,35 @@ onBeforeUnmount(invalidate)
       <t-alert theme="info" :message="t('adminModels.scopeHint')" />
       <t-alert v-if="error" theme="error" :message="error" />
       <t-alert theme="info" :message="t('adminModels.testHint')" />
-      <section class="defaults-panel">
+      <t-tabs v-model="activeTab"><t-tab-panel value="models" :label="t('consoleLayout.modelManagement')" /><t-tab-panel value="defaults" :label="t('adminModels.defaultsTitle')" /><t-tab-panel value="usage" :label="t('adminUsage.title')" /></t-tabs>
+      <UsagePage v-if="activeTab === 'usage'" />
+      <template v-else-if="activeTab === 'defaults'">      <section class="defaults-panel">
         <header><div><h3>{{ t('adminModels.defaultsTitle') }}</h3><p>{{ t('adminModels.defaultsHint') }}</p></div></header>
         <div class="defaults-grid"><label v-for="type in types" :key="type">{{ t(`adminModels.types.${type}`) }}<t-select :value="defaultsDraft[type] || ''" :options="defaultOptions[type] || []" :placeholder="t('adminModels.noDefault')" clearable filterable :disabled="busy || !ready || !(defaultOptions[type]?.length)" @change="(value: unknown) => saveDefault(type, value)" /></label></div>
       </section>
-      <t-loading :loading="loading">
-        <div v-if="ready && providers.length" class="provider-list">
-          <article v-for="provider in providers" :key="provider.id" class="provider-card">
-            <header class="provider-header"><div class="provider-title"><t-icon name="server" /><div><h3>{{ provider.name }}</h3><code>{{ provider.base_url }}</code></div></div><div class="actions"><t-button variant="outline" :disabled="busy" @click="openModel(provider)"><t-icon name="add" />{{ t('adminModels.addModel') }}</t-button><t-button variant="text" :disabled="busy" @click="openProvider(provider)">{{ t('adminModels.editProvider') }}</t-button><t-button variant="text" theme="danger" :disabled="busy" @click="confirmDisable('provider', provider)">{{ t('adminModels.disable') }}</t-button></div></header>
-            <p class="key-info">{{ t('adminModels.keyConfigured') }} <code>{{ provider.key_mask }}</code></p>
-            <div v-if="provider.models.length" class="model-list">
-              <article v-for="model in provider.models" :key="model.id" class="model-row">
-                <div class="model-info"><strong>{{ model.name }}</strong><t-tag variant="light">{{ t(`adminModels.types.${model.model_type}`) }}</t-tag><span>{{ t('adminModels.modelVersion', { version: model.version }) }}</span><small>{{ t('adminModels.protocols.' + String(model.options.protocol || 'openai_chat_completions')) }}</small><p v-if="connections[model.id]" class="connection-result" :class="{ 'is-success': connections[model.id].ok }" role="status">{{ connections[model.id].message }}</p></div>
-                <div class="actions"><t-button variant="text" :loading="testingId === model.id" :disabled="busy || !!testingId" @click="testModel(provider, model)">{{ t('adminModels.test') }}</t-button><t-button variant="text" :disabled="busy" @click="openModel(provider, model)">{{ t('adminModels.editModel') }}</t-button><t-button variant="text" theme="danger" :disabled="busy" @click="confirmDisable('model', provider, model)">{{ t('adminModels.disable') }}</t-button></div>
-              </article>
-            </div>
-            <p v-else class="empty-models">{{ t('adminModels.noModels') }}</p>
+</template>
+      <template v-else>
+        <div class="model-tabbar"><t-tabs v-model="activeType" class="model-type-tabs"><t-tab-panel v-for="type in types" :key="type" :value="type"><template #label><span class="model-type-tab"><t-icon name="control-platform" size="16px" />{{ t(`adminModels.types.${type}`) }}<span class="model-tab-count">{{ models.filter(row => row.model.model_type === type).length }}</span></span></template></t-tab-panel></t-tabs><t-input v-model="modelQuery" class="model-search" clearable :placeholder="t('menu.search')" :aria-label="t('menu.search')"><template #prefix-icon><t-icon name="search" /></template></t-input></div>
+        <t-loading :loading="loading"><div v-if="ready" class="model-grid">
+          <article v-for="{ provider, model } in filteredModels" :key="model.id" class="model-card" :class="`model-card--${model.model_type}`">
+            <div class="model-card__badge"><t-icon name="control-platform" size="16px" /></div><div class="model-card__body"><div class="model-card__header"><h3 class="model-card__title">{{ model.name }}</h3><div class="model-card__actions"><t-dropdown :options="[{content:t('adminModels.editModel'),value:'model'},{content:t('adminModels.editProvider'),value:'provider'},{content:t('adminModels.disable'),value:'disable'}]" @click="(option: { value?: string | number }) => { if(option.value === 'model') openModel(provider,model); if(option.value === 'provider') openProvider(provider); if(option.value === 'disable') confirmDisable('model',provider,model) }"><t-button variant="text" shape="square" :disabled="busy" :aria-label="t('common.expand')"><t-icon name="ellipsis" /></t-button></t-dropdown></div></div><p class="model-card__subtitle">{{ provider.name }} · {{ t(`adminModels.types.${model.model_type}`) }}</p><div class="model-card__meta"><t-tag variant="light">{{ t('adminModels.modelVersion',{version:model.version}) }}</t-tag><t-button variant="text" :loading="testingId === model.id" :disabled="busy || !!testingId" @click="testModel(provider, model)">{{ t('adminModels.test') }}</t-button></div><p v-if="connections[model.id]" role="status">{{ connections[model.id].message }}</p></div>
           </article>
-        </div>
-        <div v-else-if="ready" class="empty-state"><t-icon name="server" size="40px" /><p>{{ t('adminModels.noProviders') }}</p><t-button theme="primary" @click="openProvider()">{{ t('adminModels.addProvider') }}</t-button></div>
-      </t-loading>
+          <button v-for="provider in providers" :key="`add-${provider.id}`" type="button" class="model-card model-card--add" :disabled="busy" @click="openModel(provider)"><t-icon name="add" /><span>{{ provider.name }} · {{ t('adminModels.addModel') }}</span></button>
+        </div><t-empty v-if="ready && !providers.length" :description="t('adminModels.noProviders')" /></t-loading>
+        <div class="provider-management"><t-dropdown v-for="provider in providers" :key="provider.id" :options="[{content:t('adminModels.editProvider'),value:'edit'},{content:t('adminModels.disable'),value:'disable'}]" @click="(option: { value?: string | number }) => { if (option.value === 'edit') openProvider(provider); else confirmDisable('provider',provider) }"><t-button variant="text" :disabled="busy">{{ provider.name }}<t-icon name="chevron-down" /></t-button></t-dropdown></div>
+      </template>
     </template>
-    <t-dialog :visible="providerDialog" :header="t(providerEditId ? 'adminModels.editProviderTitle' : 'adminModels.addProviderTitle')" width="min(560px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveProvider" @close="!busy && (providerDialog = false)">
+    <EditorDialog :visible="providerDialog" :header="t(providerEditId ? 'adminModels.editProviderTitle' : 'adminModels.addProviderTitle')" width="min(560px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveProvider" @close="!busy && (providerDialog = false)">
       <div class="editor-form"><label>{{ t('adminModels.providerName') }}<t-input v-model="providerForm.name" maxlength="160" /></label><label>{{ t('adminModels.baseUrl') }}<t-input v-model="providerForm.baseUrl" maxlength="512" /></label><label>{{ t('adminModels.apiKey') }}<t-input v-model="providerForm.apiKey" type="password" autocomplete="new-password" :placeholder="t(providerEditId ? 'adminModels.keyKeepHint' : 'adminModels.keyRequired')" /></label><p class="field-hint">{{ t('adminModels.keyWriteOnly') }}</p></div>
-    </t-dialog>
-    <t-dialog :visible="modelDialog" :header="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" width="min(600px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveModel" @close="!busy && (modelDialog = false)">
+    </EditorDialog>
+    <EditorDialog :visible="modelDialog" :header="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" width="min(600px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveModel" @close="!busy && (modelDialog = false)">
       <div class="editor-form"><label>{{ t('adminModels.modelName') }}<t-input v-model="modelForm.name" maxlength="160" /></label><label>{{ t('adminModels.modelType') }}<t-select v-model="modelForm.type" :options="typeOptions" :disabled="!!modelEditId" /></label><label>{{ t('adminModels.protocol') }}<t-select v-model="modelForm.protocol" :options="[{value:'openai_chat_completions',label:t('adminModels.protocols.openai_chat_completions')},{value:'openai_responses',label:t('adminModels.protocols.openai_responses')},{value:'anthropic_messages',label:t('adminModels.protocols.anthropic_messages')}]" /></label><label>{{ t('adminModels.temperature') }}<t-input-number v-model="modelForm.temperature" :min="0" :max="2" :step="0.1" :decimal-places="1" /></label><label>{{ t('adminModels.reasoningEffort') }}<t-select v-model="modelForm.reasoningEffort" clearable :options="['none','minimal','low','medium','high','xhigh','max'].map(value => ({value,label:value}))" /></label><p class="field-hint">{{ t(modelEditId ? 'adminModels.versionHint' : 'adminModels.modelOptionsHint') }}</p></div>
-    </t-dialog>
+    </EditorDialog>
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="less">
+@import './ModelsPage.reference.less';
 .models-page { min-width: 0; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .defaults-panel, .provider-card { margin-top: 20px; padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); background: var(--td-bg-color-container); }

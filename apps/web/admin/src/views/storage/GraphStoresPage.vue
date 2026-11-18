@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 /** 企业图存储目录；当前已实现的外部提供方为未验证的 Neo4j。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -76,18 +77,24 @@ function remove(row: EnterpriseGraphStore) {
     <template v-else>
       <t-alert theme="info" :message="t('adminGraph.scopeHint')" />
       <t-alert v-if="error" theme="error" :message="error" />
-      <t-loading :loading="loading"><div v-if="ready" class="table-shell"><table><thead><tr><th>{{ t('adminGraph.name') }}</th><th>{{ t('adminGraph.engine') }}</th><th>{{ t('adminGraph.kind') }}</th><th>{{ t('adminGraph.actions') }}</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id"><td>{{ row.name }}</td><td>{{ row.engine }}</td><td>{{ t(row.builtin ? 'adminGraph.builtin' : 'adminGraph.custom') }}</td><td><t-button variant="text" :disabled="busy" @click="testSaved(row)">{{ t('adminGraph.test') }}</t-button><t-button v-if="!row.builtin" variant="text" theme="danger" :disabled="busy" @click="remove(row)">{{ t('adminGraph.delete') }}</t-button></td></tr><tr v-if="!rows.length"><td colspan="4">{{ t('adminGraph.empty') }}</td></tr></tbody></table></div></t-loading>
+      <t-loading :loading="loading"><div v-if="ready" class="graph-grid"><article v-for="row in rows" :key="row.id" class="graph-provider-card"><header><span class="graph-icon"><t-icon name="chart-bubble" /></span><h3>{{ row.name }}</h3><t-tag>{{ row.engine }}</t-tag></header><p>{{ t(row.builtin ? 'adminGraph.builtin' : 'adminGraph.custom') }}</p><footer><t-button variant="text" :disabled="busy" @click="testSaved(row)">{{ t('adminGraph.test') }}</t-button><t-button v-if="!row.builtin" variant="text" theme="danger" :disabled="busy" @click="remove(row)">{{ t('adminGraph.delete') }}</t-button></footer></article></div><t-empty v-if="ready && !rows.length" :description="t('adminGraph.empty')" /></t-loading>
       <section v-if="available.length" class="supported"><h3>{{ t('adminGraph.supported') }}</h3><p v-for="item in available" :key="item.engine">{{ item.name }}<t-tag theme="warning" variant="light">{{ t('adminGraph.unverified') }}</t-tag></p></section>
       <section v-if="planned.length" class="planned"><h3>{{ t('adminGraph.planned') }}</h3><p>{{ planned.map(item => item.name).join('、') }}</p></section>
-      <section v-if="editor" class="editor"><header class="section-header"><div><h3>{{ t('adminGraph.register') }}</h3><p>{{ t('adminGraph.formHint') }}</p></div><t-button variant="text" :disabled="busy || testing" @click="clearDraft">{{ t('common.close') }}</t-button></header>
+      <SettingDrawer :visible="editor" :title="t('adminGraph.register')" hide-footer @update:visible="(value: boolean) => { if (!value && !busy && !testing) clearDraft() }"><div class="editor"><header class="section-header"><div><h3>{{ t('adminGraph.register') }}</h3><p>{{ t('adminGraph.formHint') }}</p></div><t-button variant="text" :disabled="busy || testing" @click="clearDraft">{{ t('common.close') }}</t-button></header>
         <div class="fields"><label>{{ t('adminGraph.name') }}<t-input v-model="name" :maxlength="160" :disabled="busy || testing" /></label><label>{{ t('adminGraph.url') }}<t-input v-model="url" placeholder="neo4j+s://host:7687" :disabled="busy || testing" /></label><label>{{ t('adminGraph.username') }}<t-input v-model="username" :disabled="busy || testing" /></label><label>{{ t('adminGraph.password') }}<t-input v-model="password" type="password" :disabled="busy || testing" /></label><label>{{ t('adminGraph.database') }}<t-input v-model="database" :disabled="busy || testing" /></label></div>
         <div class="actions editor-actions"><t-button variant="outline" :loading="testing" :disabled="busy || testing || !valid()" @click="testDraft">{{ t('adminGraph.testDraft') }}</t-button><span class="spacer" /><t-button variant="outline" :disabled="busy || testing" @click="clearDraft">{{ t('common.cancel') }}</t-button><t-button theme="primary" :loading="busy" :disabled="busy || testing || !valid()" @click="save">{{ t('adminGraph.save') }}</t-button></div>
-      </section>
+      </div></SettingDrawer>
     </template>
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="less">
+@import (reference) '@nexus-web/core/styles/provider-card.less';
+.graph-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,320px),1fr)); gap: 12px; }
+.graph-provider-card { .provider-card(); display: block; }
+.graph-provider-card header, .graph-provider-card footer { display: flex; align-items: center; gap: 8px; padding: 16px; flex-wrap: wrap; }
+.graph-provider-card h3 { margin: 0; flex: 1; }
+.graph-provider-card p { padding: 0 16px; color: var(--td-text-color-secondary); }
 .graph-page { min-width: 0; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .table-shell { max-width: 100%; overflow-x: auto; margin-top: 20px; }

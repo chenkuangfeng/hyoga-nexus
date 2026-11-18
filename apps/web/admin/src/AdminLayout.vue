@@ -1,12 +1,15 @@
 <script setup lang="ts">
 /** 管理端外壳：企业切换、服务端权限导航、独立业务路由。 */
-import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { provide, computed, ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { logout } from '@nexus-web/core/api/auth'
 import { useAdminContext } from './stores/context'
 import { visibleAdminNavigation } from './navigation'
+import { ADMIN_EDITOR_MODE, useAdminEditorPreference } from '@nexus-web/core/composables/useEditorPresentation'
+const editorMode = useAdminEditorPreference()
+provide(ADMIN_EDITOR_MODE, editorMode)
 // 管理端仅复用公共契约，不引入工作台的会话、邀请和资源状态。
 const collapsed = ref(false), accountOpen = ref(false)
 let narrow = false

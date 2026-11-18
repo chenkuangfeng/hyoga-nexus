@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceDirectoryCard from '@nexus-web/core/components/ResourceDirectoryCard.vue'
 /** 管理应用组合共享编辑器；不依赖工作台路由或聊天状态。 */
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -21,7 +22,7 @@ function openModelSettings() {
 </script>
 <template>
   <section class="agents-page">
-    <header class="section-header"><div><h2>{{ t('adminAgents.title') }}</h2><p>{{ t('adminAgents.description') }}</p></div><div class="actions"><t-button variant="outline" :loading="loading" :disabled="busy || editor" @click="load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="canManage" theme="primary" :disabled="!ready || busy || editor" @click="open()"><template #icon><t-icon name="add" /></template>{{ t('adminAgents.create') }}</t-button></div></header>
+    <header class="section-header"><div><h2><t-icon name="app" size="24px" />{{ t('consoleLayout.agentManagement') }}</h2><p>{{ t('adminAgents.description') }}</p></div><div class="actions"><t-button variant="outline" :loading="loading" :disabled="busy || editor" @click="load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="canManage" theme="primary" :disabled="!ready || busy || editor" @click="open()"><template #icon><t-icon name="add" /></template>{{ t('adminAgents.create') }}</t-button></div></header>
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert theme="info" :message="t('adminAgents.scopeHint')" />
@@ -29,11 +30,10 @@ function openModelSettings() {
       <t-alert v-if="error" theme="error" :message="error" />
       <t-loading :loading="loading">
         <div v-if="ready && filtered.length" class="agent-grid">
-          <article v-for="row in filtered" :key="row.id" class="agent-card">
-            <header><AgentAvatar :name="row.name" size="medium" /><h3>{{ row.name }}</h3><t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light">{{ t(`adminAgents.${row.status}`) }}</t-tag></header>
-            <p>{{ row.description || t('adminAgents.noDescription') }}</p>
-          <footer><span>{{ t('adminAgents.version', { version: row.version_counter }) }}</span><div class="actions"><t-button variant="text" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="open(row)">{{ t('adminAgents.edit') }}</t-button><t-button variant="text" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="audienceAgent = row; audienceOpen = true">{{ t('agentAudience.assign') }}</t-button><t-button variant="text" theme="danger" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="archive(row)">{{ t('adminAgents.archive') }}</t-button></div></footer>
-          </article>
+          <ResourceDirectoryCard v-for="row in filtered" :key="row.id" :title="row.name" :description="row.description" icon="app" :interactive="row.can_maintain && !busy && !editor" @open="open(row)">
+            <template #actions><t-dropdown :options="[{ content: t('adminAgents.edit'), value: 'edit' }, { content: t('agentAudience.assign'), value: 'audience' }, { content: t('connectionUi.channels'), value: 'channels' }, { content: t('adminAgents.archive'), value: 'archive' }]" :disabled="busy || editor || audienceOpen || !row.can_maintain" @click="(option: { value?: string | number }) => { if (option.value === 'edit') open(row); else if (option.value === 'audience') { audienceAgent = row; audienceOpen = true }; if (option.value === 'archive') archive(row); if (option.value === 'channels') router.push('/channels') }"><t-button variant="text" shape="square" :aria-label="t('common.expand')"><t-icon name="ellipsis" /></t-button></t-dropdown></template>
+            <t-tag :theme="row.status === 'published' ? 'success' : 'default'" variant="light">{{ t(`adminAgents.${row.status}`) }}</t-tag><span>{{ t('adminAgents.version', { version: row.version_counter }) }}</span>
+          </ResourceDirectoryCard>
         </div>
         <div v-else-if="ready" class="empty"><t-icon :name="search.trim() ? 'search' : 'app'" size="40px" /><p>{{ t(search.trim() ? 'adminAgents.noMatch' : 'adminAgents.empty') }}</p></div>
       </t-loading>
@@ -49,7 +49,7 @@ function openModelSettings() {
 .toolbar :deep(.t-input__wrap) { width: 320px; max-width: 100%; }
 a { display: inline-flex; align-items: center; color: var(--td-brand-color); text-decoration: none; min-height: 40px; }
 a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
-.agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 20px; padding: 4px 0 20px; }
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 20px; padding: 4px 0 20px; }
 .agent-card { min-width: 0; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); padding: 20px; background: var(--td-bg-color-container); }
 .agent-card header { display: flex; align-items: center; gap: 12px; }
 h3 { flex: 1; min-width: 0; margin: 0; font-size: var(--app-text-lg); overflow-wrap: anywhere; }
@@ -57,4 +57,8 @@ h3 { flex: 1; min-width: 0; margin: 0; font-size: var(--app-text-lg); overflow-w
 .agent-card footer { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--td-component-stroke); padding-top: 12px; }
 .agent-card footer > span { color: var(--td-text-color-secondary); }
 .empty { padding: 60px 20px; text-align: center; color: var(--td-text-color-secondary); }
+</style>
+
+<style scoped>
+.section-header h2 { display: flex; align-items: center; gap: 8px; font-size: var(--app-text-4xl); line-height: 32px; font-weight: 600; }
 </style>

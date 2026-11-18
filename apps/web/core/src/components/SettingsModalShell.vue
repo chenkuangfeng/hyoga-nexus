@@ -1,14 +1,14 @@
 <template>
   <Teleport to="body">
     <Transition name="settings-modal-shell">
-      <div v-if="visible" class="settings-modal-shell settings-overlay" :class="[overlayClass, { 'settings-page': fullPage }]"
+      <div v-if="visible" class="settings-modal-shell settings-overlay" :class="[overlayClass, { 'settings-page': fullPage || editorMode === 'route', 'settings-drawer-mode': editorMode === 'drawer' }]"
         :style="{ zIndex }" @click.self="!fullPage && emit('close')">
-        <div class="settings-modal" role="dialog" aria-modal="true" :aria-label="title">
+        <div ref="panel" class="settings-modal" tabindex="-1" @keydown="trapFocus" role="dialog" aria-modal="true" :aria-label="title">
           <div v-if="loading" class="editor-initializing" role="status" :aria-label="$t('common.loading')">
             <t-loading size="medium" :text="$t('common.loading')" />
           </div>
 
-          <button v-if="!fullPage" class="close-btn" type="button" @click="emit('close')" :aria-label="$t('common.close')">
+          <button v-if="!fullPage && editorMode !== 'route'" class="close-btn" type="button" @click="emit('close')" :aria-label="$t('common.close')">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
             </svg>
@@ -18,7 +18,7 @@
             <aside class="settings-sidebar">
               <div class="sidebar-header">
                 <!-- 整页模式（fullPage）下没有弹窗关闭按钮，改为返回主界面 -->
-                <button v-if="fullPage" type="button" class="settings-back" @click="emit('close')">
+                <button v-if="fullPage || editorMode === 'route'" type="button" class="settings-back" @click="emit('close')">
                   <t-icon name="chevron-left" />
                   <span>{{ $t('general.backToMain') }}</span>
                 </button>
@@ -65,6 +65,8 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { useEditorPresentation } from '../composables/useEditorPresentation'
 /**
  * 全屏"设置类"弹窗壳：遮罩 + 1080×780 面板 + 左侧分组导航 + 右侧内容 + 可选底栏。
  * 被工作台 Settings / 编辑器共用，
@@ -91,7 +93,7 @@ export interface SettingsModalNavGroup {
   items: SettingsModalNavItem[]
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     visible: boolean
     title: string
@@ -128,6 +130,24 @@ function showBadge(item: SettingsModalNavItem): boolean {
   if (typeof item.badge === 'number' && item.badge <= 0) return !!item.showZeroBadge
   return true
 }
+
+const { mode: editorMode } = useEditorPresentation(() => props.visible, () => emit('close'))
+
+const panel = ref<HTMLElement | null>(null)
+let previousFocus: HTMLElement | null = null
+const focusable = () => Array.from(panel.value?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]') || []).filter(element => element.getClientRects().length)
+watch(() => props.visible, async open => {
+  if (open) { previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null; await nextTick(); if (props.visible) (focusable()[0] || panel.value)?.focus() }
+  else { if (previousFocus?.isConnected) previousFocus.focus(); previousFocus = null }
+}, { immediate: true })
+function trapFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab') return
+  const items = focusable(), first = items[0], last = items.at(-1)
+  if (!first || !last) { event.preventDefault(); panel.value?.focus(); return }
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.value)) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+}
+onBeforeUnmount(() => { if (previousFocus?.isConnected) previousFocus.focus() })
 </script>
 
 <style lang="less">
@@ -468,5 +488,24 @@ function showBadge(item: SettingsModalNavItem): boolean {
     transform: scale(0.95);
     opacity: 0;
   }
+}
+</style>
+
+<style>
+.settings-modal-shell.settings-drawer-mode { justify-content: flex-end; }
+.settings-drawer-mode .settings-modal { width: min(960px, 100vw); height: 100dvh; max-height: none; border-radius: 0; }
+</style>
+
+<style>
+@media (max-width: 600px) {
+  .settings-modal-shell .settings-container { flex-direction: column; }
+  .settings-modal-shell .settings-sidebar { width: 100%; max-height: 190px; border-right: 0; border-bottom: 1px solid var(--td-component-stroke); }
+  .settings-modal-shell .sidebar-header { padding: 12px 48px 8px 16px; }
+  .settings-modal-shell .settings-nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; }
+  .settings-modal-shell .nav-group-title { width: 100%; }
+  .settings-modal-shell .nav-item { margin: 0; }
+  .settings-modal-shell .settings-body { padding: 16px; }
+  .settings-modal-shell .setting-control { min-width: 0; max-width: 100%; }
+  .settings-modal-shell .setting-control .t-select { max-width: 100%; }
 }
 </style>

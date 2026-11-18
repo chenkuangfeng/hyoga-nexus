@@ -37,7 +37,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API、认证、主题、编辑器及渠道组件抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
 
-`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、专用模型目录适配器、桌面绑定与自动初始化入口已删除；旧集成页和本地浏览器连接入口已删除，IM 渠道迁入智能体页、MCP endpoint 迁入个人设置。管理端已接入权限外壳、企业/组织/成员/角色治理、策略、智能体与知识库管理、模型与 MCP、存储/检索、工具与技能、渠道、用量、运行状态及审计页面。智能体与知识库完整编辑器及 IM 面板由 core 复用。embed 服务端契约与 MCP 个人 endpoint 尚未完成；双应用完整构建/浏览器验收和工作台产物隔离仍待 E2.8。
+`stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、专用模型目录适配器、桌面绑定与自动初始化入口已删除；旧集成页和本地浏览器连接入口已删除，管理端智能体目录承接渠道入口，MCP endpoint 归发布集成；员工端不挂载这些页面。管理端已接入权限外壳、企业/组织/成员/角色治理、策略、智能体与知识库管理、模型与 MCP、存储/检索、工具与技能、渠道、用量、运行状态及审计页面。智能体与知识库完整编辑器及 IM 面板由 core 复用。embed 服务端契约与 MCP 个人 endpoint 尚未完成；双应用完整构建/浏览器验收和工作台产物隔离仍待 E2.8。
 
 认证恢复只使用已有令牌，不尝试桌面自动初始化。注册表单按是否持有邀请令牌分流：自助注册发送企业名称与编码，邀请注册只发送邀请与账号字段。两应用共用 404 页面，已删除的平台管理路由不再挂载应用页面；旧设置参数归一到 `general` 并移除旧 `panel` 参数。工作台改密路由先经过认证，临时密码账号先改密，避免初始化豁免绕过认证。
 
@@ -122,7 +122,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 工作台设置导航不再注册部门管理，旧 `OrgStructure.vue` 已删除，其组织读写不会再随设置页面打包。旧 `section=org-structure` 保留 `AdminSectionMoved.vue` 迁移说明，依据当前企业服务端 entries 提供显式管理应用链接；开发使用同主机 5174，生产按应用 base 构造 admin/organization。不会自动跨应用导航，管理端继续校准身份和组织权限。旧书签被识别为迁移区，不受原部门能力/owner 导航门槛影响，也不会因当前导航没有此项而自动丢回通用设置。
 
-旧企业信息页现已由账户成员身份区和独立管理端承接后移除；旧成员治理页也已移除，其他管理配置与产物隔离仍待后续验收，共享空间、加入企业或企业切换保持原流程。
+旧企业信息页现已由账户成员身份区和独立管理端承接后移除；旧成员治理页也已移除，其他管理配置与产物隔离仍待后续验收，加入企业和企业切换保留账户流程，员工不再提供共享空间管理界面。
 
 
 ## 管理端审计日志
@@ -193,7 +193,7 @@ Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路�
 
 根包维护 Playwright 和独立类型检查配置，`scripts/run-browser-tests.mjs` 按应用串行启动，`playwright.config.ts` 仅为当前项目启动对应 Vite 服务，不复用其他开发进程。测试使用真实路由与 Vue/TDesign；测试 Vite 配置仅限制依赖扫描/预打包，仍复用应用配置且不替换业务模块。`e2e/fixtures.ts` 统一隔离浏览器身份、明确模拟 API、捕获未声明请求和页面脚本错误。失败截图、trace、HTML 报告按应用归档并由 Git 忽略；浏览器路径可由环境提供，仓库不写机器专属路径。
 
-首批回归修复共享登录卡片的 border-box 缺失，以及整页设置路由背后主布局 600px 最小宽度造成的窄屏溢出；后者仅调整设置路由，不改变正常对话页面布局约束。
+首批回归修复共享登录卡片的 border-box 缺失，以及整页设置路由背后主布局 600px 最小宽度造成的窄屏溢出；主布局允许窄屏收缩；设置作为弹窗覆盖现有页面，底层目录和对话也不得撑宽视口。
 
 ## 构建与类型检查资源控制
 
@@ -209,9 +209,9 @@ Node 默认堆为 768MB，Go 预打包器默认 GOMEMLIMIT=192MiB/GOMAXPROCS=2�
 
 ## 管理端设置目录与界面来源
 
-导航数据位于 admin/src/navigation.ts。分组顺序沿用 WeKnora e1f9a6166 的 views/settings/Settings.vue：账户、空间、模型、发布集成、数据与扩展、系统管理、平台；没有管理端账户配置，因此隐藏该空组。空间收纳信息、成员、部门、角色、策略和资源；模型保留模型管理；发布集成收纳企微、渠道、MCP endpoint；数据与扩展保留原版向量库→解析→文件存储顺序，并收纳图存储与工具；系统管理为运行和审计，平台为概览。每项权限与角色条件沿用原入口，过滤后隐藏空组。
+导航数据位于 admin/src/navigation.ts，按业务固定为企业、智能体、知识库、模型、发布集成、数据和扩展、工具箱、权限、系统九组，具体子项见管理应用 README。WeKnora e1f9a6166 Toolbox.vue 的技能与 MCP 注册职责拆分保留，MCP endpoint 属于发布集成。用量位于模型管理内，渠道位于智能体卡片菜单，投稿审核位于技能管理内，长期记忆位于企业空间；不增加一级菜单。过滤后隐藏空组，业务写入仍由服务端授权。
 
-分组标题及菜单行的字重、间距和状态来自 components/SettingsModalShell.vue，外层继续使用已确认的工作台式折叠侧栏与底部账户区。折叠后分组显示分隔线，菜单保留可访问名称与悬停提示。名称不重复企业修饰词，企业微信产品名保留，业务说明仍明确真实作用域。
+分组标题及菜单行的字重、间距和状态来自 components/SettingsModalShell.vue，外层继续使用已确认的工作台式折叠侧栏与底部账户区。折叠后分组显示分隔线，菜单保留可访问名称与悬停提示。菜单名称按业务明确企业空间与企业策略，企业微信保留产品名；页面说明明确真实作用域。
 
 | 管理页面 | 固定版本来源 | 必要适配 |
 | --- | --- | --- |
@@ -228,3 +228,22 @@ UsagePage 是 Nexus 自身用量契约的管理页，沿用现有页面和公共
 页面以企业、账号、权限代次和成员/部门目录授权组成作用域键，变化时同步清理数据、草稿、确认与旧请求。必需报表/限额成功后记录 reportGroup，只用该快照解释已返回行；groupBy 是下一次查询的草稿。成员和部门目录分别加载与反馈失败，失败目录不生成可选范围，不阻断企业报表。
 
 新建范围选项携带从目录读取的类型和 ID，不拆分任意范围字符串；确认绑定当时的企业、授权键、范围和正整数 Token 数值。确认持有期间禁止重复打开保存/移除，回调只认当前确认，写入后重新读取服务端报表与限额。失败保留现有列表和草稿；失效的读取、错误、写回与成功提示不会落到新作用域。客户端严格校验计数、正整数限额和已声明的范围，最终授权仍由既有后端负责。
+
+
+## 双应用资源入口及编辑容器
+
+工作台 Settings 只导入 GeneralSettings、UserProfile、NexusMemorySettings 与旧书签迁移说明，所有角色都不提供空间、模型、工具等设置导航。UserMenu 使用 UI store 弹出设置，保留底层路由；SettingsModalShell 提供焦点循环和关闭后焦点恢复。工作台目录直接读取可见知识库和智能体，使用请求代次隔离身份切换；资源变更通知合并后刷新。KnowledgeBase 内容页不挂载资源设置编辑器，内容操作仍由现有 canEdit 和服务端维护授权控制。普通 POST knowledge/bases 校验成员身份后返回 Forbidden；admin 创建接口保留 enterprise_kbs:manage 授权，无数据库迁移、不改变已有库归属。
+
+useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏好。EditorDialog、SettingDrawer 与 SettingsModalShell 消费该偏好；没有注入的员工或嵌入页面保留自身行为。路由模式通过 editor 查询参数增加历史，浏览器返回发出关闭；关闭删除该参数。仅编辑位置查询变化不重新加载管理权限，账号/企业变化仍使上下文失效。编辑位置使用组件独立标识，关闭、卸载及迟到导航只清理自身位置，不能影响随后打开的其他编辑器。界面偏好属于当前用户当前浏览器，不作为服务端权限事实。
+
+会话产物在 NexusChatPage 的 session-artifacts 右侧面板中展示，复用 RunArtifactCards 的受认证预览和下载；无独立产物库导航。请求携带当前 session_id，旧请求代次不覆盖新会话，预览以会话键重新挂载。错误可重试、空结果明确显示；窄屏首次进入及点击业务导航后自动收起侧栏，面板覆盖当前会话，关闭后恢复完整聊天空间。
+
+| 页面/组件 | WeKnora e1f9a6166 来源 | Nexus 必要适配 |
+| --- | --- | --- |
+| ResourceDirectoryCard / 智能体与知识库目录 | views/agent/AgentList.vue、views/knowledge/KnowledgeBaseList.vue、components/css/resource-card.less | 仅当前授权目录，不展示原版跨空间分组；企业管理保留受众和维护员操作，员工不管理资源 |
+| ModelsPage | views/settings/ModelSettings.vue | 保留类型标签、计数、搜索、模型卡片；Provider、版本、默认值、停用、测试和用量使用 Nexus 真实 API，无原版云端目录 |
+| SkillsPage | views/settings/SkillSettings.vue | 保留技能卡片、版本和安装入口；采用 Nexus 版本扫描/安装及企业投稿审核，不提供员工私有技能管理 |
+| NexusToolboxMcp | views/settings/McpSettings.vue | 保留服务卡片、搜索及编辑入口；现有逐工具授权、风险、审批与发现规则保持不变 |
+| EndpointsPage | views/integrations/McpServerIntegrationSettings.vue、components/css/channel-panel-list.less | 保留发布卡片及操作菜单；签发、轮换、撤销及一次性令牌使用 Nexus 契约 |
+| GraphStoresPage | components/css/provider-card.less、views/knowledge/settings/GraphSettings.vue | 原版图谱设置属于单知识库，没有企业图存储登记页；企业页沿用提供方卡片和配置容器，不伪造图抽取功能 |
+| SpaceMemorySettings | views/settings/MemoryWorkspaceSettings.vue | 使用既有空间记忆契约、企业模型目录与显式保存；身份变化丢弃旧请求，无定时延迟写入 |

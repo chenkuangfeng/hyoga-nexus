@@ -52,7 +52,7 @@ def drain(factory):
 
 def test_base_document_and_search_flow(api):
     client, path, identity, factory = api
-    created = client.post(path + '/bases', json={'visibility': 'tenant', 'name': '产品手册', 'indexing_strategy': {'vector': False, 'keyword': True}})
+    created = client.post(path.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant', 'name': '产品手册', 'indexing_strategy': {'vector': False, 'keyword': True}})
     assert created.status_code == 201, created.text
     kb = created.json()
     assert kb['vector_engine'] == 'sqlite' and kb['vector_store_id'] == 'builtin' and kb['can_edit'] is True
@@ -88,7 +88,7 @@ def test_planned_features_and_limits_are_refused(api):
     client, path, identity, _ = api
     planned = client.post(path + '/vector-stores', json={'name': 'w', 'engine': 'pinecone'})
     assert planned.status_code == 422 and planned.json()['error']['code'] == 'capability_planned'
-    kb_id = client.post(path + '/bases', json={'visibility': 'tenant', 'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
+    kb_id = client.post(path.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant', 'name': 'x', 'indexing_strategy': {'vector': False}}).json()['id']
     too_big = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.txt', b'x' * (1024 * 1024 + 1))})
     assert too_big.status_code == 422
     unsupported = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('a.exe', b'x')})
@@ -124,7 +124,7 @@ def test_vector_store_registry_hides_secrets(api):
     assert client.post(path + '/vector-stores', json={'name': 'm', 'engine': 'sqlite',
                                                       'connection_config': {'path': 'x.db'}}).status_code == 403
     identity[0] = OWNER
-    kb = client.post(path + '/bases', json={'visibility': 'tenant', 'name': 'q', 'vector_store_id': store_id,
+    kb = client.post(path.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant', 'name': 'q', 'vector_store_id': store_id,
                                             'indexing_strategy': {'vector': False, 'keyword': True}})
     assert kb.status_code == 422  # Qdrant needs vectors
     assert client.delete(f'{path}/vector-stores/{store_id}').status_code == 204
@@ -163,7 +163,31 @@ def test_chunk_preview_parser_engines_and_engine_rules(api):
     assert not engines['mineru']['Available'] and engines['mineru']['UnavailableReason'].startswith('未配置')  # implemented, not set up
     assert engines['anydoc']['Available'] and 'doc' in engines['anydoc']['FileTypes']  # in-process, nothing to set up
     assert not engines['markitdown']['Available'] and engines['markitdown']['UnavailableReason'].startswith('待实现')
-    rule = client.post(path + '/bases', json={'visibility': 'tenant', 'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
+    rule = client.post(path.replace('/knowledge', '/admin/knowledge') + '/bases', json={'visibility': 'tenant', 'name': 'r', 'indexing_strategy': {'vector': False, 'keyword': True},
                                               'settings': {'chunking_config': {'parser_engine_rules': [
                                                   {'file_types': ['pdf'], 'engine': 'markitdown'}]}}})
     assert rule.status_code == 422 and rule.json()['error']['code'] == 'capability_planned'
+
+
+def test_workspace_cannot_create_but_assigned_maintainer_can_upload(api):
+    """普通建库入口对所有员工角色关闭；企业创建和点名维护仍走服务端授权。"""
+    client, path, identity, factory = api
+    payload = {'name': '仅企业可建库', 'indexing_strategy': {'vector': False, 'keyword': True}}
+    assert client.post(path + '/bases', json=payload).status_code == 403
+    identity[0] = MEMBER
+    assert client.post(path + '/bases', json=payload).status_code == 403
+    admin = path.replace('/knowledge', '/admin/knowledge')
+    assert client.post(admin + '/bases', json=payload).status_code == 403
+    identity[0] = OWNER
+    created = client.post(admin + '/bases', json=payload)
+    assert created.status_code == 201, created.text
+    kb_id = created.json()['id']
+    with factory() as db:
+        member_id = str(resolve_user(db, MEMBER).id)
+    granted = client.post(f'{admin}/bases/{kb_id}/maintainers', json={'user_id': member_id})
+    assert granted.status_code == 201, granted.text
+    identity[0] = MEMBER
+    assert client.get(f'{path}/bases/{kb_id}').status_code == 200
+    uploaded = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('维护.md', '允许维护已有库'.encode())})
+    assert uploaded.status_code == 201, uploaded.text
+    assert client.post(path + '/bases', json={**payload, 'name': '仍然不可建库'}).status_code == 403

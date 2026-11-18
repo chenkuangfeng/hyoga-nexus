@@ -30,3 +30,6 @@
 类型检查使用 `tsconfig.types.json` 完整检查并生成声明到本包 node_modules/.cache/nexus-types/core，供两个应用的引用工程复用。缓存保留本包的依赖解析位置，不提交；公共接口的声明生成错误必须修复，不能忽略。
 
 提供方卡片样式位于 src/styles/provider-card.less，原 SVG 位于 src/assets/img/providers，通过 src/utils/providerLogos.ts 查找；两应用共用同一份 WeKnora 资源，不跨应用导入。
+
+
+管理编辑展示通过 `useEditorPresentation` 注入，仅管理应用提供偏好。`EditorDialog`、`SettingDrawer`、`SettingsModalShell` 共享 modal/route/drawer 行为，员工设置不受影响。`ResourceDirectoryCard` 复用固定版 WeKnora 资源卡片结构，资源授权和实际动作由宿主决定；参考样式位于 `styles/resource-card.less`、`styles/channel-panel-list.less`。

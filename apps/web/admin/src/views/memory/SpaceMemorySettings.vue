@@ -19,14 +19,14 @@
     <p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
     <p v-else-if="!canEdit && loaded" class="readonly-hint">{{ t('nexusMemory.readonlyHint') }}</p>
 
-    <div v-if="loaded" class="settings-group">
+    <div v-if="loaded" class="settings-group"><t-button v-if="canEdit" :loading="saving" @click="save">{{ t('common.save') }}</t-button>
       <div class="setting-row">
         <div class="setting-info">
           <label>{{ t('memoryWorkspaceSettings.enableLabel') }}</label>
           <p class="desc">{{ t('memoryWorkspaceSettings.enableDescription') }}</p>
         </div>
         <div class="setting-control">
-          <t-switch v-model="config.enabled" :disabled="!canEdit" @change="debouncedSave" />
+          <t-switch v-model="config.enabled" :disabled="!canEdit"  />
         </div>
       </div>
 
@@ -40,7 +40,7 @@
           </p>
         </div>
         <div class="setting-control">
-          <t-radio-group v-model="config.write_mode" :disabled="!canEdit" @change="debouncedSave">
+          <t-radio-group v-model="config.write_mode" :disabled="!canEdit" >
             <t-radio-button value="explicit">{{ t('memoryWorkspaceSettings.writeModeExplicit') }}</t-radio-button>
             <t-radio-button value="auto">{{ t('memoryWorkspaceSettings.writeModeAuto') }}</t-radio-button>
           </t-radio-group>
@@ -69,7 +69,7 @@
         </div>
         <div class="setting-control" style="min-width: 280px">
           <t-select v-model="config.embedding_model_version_id" :disabled="!canEdit" clearable
-            :placeholder="t('nexusMemory.embeddingNone')" @change="debouncedSave">
+            :placeholder="t('nexusMemory.embeddingNone')" >
             <t-option v-for="model in embeddingModels" :key="model.version_id" :value="model.version_id" :label="model.name" />
           </t-select>
         </div>
@@ -82,7 +82,7 @@
         </div>
         <div class="setting-control">
           <t-input-number v-model="config.interest_threshold" :min="2" :max="10" :step="1" :disabled="!canEdit"
-            @change="debouncedSave" />
+             />
         </div>
       </div>
 
@@ -93,7 +93,7 @@
         </div>
         <div class="setting-control instructions-control">
           <t-textarea v-model="config.extract_instructions" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="1000"
-            :disabled="!canEdit" :placeholder="t('memoryWorkspaceSettings.instructionsPlaceholder')" @blur="debouncedSave" />
+            :disabled="!canEdit" :placeholder="t('memoryWorkspaceSettings.instructionsPlaceholder')" />
         </div>
       </div>
 
@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, watch, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
@@ -132,58 +132,34 @@ const loaded = ref(false)
 const loadError = ref('')
 const provider = ref<string | null>(null)
 const embeddingModels = ref<NexusModel[]>([])
-let initializing = true
-
+const saving = ref(false)
+let epoch = 0
 async function load() {
-  const tenantId = authStore.effectiveTenantId
+  const current = ++epoch, tenantId = authStore.effectiveTenantId
+  loaded.value = false; canEdit.value = false; loadError.value = ''; embeddingModels.value = []
   if (!tenantId) return
   try {
     const settings = await getSpaceMemorySettings(tenantId)
-    Object.assign(config, {
-      enabled: settings.enabled, write_mode: settings.write_mode, extract_instructions: settings.extract_instructions,
-      embedding_model_version_id: settings.embedding_model_version_id, interest_threshold: settings.interest_threshold,
-    })
-    canEdit.value = settings.can_edit
-    provider.value = settings.memory_provider
-    loaded.value = true
-  } catch (error) {
-    loadError.value = t('nexusMemory.loadFailed')
-    return
-  } finally {
-    setTimeout(() => { initializing = false }, 100)
-  }
-  try {
-    const models = await getModelSettings(tenantId)
-    embeddingModels.value = models.providers.flatMap(p => p.models).filter(m => m.model_type === 'embedding')
-  } catch {
-    embeddingModels.value = []
-  }
+    if (current !== epoch) return
+    Object.assign(config, settings); canEdit.value = settings.can_edit; provider.value = settings.memory_provider; loaded.value = true
+    try { const models = await getModelSettings(tenantId, true); if (current === epoch) embeddingModels.value = models.providers.flatMap(p => p.models).filter(m => m.model_type === 'embedding') } catch { /* 模型目录失败不影响已有记忆规则。 */ }
+  } catch { if (current === epoch) loadError.value = t('nexusMemory.loadFailed') }
 }
-
 async function save() {
-  const tenantId = authStore.effectiveTenantId
-  if (!tenantId) return
-  try {
-    await updateSpaceMemorySettings(tenantId, { ...config, embedding_model_version_id: config.embedding_model_version_id || null })
-    MessagePlugin.success(t('memoryWorkspaceSettings.toasts.saveSuccess'))
-  } catch (error) {
-    const message = error instanceof Error ? error.message : ''
-    MessagePlugin.error(t('memoryWorkspaceSettings.toasts.saveFailed', { message }))
-  }
+  const tenantId = authStore.effectiveTenantId, current = epoch
+  if (!tenantId || !canEdit.value || saving.value) return
+  const body = { enabled: config.enabled, write_mode: config.write_mode, extract_instructions: config.extract_instructions, embedding_model_version_id: config.embedding_model_version_id || null, interest_threshold: config.interest_threshold }
+  saving.value = true
+  try { await updateSpaceMemorySettings(tenantId, body); if (current === epoch) MessagePlugin.success(t('memoryWorkspaceSettings.toasts.saveSuccess')) }
+  catch { if (current === epoch) loadError.value = t('nexusMemory.loadFailed') }
+  finally { if (current === epoch) saving.value = false }
 }
-
-let saveTimer: number | null = null
-function debouncedSave() {
-  if (initializing || !canEdit.value) return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = window.setTimeout(() => { void save() }, 500)
-}
-
-onMounted(load)
+watch(() => `${authStore.effectiveTenantId}:${authStore.user?.id}:${authStore.currentTenantRole}`, () => { saving.value = false; void load() }, { immediate: true })
+onBeforeUnmount(() => epoch++)
 </script>
 
 <style lang="less" scoped>
-@import (reference) '@/components/css/settings-section.less';
+@import (reference) '@nexus-web/core/styles/settings-section.less';
 
 .memory-workspace-settings {
   width: 100%;

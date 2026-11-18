@@ -1,0 +1,5 @@
+.editor-dialog-route .t-dialog { width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; display: flex; flex-direction: column; border-radius: 0; }
+.t-dialog__ctx.editor-dialog-route .t-dialog__position,
+.t-dialog__ctx.editor-dialog-route .t-dialog__position.t-dialog--top { padding: 0; }
+.editor-dialog-route .t-dialog__body { flex: 1; min-height: 0; overflow: auto; }
+.setting-drawer.setting-drawer--center.editor-dialog-route .t-dialog__body { max-height: none; min-height: 0; flex: 1; overflow: auto; }

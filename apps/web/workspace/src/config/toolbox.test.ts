@@ -2,8 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { computed, ref } from 'vue'
-import { runInNewContext } from 'node:vm'
-import ts from 'typescript'
 import { TOOLBOX_ITEMS, canAccessToolboxSection, isToolboxSection, isToolboxSectionAvailable, toolboxLocation } from './toolbox'
 import zhCN from '@nexus-web/core/i18n/locales/zh-CN'
 
@@ -52,44 +50,14 @@ test('skill shortcut retains its target sandbox without leaking it to other tool
   assert.deepEqual(toolboxLocation(), { path: '/platform/toolbox', query: {} })
 })
 
-const settings = readFileSync(new URL('../views/settings/Settings.vue', import.meta.url), 'utf8')
-const script = settings.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]!
-const ast = ts.createSourceFile('Settings.ts', script, ts.ScriptTarget.Latest, true)
-function declaration(name: string) {
-  const node = ast.statements.find((s) => ts.isVariableStatement(s)
-    && s.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && d.name.text === name))
-  assert.ok(node, `${name} exists`)
-  return ts.transpileModule(node.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-}
-
-test('legacy shortcuts close settings and route to the selected tool and sandbox', () => {
-  const calls: unknown[] = []
-  const redirect = runInNewContext(`${declaration('redirectToToolbox')}\nredirectToToolbox`, {
-    isToolboxSection, toolboxLocation,
-    uiStore: { closeSettings: () => calls.push('close') },
-    router: { push: (location: unknown) => calls.push(location) },
-  })
-  assert.equal(redirect('skills', 'sandbox-123'), true)
-  assert.deepEqual(calls, ['close', toolboxLocation('skills', 'sandbox-123')])
-  calls.length = 0
-  assert.equal(redirect('sandbox'), false)
-  assert.deepEqual(calls, [])
-  assert.match(script, /redirectToToolbox\(normalizedSection, uiStore.settingsInitialSubSection\)/)
-  assert.match(script, /redirectToToolbox\(normalizedSection, subsection\)/)
-})
-
-test('settings no longer render moved panels, and old bookmarks reach toolbox', () => {
-  for (const component of ['SkillSettings', 'McpSettings', 'BrowserConnectionSettings']) {
-    assert.equal(settings.includes(`<${component}`), false)
-  }
-  for (const item of TOOLBOX_ITEMS) {
-    assert.equal(settings.includes(`{ key: '${item.key}',`), false)
-  }
+test('员工设置只挂载三个账户面板，旧工具箱地址回到对话', () => {
+  const settings = readFileSync(new URL('../views/settings/Settings.vue', import.meta.url), 'utf8')
+  for (const component of ['GeneralSettings', 'UserProfile', 'NexusMemorySettings']) assert.ok(settings.includes(`<${component}`))
+  for (const component of ['SkillSettings', 'McpSettings', 'BrowserConnectionSettings', 'ModelSettings', 'NexusMemoryWorkspaceSettings']) assert.equal(settings.includes(`<${component}`), false)
   const router = readFileSync(new URL('../router/index.ts', import.meta.url), 'utf8')
-  assert.match(router, /to\.path === '\/platform\/settings' && isToolboxSection\(to\.query\.section\)/)
-  assert.match(router, /toolboxLocation\(to\.query\.section/)
-  assert.match(router, /name: "toolbox",\s+component: \(\) => import\("\.\.\/views\/toolbox\/NexusToolbox\.vue"\)/)
-  const page = readFileSync(new URL('../views/toolbox/NexusToolbox.vue', import.meta.url), 'utf8')
-  assert.match(page, /if \(!selectedItem\.value && fallback\) void router\.replace\(toolboxLocation\(fallback\.key\)\)/)
-  assert.match(page, /:disabled="!item\.available"/)  // a planned tab cannot be opened
+  assert.match(router, /path: "toolbox\/:section\?", redirect: "\/platform\/creatChat"/)
+  assert.equal(router.includes('views/toolbox/NexusToolbox.vue'), false)
+  const menu = readFileSync(new URL('../stores/menu.ts', import.meta.url), 'utf8')
+  const source = menu.slice(menu.indexOf('reactive<MenuItem[]>('), menu.indexOf('const isFirstSession'))
+  assert.deepEqual([...source.matchAll(/path: '([^']+)'/g)].map(match => match[1]), ['creatChat', 'knowledge-bases', 'agents'])
 })

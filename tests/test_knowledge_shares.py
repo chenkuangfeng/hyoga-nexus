@@ -8,7 +8,7 @@ from test_platform import database  # noqa: F401  (fixture)
 
 
 def _kb(client, w, name='手册'):
-    created = client.post(f"/api/v1/tenants/{w['acme']}/knowledge/bases", headers=_as(w['ann'], w['acme']),
+    created = client.post(f"/api/v1/tenants/{w['acme']}/admin/knowledge/bases", headers=_as(w['ann'], w['acme']),
                           json={'name': name, 'visibility': 'tenant', 'indexing_strategy': {'vector': False, 'keyword': True}})
     assert created.status_code == 201, created.text
     return created.json()['id']

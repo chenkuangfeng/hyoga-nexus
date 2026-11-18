@@ -13,7 +13,7 @@ const scopeKey = computed(() => `${tenant.value}:${auth.user?.id || ''}:${contex
 
 <template>
   <section class="mcp-services-page">
-    <header class="section-header"><div><h2>{{ t('mcpSettings.title') }}</h2><p>{{ t('mcpSettings.description') }}</p></div></header>
+    <header class="section-header"><div><h2>{{ t('consoleLayout.mcpRegister') }}</h2><p>{{ t('mcpSettings.description') }}</p></div></header>
     <t-alert v-if="!context.can('tools:manage')" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert theme="info" :message="t('mcpSettings.manageAndTest')" />

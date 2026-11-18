@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 /** 智能体部门/成员受众编辑；无目录权限时保留原记录，不按空列表覆盖。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -87,7 +88,7 @@ onBeforeUnmount(reset)
 </script>
 
 <template>
-  <t-dialog :visible="visible" :header="t('agentAudience.title')" width="min(760px, calc(100vw - 24px))" :confirm-btn="{ content: t('agentAudience.save'), disabled: !canSave, loading: saving }" :cancel-btn="{ content: t('common.cancel'), disabled: saving }" :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving" :close-btn="!saving" @confirm="save" @close="close">
+  <EditorDialog :visible="visible" :header="t('agentAudience.title')" width="min(760px, calc(100vw - 24px))" :confirm-btn="{ content: t('agentAudience.save'), disabled: !canSave, loading: saving }" :cancel-btn="{ content: t('common.cancel'), disabled: saving }" :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving" :close-btn="!saving" @confirm="save" @close="close">
     <p class="hint">{{ t('agentAudience.description', { agent: agentName }) }}</p>
     <t-alert theme="info" :message="t('agentAudience.scopeHint')" />
     <t-alert v-if="error" theme="error" :message="error"><template #operation><t-button variant="text" @click="load">{{ t('connectionUi.refresh') }}</t-button></template></t-alert>
@@ -101,7 +102,7 @@ onBeforeUnmount(reset)
         <p v-if="membersReady && !memberOptions.length">{{ t('agentAudience.noMembers') }}</p>
       </section>
     </t-loading>
-  </t-dialog>
+  </EditorDialog>
 </template>
 
 <style scoped>

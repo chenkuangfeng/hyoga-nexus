@@ -16,36 +16,32 @@
       </t-button>
     </div>
 
+    <t-input v-model="query" class="list-search" clearable :placeholder="$t('menu.search')" :aria-label="$t('menu.search')"><template #prefix-icon><t-icon name="search" /></template></t-input>
     <t-loading :loading="loading" size="small">
-      <p v-if="!loading && !services.length" class="tbm-empty">{{ $t('toolbox.mcp.empty') }}</p>
+      <p v-if="!loading && !filteredServices.length" class="tbm-empty">{{ $t('toolbox.mcp.empty') }}</p>
 
-      <article v-for="service in services" :key="service.id" :class="['tbm-row', { 'tbm-off': !service.enabled }]">
-        <div class="tbm-main">
-          <span class="tbm-name">{{ service.name }}</span>
+      <div class="services-grid"><article v-for="service in filteredServices" :key="service.id" :class="['service-card', { 'tbm-off': !service.enabled }]">
+        <div class="service-card__main"><div class="service-card__body">
+          <div class="service-card__header">
+            <span class="service-card__badge" aria-hidden="true"><t-icon name="tools" size="14px" /></span>
+            <h3 class="service-card__title" :title="service.name">{{ service.name }}</h3>
+            <div v-if="isAdmin" class="service-card__actions">
+              <t-button variant="text" shape="square" size="small" :aria-label="$t('common.edit')" @click="openEdit(service)"><t-icon name="edit" /></t-button>
+              <t-popconfirm :content="$t('toolbox.mcp.deleteConfirm', { name: service.name })" @confirm="remove(service)"><t-button variant="text" theme="danger" shape="square" size="small" :aria-label="$t('common.delete')"><t-icon name="delete" /></t-button></t-popconfirm>
+            </div>
+          </div>
+          <p class="service-card__subtitle tbm-target">{{ serviceTarget(service) }}</p>
+          <p v-if="service.description" class="service-card__desc tbm-desc">{{ service.description }}</p>
+        </div></div>
+        <div class="service-card__footer tbm-controls">
           <span class="tbm-badge tbm-badge--muted">{{ $t(`toolbox.mcp.transports.${service.transport}`) }}</span>
-          <span :class="['tbm-badge', service.enabled ? 'tbm-badge--on' : 'tbm-badge--muted']">
-            {{ $t(service.enabled ? 'common.on' : 'common.off') }}
-          </span>
-          <span class="tbm-spacer" />
-          <t-switch v-if="isAdmin" :value="service.enabled" size="small" :loading="togglingId === service.id"
-            :aria-label="$t('toolbox.mcp.toggleEnabled', { name: service.name })"
-            @change="(value: unknown) => setEnabled(service, value === true)" />
+          <span :class="['tbm-badge', service.enabled ? 'tbm-badge--on' : 'tbm-badge--muted']">{{ $t(service.enabled ? 'common.on' : 'common.off') }}</span>
+          <t-switch v-if="isAdmin" :value="service.enabled" size="small" :loading="togglingId === service.id" :aria-label="$t('toolbox.mcp.toggleEnabled', { name: service.name })" @change="(value: unknown) => setEnabled(service, value === true)" />
           <template v-if="isAdmin">
-            <t-link theme="primary" size="small" :disabled="discoveringId === service.id" @click="discover(service)">
-              {{ discoveringId === service.id ? $t('toolbox.mcp.discovering') : $t('toolbox.mcp.discover') }}
-            </t-link>
-            <t-link theme="primary" size="small" @click="toggleTools(service)">
-              {{ openTools === service.id ? $t('toolbox.mcp.hideTools') : $t('toolbox.mcp.showTools') }}
-            </t-link>
-            <t-link theme="primary" size="small" @click="openEdit(service)">{{ $t('common.edit') }}</t-link>
-            <t-popconfirm :content="$t('toolbox.mcp.deleteConfirm', { name: service.name })"
-              @confirm="remove(service)">
-              <t-link theme="danger" size="small">{{ $t('common.delete') }}</t-link>
-            </t-popconfirm>
+            <t-link theme="primary" size="small" :disabled="discoveringId === service.id" @click="discover(service)">{{ discoveringId === service.id ? $t('toolbox.mcp.discovering') : $t('toolbox.mcp.discover') }}</t-link>
+            <t-link theme="primary" size="small" @click="toggleTools(service)">{{ openTools === service.id ? $t('toolbox.mcp.hideTools') : $t('toolbox.mcp.showTools') }}</t-link>
           </template>
         </div>
-        <p class="tbm-target">{{ serviceTarget(service) }}</p>
-        <p v-if="service.description" class="tbm-desc">{{ service.description }}</p>
 
         <div v-if="openTools === service.id" class="tbm-tools">
           <t-loading :loading="toolsLoading" size="small">
@@ -73,7 +69,7 @@
             </div>
           </t-loading>
         </div>
-      </article>
+      </article></div>
     </t-loading>
 
     <NexusMcpServiceDialog v-model:visible="dialogVisible" :tenant-id="tenantId" :service="editing"
@@ -98,6 +94,8 @@ const emit = defineEmits<{ (event: 'count', value: number): void }>()
 const { t, te } = useI18n()
 
 const services = ref<McpService[]>([])
+const query = ref('')
+const filteredServices = computed(() => services.value.filter(service => `${service.name} ${service.description || ''}`.toLowerCase().includes(query.value.toLowerCase())))
 const loading = ref(false)
 const error = ref('')
 const isAdmin = ref(props.canManage === true)
@@ -324,14 +322,16 @@ watch([() => props.tenantId, () => props.canManage], async () => {
 onBeforeUnmount(() => { generation++; dialogVisible.value = false })
 </script>
 
-<style scoped>
+<style scoped lang="less">
+@import './NexusToolboxMcp.reference.less';
+.tbm-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--td-component-stroke); }
 .tbm-alert { margin-bottom: 8px; }
 .tbm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
 .tbm-hint { margin: 0; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
 .tbm-empty { margin: 0; color: var(--td-text-color-secondary); font-size: var(--app-text-sm); }
 .tbm-row { padding: 10px 0; border-bottom: 1px solid var(--td-component-stroke); }
 .tbm-off .tbm-name { color: var(--td-text-color-secondary); }
-.tbm-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tbm-main { flex-wrap: wrap; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .tbm-name { font-weight: 600; }
 .tbm-spacer { flex: 1; }
 .tbm-badge { padding: 0 6px; font-size: var(--app-text-xs); border: 1px solid var(--td-warning-color); color: var(--td-warning-color); border-radius: var(--td-radius-small); }

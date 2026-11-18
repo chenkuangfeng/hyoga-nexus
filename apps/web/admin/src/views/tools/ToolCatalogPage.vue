@@ -83,7 +83,11 @@ function restore(tool: AgentToolEntry) { if (ready.value && !busy.value && tool.
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="less">
+@import (reference) '@nexus-web/core/styles/provider-card.less';
+.tool-group { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,320px),1fr)); gap: 12px; }
+.tool-group h3 { grid-column: 1 / -1; }
+.tool-row { .provider-card(); display: block; }
 .tool-catalog-page { min-width: 0; }
 .tool-group { margin-top: 20px; }
 .tool-group h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: var(--app-text-md); }
