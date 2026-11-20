@@ -4,8 +4,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import knowledgeIcon from '@/assets/img/zhishiku.svg'
-import agentIcon from '@/assets/img/agent.svg'
+import knowledgeIcon from '@nexus-web/core/assets/img/zhishiku.svg'
+import agentIcon from '@nexus-web/core/assets/img/agent.svg'
 import artifactIcon from '@/assets/img/artifact.svg'
 import organizationIcon from '@/assets/img/organization.svg'
 import toolboxIcon from '@/assets/img/toolbox.svg'

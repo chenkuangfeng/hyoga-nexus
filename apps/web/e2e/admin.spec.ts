@@ -206,20 +206,62 @@ test('系统设置保存编辑展示偏好，抽屉与替换路由保持同一�
 
 test('知识库、智能体与技能使用参考资源卡片，MCP注册独立于发布', async ({ page, api }, testInfo) => {
   await api.signIn()
+  const knowledge = { id: 'kb1', tenant_id: 'a', ownership: 'enterprise', shared: false, name: 'Knowledge reference', description: 'Knowledge content', type: 'document', visibility: 'tenant', knowledge_count: 3, can_manage: true }
   api.handle(request => {
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['enterprise_kbs:manage', 'enterprise_agents:manage', 'tools:manage'] } }
-    if (path === '/api/v1/tenants/a/admin/knowledge/bases') return { body: { items: [{ id: 'kb1', tenant_id: 'a', ownership: 'enterprise', shared: false, name: 'Knowledge reference', description: 'Knowledge content', type: 'document', visibility: 'tenant', knowledge_count: 3, can_manage: true }] } }
+    if (path === '/api/v1/tenants/a/admin/knowledge/bases') return { body: { items: [knowledge, { ...knowledge, id: 'kb2', name: 'Archive reference', description: '', type: 'faq', knowledge_count: 0 }] } }
+    if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb1/documents') return { body: { items: [], total: 0 } }
+    if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb2/faq/entries') return { body: { items: [], total: 0 } }
     if (path === '/api/v1/tenants/a/admin/agents') return { body: [{ id: 'agent1', tenant_id: 'a', ownership: 'enterprise', can_maintain: true, name: 'Agent reference', description: 'Agent content', status: 'draft', runtime_type: 'native', instructions: '', published_version_id: null, model_profile_version_id: null, version_counter: 0, budgets: {}, resource_bindings: [], created_at: '2026-11-18', updated_at: '2026-11-18' }] }
     if (path === '/api/v1/tenants/a/skills') return { body: [{ name: 'Skill reference', source: 'builtin', scope: 'builtin', source_tenant_id: 'a', version: 1, version_id: 'v1', tools: [], execution: 'sandbox', model_invocable: true, description: 'Skill content', disabled: false }] }
     if (path === '/api/v1/tenants/a/mcp-services') return { body: [{ id: 'm1', tenant_id: 'a', name: 'MCP reference', description: 'MCP content', transport: 'streamable_http', config: { url: 'https://mcp.example.test' }, enabled: true, config_epoch: 'e1', created_by: 'u', created_at: '2026-11-18', updated_at: '2026-11-18' }] }
   })
   await page.goto('knowledge')
   const navigation = page.locator('#admin-navigation')
-  await expect(page.locator('.resource-directory-card')).toContainText('Knowledge reference')
+  const cards = page.locator('.resource-directory-card')
+  await expect(cards.locator('.card-title')).toHaveText(['Knowledge reference', 'Archive reference'])
+  await expect(page.locator('.resource-grid')).toHaveCSS('gap', '10px')
+  await page.screenshot({ path: testInfo.outputPath('knowledge-reference-directory.png') })
+  await page.getByRole('button', { name: '排序' }).click()
+  await page.getByText('A–Z', { exact: true }).click()
+  await expect(cards.locator('.card-title')).toHaveText(['Archive reference', 'Knowledge reference'])
+  const search = page.getByRole('textbox', { name: '搜索知识库名称或描述' })
+  await search.fill('does not exist')
+  await expect(cards).toHaveCount(0)
+  await page.getByRole('button', { name: '清空', exact: true }).click()
+  const documentCard = cards.filter({ hasText: 'Knowledge reference' })
+  await documentCard.hover()
+  await documentCard.locator('.card-more-button').click()
+  await expect(page.getByText('编辑设置', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/\/admin\/knowledge$/)
+  await page.locator('.header h2').click()
+  await documentCard.focus()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/knowledge\/kb1\/content$/)
+  const breadcrumb = page.locator('.document-breadcrumb')
+  await breadcrumb.getByRole('button', { name: 'Knowledge reference' }).click()
+  await page.getByText('Archive reference', { exact: true }).click()
+  await expect(page).toHaveURL(/\/knowledge\/kb2\/content$/)
+  await expect(breadcrumb).toContainText('Archive reference')
+  await expectResponsive(page)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  if (await page.getByRole('button', { name: '展开侧边栏' }).isVisible()) {
+    await page.getByRole('button', { name: '展开侧边栏' }).click()
+  }
+  await breadcrumb.getByRole('link', { name: '知识库管理' }).click()
   await navigation.getByRole('button', { name: '智能体', exact: true }).click()
   await navigation.getByRole('link', { name: '智能体管理' }).click()
-  await expect(page.locator('.resource-directory-card')).toContainText('Agent reference')
+  await expect(page).toHaveURL(/\/admin\/agents$/)
+  const agentCard = cards.filter({ hasText: 'Agent reference' })
+  await expect(agentCard).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('agent-reference-directory.png') })
+  await agentCard.hover()
+  await agentCard.locator('.card-more-button').click()
+  await expect(page.getByText('编辑并发布', { exact: true })).toBeVisible()
+  const archive = page.getByText('归档', { exact: true })
+  await expect(archive).toBeVisible()
+  await page.locator('.header h2').click()
   await navigation.getByRole('button', { name: '工具箱', exact: true }).click()
   await navigation.getByRole('link', { name: '技能管理' }).click()
   await expect(page.locator('.skill-card')).toContainText('Skill reference')

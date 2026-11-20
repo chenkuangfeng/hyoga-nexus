@@ -242,7 +242,8 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 
 | 页面/组件 | WeKnora e1f9a6166 来源 | Nexus 必要适配 |
 | --- | --- | --- |
-| ResourceDirectoryCard / 智能体与知识库目录 | views/agent/AgentList.vue、views/knowledge/KnowledgeBaseList.vue、components/css/resource-card.less | 仅当前授权目录，不展示原版跨空间分组；企业管理保留受众和维护员操作，员工不管理资源 |
+| 企业智能体与知识库目录 | views/agent/AgentList.vue、views/knowledge/KnowledgeBaseList.vue、components/ResourceListToolbar.vue、components/css/resource-card.less | `ResourceManagementDirectory` 沿用标题同行操作、左侧目录范围与右侧搜索、20px/28px 内容留白、260px 最小卡宽及 10px 间距。名称排序在当前已加载目录执行，范围及数量来自企业接口。`ResourceDirectoryCard` 保留类型图标、右上更多操作与底部指标，企业管理动作沿用现有授权 |
+| 企业知识库内容 | views/knowledge/KnowledgeBase.vue | 使用面包屑、可管理知识库切换及内容工具栏。文档、问答和 Wiki 继续使用 Nexus 的内容表格、分页及编辑交互 |
 | ModelsPage | views/settings/ModelSettings.vue | 保留类型标签、计数、搜索、模型卡片；Provider、版本、默认值、停用、测试和用量使用 Nexus 真实 API，无原版云端目录 |
 | SkillsPage | views/settings/SkillSettings.vue | 保留技能卡片、版本和安装入口；采用 Nexus 版本扫描/安装及企业投稿审核，不提供员工私有技能管理 |
 | NexusToolboxMcp | views/settings/McpSettings.vue | 保留服务卡片、搜索及编辑入口；现有逐工具授权、风险、审批与发现规则保持不变 |

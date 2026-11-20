@@ -570,3 +570,8 @@ E6.3 已有 UsagePage 与 enterprise-usage 客户端，本批修复其状态边�
 参考 WeKnora e1f9a6166 的 `frontend/src/views/settings/Settings.vue` 中的子菜单展开箭头和层级缩进，在 `AdminLayout.vue` 复用现有导航行样式及 TDesign 图标。一级菜单使用带 `aria-expanded` 和 `aria-controls` 的原生按钮，点击或键盘操作只改变展开状态。整条侧栏收窄时一级按钮及已展开的二级链接以图标显示，保留可读名称和悬停提示。
 
 展开状态保存在管理外壳内存中，初始为空，展开新菜单时收起前一个，账号、企业或管理入口变化时重置。子链接保持 `RouterLink`，路由切换及浏览器历史沿用原守卫。当前页面所属的收起菜单高亮，展开后由当前业务链接承接高亮。菜单继续使用已授权的导航数据，空菜单隐藏。
+
+### E2.12 企业知识库与智能体管理布局
+以 WeKnora `frontend/src/views/knowledge/KnowledgeBaseList.vue`、`views/agent/AgentList.vue`、`components/ResourceListToolbar.vue` 和 `components/css/resource-card.less` 为基准。管理端复用原版目录尺寸与卡片 mixin，标题同行放置排序、新建和刷新，工具栏左侧展示企业目录范围及总数，右侧搜索。卡片顶部放资源标识、名称和更多操作，底部承载现有的知识库类型、内容数量或智能体发布信息。排序基于当前已加载目录。知识库内容页参考 `KnowledgeBase.vue` 的面包屑和内容工具栏，使用现有文档、FAQ、Wiki 数据及操作。
+
+管理端接入既有创建编辑器、受众、维护员、渠道、归档与删除动作。界面只展示当前企业目录与服务端已提供的数据，因此原版收藏、最近访问、跨空间筛选和文件夹树等信息无对应时不显示。

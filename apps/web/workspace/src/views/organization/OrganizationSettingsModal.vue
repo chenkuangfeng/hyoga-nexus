@@ -774,7 +774,7 @@ import {
 import { useOrganizationStore } from '@nexus-web/core/stores/organization'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import SpaceAvatar from '@nexus-web/core/components/SpaceAvatar.vue'
-import agentIconSrc from '@/assets/img/agent.svg'
+import agentIconSrc from '@nexus-web/core/assets/img/agent.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()

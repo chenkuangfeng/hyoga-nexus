@@ -19,6 +19,10 @@ const tenant = computed(() => String(auth.effectiveTenantId || ''))
 const kbId = computed(() => String(route.params.kbId || ''))
 const canManage = computed(() => context.can('enterprise_kbs:manage'))
 const knowledgeBase = ref<EnterpriseKnowledgeBase | null>(null)
+const knowledgeBases = ref<EnterpriseKnowledgeBase[]>([])
+const knowledgeOptions = computed(() => knowledgeBases.value.map(row => ({
+  value: row.id, content: row.name, active: row.id === kbId.value,
+})))
 const loading = ref(false), working = ref(false), error = ref(''), ready = ref(false)
 const keyword = ref(''), page = ref(1), pageSize = 20, total = ref(0)
 const documents = ref<EnterpriseKnowledgeDocument[]>([]), faqEntries = ref<EnterpriseFaqEntry[]>([]), wikiPages = ref<EnterpriseWikiPage[]>([])
@@ -31,9 +35,15 @@ let epoch = 0, confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const statusLabel = (state: string) => t(`adminKnowledge.content.states.${state}`, state)
 
+/** 只切换到当前企业目录中已确认可管理的知识库。 */
+function switchKnowledgeBase({ value }: { value?: unknown }) {
+  if (typeof value !== 'string' || value === kbId.value || !knowledgeBases.value.some(row => row.id === value)) return
+  void router.push(`/knowledge/${encodeURIComponent(value)}/content`)
+}
+
 function reset() {
   epoch++; confirmation?.hide(); confirmation = undefined
-  knowledgeBase.value = null; loading.value = false; working.value = false; error.value = ''; ready.value = false
+  knowledgeBase.value = null; knowledgeBases.value = []; loading.value = false; working.value = false; error.value = ''; ready.value = false
   page.value = 1; total.value = 0; documents.value = []; faqEntries.value = []; wikiPages.value = []
   uploadLabel.value = ''; uploadPercent.value = 0; faqDialog.value = false; faqSaving.value = false; faqEditId.value = null
   wikiDialog.value = false; wikiLoading.value = false; wikiSaving.value = false; wikiEditSlug.value = null
@@ -72,6 +82,7 @@ async function load() {
     if (!currentScope(current, scope, user, id)) return
     const selected = rows.find(row => row.id === id && row.tenant_id === scope && row.can_manage)
     if (!selected) { error.value = t('adminKnowledge.content.denied'); return }
+    knowledgeBases.value = rows.filter(row => row.tenant_id === scope && row.can_manage)
     knowledgeBase.value = selected; ready.value = true
     await loadRows(current, scope, user, id)
   } catch { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.loadFailed') }
@@ -195,15 +206,46 @@ onBeforeUnmount(reset)
 
 <template>
   <section class="knowledge-content-page">
-    <header class="section-header content-header">
-      <div><button class="back-link" type="button" @click="router.push('/knowledge')"><t-icon name="chevron-left" />{{ t('adminKnowledge.content.back') }}</button><h2>{{ knowledgeBase?.name || t('adminKnowledge.content.title') }}</h2><p>{{ t('adminKnowledge.content.description') }}</p></div>
-      <div class="actions"><t-button variant="outline" :loading="loading" :disabled="working" @click="load">{{ t('connectionUi.refresh') }}</t-button><t-button v-if="knowledgeBase?.type === 'faq'" theme="primary" :disabled="working" @click="blankFaq"><t-icon name="add" />{{ t('adminKnowledge.content.addFaq') }}</t-button><t-button v-else-if="knowledgeBase" theme="primary" :disabled="working" @click="openUpload"><t-icon name="upload" />{{ t('adminKnowledge.content.upload') }}</t-button><t-button v-if="knowledgeBase?.type === 'wiki'" variant="outline" :disabled="working" @click="blankWiki"><t-icon name="add" />{{ t('adminKnowledge.content.addWiki') }}</t-button></div>
+    <header class="document-header">
+      <nav :aria-label="t('adminKnowledge.content.title')">
+        <h2 class="document-breadcrumb">
+          <RouterLink class="breadcrumb-link" to="/knowledge">{{ t('consoleLayout.knowledgeManagement') }}</RouterLink>
+          <t-icon name="chevron-right" class="breadcrumb-separator" aria-hidden="true" />
+          <t-dropdown v-if="knowledgeBase" :options="knowledgeOptions" trigger="click" placement="bottom-left" @click="switchKnowledgeBase">
+            <button type="button" class="breadcrumb-link breadcrumb-current" aria-haspopup="true">
+              <span>{{ knowledgeBase.name }}</span><t-icon name="chevron-down" size="16px" aria-hidden="true" />
+            </button>
+          </t-dropdown>
+          <span v-else>{{ t('adminKnowledge.content.title') }}</span>
+        </h2>
+      </nav>
+      <p v-if="knowledgeBase?.description" class="document-subtitle">{{ knowledgeBase.description }}</p>
       <input ref="uploadInput" class="file-input" type="file" multiple @change="uploadFiles" />
     </header>
     <t-alert v-if="error" theme="error" :message="error" />
     <t-alert v-if="uploadLabel" theme="info" :message="t('adminKnowledge.content.uploading', { name: uploadLabel, percent: uploadPercent })" />
     <t-alert v-if="knowledgeBase?.type === 'wiki'" theme="info" :message="t('adminKnowledge.content.wikiSourceHint')" />
-    <div v-if="ready && knowledgeBase" class="content-toolbar"><t-input v-model="keyword" clearable :placeholder="t('adminKnowledge.content.search')" :aria-label="t('adminKnowledge.content.search')" @enter="refreshSearch" /><t-button variant="outline" :disabled="loading || working" @click="refreshSearch">{{ t('adminKnowledge.content.search') }}</t-button></div>
+    <div v-if="ready && knowledgeBase" class="content-toolbar">
+      <t-input v-model="keyword" class="content-search" clearable :placeholder="t('adminKnowledge.content.search')" :aria-label="t('adminKnowledge.content.search')" @enter="refreshSearch">
+        <template #prefix-icon><t-icon name="search" size="16px" /></template>
+      </t-input>
+      <t-button variant="outline" :disabled="loading || working" @click="refreshSearch">{{ t('adminKnowledge.content.search') }}</t-button>
+      <div class="content-actions">
+        <t-button variant="outline" :loading="loading" :disabled="working" @click="load">
+          <template #icon><t-icon name="refresh" /></template>{{ t('connectionUi.refresh') }}
+        </t-button>
+        <t-button v-if="knowledgeBase.type === 'faq'" theme="primary" :disabled="working" @click="blankFaq">
+          <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addFaq') }}
+        </t-button>
+        <t-button v-else theme="primary" :disabled="working" @click="openUpload">
+          <template #icon><t-icon name="upload" /></template>{{ t('adminKnowledge.content.upload') }}
+        </t-button>
+        <t-button v-if="knowledgeBase.type === 'wiki'" variant="outline" :disabled="working" @click="blankWiki">
+          <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addWiki') }}
+        </t-button>
+      </div>
+    </div>
+    <t-button v-else-if="error && canManage" class="content-retry" variant="outline" :loading="loading" @click="load">{{ t('connectionUi.refresh') }}</t-button>
     <t-loading :loading="loading">
       <div v-if="knowledgeBase?.type === 'faq'" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.question') }}</th><th>{{ t('adminKnowledge.content.answer') }}</th><th>{{ t('adminKnowledge.content.category') }}</th><th>{{ t('adminKnowledge.content.indexState') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in faqEntries" :key="row.id"><td>{{ row.standard_question }}</td><td>{{ row.answers.join(' / ') }}</td><td>{{ row.category || '—' }}</td><td><t-tag :theme="row.index_state === 'ready' ? 'success' : row.index_state === 'failed' ? 'danger' : 'warning'">{{ statusLabel(row.index_state) }}</t-tag></td><td class="row-actions"><t-button variant="text" :disabled="working" @click="editFaq(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working" @click="confirmDelete('faq', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!faqEntries.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noFaq') }}</td></tr></tbody></table></div>
       <div v-else-if="knowledgeBase?.type === 'wiki'" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.titleColumn') }}</th><th>{{ t('adminKnowledge.content.slug') }}</th><th>{{ t('adminKnowledge.content.wikiType') }}</th><th>{{ t('adminKnowledge.content.status') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in wikiPages" :key="row.id"><td>{{ row.title }}</td><td><code>{{ row.slug }}</code></td><td>{{ row.page_type }}</td><td>{{ row.status }}</td><td class="row-actions"><t-button variant="text" :disabled="working || ['index','log'].includes(row.page_type)" @click="editWiki(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working || ['index','log'].includes(row.page_type)" @click="confirmDelete('wiki', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!wikiPages.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noWiki') }}</td></tr></tbody></table></div>
@@ -220,11 +262,20 @@ onBeforeUnmount(reset)
 </template>
 
 <style scoped>
-.knowledge-content-page { min-width: 0; }
-.content-header { align-items: flex-end; }
-.back-link { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 12px; padding: 0; color: var(--td-brand-color); background: none; border: 0; cursor: pointer; }
+.knowledge-content-page { min-width: 0; min-height: 0; flex: 1; overflow-y: auto; padding: 20px 28px 24px; }
+.document-header { margin-bottom: 16px; }
+.document-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: var(--app-text-4xl); font-weight: 600; line-height: 32px; }
+.breadcrumb-link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 0; color: inherit; background: none; border: 0; font: inherit; text-decoration: none; cursor: pointer; }
+.breadcrumb-link:hover { color: var(--td-brand-color); }
+.breadcrumb-link:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+.breadcrumb-current span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb-current :deep(.t-icon), .breadcrumb-separator { flex-shrink: 0; color: var(--td-text-color-placeholder); }
+.document-subtitle { margin: 4px 0 0; color: var(--td-text-color-secondary); overflow-wrap: anywhere; }
 .file-input { display: none; }
-.content-toolbar { display: flex; gap: 10px; max-width: 520px; margin: 20px 0; }
+.content-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--td-component-stroke); }
+.content-search { width: 260px; max-width: 100%; }
+.content-actions { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.content-retry { margin-top: 12px; }
 .table-shell { width: 100%; max-width: 100%; overflow-x: auto; margin-top: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-lg); }
 table { width: 100%; min-width: 760px; border-collapse: collapse; text-align: left; }
 th, td { padding: 13px 16px; border-bottom: 1px solid var(--td-component-stroke); vertical-align: top; overflow-wrap: anywhere; }
@@ -239,5 +290,9 @@ tr:last-child td { border-bottom: 0; }
 .editor-form label { display: grid; gap: 8px; color: var(--td-text-color-primary); }
 .checks, .two-columns { display: flex; flex-wrap: wrap; gap: 16px; }
 .two-columns > label { flex: 1; min-width: 180px; }
-@media (max-width: 600px) { .content-header { align-items: stretch; flex-direction: column; } .content-toolbar { max-width: 100%; } .pagination { flex-wrap: wrap; justify-content: center; } }
+@media (max-width: 720px) {
+  .knowledge-content-page { padding: 16px; }
+  .content-actions { margin-inline-start: 0; }
+  .pagination { flex-wrap: wrap; justify-content: center; }
+}
 </style>

@@ -140,7 +140,10 @@ async function signOut() {
       </div>
     </aside>
     <div class="admin-main">
-    <main class="admin-content-wrapper" :class="{ 'admin-content-wrapper--resource-list': $route.path === '/members' }">
+    <main class="admin-content-wrapper" :class="{
+      'admin-content-wrapper--resource-list': $route.path === '/members',
+      'admin-content-wrapper--directory': $route.path === '/agents' || $route.path === '/knowledge' || $route.path.startsWith('/knowledge/'),
+    }">
       <t-alert v-if="error" theme="error" :message="error" />
       <section v-if="!auth.currentEntries.includes('admin')" class="role-denied"><t-icon name="lock-on" size="48px" /><h2>{{ t('adminConsole.denied') }}</h2><p>{{ t('adminConsole.deniedHint') }}</p></section>
       <t-alert v-else-if="context.failed" theme="error" :message="t('adminConsole.permissionFailed')"><template #operation><t-button variant="text" @click="refresh">{{ t('connectionUi.refresh') }}</t-button></template></t-alert>
@@ -190,9 +193,15 @@ button:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--td-bran
 .admin-content-wrapper { width: 100%; padding: 40px 48px; }
 .admin-content-wrapper--resource-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 20px 28px 0; }
 .admin-content-wrapper--resource-list > :deep(.t-loading__parent) { flex: 1; min-height: 0; }
+.admin-content-wrapper--directory { min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; }
+.admin-content-wrapper--directory > :deep(.t-loading__parent) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .role-denied { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 240px; padding: 64px 24px; text-align: center; }
 .role-denied > .t-icon { color: var(--td-text-color-placeholder); }
 .role-denied h2 { margin: 0; font-size: var(--app-text-xl); }
 .role-denied p { color: var(--td-text-color-secondary); max-width: 360px; line-height: 1.6; }
-@media (max-width: 720px) { .admin-content-wrapper { padding: 24px 16px; } .admin-content-wrapper--resource-list { padding: 16px 16px 0; } }
+@media (max-width: 720px) {
+  .admin-content-wrapper { padding: 24px 16px; }
+  .admin-content-wrapper--resource-list { padding: 16px 16px 0; }
+  .admin-content-wrapper--directory { padding: 0; }
+}
 </style>
