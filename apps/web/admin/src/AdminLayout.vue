@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 管理端外壳：企业切换、服务端权限导航、独立业务路由。 */
-import { provide, computed, ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { provide, computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
@@ -53,9 +53,24 @@ onUnmounted(() => {
 const auth = useAuthStore(), context = useAdminContext(), router = useRouter()
 const { t } = useI18n()
 const switching = ref(false), error = ref('')
+const expandedMenu = ref<string | null>(null)
 const navGroups = computed(() => auth.currentEntries.includes('admin')
   ? visibleAdminNavigation(auth.currentTenantRole || '', context.hasNavigationPermission) : [])
 const choices = computed(() => auth.memberships.map(row => ({ label: row.tenant_name || t('adminConsole.unnamedEnterprise'), value: String(row.tenant_id) })))
+watch([() => auth.user?.id, () => auth.effectiveTenantId, () => auth.currentEntries.includes('admin')], () => {
+  expandedMenu.value = null
+}, { flush: 'sync' })
+
+/** 二级链接保留原路由，切页和浏览器历史都不会改变展开状态。 */
+function toggleMenu(key: string) {
+  expandedMenu.value = expandedMenu.value === key ? null : key
+}
+
+/** 详情页沿用业务入口的高亮，例如知识库内容仍属于知识库管理。 */
+function isCurrentItem(path: string, currentPath: string): boolean {
+  return currentPath === path || currentPath.startsWith(`${path}/`)
+}
+
 async function refresh(): Promise<boolean> {
   context.invalidate(); error.value = ''
   if (!await auth.refreshFromAuthMe()) { await router.replace('/login'); return false }
@@ -91,14 +106,24 @@ async function signOut() {
         </button>
       </header>
       <nav id="admin-navigation" class="sidebar-nav" :aria-label="t('adminConsole.title')">
-        <section v-for="group in navGroups" :key="group.key" class="nav-group" :aria-label="t(group.label)">
-          <div v-if="!collapsed" class="nav-group-title">{{ t(group.label) }}</div>
-          <RouterLink v-for="item in group.items" :key="item.path" class="nav-item" :to="item.path"
-            :class="{ active: item.path === '/' ? $route.path === '/' : $route.path === item.path || $route.path.startsWith(`${item.path}/`) }"
-            :aria-label="t(item.label)" :title="collapsed ? t(item.label) : undefined">
-            <t-icon :name="item.icon" class="nav-icon" /><span v-if="!collapsed" class="nav-label">{{ t(item.label) }}</span>
-          </RouterLink>
-        </section>
+        <div v-for="group in navGroups" :key="group.key" class="nav-group">
+          <button type="button" class="nav-item nav-parent"
+            :class="{ active: expandedMenu !== group.key && group.items.some(item => isCurrentItem(item.path, $route.path)) }"
+            :aria-label="t(group.label)" :aria-expanded="expandedMenu === group.key"
+            :aria-controls="`admin-submenu-${group.key}`" :title="collapsed ? t(group.label) : undefined"
+            @click="toggleMenu(group.key)">
+            <t-icon :name="group.icon" class="nav-icon" aria-hidden="true" />
+            <span v-if="!collapsed" class="nav-label">{{ t(group.label) }}</span>
+            <t-icon v-if="!collapsed" :name="expandedMenu === group.key ? 'chevron-down' : 'chevron-right'" class="nav-chevron" aria-hidden="true" />
+          </button>
+          <div v-show="expandedMenu === group.key" :id="`admin-submenu-${group.key}`" class="nav-submenu">
+            <RouterLink v-for="item in group.items" :key="item.path" class="nav-item" :to="item.path"
+              :class="{ active: isCurrentItem(item.path, $route.path) }"
+              :aria-label="t(item.label)" :title="collapsed ? t(item.label) : undefined">
+              <t-icon :name="item.icon" class="nav-icon" aria-hidden="true" /><span v-if="!collapsed" class="nav-label">{{ t(item.label) }}</span>
+            </RouterLink>
+          </div>
+        </div>
       </nav>
       <div ref="accountRoot" class="account-root" @focusout="(event) => { if (event.relatedTarget && !accountRoot?.contains(event.relatedTarget as Node)) closeAccount() }">
         <button ref="accountButton" type="button" class="account-button" :aria-label="[tenantName, userName].filter(Boolean).join(' · ')" :aria-expanded="accountOpen" aria-controls="admin-account-panel" @click="accountOpen = !accountOpen">
@@ -135,13 +160,14 @@ button { font: inherit; border: 0; background: transparent; cursor: pointer; bor
 button:hover, .nav-item:hover { background: var(--td-bg-color-container-hover); }
 button:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
 .sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; }
-.nav-group-title { padding: 8px 14px 2px; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); font-weight: 600; letter-spacing: .02em; }
-.nav-group:first-child .nav-group-title { padding-top: 2px; }
-.is-collapsed .nav-group + .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--td-component-stroke); }
 .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 6px 12px; margin-bottom: 2px; color: var(--td-text-color-primary); text-decoration: none; border-radius: var(--app-radius-sm); font-size: var(--app-text-base); user-select: none; transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease; }
 .nav-item.active { font-weight: 500; background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); }
 .nav-icon { font-size: 18px; flex-shrink: 0; }
+.nav-parent { width: 100%; text-align: start; }
+.nav-parent .nav-label { flex: 1; }
+.nav-chevron { flex-shrink: 0; color: var(--td-text-color-secondary); font-size: 16px; }
+.nav-submenu { margin-inline-start: 20px; }
 .account-root { position: relative; flex-shrink: 0; }
 .account-button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; text-align: left; color: var(--td-text-color-primary); }
 .user-avatar { width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); overflow: hidden; }
@@ -157,6 +183,8 @@ button:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--td-bran
 .is-collapsed .admin-sidebar { width: 48px; padding: 8px 0; }
 .is-collapsed .sidebar-header { padding: 0; justify-content: center; }
 .is-collapsed .nav-item { width: 32px; padding: 0; justify-content: center; margin: 0 auto 6px; }
+.is-collapsed .nav-submenu { margin-inline: 4px; border-inline-start: 1px solid var(--td-component-stroke); }
+.is-collapsed .nav-submenu .nav-icon { font-size: 16px; }
 .is-collapsed .account-button { justify-content: center; padding: 10px 0; }
 @media (max-width: 720px) { .admin-sidebar { width: 220px; } }
 .admin-content-wrapper { width: 100%; padding: 40px 48px; }
