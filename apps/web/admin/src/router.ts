@@ -57,22 +57,34 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', component: () => import('@nexus-web/core/components/NotFound.vue'), meta: { public: true } },
   ],
 })
+let navigationSequence = 0
 router.beforeEach(async (to, from) => {
+  const navigation = ++navigationSequence
   const auth = useAuthStore()
   if (to.meta.public) return true
   // 只跳过同页编辑历史变化；其他业务导航继续校准身份与权限。
   if (to.path === from?.path && to.query.editor !== from.query.editor && !auth.user?.must_change_password
     && [...new Set([...Object.keys(to.query), ...Object.keys(from.query)])].filter(key => key !== 'editor').every(key => JSON.stringify(to.query[key]) === JSON.stringify(from.query[key]))
     && localStorage.getItem('weknora_token') && useAdminContext().ready) return true
-  useAdminContext().invalidate()
-  if (!localStorage.getItem('weknora_token')) return '/login'
-  try {
-    if (!await auth.refreshFromAuthMe()) return '/login'
-  } catch {
+  const context = useAdminContext()
+  if (!localStorage.getItem('weknora_token')) {
+    context.invalidate()
     return '/login'
   }
-  if (auth.user?.must_change_password && to.path !== '/auth/change-password') return '/auth/change-password'
-  await useAdminContext().load()
+  const refreshOptions = { preserveNavigation: true }
+  context.invalidate(refreshOptions)
+  const authenticated = await auth.refreshFromAuthMe().catch(() => false)
+  // 侧栏在校验期间仍可点击，旧导航不能覆盖后续导航的校验状态。
+  if (navigation !== navigationSequence) return false
+  if (!authenticated) {
+    context.invalidate()
+    return '/login'
+  }
+  if (auth.user?.must_change_password && to.path !== '/auth/change-password') {
+    context.invalidate()
+    return '/auth/change-password'
+  }
+  await context.load(refreshOptions)
   return true
 })
 export default router

@@ -55,7 +55,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 企业管理端策略与权限
 
-`admin/src/router.ts` 的受保护导航先使 `stores/context.ts` 失效，再刷新认证与权限；强制改密优先于业务。`AdminLayout.vue` 显示当前企业、成员企业选择器和按 API 权限提供的导航。没有 `entries.admin` 时显示无权限；权限请求失败时展示重试，不回退角色推断。上下文不持久化权限；账号、企业或管理入口变化立即递增请求代次并清空权限。
+`AdminLayout.vue` 持续挂载侧栏、当前企业和成员企业选择器，业务子路由在右侧 `RouterView` 切换。`admin/src/router.ts` 的受保护导航先使 `stores/context.ts` 的业务权限失效，再刷新认证与权限；强制改密优先于业务。普通切页校验期间保留同一账号和企业上次确认的菜单，校验完成后按最新 API 权限更新。菜单快照只用于显示，业务操作仍须通过权限检查。没有 `entries.admin` 时显示无权限；权限请求失败时清除菜单快照并展示重试。上下文不持久化权限；账号、企业或管理入口变化立即递增请求代次并清空权限及菜单快照。
 
 `/admin/policy` 的 `views/EnterprisePolicy.vue` 调用公共 `core/src/api/enterprise-admin.ts`：GET/PATCH `/tenants/{id}/admin/policy`，组织选项通过 `/org-units/tree` 读取。策略的枚举、布尔值与保留天数经过运行时校验。页面保留服务端快照，`policyChanges` 只提交不同字段；组织配置不可读时保留已有部门 ID，表单只显示配置数量，不暴露内部 ID 或允许手填。保存前说明渠道停用与内容清理后果，显式 null 关闭自动清理。每个请求、确认弹窗及保存结果校验代次，身份变化、权限重载或卸载使原操作失效。
 

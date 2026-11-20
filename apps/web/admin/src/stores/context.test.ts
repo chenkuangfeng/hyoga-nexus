@@ -50,3 +50,33 @@ test('同企业切换账号会同步清除权限，失败请求保持不可写',
   assert.equal(context.failed, true)
   assert.equal(context.can('policy:manage'), false)
 })
+
+test('切页仅保留侧栏权限，校验结果、失败和企业切换立即更新菜单', async t => {
+  let apis = ['policy:manage']
+  let fail = false
+  const { auth, context } = setup(t, async () => {
+    if (fail) throw new Error('offline')
+    return apis
+  })
+  const options = { preserveNavigation: true }
+  await context.load()
+  context.invalidate(options)
+  assert.equal(context.can('policy:manage'), false)
+  assert.equal(context.hasNavigationPermission('policy:manage'), true)
+
+  apis = ['audit:read']
+  await context.load(options)
+  assert.equal(context.hasNavigationPermission('policy:manage'), false)
+  assert.equal(context.hasNavigationPermission('audit:read'), true)
+
+  fail = true
+  await context.load(options)
+  assert.equal(context.hasNavigationPermission('audit:read'), false)
+  assert.equal(context.ready, false)
+
+  fail = false
+  await context.load()
+  context.invalidate(options)
+  auth.effectiveTenantId = 'b'
+  assert.equal(context.hasNavigationPermission('audit:read'), false)
+})

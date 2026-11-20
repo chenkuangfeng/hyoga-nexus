@@ -14,7 +14,7 @@ function setup(t: Parameters<typeof fixture>[0], authenticated = true) {
     './navigation': { visibleAdminNavigation },
     '@nexus-web/core/composables/useEditorPresentation': { ADMIN_EDITOR_MODE: Symbol('mode'), useAdminEditorPreference: () => ref('modal') },
     '@nexus-web/core/stores/auth': { useAuthStore: () => auth },
-    './stores/context': { useAdminContext: () => ({ invalidate: () => { invalidations++ }, load: async () => { loads++ } }) },
+    './stores/context': { useAdminContext: () => ({ hasNavigationPermission: () => false, invalidate: () => { invalidations++ }, load: async () => { loads++ } }) },
     '@nexus-web/core/api/auth': { logout: async () => { throw new Error('offline') } },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     'vue-router': { useRouter: () => ({ replace: async (path: string) => { paths.push(path) } }) },

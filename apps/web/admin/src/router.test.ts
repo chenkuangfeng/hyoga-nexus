@@ -46,15 +46,18 @@ test('受保护路由先作废旧权限、校准身份，强制改密优先于�
     require(name: string) {
       if (name === 'vue-router') return { createWebHistory: () => null, createRouter: () => ({ beforeEach: (fn: typeof guard) => { guard = fn } }) }
       if (name === '@nexus-web/core/stores/auth') return { useAuthStore: () => auth }
-      if (name === './stores/context') return { useAdminContext: () => ({ invalidate: () => events.push('invalidate'), load: async () => { events.push('permissions') } }) }
+      if (name === './stores/context') return { useAdminContext: () => ({
+        invalidate: (options?: { preserveNavigation: boolean }) => events.push(options?.preserveNavigation ? 'invalidate-business' : 'invalidate'),
+        load: async (options?: { preserveNavigation: boolean }) => { events.push(options?.preserveNavigation ? 'permissions-preserving-navigation' : 'permissions') },
+      }) }
       assert.fail(`Unexpected dependency: ${name}`)
     },
   })
   assert.equal(await guard({ meta: {}, path: '/policy' }), true)
-  assert.deepEqual(events, ['invalidate', 'auth', 'permissions'])
+  assert.deepEqual(events, ['invalidate-business', 'auth', 'permissions-preserving-navigation'])
   events.length = 0; auth.user.must_change_password = true
   assert.equal(await guard({ meta: {}, path: '/policy' }), '/auth/change-password')
-  assert.deepEqual(events, ['invalidate', 'auth'])
+  assert.deepEqual(events, ['invalidate-business', 'auth', 'invalidate'])
   events.length = 0; token = null
   assert.equal(await guard({ meta: {}, path: '/' }), '/login')
   assert.deepEqual(events, ['invalidate'])

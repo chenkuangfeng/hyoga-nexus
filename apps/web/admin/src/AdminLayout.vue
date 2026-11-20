@@ -54,7 +54,7 @@ const auth = useAuthStore(), context = useAdminContext(), router = useRouter()
 const { t } = useI18n()
 const switching = ref(false), error = ref('')
 const navGroups = computed(() => auth.currentEntries.includes('admin')
-  ? visibleAdminNavigation(auth.currentTenantRole || '', permission => context.can(permission)) : [])
+  ? visibleAdminNavigation(auth.currentTenantRole || '', context.hasNavigationPermission) : [])
 const choices = computed(() => auth.memberships.map(row => ({ label: row.tenant_name || t('adminConsole.unnamedEnterprise'), value: String(row.tenant_id) })))
 async function refresh(): Promise<boolean> {
   context.invalidate(); error.value = ''
