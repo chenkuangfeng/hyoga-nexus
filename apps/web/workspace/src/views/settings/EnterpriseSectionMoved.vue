@@ -16,7 +16,15 @@ const auditHref = enterpriseSettingsLocation(import.meta.env.BASE_URL, 'audit')
   <section class="enterprise-section-moved">
     <h2>{{ t(destination.titleKey) }}</h2>
     <p>{{ t(destination.messageKey) }}</p>
-    <div v-if="canOpen" class="enterprise-links"><a class="enterprise-entry" :href="href">{{ t('adminMigration.openAdmin') }}<t-icon name="chevron-right" aria-hidden="true" /></a><a v-if="members" class="enterprise-entry" :href="auditHref">{{ t('adminAudit.title') }}</a></div>
+    <div v-if="canOpen" class="enterprise-links">
+      <a class="enterprise-entry" :href="href" target="_blank" rel="noopener">
+        {{ t('adminMigration.openAdmin') }}
+        <t-icon name="chevron-right" aria-hidden="true" />
+      </a>
+      <a v-if="members" class="enterprise-entry" :href="auditHref" target="_blank" rel="noopener">
+        {{ t('adminAudit.title') }}
+      </a>
+    </div>
     <t-alert v-else theme="info" :message="t('adminMigration.noEntry')" />
   </section>
 </template>

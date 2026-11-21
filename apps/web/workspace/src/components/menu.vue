@@ -83,7 +83,8 @@
             <div class="menu_box" :class="{ 'menu_box--sticky': item.children && !uiStore.sidebarCollapsed }"
                 v-for="(item, index) in topMenuItems" :key="index">
                 <t-tooltip :content="item.title" placement="right" :disabled="!uiStore.sidebarCollapsed">
-                    <div @click="handleMenuClick(item.path)" @mouseenter="mouseenteMenu(item.path)"
+                    <div role="link" tabindex="0" :aria-label="item.title"
+                        @click="handleMenuClick(item.path)" @keydown.enter.prevent="handleMenuClick(item.path)" @mouseenter="mouseenteMenu(item.path)"
                         @mouseleave="mouseleaveMenu(item.path)" :data-guide="`nav-${item.path}`"
                         :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
                         <div class="menu_item-box">
@@ -241,6 +242,8 @@ import UserMenu from '@/components/UserMenu.vue';
 import TenantSelector from '@/components/TenantSelector.vue';
 import { useI18n } from 'vue-i18n';
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources';
+import agentMenuIcon from '@nexus-web/core/assets/img/agent.svg';
+import knowledgeMenuIcon from '@nexus-web/core/assets/img/zhishiku.svg';
 
 const chatResources = useChatResourcesStore();
 const editorResources = useEditorResourcesStore();
@@ -912,8 +915,13 @@ const gotopage = async (path: string) => {
     getIcon(path)
 }
 
+// 未选中的知识库和智能体图标与企业管理应用共用，资源由 core 提供。
+const sharedMenuIcons: Partial<Record<string, string>> = {
+    'agent.svg': agentMenuIcon,
+    'zhishiku.svg': knowledgeMenuIcon,
+};
 const getImgSrc = (url: string) => {
-    return new URL(`/src/assets/img/${url}`, import.meta.url).href;
+    return sharedMenuIcons[url] ?? new URL(`/src/assets/img/${url}`, import.meta.url).href;
 }
 
 // 侧栏图标名 -> 当前应显示的 svg 文件名（激活态会切换为 *-green.svg）
@@ -1187,6 +1195,11 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
         margin-bottom: 1px;
         border-radius: var(--app-radius-xs);
         transition: background-color var(--app-motion-base) ease;
+
+        &:focus-visible {
+            outline: 2px solid var(--td-brand-color);
+            outline-offset: -2px;
+        }
 
         .menu_item-box {
             display: flex;

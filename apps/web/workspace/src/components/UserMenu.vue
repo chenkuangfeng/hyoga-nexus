@@ -89,7 +89,8 @@
           <t-icon name="setting" class="menu-icon" />
           <span>{{ $t('general.settings') }}</span>
         </div>
-        <a v-if="authStore.currentEntries.includes('enterprise')" class="menu-item enterprise-management-link" :href="enterpriseHref">
+        <a v-if="authStore.currentEntries.includes('enterprise')" class="menu-item enterprise-management-link"
+          :href="enterpriseHref" target="_blank" rel="noopener">
           <t-icon name="system-sum" class="menu-icon" aria-hidden="true" />
           <span>{{ $t('adminConsole.title') }}</span>
         </a>

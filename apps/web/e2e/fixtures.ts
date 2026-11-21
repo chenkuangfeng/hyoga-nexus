@@ -10,11 +10,12 @@ export interface ApiMock {
 }
 
 export const test = base.extend<{ api: ApiMock }>({
-  api: [async ({ page }, use) => {
+  api: [async ({ page, context }, use) => {
     const unexpected: string[] = [], errors: string[] = [], requests: string[] = [], handlers: ApiHandler[] = []
     let entries = ['workspace', 'enterprise']
     page.on('pageerror', error => errors.push(error.message))
-    await page.route('**/api/v1/**', async route => {
+    context.on('page', opened => opened.on('pageerror', error => errors.push(error.message)))
+    await context.route('**/api/v1/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname
       requests.push(`${request.method()} ${path}`)
       for (const handler of [...handlers].reverse()) {
@@ -49,7 +50,7 @@ export const test = base.extend<{ api: ApiMock }>({
       })
     } })
     // 先关闭页面停止轮询，再释放路由，避免收尾期间的请求穿透模拟接口。
-    if (!page.isClosed()) await page.close()
+    for (const opened of context.pages()) await opened.close()
     expect(unexpected, '用例必须显式声明所有 API 请求').toEqual([])
     expect(errors, '真实页面不应有脚本错误').toEqual([])
   }, { auto: true }],

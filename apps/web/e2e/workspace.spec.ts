@@ -29,6 +29,7 @@ test('旧解析书签只显示显式管理链接，不读取治理配置', async
   const link = page.locator('a[href$="/enterprise/parsers"]')
   await expect(link).toBeVisible()
   await expect(link).toHaveAttribute('href', '/enterprise/parsers')
+  await expect(link).toHaveAttribute('target', '_blank')
   await expect(page).toHaveURL(/5193\/platform\/settings\?section=parser$/)
   expect(api.requests.some(path => /parser-engine|\/admin\//.test(path))).toBe(false)
   await expectResponsive(page)
@@ -92,7 +93,7 @@ test('数据库重建后清理旧空间缓存并重新完成开发登录', async
   expect(await page.evaluate(() => localStorage.getItem('weknora_selected_tenant_id'))).toBe('a')
 })
 
-test('企业 owner 从设置下方打开企业管理并沿用工作台会话', async ({ page, api }) => {
+test('企业 owner 在新标签页打开企业管理并沿用工作台会话', async ({ page, api, context }) => {
   bootWorkspace(api)
   await page.addInitScript(() => {
     if (location.pathname !== '/platform/knowledge-bases') return
@@ -105,14 +106,43 @@ test('企业 owner 从设置下方打开企业管理并沿用工作台会话', a
   await expect(link).toHaveAttribute('href', '/enterprise/')
   await expect(link.locator('xpath=preceding-sibling::*[1]')).toHaveText('设置')
   await link.focus()
-  const authMe = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/auth/me')
-  await link.press('Enter')
-  const request = await authMe
+  const [enterprisePage, request] = await Promise.all([
+    context.waitForEvent('page'),
+    context.waitForEvent('request', {
+      predicate: request => new URL(request.url()).pathname === '/api/v1/auth/me' && request.frame().page() !== page,
+    }),
+    link.press('Enter'),
+  ])
   expect(request.headers().authorization).toBe('Bearer workspace-session')
   expect(request.headers()['x-tenant-id']).toBe('a')
-  await expect(page).toHaveURL(/5193\/enterprise\/settings$/)
-  await expect(page.locator('#enterprise-navigation')).toBeVisible()
+  await expect(enterprisePage).toHaveURL(/5193\/enterprise\/settings$/)
+  await expect(enterprisePage.locator('#enterprise-navigation')).toBeVisible()
+  await expect(page).toHaveURL(/5193\/platform\/knowledge-bases$/)
+  await expect(page.locator('[data-guide^="nav-"]')).toHaveCount(3)
   expect(api.requests).not.toContain('POST /api/v1/auth/login')
+})
+
+test('展开和折叠侧栏时，员工工作台的当前和未选中菜单均显示图标', async ({ page, api }) => {
+  await api.signIn()
+  bootWorkspace(api)
+  await page.goto('/platform/knowledge-bases')
+  const sidebar = page.locator('.aside_box')
+  const imageLoaded = async (path: string) => {
+    const icon = sidebar.locator(`[data-guide="nav-${path}"] img.icon`)
+    await expect(icon).toBeVisible()
+    await expect.poll(() => icon.evaluate(el => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  }
+  await imageLoaded('agents')
+  await imageLoaded('creatChat')
+  await expect(sidebar.locator('[data-guide="nav-knowledge-bases"] .icon--brand')).toHaveCSS('mask-image', /url\(/)
+
+  await sidebar.locator('.sidebar-toggle').click()
+  await expect(sidebar).toHaveClass(/aside_box--collapsed/)
+  await sidebar.locator('[data-guide="nav-creatChat"]').press('Enter')
+  await expect(page).toHaveURL(/\/platform\/creatChat$/)
+  await imageLoaded('knowledge-bases')
+  await imageLoaded('agents')
+  await expect(sidebar.locator('[data-guide="nav-creatChat"] .icon--brand')).toHaveCSS('mask-image', /url\(/)
 })
 
 test('普通成员看不到企业管理入口且直达页面显示无权限', async ({ page, api }) => {
