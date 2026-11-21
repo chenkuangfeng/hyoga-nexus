@@ -31,7 +31,7 @@ function onCardAction(action: string, row: (typeof rows.value)[number]) {
   switch (action) {
     case 'edit': open(row); break
     case 'audience': audienceAgent.value = row; audienceOpen.value = true; break
-    case 'channels': void router.push('/channels'); break
+    case 'channels': void router.push({ path: '/channels', query: { agent: row.id } }); break
     case 'archive': archive(row); break
   }
 }

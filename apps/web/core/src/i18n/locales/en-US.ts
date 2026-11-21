@@ -2939,6 +2939,7 @@ export default {
       account: 'Account',
       workspace: 'Workspace',
       modelsRuntime: 'Models',
+      systemAdministration: 'System administration',
       dataExtensions: 'Data & Extensions',
       platform: 'Platform'
     },

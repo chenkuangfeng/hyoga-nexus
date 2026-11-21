@@ -56,11 +56,12 @@ function confirmDisable(tool: AgentToolEntry) {
   confirmation = dialog
 }
 function restore(tool: AgentToolEntry) { if (ready.value && !busy.value && tool.builtin && tool.disabled) void change(tool, false, epoch, tenant.value, String(auth.user?.id || ''), context.revision) }
+const props = defineProps<{ embedded?: boolean }>()
 </script>
 
 <template>
   <section class="tool-catalog-page">
-    <header class="section-header"><div><h2>{{ t('adminToolCatalog.title') }}</h2><p>{{ t('adminToolCatalog.description') }}</p></div><t-button variant="outline" :loading="loading" :disabled="!!busy" @click="load">{{ t('connectionUi.refresh') }}</t-button></header>
+    <header class="section-header"><div v-if="!props.embedded"><h2>{{ t('adminToolCatalog.title') }}</h2><p>{{ t('adminToolCatalog.description') }}</p></div><t-button variant="outline" :loading="loading" :disabled="!!busy" @click="load">{{ t('connectionUi.refresh') }}</t-button></header>
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert v-if="error" theme="error" :message="error" />

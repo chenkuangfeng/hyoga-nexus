@@ -48,13 +48,25 @@ async function download(row: TenantSkill, version?: number) {
   try { const blob = await downloadSkillBundle(tenant.value, row.name, version); if (current !== epoch) return; const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = `${row.name}.zip`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
   catch { if (current === epoch) error.value = t('nexusAgent.mySkills.failed') }
 }
+const props = defineProps<{ embedded?: boolean }>()
+const emit = defineEmits<{ count: [value: number] }>()
+watch([rows, loading, error], () => {
+  if (!loading.value && !error.value) emit('count', rows.value.length)
+})
 </script>
 <template>
-  <section class="skill-settings"><header class="section-header"><div><h2>{{ t('consoleLayout.skills') }}</h2><p>{{ t('settings.skills.description') }}</p></div><t-button v-if="context.can('tools:manage')" @click="installing = true"><t-icon name="add" />{{ t('consoleLayout.install') }}</t-button></header>
+  <section class="skill-settings"><header v-if="!props.embedded" class="section-header"><div><h2>{{ t('consoleLayout.skills') }}</h2><p>{{ t('settings.skills.description') }}</p></div><t-button v-if="context.can('tools:manage')" @click="installing = true"><t-icon name="add" />{{ t('consoleLayout.install') }}</t-button></header>
+    <Teleport v-if="props.embedded && context.can('tools:manage')" to="#enterprise-toolbox-action">
+      <t-button variant="outline" size="small" @click="installing = true">
+        <template #icon><t-icon name="add" /></template>{{ t('consoleLayout.install') }}
+      </t-button>
+    </Teleport>
     <t-alert v-if="!context.can('tools:manage')" theme="info" :message="t('adminConsole.denied')" />
     <template v-else><t-tabs v-model="tab"><t-tab-panel value="library" :label="t('consoleLayout.library')" /><t-tab-panel value="review" :label="t('consoleLayout.review')" /></t-tabs>
       <SkillSubmissionsPage v-if="tab === 'review'" />
-      <template v-else><t-input v-model="query" clearable :placeholder="t('menu.search')" :aria-label="t('menu.search')" /><t-alert v-if="error" theme="error" :message="error"><template #operation><t-button variant="text" @click="load">{{ t('common.retry') }}</t-button></template></t-alert>
+      <template v-else><Teleport to="#enterprise-toolbox-search" :disabled="!props.embedded">
+        <t-input v-model="query" clearable :placeholder="t('menu.search')" :aria-label="t('menu.search')" />
+      </Teleport><t-alert v-if="error" theme="error" :message="error"><template #operation><t-button variant="text" @click="load">{{ t('common.retry') }}</t-button></template></t-alert>
         <t-loading :loading="loading"><div class="skill-list"><article v-for="row in filtered" :key="`${row.scope}:${row.name}`" class="skill-card"><div class="skill-card__main"><div class="skill-card__body"><div class="skill-card__header"><div class="skill-card__badge">{{ row.name.slice(0,1).toUpperCase() }}</div><div class="skill-card__heading"><h3 class="skill-card__title">{{ row.name }}</h3><span class="skill-card__type">{{ row.version || '—' }}</span></div><div class="skill-card__actions"><t-button variant="text" :aria-label="t('common.expand')" @click="inspect(row)"><t-icon name="folder" /></t-button></div></div><p class="skill-card__desc">{{ row.description || '—' }}</p></div></div><div class="skill-card__footer"><t-tag>{{ t(row.scope === 'builtin' ? 'toolbox.skills.badge.builtin' : 'consoleLayout.enterprise') }}</t-tag><t-tag v-if="row.disabled">{{ t('common.off') }}</t-tag><t-button variant="text" @click="download(row)">{{ t('toolbox.skills.export') }}</t-button><t-popconfirm v-if="row.scope === 'builtin' && !row.disabled" :content="t('nexusAgent.disableHint')" @confirm="toggle(row)"><t-button variant="text" :disabled="busy">{{ t('nexusAgent.disableHere') }}</t-button></t-popconfirm><t-button v-else-if="row.scope === 'builtin'" variant="text" :disabled="busy" @click="toggle(row)">{{ t('nexusAgent.restore') }}</t-button></div></article></div><t-empty v-if="!loading && !filtered.length" :description="t('toolbox.skills.empty')" /></t-loading>
       </template>
       <SettingDrawer v-model:visible="installing" :title="t('consoleLayout.install')" hide-footer><NexusSkillInstallPanel v-if="installing" :key="`${tenant}:${context.revision}`" :tenant-id="tenant" @installed="load" /></SettingDrawer>

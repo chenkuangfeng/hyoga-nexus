@@ -4,7 +4,7 @@ export type EnterpriseKnowledgeType = 'document' | 'faq' | 'wiki'
 export type KnowledgeVisibility = 'private' | 'tenant' | 'scoped'
 export interface EnterpriseKnowledgeBase {
   id: string; tenant_id: string; name: string; description: string; type: EnterpriseKnowledgeType
-  visibility: KnowledgeVisibility; knowledge_count: number; can_manage: boolean
+  visibility: KnowledgeVisibility; knowledge_count: number; can_manage: boolean; created_at?: string; updated_at?: string
 }
 export interface KnowledgeMaintainer { user_id: string; display_name: string | null; email: string | null; granted_by: string; granted_at: string }
 export interface KnowledgeBaseAudienceItem { kind: 'user' | 'org_unit'; id: string; include_descendants: boolean }
@@ -18,7 +18,9 @@ function array(value: unknown): unknown[] { if (!Array.isArray(value)) throw inv
 export function enterpriseBaseFromResponse(value: unknown, tenant: string): EnterpriseKnowledgeBase {
   const row = object(value)
   if (row.tenant_id !== tenant || row.ownership !== 'enterprise' || row.shared !== false || typeof row.can_manage !== 'boolean' || !['document', 'faq', 'wiki'].includes(string(row.type)) || !['private', 'tenant', 'scoped'].includes(string(row.visibility)) || !Number.isSafeInteger(row.knowledge_count) || Number(row.knowledge_count) < 0) throw invalid()
-  return { id: string(row.id), tenant_id: tenant, name: string(row.name), description: string(row.description), type: row.type as EnterpriseKnowledgeType, visibility: row.visibility as KnowledgeVisibility, knowledge_count: Number(row.knowledge_count), can_manage: row.can_manage }
+  return { id: string(row.id), tenant_id: tenant, name: string(row.name), description: string(row.description), type: row.type as EnterpriseKnowledgeType, visibility: row.visibility as KnowledgeVisibility, knowledge_count: Number(row.knowledge_count), can_manage: row.can_manage,
+    ...(row.created_at === undefined ? {} : { created_at: string(row.created_at) }),
+    ...(row.updated_at === undefined ? {} : { updated_at: string(row.updated_at) }) }
 }
 /** 成员可能已离开企业，仍保留服务端管理员记录供撤销；不据此推断当前成员身份。 */
 export function knowledgeMaintainersFromResponse(value: unknown): KnowledgeMaintainer[] {

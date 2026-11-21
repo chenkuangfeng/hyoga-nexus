@@ -10,13 +10,19 @@
 
     <div class="tbm-head">
       <p class="tbm-hint">{{ $t(isAdmin ? 'toolbox.mcp.hintAdmin' : 'toolbox.mcp.hintMember') }}</p>
-      <t-button v-if="isAdmin" theme="primary" variant="outline" size="small" @click="openCreate">
-        <template #icon><t-icon name="add" size="16px" /></template>
-        {{ $t('toolbox.mcp.add') }}
-      </t-button>
+      <Teleport v-if="isAdmin" :to="actionTarget || 'body'" :disabled="!actionTarget">
+        <t-button theme="primary" variant="outline" size="small" @click="openCreate">
+          <template #icon><t-icon name="add" size="16px" /></template>
+          {{ $t('toolbox.mcp.add') }}
+        </t-button>
+      </Teleport>
     </div>
 
-    <t-input v-model="query" class="list-search" clearable :placeholder="$t('menu.search')" :aria-label="$t('menu.search')"><template #prefix-icon><t-icon name="search" /></template></t-input>
+    <Teleport :to="searchTarget || 'body'" :disabled="!searchTarget">
+      <t-input v-model="query" class="list-search" clearable :placeholder="$t('menu.search')" :aria-label="$t('menu.search')">
+        <template #prefix-icon><t-icon name="search" /></template>
+      </t-input>
+    </Teleport>
     <t-loading :loading="loading" size="small">
       <p v-if="!loading && !filteredServices.length" class="tbm-empty">{{ $t('toolbox.mcp.empty') }}</p>
 
@@ -89,7 +95,7 @@ import { getMyApiPermissions } from '@nexus-web/core/api/nexus-agents'
 import NexusMcpServiceDialog from './NexusMcpServiceDialog.vue'
 import { enabledToolNames, serviceTarget } from './toolboxMcp'
 
-const props = defineProps<{ tenantId: string; canManage?: boolean }>()
+const props = defineProps<{ tenantId: string; canManage?: boolean; actionTarget?: string; searchTarget?: string }>()
 const emit = defineEmits<{ (event: 'count', value: number): void }>()
 const { t, te } = useI18n()
 

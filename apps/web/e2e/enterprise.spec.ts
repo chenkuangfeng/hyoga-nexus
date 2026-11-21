@@ -24,7 +24,7 @@ test('解析配置确认后保存，保留既有密钥与关闭状态', async ({
   })
   await page.goto('parsers')
   await expect(page.locator('.engine-card')).toHaveCount(4)
-  await expect(page.locator('#enterprise-navigation button')).toHaveText(['企业', '知识库', '发布集成', '数据和扩展', '权限', '系统'])
+  await expect(page.locator('#enterprise-navigation').getByRole('link', { name: '解析引擎' })).toHaveClass(/\bactive\b/)
   await page.locator('.engine-card').first().click()
   await expect(page.locator('.setting-drawer')).toBeVisible()
   await expect(page.locator('.parser-group')).toHaveCount(1)
@@ -39,43 +39,28 @@ test('解析配置确认后保存，保留既有密钥与关闭状态', async ({
   await expectResponsive(page)
 })
 
-test('一级菜单默认收起并互斥展开，图标侧栏可用键盘访问', async ({ page, api }, testInfo) => {
+test('WeKnora 分组下的链接直接可用，图标侧栏保留键盘访问', async ({ page, api }, testInfo) => {
   await api.signIn()
   api.handle(request => new URL(request.url()).pathname === '/api/v1/tenants/a/me/permissions'
     ? { body: { apis: ['org:manage', 'members:manage', 'roles:manage', 'models:manage', 'tools:manage', 'enterprise_kbs:manage', 'enterprise_agents:manage', 'audit:read', 'policy:manage'] } } : undefined)
   await page.goto('')
   const navigation = page.locator('#enterprise-navigation')
-  await expect(navigation.getByRole('button')).toHaveText(['企业', '智能体', '知识库', '模型', '发布集成', '数据和扩展', '工具箱', '权限', '系统'])
-  await expect(navigation.locator('a')).toHaveCount(20)
-  await expect(navigation.getByRole('link')).toHaveCount(0)
-  const system = navigation.getByRole('button', { name: '系统', exact: true })
-  const enterprise = navigation.getByRole('button', { name: '企业', exact: true })
-  const integrations = navigation.getByRole('button', { name: '发布集成', exact: true })
-  await expect(system).toHaveClass(/\bactive\b/)
+  await expect(navigation.locator('.nav-group-title')).toHaveText(['账户', '空间', '模型', '发布集成', '数据与扩展', '系统管理'])
+  await expect(navigation.locator('.nav-group').first().getByRole('link')).toHaveText(['知识库管理', '智能体管理', '工具箱'])
+  const integration = navigation.locator('.nav-group').filter({ has: page.getByText('发布集成', { exact: true }) })
+  await expect(integration.getByRole('link')).toHaveText(['IM 集成', 'MCP服务发布', '企业微信'])
+  const settings = navigation.getByRole('link', { name: '系统设置', exact: true })
+  await expect(settings).toHaveClass(/\bactive\b/)
   await page.screenshot({ path: testInfo.outputPath('grouped-navigation.png') })
-  await enterprise.focus()
-  await page.keyboard.press('Enter')
-  await expect(enterprise).toHaveAttribute('aria-expanded', 'true')
-  await expect(navigation.getByRole('link')).toHaveText(['企业空间', '企业策略', '企业组织'])
-  await integrations.click()
-  await expect(enterprise).toHaveAttribute('aria-expanded', 'false')
-  await expect(navigation.getByRole('link')).toHaveText(['企业微信', 'MCP服务发布'])
-  await integrations.click()
-  await expect(navigation.getByRole('link')).toHaveCount(0)
-  await expect(page).toHaveURL(/\/enterprise\/settings$/)
   await page.getByRole('button', { name: '收起侧边栏' }).click()
-  const data = navigation.getByRole('button', { name: '数据和扩展', exact: true })
-  await expect(data).toHaveAttribute('title', '数据和扩展')
-  await data.focus()
-  await page.keyboard.press('Space')
-  await expect(data).toHaveAttribute('aria-expanded', 'true')
   const parser = navigation.getByRole('link', { name: '解析引擎' })
   await expect(parser).toHaveAttribute('title', '解析引擎')
+  await parser.focus()
+  await expect(parser).toBeFocused()
   await expectResponsive(page)
   await expect(parser).toBeVisible()
   await page.reload()
-  await expect(data).toHaveAttribute('aria-expanded', 'false')
-  await expect(navigation.getByRole('link')).toHaveCount(0)
+  await expect(parser).toBeVisible()
 })
 
 test('切换管理菜单时保留侧栏，只在右侧切换路由', async ({ page, api }) => {
@@ -94,8 +79,6 @@ test('切换管理菜单时保留侧栏，只在右侧切换路由', async ({ pa
   })
   await page.goto('settings')
   const navigation = page.locator('#enterprise-navigation')
-  const data = navigation.getByRole('button', { name: '数据和扩展', exact: true })
-  await data.click()
   const storageLink = navigation.locator('a[href$="/storage"]')
   await storageLink.evaluate(element => element.setAttribute('data-e2e-original', 'true'))
   delayPermissions = true
@@ -116,7 +99,7 @@ test('切换管理菜单时保留侧栏，只在右侧切换路由', async ({ pa
   await page.goBack()
   await expect(page).toHaveURL(/\/enterprise\/settings$/)
   await expect(storageLink).toHaveAttribute('data-e2e-original', 'true')
-  await expect(data).toHaveAttribute('aria-expanded', 'true')
+  await expect(storageLink).toBeVisible()
 })
 
 test('存储与向量库使用原版卡片和抽屉，保留创建及键盘编辑流程', async ({ page, api }) => {
@@ -174,28 +157,23 @@ test('系统设置保存编辑展示偏好，抽屉与替换路由保持同一�
   })
   await page.goto('settings')
   const navigation = page.locator('#enterprise-navigation')
-  const modelsMenu = navigation.getByRole('button', { name: '模型', exact: true })
-  const settingsMenu = navigation.getByRole('button', { name: '系统', exact: true })
   const selectMode = async (label: string) => {
     await page.locator('.setting-row').filter({ hasText: '二级编辑界面' }).locator('.t-select').click()
     await page.locator('.t-select-option:visible').filter({ hasText: label }).click()
   }
   await selectMode('抽屉')
-  await modelsMenu.click()
   await navigation.getByRole('link', { name: '模型管理', exact: true }).click()
   await page.locator('.model-header-actions').getByRole('button', { name: '添加模型', exact: true }).click()
   await expect(page.locator('.t-drawer--open')).toBeVisible()
   await page.locator('.t-drawer--open .t-drawer__close-btn').click()
-  await settingsMenu.click()
   await navigation.getByRole('link', { name: '系统设置', exact: true }).click()
   await selectMode('替换路由')
-  await modelsMenu.click()
   await navigation.getByRole('link', { name: '模型管理', exact: true }).click()
   await page.locator('.model-header-actions').getByRole('button', { name: '添加模型', exact: true }).click()
   await expect(page).toHaveURL(/models\?editor=edit-[^&]+$/)
   await expect(page.locator('.editor-dialog-route:visible')).toBeVisible()
   await expect.poll(async () => await page.locator('.editor-dialog-route:visible .t-dialog').evaluate(element => { const rect = element.getBoundingClientRect(); return Math.abs(rect.top) <= 1 && rect.bottom <= innerHeight + 1 && rect.height >= innerHeight - 2 })).toBe(true)
-  await expect(page.locator('.editor-dialog-route:visible .t-dialog__footer')).toBeInViewport()
+  await expect(page.locator('.editor-dialog-route:visible .setting-drawer__footer')).toBeInViewport()
   await page.screenshot({ path: testInfo.outputPath('route-editor.png') })
   await page.goBack()
   await expect(page).toHaveURL(/models$/)
@@ -223,7 +201,7 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
   await expect(cards.locator('.card-title')).toHaveText(['Knowledge reference', 'Archive reference'])
   await expect(page.locator('.resource-grid')).toHaveCSS('gap', '10px')
   await page.screenshot({ path: testInfo.outputPath('knowledge-reference-directory.png') })
-  await page.getByRole('button', { name: '排序' }).click()
+  await page.getByRole('button', { name: /^排序/ }).click()
   await page.getByText('A–Z', { exact: true }).click()
   await expect(cards.locator('.card-title')).toHaveText(['Archive reference', 'Knowledge reference'])
   const search = page.getByRole('textbox', { name: '搜索知识库名称或描述' })
@@ -250,7 +228,6 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
     await page.getByRole('button', { name: '展开侧边栏' }).click()
   }
   await breadcrumb.getByRole('link', { name: '知识库管理' }).click()
-  await navigation.getByRole('button', { name: '智能体', exact: true }).click()
   await navigation.getByRole('link', { name: '智能体管理' }).click()
   await expect(page).toHaveURL(/\/enterprise\/agents$/)
   const agentCard = cards.filter({ hasText: 'Agent reference' })
@@ -262,12 +239,10 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
   const archive = page.getByText('归档', { exact: true })
   await expect(archive).toBeVisible()
   await page.locator('.header h2').click()
-  await navigation.getByRole('button', { name: '工具箱', exact: true }).click()
-  await navigation.getByRole('link', { name: '技能管理' }).click()
+  await navigation.getByRole('link', { name: '工具箱', exact: true }).click()
   await expect(page.locator('.skill-card')).toContainText('Skill reference')
-  await navigation.getByRole('link', { name: 'MCP服务注册' }).click()
+  await page.locator('.toolbox-tabs').getByRole('link', { name: 'MCP服务注册' }).click()
   await expect(page.locator('.service-card')).toContainText('MCP reference')
-  await navigation.getByRole('button', { name: '发布集成', exact: true }).click()
   await expect(navigation.getByRole('link', { name: 'MCP服务发布' })).toHaveAttribute('href', /mcp-endpoints$/)
   await page.screenshot({ path: testInfo.outputPath('mcp-reference-cards.png') })
   await expectResponsive(page)
@@ -576,4 +551,67 @@ test('企业从同一表单添加模型和服务商，失败后可直接重试',
   expect(writes[2]).toEqual({
     name: 'Enterprise Gateway', base_url: 'https://another.example.test/v1', api_key: 'example-new-key', scope: 'tenant',
   })
+})
+
+test('IM 集成从发布集成进入并绑定已登记的企业微信应用', async ({ page, api }) => {
+  await api.signIn()
+  const root = '/api/v1/tenants/a'
+  const row = { id: 'channel', name: '企业客服', agent_id: 'agent', kind: 'wecom_app', status: 'active', owner_user_id: 'u', bound: true, review_note: null }
+  const writes: unknown[] = []
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === root + '/me/permissions') return { body: { apis: ['org:manage', 'enterprise_agents:manage'] } }
+    if (path === root + '/admin/agents') return { body: [
+      { id: 'agent', tenant_id: 'a', name: '客服智能体', ownership: 'enterprise', can_maintain: true, status: 'published' },
+      { id: 'personal', tenant_id: 'a', name: '个人智能体', ownership: 'personal', can_maintain: true, status: 'published' },
+    ] }
+    if (path === root + '/admin/channels') return { body: { items: writes.length ? [row] : [] } }
+    if (path === root + '/admin/wecom') return { body: { apps: [{ id: 'app', name: '微信应用', purpose: 'agent', nexus_agent_id: 'agent', status: 'active' }] } }
+    if (path === root + '/agents/agent/channels' && request.method() === 'POST') {
+      writes.push(request.postDataJSON())
+      return { body: row }
+    }
+  })
+  await page.goto('settings')
+  await page.locator('#enterprise-navigation').getByRole('link', { name: 'IM 集成' }).click()
+  await expect(page.getByRole('heading', { name: 'IM 集成' })).toBeVisible()
+  await page.locator('.channel-card--add').click()
+  const drawer = page.locator('.setting-drawer:visible')
+  const select = drawer.locator('.t-select')
+  await select.first().click()
+  await expect(page.locator('.t-select-option:visible').filter({ hasText: '个人智能体' })).toHaveCount(0)
+  await page.locator('.t-select-option:visible').filter({ hasText: '客服智能体' }).click()
+  await drawer.getByRole('textbox', { name: '渠道名称' }).fill('企业客服')
+  await select.last().click()
+  await page.locator('.t-select-option:visible').filter({ hasText: '微信应用' }).click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.locator('.channel-card__title').filter({ hasText: '企业客服' })).toBeVisible()
+  expect(writes).toEqual([{ kind: 'wecom_app', name: '企业客服', wecom_app_id: 'app' }])
+  await expectResponsive(page)
+})
+
+test('MCP 发布从新增卡片保存端点并展示一次性配置', async ({ page, api }) => {
+  await api.signIn()
+  const root = '/api/v1/tenants/a/admin'
+  const writes: unknown[] = []
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['tools:manage'] } }
+    if (path === root + '/knowledge/bases') return { body: { items: [] } }
+    if (path === root + '/mcp-endpoints') {
+      if (request.method() === 'GET') return { body: [] }
+      const input = request.postDataJSON()
+      writes.push(input)
+      return { body: { ...input, id: 'endpoint', tenant_id: 'a', enabled: true, created_by: 'u', token: 'one-time-mock-token' } }
+    }
+  })
+  await page.goto('mcp-endpoints')
+  await expect(page.locator('.channels-count')).toHaveText('0')
+  await page.locator('.channel-card--add').click()
+  const editor = page.locator('.setting-drawer:visible')
+  await editor.locator('input').first().fill('new-endpoint')
+  await editor.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.locator('.token-snippet')).toContainText('one-time-mock-token')
+  await expect(page.locator('.channel-card__title').filter({ hasText: 'new-endpoint' })).toBeVisible()
+  expect(writes).toEqual([{ name: 'new-endpoint', description: '', tool_allowlist: [], kb_ids: [] }])
 })

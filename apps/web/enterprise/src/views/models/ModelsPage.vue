@@ -3,7 +3,7 @@ import UsagePage from '../usage/UsagePage.vue'
 import ModelActions from './ModelActions.vue'
 import ModelProviderEditor from './ModelProviderEditor.vue'
 import { isApiAddress, providerPresets } from './providerConfig'
-import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
+import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
 /** 企业模型目录：只管理当前企业共享 Provider、模型版本和租户默认值。 */
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -431,9 +431,34 @@ onBeforeUnmount(invalidate)
     </template>
     <ModelProviderEditor v-if="editingProvider" :visible="providerDialog" :provider="editingProvider" :busy="busy" :error="providerError"
       @save="saveProvider" @close="closeProvider" />
-    <EditorDialog :visible="modelDialog" :header="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" width="min(600px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy || !modelProviderId }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @confirm="saveModel" @close="!busy && closeModel()">
-      <div class="editor-form">
+    <SettingDrawer :visible="modelDialog" class="model-editor-drawer" placement="center" width="560px" :resizable="false"
+      :title="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" :icon="typeIcons[modelForm.type]"
+      :confirm-text="t('adminModels.save')" :confirm-loading="busy" :confirm-disabled="busy || !modelProviderId"
+      :cancel-disabled="busy" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy"
+      @confirm="saveModel" @update:visible="(value: boolean) => { if (!value && !busy) closeModel() }">
+      <template v-if="['chat', 'embedding', 'rerank'].includes(modelForm.type)" #footer-left>
+        <t-button variant="outline" :loading="testingDraft" :disabled="busy || testingDraft || (!selectedProvider && !newProviderInput) || !!providerInputError || !modelInput.name"
+          :aria-description="t('adminModels.testHint')" @click="testModelDraft">{{ t('adminModels.test') }}</t-button>
+      </template>
+      <template #footer-extra>
         <t-alert v-if="error" theme="error" :message="error" />
+        <p v-if="draftConnection" class="connection-result" :class="{ 'is-success': draftConnection.ok }"
+          role="status">{{ draftConnection.message }}</p>
+      </template>
+      <div class="editor-form" :inert="busy || undefined">
+        <section v-if="!modelEditId" class="setting-drawer__section">
+          <h4 class="setting-drawer__section-title">{{ t('adminModels.modelType') }}</h4>
+          <div class="model-type-options" role="group" :aria-label="t('adminModels.modelType')">
+            <button v-for="type in typeOptions" :key="type.value" type="button" class="model-type-option"
+              :class="{ 'is-active': modelForm.type === type.value }" :aria-pressed="modelForm.type === type.value"
+              @click="modelForm.type = type.value">
+              <t-icon :name="typeIcons[type.value]" class="model-type-option__icon" aria-hidden="true" />
+              <span class="model-type-option__label">{{ type.label }}</span>
+            </button>
+          </div>
+        </section>
+        <section class="setting-drawer__section editor-fields">
+          <h4 class="setting-drawer__section-title">{{ t('model.editor.sectionProvider') }}</h4>
         <label for="enterprise-model-provider">{{ t('model.editor.providerLabel') }}
           <t-select v-model="modelProviderId" :input-props="{ id: 'enterprise-model-provider' }"
             :options="providerOptions" :placeholder="t('model.editor.providerPlaceholder')" :disabled="!!modelEditId || busy" filterable />
@@ -453,7 +478,9 @@ onBeforeUnmount(invalidate)
             </t-input>
           </label>
         </template>
-        <label>{{ t('adminModels.modelType') }}<t-select v-model="modelForm.type" :options="typeOptions" :disabled="!!modelEditId" /></label>
+        </section>
+        <section class="setting-drawer__section editor-fields">
+          <h4 class="setting-drawer__section-title">{{ t('model.editor.sectionAdvanced') }}</h4>
         <label v-if="modelForm.type === 'chat' || modelForm.type === 'embedding'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.protocol" :options="[{value:'openai_chat_completions',label:t('adminModels.protocols.openai_chat_completions')},{value:'openai_responses',label:t('adminModels.protocols.openai_responses')},...(modelForm.type === 'chat' ? [{value:'anthropic_messages',label:t('adminModels.protocols.anthropic_messages')}] : [])]" /></label>
         <label v-if="modelForm.type === 'rerank'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.rerankApi" :options="rerankApis" /></label>
         <template v-if="modelForm.type === 'chat'">
@@ -461,20 +488,15 @@ onBeforeUnmount(invalidate)
           <label>{{ t('adminModels.reasoningEffort') }}<t-select v-model="modelForm.reasoningEffort" clearable :options="['none','minimal','low','medium','high','xhigh','max'].map(value => ({value,label:value}))" /></label>
         </template>
         <p class="field-hint">{{ t(modelEditId ? 'adminModels.versionHint' : 'adminModels.modelOptionsHint') }}</p>
-        <div v-if="['chat', 'embedding', 'rerank'].includes(modelForm.type)">
-          <t-button variant="outline" :loading="testingDraft" :disabled="busy || testingDraft || (!selectedProvider && !newProviderInput) || !!providerInputError || !modelInput.name"
-            :aria-description="t('adminModels.testHint')" @click="testModelDraft">{{ t('adminModels.test') }}</t-button>
-          <p class="field-hint">{{ t('adminModels.testHint') }}</p>
-          <p v-if="draftConnection" class="connection-result" :class="{ 'is-success': draftConnection.ok }"
-            role="status">{{ draftConnection.message }}</p>
-        </div>
+        </section>
       </div>
-    </EditorDialog>
+    </SettingDrawer>
   </section>
 </template>
 
 <style scoped lang="less">
 @import './ModelsPage.reference.less';
+@import './ModelEditor.reference.less';
 
 .defaults-panel {
   margin-top: 20px;
@@ -492,6 +514,9 @@ onBeforeUnmount(invalidate)
   margin-top: 16px;
 }
 .defaults-grid label, .editor-form label { display: grid; min-width: 0; gap: 8px; }
-.editor-form { display: grid; gap: 16px; max-height: min(68vh, 720px); overflow-y: auto; padding: 2px; }
+.editor-fields { display: grid; gap: 16px; }
 .field-hint { margin: 0; line-height: 1.5; }
+:global(.model-editor-drawer.setting-drawer--center:not(.editor-dialog-route) .t-dialog__body) {
+  max-height: min(60dvh, max(80px, calc(100dvh - 240px)));
+}
 </style>

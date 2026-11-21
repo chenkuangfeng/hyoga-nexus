@@ -9,15 +9,19 @@ import { useEnterpriseContext } from '../../stores/context'
 const { t } = useI18n(), auth = useAuthStore(), context = useEnterpriseContext()
 const tenant = computed(() => String(auth.effectiveTenantId || ''))
 const scopeKey = computed(() => `${tenant.value}:${auth.user?.id || ''}:${context.revision}`)
+const props = defineProps<{ embedded?: boolean }>()
+const emit = defineEmits<{ count: [value: number] }>()
 </script>
 
 <template>
   <section class="mcp-services-page">
-    <header class="section-header"><div><h2>{{ t('consoleLayout.mcpRegister') }}</h2><p>{{ t('mcpSettings.description') }}</p></div></header>
+    <header v-if="!props.embedded" class="section-header"><div><h2>{{ t('consoleLayout.mcpRegister') }}</h2><p>{{ t('mcpSettings.description') }}</p></div></header>
     <t-alert v-if="!context.can('tools:manage')" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert theme="info" :message="t('mcpSettings.manageAndTest')" />
-      <NexusToolboxMcp :key="scopeKey" :tenant-id="tenant" :can-manage="true" />
+      <NexusToolboxMcp :key="scopeKey" :tenant-id="tenant"  :can-manage="true"
+        :action-target="props.embedded ? '#enterprise-toolbox-action' : undefined"
+        :search-target="props.embedded ? '#enterprise-toolbox-search' : undefined" @count="emit('count', $event)" />
     </template>
   </section>
 </template>

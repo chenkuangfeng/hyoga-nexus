@@ -1,42 +1,37 @@
-/** 管理导航依用户业务分组；工具箱拆分参照 WeKnora e1f9a6166 Toolbox.vue。 */
+/** 管理导航沿用 WeKnora Settings.vue 分组和资源入口，链接按 Nexus 企业权限过滤。 */
 export interface AdminNavigationItem { path: string; label: string; icon: string; permission?: string; roles?: string[] }
-export interface AdminNavigationGroup { key: string; label: string; icon: string; items: AdminNavigationItem[] }
+export interface AdminNavigationGroup { key: string; label: string; items: AdminNavigationItem[] }
 const groups: AdminNavigationGroup[] = [
-  { key: 'enterprise', label: 'consoleLayout.enterprise', icon: 'view-organization', items: [
-    { path: '/enterprise', label: 'consoleLayout.space', icon: 'user-circle', roles: ['owner', 'admin'] },
-    { path: '/policy', label: 'consoleLayout.policy', icon: 'setting', permission: 'policy:manage' },
-    { path: '/organization', label: 'enterpriseLayout.enterpriseOrganization', icon: 'view-organization', permission: 'org:manage' },
-  ] },
-  { key: 'agents', label: 'consoleLayout.agents', icon: 'app', items: [
-    { path: '/agents', label: 'consoleLayout.agentManagement', icon: 'app', permission: 'enterprise_agents:manage' },
-  ] },
-  { key: 'knowledge', label: 'consoleLayout.knowledge', icon: 'folder', items: [
+  { key: 'resources', label: '', items: [
     { path: '/knowledge', label: 'consoleLayout.knowledgeManagement', icon: 'folder', permission: 'enterprise_kbs:manage' },
+    { path: '/agents', label: 'consoleLayout.agentManagement', icon: 'app', permission: 'enterprise_agents:manage' },
+    { path: '/skills', label: 'consoleLayout.toolbox', icon: 'tools', permission: 'tools:manage' },
   ] },
-  { key: 'models', label: 'consoleLayout.models', icon: 'control-platform', items: [
+  { key: 'account', label: 'settings.navGroups.account', items: [
+    { path: '/settings', label: 'consoleLayout.settings', icon: 'setting' },
+  ] },
+  { key: 'workspace', label: 'settings.navGroups.workspace', items: [
+    { path: '/enterprise', label: 'consoleLayout.space', icon: 'user-circle', roles: ['owner', 'admin'] },
+    { path: '/members', label: 'consoleLayout.members', icon: 'usergroup', permission: 'members:manage' },
+    { path: '/organization', label: 'enterpriseLayout.enterpriseOrganization', icon: 'view-organization', permission: 'org:manage' },
+    { path: '/roles', label: 'consoleLayout.roles', icon: 'user-safety', permission: 'roles:manage' },
+    { path: '/policy', label: 'consoleLayout.policy', icon: 'setting', permission: 'policy:manage' },
+  ] },
+  { key: 'models_runtime', label: 'settings.navGroups.modelsRuntime', items: [
     { path: '/models', label: 'consoleLayout.modelManagement', icon: 'control-platform', permission: 'models:manage' },
   ] },
-  { key: 'integrations', label: 'consoleLayout.integrations', icon: 'link', items: [
+  { key: 'integrations', label: 'integrations.title', items: [
+    { path: '/channels', label: 'integrations.tabs.im', icon: 'chat-message', permission: 'enterprise_agents:manage' },
+    { path: '/mcp-endpoints', label: 'consoleLayout.mcpPublish', icon: 'tools', permission: 'tools:manage' },
     { path: '/wecom', label: 'adminWecom.title', icon: 'link', permission: 'org:manage' },
-    { path: '/mcp-endpoints', label: 'consoleLayout.mcpPublish', icon: 'link', permission: 'tools:manage' },
   ] },
-  { key: 'data_extensions', label: 'consoleLayout.data', icon: 'data-base', items: [
+  { key: 'data_extensions', label: 'settings.navGroups.dataExtensions', items: [
     { path: '/vector-stores', label: 'settings.vectorStoreEngine', icon: 'data-base', permission: 'enterprise_kbs:manage' },
     { path: '/parsers', label: 'settings.parserEngine', icon: 'file-search', roles: ['owner', 'admin'] },
     { path: '/storage', label: 'settings.storageEngine', icon: 'cloud', permission: 'enterprise_kbs:manage' },
     { path: '/graph-stores', label: 'consoleLayout.graph', icon: 'chart-bubble', permission: 'enterprise_kbs:manage' },
   ] },
-  { key: 'toolbox', label: 'consoleLayout.toolbox', icon: 'tools', items: [
-    { path: '/tools', label: 'consoleLayout.tools', icon: 'tools', permission: 'tools:manage' },
-    { path: '/skills', label: 'consoleLayout.skills', icon: 'check-circle', permission: 'tools:manage' },
-    { path: '/mcp-services', label: 'consoleLayout.mcpRegister', icon: 'tools', permission: 'tools:manage' },
-  ] },
-  { key: 'permissions', label: 'consoleLayout.permissions', icon: 'secured', items: [
-    { path: '/members', label: 'consoleLayout.members', icon: 'usergroup', permission: 'members:manage' },
-    { path: '/roles', label: 'consoleLayout.roles', icon: 'user-safety', permission: 'roles:manage' },
-  ] },
-  { key: 'system', label: 'consoleLayout.system', icon: 'setting', items: [
-    { path: '/settings', label: 'consoleLayout.settings', icon: 'setting' },
+  { key: 'system_administration', label: 'settings.navGroups.systemAdministration', items: [
     { path: '/runtime', label: 'adminRuntime.title', icon: 'queue', roles: ['owner', 'admin'] },
     { path: '/audit', label: 'adminAudit.title', icon: 'history', permission: 'audit:read' },
   ] },

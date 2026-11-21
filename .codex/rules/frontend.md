@@ -40,7 +40,7 @@
 ## 开源界面参考
 
 - **WeKnora 是首要的平台 Web 参考**。对照固定版本 `e1f9a6166` 的 Vue 3 前端，重点看 Agent、聊天、知识库、集成、工具箱、组织/设置等页面，以及流式进度、工具结果卡片、引用和产物呈现。Nexus 的前端同样采用 Vue 3，可优先借鉴其页面组织与交互细节；要保留参考实现中与平台能力相关的有效行为，并按 Nexus 的身份、空间和 Runtime 契约做兼容扩展。源码：[WeKnora frontend](https://github.com/Tencent/WeKnora/tree/e1f9a6166/frontend)。
-- 管理菜单按企业、智能体、知识库、模型、发布集成、数据和扩展、工具箱、权限、系统九组组织；具体子项与顺序见管理端 README，企业空间、企业策略和企业微信按约定命名。工具箱职责严格参照 WeKnora 的技能和 MCP 注册拆分，MCP 发布归发布集成。来自 WeKnora 的界面必须先核对固定版本对应页面源码，严格沿用其布局、组件、卡片、抽屉与样式；仅按 Nexus 已实现的接口和权限适配，不凭空重新设计。新增或调整页面须在模块设计文档中记录来源文件及必要差异。
+- 企业设置菜单沿用本地 WeKnora 的分组标题和直属链接。知识库、智能体和工具箱列在资源入口区，具体子项见管理端 README。工具箱职责严格参照 WeKnora 的技能和 MCP 注册拆分，MCP 发布归发布集成。来自 WeKnora 的界面必须先核对固定版本对应页面源码，严格沿用其布局、组件、卡片、抽屉与样式；仅按 Nexus 已实现的接口和权限适配，不凭空重新设计。新增或调整页面须在模块设计文档中记录来源文件及必要差异。
 - **GenericAgent 是 Native 使用流程参考**。对照固定版本 `a9a36b4` 的 `frontends/stapp.py`、`stapp2.py`、`conductor.py`、终端与桌面入口，保留并扩展其对话连续性、会话/模型切换、运行进度、后台任务、停止控制、工具结果和多入口复用等用户可见能力。其界面与单机 Agent 状态耦合，迁移到 Nexus 时通过平台 API 和 Run/Event 契约实现，不把单机状态边界带入多用户 Web。源码：[GenericAgent frontends](https://github.com/lsdefine/GenericAgent/tree/a9a36b4/frontends)。
 - **Dify** 适合参考平台导航、Agent/应用配置、知识库与运行记录的整体信息架构；**LibreChat** 适合参考 Agent 配置、工具/Skills/MCP 选择和聊天工作台；**Open WebUI** 适合参考 Workspace 资源管理；**Langflow** 适合参考节点画布和流程编辑器。**Flowise** 仅作为画布交互案例，仓库已归档，不作为活跃依赖。参考：[Dify](https://github.com/langgenius/dify)、[LibreChat](https://github.com/LibreChat-AI/LibreChat)、[Open WebUI](https://github.com/open-webui/open-webui)、[Langflow](https://github.com/langflow-ai/langflow)、[Flowise](https://github.com/FlowiseAI/Flowise)。
 - 以上项目用于核对可观察行为和交互模式，不要求采用其 React、Svelte、Streamlit 或桌面技术栈。采用不同实现时不得删减已确认的核心流程；把流程和能力映射到 Vue 3/TypeScript/TDesign，并补齐兼容行为。

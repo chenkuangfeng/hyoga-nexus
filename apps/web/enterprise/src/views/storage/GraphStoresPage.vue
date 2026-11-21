@@ -77,7 +77,11 @@ function remove(row: EnterpriseGraphStore) {
     <template v-else>
       <t-alert theme="info" :message="t('adminGraph.scopeHint')" />
       <t-alert v-if="error" theme="error" :message="error" />
-      <t-loading :loading="loading"><div v-if="ready" class="graph-grid"><article v-for="row in rows" :key="row.id" class="graph-provider-card"><header><span class="graph-icon"><t-icon name="chart-bubble" /></span><h3>{{ row.name }}</h3><t-tag>{{ row.engine }}</t-tag></header><p>{{ t(row.builtin ? 'adminGraph.builtin' : 'adminGraph.custom') }}</p><footer><t-button variant="text" :disabled="busy" @click="testSaved(row)">{{ t('adminGraph.test') }}</t-button><t-button v-if="!row.builtin" variant="text" theme="danger" :disabled="busy" @click="remove(row)">{{ t('adminGraph.delete') }}</t-button></footer></article></div><t-empty v-if="ready && !rows.length" :description="t('adminGraph.empty')" /></t-loading>
+      <t-loading :loading="loading"><div v-if="ready" class="graph-grid"><article v-for="row in rows" :key="row.id" class="graph-provider-card"><header><span class="graph-icon"><t-icon name="chart-bubble" /></span><h3>{{ row.name }}</h3><t-tag>{{ row.engine }}</t-tag></header><p>{{ t(row.builtin ? 'adminGraph.builtin' : 'adminGraph.custom') }}</p><footer><t-button variant="text" :disabled="busy" @click="testSaved(row)">{{ t('adminGraph.test') }}</t-button><t-button v-if="!row.builtin" variant="text" theme="danger" :disabled="busy" @click="remove(row)">{{ t('adminGraph.delete') }}</t-button></footer></article>
+        <button v-if="available.length" type="button" class="graph-provider-card graph-provider-card--add" :disabled="busy" @click="openCreate">
+          <span class="graph-add-icon" aria-hidden="true"><t-icon name="add" /></span>{{ t('adminGraph.add') }}
+        </button>
+      </div><t-empty v-if="ready && !rows.length && !available.length" :description="t('adminGraph.empty')" /></t-loading>
       <section v-if="available.length" class="supported"><h3>{{ t('adminGraph.supported') }}</h3><p v-for="item in available" :key="item.engine">{{ item.name }}<t-tag theme="warning" variant="light">{{ t('adminGraph.unverified') }}</t-tag></p></section>
       <section v-if="planned.length" class="planned"><h3>{{ t('adminGraph.planned') }}</h3><p>{{ planned.map(item => item.name).join('、') }}</p></section>
       <SettingDrawer :visible="editor" :title="t('adminGraph.register')" hide-footer @update:visible="(value: boolean) => { if (!value && !busy && !testing) clearDraft() }"><div class="editor"><header class="section-header"><div><h3>{{ t('adminGraph.register') }}</h3><p>{{ t('adminGraph.formHint') }}</p></div><t-button variant="text" :disabled="busy || testing" @click="clearDraft">{{ t('common.close') }}</t-button></header>
@@ -92,6 +96,8 @@ function remove(row: EnterpriseGraphStore) {
 @import (reference) '@nexus-web/core/styles/provider-card.less';
 .graph-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,320px),1fr)); gap: 12px; }
 .graph-provider-card { .provider-card(); display: block; }
+.graph-provider-card--add { .provider-card-add(); width: 100%; display: flex; }
+.graph-add-icon { .provider-card-badge(32px, var(--app-radius-md)); background: var(--td-brand-color-light); color: var(--td-brand-color); }
 .graph-provider-card header, .graph-provider-card footer { display: flex; align-items: center; gap: 8px; padding: 16px; flex-wrap: wrap; }
 .graph-provider-card h3 { margin: 0; flex: 1; }
 .graph-provider-card p { padding: 0 16px; color: var(--td-text-color-secondary); }

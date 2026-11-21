@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 管理端外壳：企业切换、服务端权限导航、独立业务路由。 */
-import { provide, computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { provide, computed, ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
@@ -53,21 +53,12 @@ onUnmounted(() => {
 const auth = useAuthStore(), context = useEnterpriseContext(), router = useRouter()
 const { t } = useI18n()
 const switching = ref(false), error = ref('')
-const expandedMenu = ref<string | null>(null)
 const navGroups = computed(() => auth.currentEntries.includes('enterprise')
   ? visibleAdminNavigation(auth.currentTenantRole || '', context.hasNavigationPermission) : [])
 const choices = computed(() => auth.memberships.map(row => ({ label: row.tenant_name || t('adminConsole.unnamedEnterprise'), value: String(row.tenant_id) })))
-watch([() => auth.user?.id, () => auth.effectiveTenantId, () => auth.currentEntries.includes('enterprise')], () => {
-  expandedMenu.value = null
-}, { flush: 'sync' })
-
-/** 二级链接保留原路由，切页和浏览器历史都不会改变展开状态。 */
-function toggleMenu(key: string) {
-  expandedMenu.value = expandedMenu.value === key ? null : key
-}
-
 /** 详情页沿用业务入口的高亮，例如知识库内容仍属于知识库管理。 */
 function isCurrentItem(path: string, currentPath: string): boolean {
+  if (path === '/skills' && ['/tools', '/mcp-services'].includes(currentPath)) return true
   return currentPath === path || currentPath.startsWith(`${path}/`)
 }
 
@@ -107,22 +98,12 @@ async function signOut() {
       </header>
       <nav id="enterprise-navigation" class="sidebar-nav" :aria-label="t('adminConsole.title')">
         <div v-for="group in navGroups" :key="group.key" class="nav-group">
-          <button type="button" class="nav-item nav-parent"
-            :class="{ active: expandedMenu !== group.key && group.items.some(item => isCurrentItem(item.path, $route.path)) }"
-            :aria-label="t(group.label)" :aria-expanded="expandedMenu === group.key"
-            :aria-controls="`admin-submenu-${group.key}`" :title="collapsed ? t(group.label) : undefined"
-            @click="toggleMenu(group.key)">
-            <t-icon :name="group.icon" class="nav-icon" aria-hidden="true" />
-            <span v-if="!collapsed" class="nav-label">{{ t(group.label) }}</span>
-            <t-icon v-if="!collapsed" :name="expandedMenu === group.key ? 'chevron-down' : 'chevron-right'" class="nav-chevron" aria-hidden="true" />
-          </button>
-          <div v-show="expandedMenu === group.key" :id="`admin-submenu-${group.key}`" class="nav-submenu">
-            <RouterLink v-for="item in group.items" :key="item.path" class="nav-item" :to="item.path"
-              :class="{ active: isCurrentItem(item.path, $route.path) }"
-              :aria-label="t(item.label)" :title="collapsed ? t(item.label) : undefined">
-              <t-icon :name="item.icon" class="nav-icon" aria-hidden="true" /><span v-if="!collapsed" class="nav-label">{{ t(item.label) }}</span>
-            </RouterLink>
-          </div>
+          <div v-if="group.label && !collapsed" class="nav-group-title">{{ t(group.label) }}</div>
+          <RouterLink v-for="item in group.items" :key="item.path" class="nav-item" :to="item.path"
+            :class="{ active: isCurrentItem(item.path, $route.path) }"
+            :aria-label="t(item.label)" :title="collapsed ? t(item.label) : undefined">
+            <t-icon :name="item.icon" class="nav-icon" aria-hidden="true" /><span v-if="!collapsed" class="nav-label">{{ t(item.label) }}</span>
+          </RouterLink>
         </div>
       </nav>
       <div ref="accountRoot" class="account-root" @focusout="(event) => { if (event.relatedTarget && !accountRoot?.contains(event.relatedTarget as Node)) closeAccount() }">
@@ -142,7 +123,7 @@ async function signOut() {
     <div class="admin-main">
     <main class="admin-content-wrapper" :class="{
       'admin-content-wrapper--resource-list': $route.path === '/members',
-      'admin-content-wrapper--directory': $route.path === '/agents' || $route.path === '/knowledge' || $route.path.startsWith('/knowledge/'),
+      'admin-content-wrapper--directory': ['/agents', '/knowledge', '/skills', '/mcp-services', '/tools'].includes($route.path) || $route.path.startsWith('/knowledge/'),
     }">
       <t-alert v-if="error" theme="error" :message="error" />
       <section v-if="!auth.currentEntries.includes('enterprise')" class="role-denied"><t-icon name="lock-on" size="48px" /><h2>{{ t('adminConsole.denied') }}</h2><p>{{ t('adminConsole.deniedHint') }}</p></section>
@@ -167,10 +148,9 @@ button:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--td-bran
 .nav-item { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 6px 12px; margin-bottom: 2px; color: var(--td-text-color-primary); text-decoration: none; border-radius: var(--app-radius-sm); font-size: var(--app-text-base); user-select: none; transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease; }
 .nav-item.active { font-weight: 500; background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); }
 .nav-icon { font-size: 18px; flex-shrink: 0; }
-.nav-parent { width: 100%; text-align: start; }
-.nav-parent .nav-label { flex: 1; }
-.nav-chevron { flex-shrink: 0; color: var(--td-text-color-secondary); font-size: 16px; }
-.nav-submenu { margin-inline-start: 20px; }
+/* WeKnora SettingsModalShell.vue 的分组标签与链接同级。 */
+.nav-group-title { padding: 8px 14px 2px; color: var(--td-text-color-secondary); font-size: var(--app-text-sm); font-weight: 600; letter-spacing: .02em; }
+.is-collapsed .nav-group + .nav-group { border-top: 1px solid var(--td-component-stroke); padding-top: 4px; }
 .account-root { position: relative; flex-shrink: 0; }
 .account-button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; text-align: left; color: var(--td-text-color-primary); }
 .user-avatar { width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); overflow: hidden; }
@@ -186,8 +166,6 @@ button:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--td-bran
 .is-collapsed .admin-sidebar { width: 48px; padding: 8px 0; }
 .is-collapsed .sidebar-header { padding: 0; justify-content: center; }
 .is-collapsed .nav-item { width: 32px; padding: 0; justify-content: center; margin: 0 auto 6px; }
-.is-collapsed .nav-submenu { margin-inline: 4px; border-inline-start: 1px solid var(--td-component-stroke); }
-.is-collapsed .nav-submenu .nav-icon { font-size: 16px; }
 .is-collapsed .account-button { justify-content: center; padding: 10px 0; }
 @media (max-width: 720px) { .admin-sidebar { width: 220px; } }
 .admin-content-wrapper { width: 100%; padding: 40px 48px; }

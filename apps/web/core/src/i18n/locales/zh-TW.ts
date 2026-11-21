@@ -7152,6 +7152,7 @@ export default {
       account: '帳戶',
       workspace: '空間',
       modelsRuntime: '模型',
+      systemAdministration: '系統管理',
       dataExtensions: '資料與擴展',
       platform: '平台'
     }

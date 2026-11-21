@@ -217,7 +217,7 @@ Node 默认堆为 768MB，Go 预打包器默认 GOMEMLIMIT=192MiB/GOMAXPROCS=2�
 
 ## 管理端设置目录与界面来源
 
-导航数据位于 `enterprise/src/navigation.ts`，一级菜单顺序为企业、智能体、知识库、模型、发布集成、数据和扩展、工具箱、权限、系统，具体子项见管理应用 README。`EnterpriseLayout.vue` 参考 WeKnora e1f9a6166 `frontend/src/views/settings/Settings.vue` 的子菜单箭头与缩进，复用原管理端侧栏导航行和主题。一级菜单使用原生按钮和 `aria-expanded`，默认全部收起，一次展开一个。展开状态保存在布局内，随账号、企业或管理入口变化清空，切换业务子路由及浏览器历史时保留。当前入口在二级菜单收起时高亮其一级菜单。侧栏收窄时保留两级菜单图标和可读名称。
+导航数据位于 `enterprise/src/navigation.ts`。参照本地 WeKnora `Settings.vue` 和 `SettingsModalShell.vue` 的分组标题、直属链接和高亮行为。资源入口承载知识库、智能体和工具箱，设置链接按账户、空间、模型、发布集成、数据与扩展和系统管理组织。侧栏收窄时保留图标和可读名称。
 
 WeKnora e1f9a6166 `Toolbox.vue` 的技能与 MCP 注册职责拆分保留，MCP endpoint 属于发布集成。用量位于模型管理内，渠道位于智能体卡片菜单，投稿审核位于技能管理内，长期记忆位于企业空间。过滤后隐藏空菜单，业务写入仍由服务端授权。
 
@@ -230,6 +230,14 @@ WeKnora e1f9a6166 `Toolbox.vue` 的技能与 MCP 注册职责拆分保留，MCP 
 | VectorStoresPage | views/settings/VectorStoreSettings.vue | 保留提供方卡片、键盘打开与 SettingDrawer；字段和计划状态读取服务端能力目录，内置项只读 |
 
 三页的 .reference.less 保留对应原版卡片样式；只对 grid 最小宽度作窄屏适配。provider-card.less 与原 SVG/查找工具抽入 core，工作台保留兼容导出入口，两应用不互相引用源码。原版不存在的 Nexus 管理能力保留现有设置组件，不伪造上游页面或服务端操作。后续所有来源于 WeKnora 的页面调整也须先阅读对应原文件，并记录必要差异。
+
+## 发布集成与工具箱
+
+IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `channel-panel-list.less` 展示智能体选择、计数、渠道卡片与新增抽屉。列表与审核访问企业渠道接口，新增访问智能体渠道接口并选择已有的企业微信应用。MCP 发布沿用 `McpServerIntegrationSettings.vue` 的计数、卡片和配置抽屉，令牌仅在签发后显示一次。工具箱按 WeKnora `Toolbox.vue` 组织标题和标签栏，技能和 MCP 接入各自的新增按钮、搜索与计数，内置工具继续使用企业工具目录接口。
+
+企业知识库和智能体共用 WeKnora 的 `ResourceSortControl.vue`，按后台返回的创建时间、更新时间及名称组织列表。数据扩展的解析、向量和存储沿用各自 WeKnora 设置页，Nexus 图存储复用配置卡片和新增卡片形态。模型编辑器沿用 `ModelEditorDialog.vue` 的类型选择、接入分区及底部测试区。源码与许可见 [WeKnora 声明](weknora-license.txt)。
+
+当前企业管理页面覆盖 Nexus 已提供的服务端能力。与本地 WeKnora 的完整差异包括模型目录、调试器及本地和云模型来源，知识库和智能体目录的跨空间、收藏与最近访问，发布集成的网页嵌入、外部 API、CLI 和浏览器扩展，以及设置内的沙箱与搜索服务商管理。IM 目录可创建企业微信应用渠道并处理企业审核。其他平台和个人微信的建立流程需各自的接入契约和身份能力。
 
 ## 企业模型操作
 

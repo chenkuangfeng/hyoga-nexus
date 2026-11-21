@@ -7151,6 +7151,7 @@ export default {
       account: '계정',
       workspace: '공간',
       modelsRuntime: '모델',
+      systemAdministration: '시스템 관리',
       dataExtensions: '데이터 및 확장',
       platform: '플랫폼'
     }

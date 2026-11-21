@@ -1,8 +1,10 @@
-<script setup lang="ts" generic="T extends { name: string }">
+<script setup lang="ts" generic="T extends { name: string; created_at?: string; updated_at?: string }">
 /** 企业资源目录外壳，沿用 WeKnora 的标题区、搜索工具栏和资源网格。 */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ResourceCatalogIcon from './ResourceCatalogIcon.vue'
+import ResourceSortControl from '@nexus-web/core/components/ResourceSortControl.vue'
+import { DEFAULT_RESOURCE_SORT, sortResourceItems } from '@nexus-web/core/utils/resourceSorting'
 
 const props = defineProps<{
   title: string
@@ -22,23 +24,13 @@ const props = defineProps<{
 }>()
 const query = defineModel<string>('query', { required: true })
 const emit = defineEmits<{ create: []; refresh: [] }>()
-const { t, locale } = useI18n()
-const sort = ref<'name-asc' | 'name-desc' | ''>('')
-const sortOptions = computed(() => [
-  { content: t('common.default'), value: '', active: !sort.value },
-  { content: t('resourceSort.nameAscending'), value: 'name-asc', active: sort.value === 'name-asc' },
-  { content: t('resourceSort.nameDescending'), value: 'name-desc', active: sort.value === 'name-desc' },
-])
-const sortLabel = computed(() => sort.value ? sortOptions.value.find(option => option.value === sort.value)?.content : undefined)
-const displayedItems = computed(() => {
-  if (!sort.value) return props.items
-  const direction = sort.value === 'name-asc' ? 1 : -1
-  const collator = new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' })
-  return [...props.items].sort((first, second) => direction * collator.compare(first.name, second.name))
-})
-function selectSort({ value }: { value?: unknown }) {
-  if (value === '' || value === 'name-asc' || value === 'name-desc') sort.value = value
-}
+const { t } = useI18n()
+const sort = ref(DEFAULT_RESOURCE_SORT)
+const displayedItems = computed(() => sortResourceItems(props.items, sort.value, {
+  getName: item => item.name,
+  getCreatedAt: item => item.created_at,
+  getUpdatedAt: item => item.updated_at,
+}))
 </script>
 
 <template>
@@ -48,13 +40,7 @@ function selectSort({ value }: { value?: unknown }) {
         <div class="title-row">
           <h2><ResourceCatalogIcon :kind="resource" :size="24" />{{ title }}</h2>
           <div v-if="allowed" class="header-actions">
-            <t-dropdown :options="sortOptions" trigger="click" placement="bottom-right" @click="selectSort">
-              <button type="button" class="header-action-btn" :aria-label="t('resourceSort.title')" aria-haspopup="true">
-                <t-icon name="filter-sort" size="16px" aria-hidden="true" />
-                <span>{{ t('resourceSort.title') }}<template v-if="sortLabel"> · {{ sortLabel }}</template></span>
-                <t-icon name="chevron-down" size="14px" aria-hidden="true" />
-              </button>
-            </t-dropdown>
+            <ResourceSortControl v-model="sort" />
             <t-button variant="text" theme="default" size="small" class="header-action-btn" :disabled="!ready || disabled" @click="emit('create')">
               <template #icon>
                 <t-icon v-if="resource === 'knowledge'" name="folder-add" size="16px" />

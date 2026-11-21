@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { useEnterpriseContext } from './stores/context'
 
+const toolboxPage = () => import('./views/tools/ToolboxPage.vue')
+
 /** 开发时员工应用使用同主机 5173 端口；生产部署保持同源路径并保留查询参数。 */
 function workspaceLocation(path = '/'): string {
   if (!import.meta.env.DEV) return path
@@ -35,12 +37,12 @@ const router = createRouter({
       { path: 'members', component: () => import('./views/members/MembersPage.vue'), props: () => ({ workspaceHref: workspaceLocation() }) },
       { path: 'roles', component: () => import('./views/roles/RolesPage.vue') },
       { path: 'settings', component: () => import('./views/SystemSettingsPage.vue') },
-      { path: 'skills', component: () => import('./views/skills/SkillsPage.vue') },
+      { path: 'skills', component: toolboxPage },
       { path: 'models', component: () => import('./views/models/ModelsPage.vue') },
       { path: 'usage', component: () => import('./views/usage/UsagePage.vue') },
       { path: 'runtime', component: () => import('./views/runtime/RuntimeHealthPage.vue') },
       { path: 'mcp-endpoints', component: () => import('./views/connections/EndpointsPage.vue') },
-      { path: 'mcp-services', component: () => import('./views/connections/McpServicesPage.vue') },
+      { path: 'mcp-services', component: toolboxPage },
       { path: 'parsers', component: () => import('./views/parsers/ParserPage.vue') },
       { path: 'storage', component: () => import('./views/storage/StoragePage.vue') },
       { path: 'vector-stores', component: () => import('./views/storage/VectorStoresPage.vue') },
@@ -50,7 +52,7 @@ const router = createRouter({
       { path: 'agents', component: () => import('./views/agents/AgentsPage.vue') },
       { path: 'channels', component: () => import('./views/agents/ChannelsPage.vue') },
       { path: 'skill-submissions', component: () => import('./views/skills/SkillSubmissionsPage.vue') },
-      { path: 'tools', component: () => import('./views/tools/ToolCatalogPage.vue') },
+      { path: 'tools', component: toolboxPage },
       { path: 'audit', component: () => import('./views/audit/AuditPage.vue') },
       { path: 'policy', component: () => import('./views/EnterprisePolicy.vue') },
     ] },

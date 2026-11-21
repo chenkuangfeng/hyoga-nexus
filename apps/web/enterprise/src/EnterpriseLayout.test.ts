@@ -24,13 +24,10 @@ function setup(t: Parameters<typeof fixture>[0], authenticated = true) {
 
 test('企业切换只接受成员列表中的企业，重新校准身份后再读取权限', async t => {
   const s = setup(t)
-  s.vm.toggleMenu('enterprise')
   await s.vm.switchTenant('unknown')
   assert.equal(s.auth.effectiveTenantId, 'a')
-  assert.equal(s.vm.expandedMenu, 'enterprise')
   await s.vm.switchTenant('b')
   assert.equal(s.auth.effectiveTenantId, 'b')
-  assert.equal(s.vm.expandedMenu, null)
   assert.equal(s.invalidations(), 1)
   assert.equal(s.loads(), 1)
   assert.deepEqual(s.paths, ['/'])

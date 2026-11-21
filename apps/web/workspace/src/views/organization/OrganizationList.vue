@@ -446,7 +446,7 @@ import SpaceAvatar from '@nexus-web/core/components/SpaceAvatar.vue'
 import ResourceCardAvatar from '@/components/ResourceCardAvatar.vue'
 import ResourceListToolbar from '@/components/ResourceListToolbar.vue'
 import { matchesResourceQuery } from '@/utils/resourceListSearch'
-import ResourceSortControl from '@/components/ResourceSortControl.vue'
+import ResourceSortControl from '@nexus-web/core/components/ResourceSortControl.vue'
 import { shouldShowOrgRelationTag } from '@/utils/card-list-badge'
 import {
   DEFAULT_RESOURCE_SORT,

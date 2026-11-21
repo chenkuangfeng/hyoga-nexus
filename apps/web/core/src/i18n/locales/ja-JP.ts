@@ -2864,6 +2864,7 @@ export default {
       account: 'アカウント',
       workspace: 'ワークスペース',
       modelsRuntime: 'モデル',
+      systemAdministration: 'システム管理',
       dataExtensions: 'データ・拡張',
       platform: 'プラットフォーム'
     },

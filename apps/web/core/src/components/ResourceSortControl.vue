@@ -37,7 +37,7 @@ import {
   getResourceSortOption,
   type ResourceSortOption,
   type ResourceSortValue,
-} from '@/utils/resourceSorting'
+} from '../utils/resourceSorting'
 
 const props = defineProps<{ modelValue: ResourceSortValue }>()
 const emit = defineEmits<{ 'update:modelValue': [value: ResourceSortValue] }>()

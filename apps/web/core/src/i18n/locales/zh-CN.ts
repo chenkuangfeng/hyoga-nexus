@@ -7258,6 +7258,7 @@ export default {
       account: '账户',
       workspace: '空间',
       modelsRuntime: '模型',
+      systemAdministration: '系统管理',
       dataExtensions: '数据与扩展',
       platform: '平台'
     }

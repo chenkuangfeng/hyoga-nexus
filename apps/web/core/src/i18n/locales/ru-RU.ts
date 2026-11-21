@@ -7151,6 +7151,7 @@ export default {
       account: 'Аккаунт',
       workspace: 'Пространство',
       modelsRuntime: 'Модели',
+      systemAdministration: 'Системное администрирование',
       dataExtensions: 'Данные и расширения',
       platform: 'Платформа'
     }
