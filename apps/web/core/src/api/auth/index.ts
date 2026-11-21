@@ -337,14 +337,31 @@ export interface AuthCapabilities {
   auto_accept_invitation: boolean
 }
 
-export async function getCurrentUser(): Promise<{ success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; memberships?: MembershipInfo[]; tenant_required?: boolean; capabilities?: AuthCapabilities; preference_defaults?: { browser_search_instructions: string } }; message?: string }> {
+interface CurrentUserResponse {
+  success: boolean
+  data?: {
+    user: UserInfo
+    tenant?: TenantInfo | null
+    memberships?: MembershipInfo[]
+    tenant_required?: boolean
+    capabilities?: AuthCapabilities
+    preference_defaults?: { browser_search_instructions: string }
+  }
+  message?: string
+  status?: number
+}
+
+/** 获取当前用户和已选空间，失败时保留 HTTP 状态供会话恢复逻辑使用。 */
+export async function getCurrentUser(): Promise<CurrentUserResponse> {
   try {
-    const response = await get('/api/v1/auth/me')
-    return response as unknown as { success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; memberships?: MembershipInfo[]; tenant_required?: boolean; capabilities?: AuthCapabilities; preference_defaults?: { browser_search_instructions: string } }; message?: string }
-  } catch (error: any) {
+    return await get<CurrentUserResponse>('/api/v1/auth/me')
+  } catch (error) {
+    const failure = typeof error === 'object' && error !== null ? error : {}
     return {
       success: false,
-      message: error.message || t('error.auth.getUserFailed')
+      message: 'message' in failure && typeof failure.message === 'string' && failure.message
+        ? failure.message : t('error.auth.getUserFailed'),
+      status: 'status' in failure && typeof failure.status === 'number' ? failure.status : undefined,
     }
   }
 }

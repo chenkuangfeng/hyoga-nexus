@@ -359,8 +359,15 @@ export const useAuthStore = defineStore('auth', () => {
   const authMeRequest = createSequencedRefresh<boolean>(async (isCurrent) => {
     try {
       const { getCurrentUser } = await import('@nexus-web/core/api/auth/index')
+      const requestedTenant = selectedTenantId.value
       const response = await getCurrentUser()
       if (!isCurrent()) return false
+      // 数据库重建或成员资格撤销后，旧空间仍可能保存在浏览器里。
+      // 只有当前选中的空间被明确拒绝时才清理会话，避免误清理刚切换的空间。
+      if (response.status === 404 && requestedTenant && requestedTenant === selectedTenantId.value) {
+        logout()
+        return false
+      }
       return applyAuthMeResponse(response)
     } catch {
       return false

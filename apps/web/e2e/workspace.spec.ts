@@ -53,6 +53,45 @@ function bootWorkspace(api: import('./fixtures').ApiMock) {
   })
 }
 
+test('数据库重建后清理旧空间缓存并重新完成开发登录', async ({ page, api }) => {
+  bootWorkspace(api)
+  const oldSpace = '09844aa5-952c-49e6-b97b-3adc37bbec05'
+  await page.addInitScript(spaceId => {
+    localStorage.setItem('weknora_user', JSON.stringify({ id: 'old-user', username: 'Owner' }))
+    localStorage.setItem('weknora_tenant', JSON.stringify({ id: spaceId, name: 'Acme' }))
+    localStorage.setItem('weknora_token', 'old-token')
+    localStorage.setItem('weknora_selected_tenant_id', spaceId)
+  }, oldSpace)
+
+  let staleLookups = 0
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/auth/me' && request.headers()['x-tenant-id'] === oldSpace) {
+      staleLookups++
+      return { status: 404, body: { error: { code: 'not_found', message: 'Tenant not found' } } }
+    }
+    if (path === '/api/v1/auth/config') {
+      return { body: { success: true, development_login: true } }
+    }
+    if (path === '/api/v1/auth/dev-session') {
+      expect(request.headers()['x-tenant-id']).toBeUndefined()
+      expect(request.headers().authorization).toBeUndefined()
+      const tenant = { id: 'a', name: 'Acme' }
+      return { body: {
+        success: true, token: 'new-token', tenant, active_tenant: tenant,
+        user: { id: 'u', username: 'Owner', email: 'owner@example.test', tenant_id: 'a' },
+        memberships: [{ tenant_id: 'a', tenant_name: 'Acme', role: 'owner', entries: ['workspace'] }],
+      } }
+    }
+  })
+
+  await page.goto('/platform/knowledge-bases')
+  await expect(page.locator('[data-guide^="nav-"]')).toHaveCount(3)
+  await expect(page).toHaveURL(/knowledge-bases$/)
+  expect(staleLookups).toBe(1)
+  expect(await page.evaluate(() => localStorage.getItem('weknora_selected_tenant_id'))).toBe('a')
+})
+
 test('员工主菜单仅三项，设置弹出且账户仅三项，旧工具地址不加载管理能力', async ({ page, api }) => {
   await api.signIn(); bootWorkspace(api)
   await page.goto('/platform/knowledge-bases')
