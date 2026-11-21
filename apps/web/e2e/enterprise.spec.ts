@@ -441,3 +441,81 @@ test('企业模型目录按类型和服务商筛选，并从卡片编辑与添�
   expect((await search.boundingBox())!.y).toBeGreaterThan((await typeTabs.boundingBox())!.y)
   await expect(page.locator('.model-card--add')).toBeInViewport()
 })
+
+test('企业服务商模板预填地址并清空密钥，编辑地址要求新密钥', async ({ page, api }) => {
+  await api.signIn()
+  const root = '/api/v1/tenants/a/admin/model-settings'
+  let provider: { id: string; name: string; base_url: string; scope: string; key_configured: boolean; key_mask: string; models: unknown[] } | undefined
+  const writes: unknown[] = []
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
+    if (path === root) return { body: { providers: provider ? [provider] : [], defaults: {}, can_manage_tenant: true } }
+    if (path === root + '/providers' && request.method() === 'POST' ||
+        path === root + '/providers/new' && request.method() === 'PUT') {
+      const input = request.postDataJSON()
+      writes.push(input)
+      provider = { id: 'new', name: input.name, base_url: input.base_url, scope: input.scope, key_configured: true, key_mask: '****', models: [] }
+      return { body: provider }
+    }
+  })
+
+  await page.setViewportSize({ width: 375, height: 900 })
+  await page.goto('models')
+  await page.getByRole('button', { name: '添加服务商', exact: true }).click()
+  const editor = page.locator('.setting-drawer .t-dialog:visible')
+  const save = editor.getByRole('button', { name: '保存并关闭' })
+  const template = editor.locator('.t-select')
+  const name = editor.getByLabel('服务商名称')
+  const address = editor.getByLabel('API 地址')
+  const key = editor.getByLabel('API Key')
+  await expect(editor.getByRole('heading', { name: '接入配置' })).toBeVisible()
+  await expect(save).toBeInViewport()
+  await save.click()
+  await expect(editor).toContainText('请输入服务商名称。')
+  await expect(editor).toContainText('请输入有效的 HTTP 或 HTTPS API 地址。')
+  expect(writes).toHaveLength(0)
+
+  const choose = async (label: string) => {
+    await template.click()
+    await page.locator('.t-select-option:visible').filter({ hasText: label }).click()
+  }
+  await choose('OpenAI')
+  await expect(name).toHaveValue('OpenAI')
+  await expect(address).toHaveValue('https://api.openai.com/v1')
+  await key.fill('example-key-for-openai')
+  await choose('DeepSeek')
+  await expect(address).toHaveValue('https://api.deepseek.com')
+  await expect(key).toHaveValue('')
+  await choose('自定义')
+  await expect(name).toHaveValue('')
+  await expect(address).toHaveValue('')
+
+  await choose('DeepSeek')
+  await name.fill('Enterprise Gateway')
+  await address.fill('https://gateway.example.test/v1')
+  await key.fill('example-gateway-key')
+  await save.click()
+  await expect(editor).toHaveCount(0)
+  expect(writes).toEqual([{
+    name: 'Enterprise Gateway', base_url: 'https://gateway.example.test/v1', api_key: 'example-gateway-key', scope: 'tenant',
+  }])
+
+  await page.getByRole('button', { name: '服务商', exact: true }).click()
+  await page.getByRole('button', { name: 'Enterprise Gateway · 编辑服务商' }).click()
+  await expect(editor).toContainText('编辑企业模型服务商')
+  await expect(template).toHaveCount(0)
+  await expect(name).toHaveValue('Enterprise Gateway')
+  await expect(address).toHaveValue('https://gateway.example.test/v1')
+  await expect(key).toHaveValue('')
+  await address.fill('https://another.example.test/v1')
+  await save.click()
+  await expect(editor).toContainText('修改 API 地址需要重新填写 API Key。')
+  expect(writes).toHaveLength(1)
+  await key.fill('example-new-key')
+  await save.click()
+  await expect(editor).toHaveCount(0)
+  expect(writes[1]).toEqual({
+    name: 'Enterprise Gateway', base_url: 'https://another.example.test/v1', api_key: 'example-new-key', scope: 'tenant',
+  })
+})

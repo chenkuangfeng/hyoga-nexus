@@ -176,6 +176,7 @@ export default {
     scopeHint: 'Only shared enterprise models are shown. Member personal models are not read or changed. API keys are sent only when submitted and are never displayed in full.',
     loadFailed: 'Could not load enterprise models. Try again.', saveFailed: 'Could not save the model configuration. Check the fields and retry.', deleteFailed: 'Could not disable the model configuration. Try again.',
     addProvider: 'Add provider', editProvider: 'Edit provider', addProviderTitle: 'Add enterprise model provider', editProviderTitle: 'Edit enterprise model provider',
+    providerTemplate: 'プロバイダーテンプレート', providerNameRequired: 'プロバイダー名を入力してください。', providerAddressInvalid: '有効な HTTP または HTTPS の API アドレスを入力してください。',
     providerName: 'Provider name', baseUrl: 'API address', apiKey: 'API key', keyRequired: 'Enter API key', keyKeepHint: 'Leave blank to keep the current key', keyWriteOnly: 'The key is encrypted on the server. Changing the API address requires a replacement key.',
     providerRequired: 'Enter the provider name, API address and required API key.', keyRequiredForAddressChange: 'Changing the API address requires a replacement API key.', providerSaved: 'Enterprise provider saved.', keyConfigured: 'Configured key:', disable: 'Disable',
     deleteProviderTitle: 'Disable enterprise provider', deleteProviderConfirm: 'Disabling “{name}” revokes its credential, clears related defaults and prevents agents from using its models. Historical runs are retained. Continue?',

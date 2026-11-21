@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import UsagePage from '../usage/UsagePage.vue'
 import ModelActions from './ModelActions.vue'
+import ModelProviderEditor from './ModelProviderEditor.vue'
 import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 /** 企业模型目录：只管理当前企业共享 Provider、模型版本和租户默认值。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -12,7 +13,7 @@ import {
   saveEnterpriseModelProvider, setEnterpriseModelDefault, testEnterpriseModel,
   enterpriseModelProtocol, type EnterpriseModelConnectionResult, type EnterpriseModelInput,
   type EnterpriseModelProvider, type EnterpriseModelProfile, type EnterpriseModelProtocol, type EnterpriseModelSettings,
-  type EnterpriseModelType,
+  type EnterpriseModelType, type EnterpriseProviderInput,
 } from '@nexus-web/core/api/enterprise-models'
 import { useEnterpriseContext } from '../../stores/context'
 
@@ -26,8 +27,8 @@ const typeIcons: Record<EnterpriseModelType | 'all', string> = {
   all: 'view-module', chat: 'chat', embedding: 'chart-bubble', rerank: 'filter-sort', vision: 'image', speech: 'sound',
 }
 const defaultsDraft = ref<Partial<Record<EnterpriseModelType, string>>>({})
-const providerDialog = ref(false), providerEditId = ref<string | null>(null)
-const providerForm = ref({ name: '', baseUrl: '', apiKey: '' })
+const providerDialog = ref(false), providerError = ref('')
+const editingProvider = ref<EnterpriseModelProvider | null>(null)
 const modelDialog = ref(false), modelProviderId = ref<string | null>(null), modelEditId = ref<string | null>(null)
 const modelForm = ref({ name: '', type: 'chat' as EnterpriseModelType, protocol: 'openai_chat_completions' as EnterpriseModelProtocol, temperature: null as number | null, reasoningEffort: '' })
 const connections = ref<Record<string, EnterpriseModelConnectionResult>>({}), testingId = ref('')
@@ -58,7 +59,7 @@ function currentScope(current: number, scope: string, user: string) {
   return current === epoch && scope === tenant.value && user === String(auth.user?.id || '') && canManage.value
 }
 function clearForms() {
-  providerDialog.value = false; providerEditId.value = null; providerForm.value = { name: '', baseUrl: '', apiKey: '' }
+  closeProvider()
   modelDialog.value = false; modelProviderId.value = null; modelEditId.value = null
   modelForm.value = { name: '', type: 'chat', protocol: 'openai_chat_completions', temperature: null, reasoningEffort: '' }
   connections.value = {}; testingId.value = ''
@@ -82,26 +83,27 @@ async function load(refreshAfterWrite = false) {
 }
 function openProvider(row?: EnterpriseModelProvider) {
   if (!canManage.value || !ready.value || busy.value) return
-  providerEditId.value = row?.id || null
-  providerForm.value = { name: row?.name || '', baseUrl: row?.base_url || '', apiKey: '' }
-  providerDialog.value = true; error.value = ''
+  editingProvider.value = row ?? null
+  providerError.value = ''
+  providerDialog.value = true
+  error.value = ''
 }
-async function saveProvider() {
-  if (!tenant.value || busy.value) return
-  const name = providerForm.value.name.trim(), baseUrl = providerForm.value.baseUrl.trim(), apiKey = providerForm.value.apiKey
-  if (!name || !baseUrl || (!providerEditId.value && !apiKey.trim())) { error.value = t('adminModels.providerRequired'); return }
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = providerEditId.value
-  if (id) {
-    const existing = providers.value.find(row => row.id === id)
-    if (existing && existing.base_url !== baseUrl && !apiKey.trim()) { error.value = t('adminModels.keyRequiredForAddressChange'); return }
-  }
-  busy.value = true; error.value = ''
+function closeProvider() {
+  providerDialog.value = false
+  editingProvider.value = null
+  providerError.value = ''
+}
+async function saveProvider(input: Omit<EnterpriseProviderInput, 'scope'>) {
+  if (!tenant.value || !canManage.value || !ready.value || !providerDialog.value || busy.value) return
+  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = editingProvider.value?.id
+  busy.value = true
+  providerError.value = ''
   try {
-    await saveEnterpriseModelProvider(scope, { name, base_url: baseUrl, scope: 'tenant', ...(apiKey ? { api_key: apiKey } : {}) }, id || undefined)
+    await saveEnterpriseModelProvider(scope, { ...input, scope: 'tenant' }, id)
     if (!currentScope(current, scope, user)) return
     clearForms(); void MessagePlugin.success(t('adminModels.providerSaved'))
     await load(true)
-  } catch { if (currentScope(current, scope, user)) error.value = t('adminModels.saveFailed') }
+  } catch { if (currentScope(current, scope, user)) providerError.value = t('adminModels.saveFailed') }
   finally { if (currentScope(current, scope, user)) busy.value = false }
 }
 /** 新增时可选企业服务商，编辑时继续使用原服务商和模型类型。 */
@@ -329,15 +331,8 @@ onBeforeUnmount(invalidate)
         </t-loading>
       </template>
     </template>
-    <EditorDialog :visible="providerDialog" :header="t(providerEditId ? 'adminModels.editProviderTitle' : 'adminModels.addProviderTitle')" width="min(560px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveProvider" @close="!busy && (providerDialog = false)">
-      <div class="editor-form">
-        <t-alert v-if="error" theme="error" :message="error" />
-        <label>{{ t('adminModels.providerName') }}<t-input v-model="providerForm.name" maxlength="160" /></label>
-        <label>{{ t('adminModels.baseUrl') }}<t-input v-model="providerForm.baseUrl" maxlength="512" /></label>
-        <label>{{ t('adminModels.apiKey') }}<t-input v-model="providerForm.apiKey" type="password" autocomplete="new-password" :placeholder="t(providerEditId ? 'adminModels.keyKeepHint' : 'adminModels.keyRequired')" /></label>
-        <p class="field-hint">{{ t('adminModels.keyWriteOnly') }}</p>
-      </div>
-    </EditorDialog>
+    <ModelProviderEditor :visible="providerDialog" :provider="editingProvider" :busy="busy" :error="providerError"
+      @save="saveProvider" @close="closeProvider" />
     <EditorDialog :visible="modelDialog" :header="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" width="min(600px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy || !modelProviderId }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveModel" @close="!busy && (modelDialog = false)">
       <div class="editor-form">
         <t-alert v-if="error" theme="error" :message="error" />

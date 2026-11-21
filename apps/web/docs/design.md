@@ -253,6 +253,7 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 | 企业智能体与知识库目录 | views/agent/AgentList.vue、views/knowledge/KnowledgeBaseList.vue、components/ResourceListToolbar.vue、components/css/resource-card.less | `ResourceManagementDirectory` 沿用标题同行操作、左侧目录范围与右侧搜索、20px/28px 内容留白、260px 最小卡宽及 10px 间距。名称排序在当前已加载目录执行，范围及数量来自企业接口。`ResourceDirectoryCard` 保留类型图标、右上更多操作与底部指标，企业管理动作沿用现有授权 |
 | 企业知识库内容 | views/knowledge/KnowledgeBase.vue | 使用面包屑、可管理知识库切换及内容工具栏。文档、问答和 Wiki 继续使用 Nexus 的内容表格、分页及编辑交互 |
 | ModelsPage | views/settings/ModelSettings.vue | 默认显示全部模型，类型标签带计数，搜索匹配模型或服务商名称。紧凑网格以添加卡片收尾，新增时选择企业服务商并预填当前类型。模型卡片可直接编辑，连接测试和停用使用现有企业接口。服务商操作在标题区，企业默认模型和用量各自使用独立标签页。 |
+| ModelProviderEditor | components/ModelEditorDialog.vue、components/settings/SettingDrawer.vue | 企业服务商沿用接入配置区、密码输入框和底部保存操作。常用模板只预填名称和可编辑的 API 地址，切换模板时清空密钥。自定义和编辑均使用企业服务商接口，修改已保存的地址要求重新填写密钥。 |
 | SkillsPage | views/settings/SkillSettings.vue | 保留技能卡片、版本和安装入口；采用 Nexus 版本扫描/安装及企业投稿审核，不提供员工私有技能管理 |
 | NexusToolboxMcp | views/settings/McpSettings.vue | 保留服务卡片、搜索及编辑入口；现有逐工具授权、风险、审批与发现规则保持不变 |
 | EndpointsPage | views/integrations/McpServerIntegrationSettings.vue、components/css/channel-panel-list.less | 保留发布卡片及操作菜单；签发、轮换、撤销及一次性令牌使用 Nexus 契约 |

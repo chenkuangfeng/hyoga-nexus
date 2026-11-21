@@ -178,6 +178,7 @@ export default {
     saveFailed: '模型配置保存失败，请检查字段后重试。',
     deleteFailed: '停用模型配置失败，请重试。',
     addProvider: '添加服务商', editProvider: '编辑服务商', addProviderTitle: '添加企业模型服务商', editProviderTitle: '编辑企业模型服务商',
+    providerTemplate: '服务商模板', providerNameRequired: '请输入服务商名称。', providerAddressInvalid: '请输入有效的 HTTP 或 HTTPS API 地址。',
     providerName: '服务商名称', baseUrl: 'API 地址', apiKey: 'API Key', keyRequired: '请输入 API Key', keyKeepHint: '留空表示保留当前 Key', keyWriteOnly: 'Key 加密保存在服务端；修改 API 地址时必须重新填写 Key。',
     providerRequired: '请填写服务商名称、API 地址和必需的 API Key。', keyRequiredForAddressChange: '修改 API 地址需要重新填写 API Key。',
     providerSaved: '企业模型服务商已保存。', keyConfigured: '已配置密钥：', disable: '停用',

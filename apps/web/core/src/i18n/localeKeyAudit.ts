@@ -256,7 +256,7 @@ let cachedSourceFiles: string[] | undefined
 
 function getSourceFiles(rootDir = SOURCE_ROOT): string[] {
   if (!cachedSourceFiles) cachedSourceFiles = rootDir === SOURCE_ROOT
-    ? ['core', 'workspace', 'admin'].flatMap(name => listSourceFiles(join(SOURCE_ROOT, '../../', name, 'src')))
+    ? ['core', 'workspace', 'enterprise'].flatMap(name => listSourceFiles(join(SOURCE_ROOT, '../../', name, 'src')))
     : listSourceFiles(rootDir)
   return cachedSourceFiles
 }
