@@ -43,6 +43,7 @@ const router = createRouter({
       { path: 'runtime', component: () => import('./views/runtime/RuntimeHealthPage.vue') },
       { path: 'mcp-endpoints', component: () => import('./views/connections/EndpointsPage.vue') },
       { path: 'mcp-services', component: toolboxPage },
+      { path: 'sandbox', component: () => import('./views/storage/SandboxPage.vue') },
       { path: 'parsers', component: () => import('./views/parsers/ParserPage.vue') },
       { path: 'storage', component: () => import('./views/storage/StoragePage.vue') },
       { path: 'vector-stores', component: () => import('./views/storage/VectorStoresPage.vue') },

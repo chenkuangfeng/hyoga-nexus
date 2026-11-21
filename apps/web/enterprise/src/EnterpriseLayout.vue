@@ -58,7 +58,7 @@ const navGroups = computed(() => auth.currentEntries.includes('enterprise')
 const choices = computed(() => auth.memberships.map(row => ({ label: row.tenant_name || t('adminConsole.unnamedEnterprise'), value: String(row.tenant_id) })))
 /** 详情页沿用业务入口的高亮，例如知识库内容仍属于知识库管理。 */
 function isCurrentItem(path: string, currentPath: string): boolean {
-  if (path === '/skills' && ['/tools', '/mcp-services'].includes(currentPath)) return true
+  if (path === '/tools' && ['/skills', '/mcp-services'].includes(currentPath)) return true
   return currentPath === path || currentPath.startsWith(`${path}/`)
 }
 

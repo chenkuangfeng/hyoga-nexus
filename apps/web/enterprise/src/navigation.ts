@@ -1,37 +1,35 @@
-/** 管理导航沿用 WeKnora Settings.vue 分组和资源入口，链接按 Nexus 企业权限过滤。 */
+/** 企业侧栏六组固定顺序。链接可见性由当前企业权限决定。 */
 export interface AdminNavigationItem { path: string; label: string; icon: string; permission?: string; roles?: string[] }
 export interface AdminNavigationGroup { key: string; label: string; items: AdminNavigationItem[] }
 const groups: AdminNavigationGroup[] = [
-  { key: 'resources', label: '', items: [
-    { path: '/knowledge', label: 'consoleLayout.knowledgeManagement', icon: 'folder', permission: 'enterprise_kbs:manage' },
-    { path: '/agents', label: 'consoleLayout.agentManagement', icon: 'app', permission: 'enterprise_agents:manage' },
-    { path: '/skills', label: 'consoleLayout.toolbox', icon: 'tools', permission: 'tools:manage' },
-  ] },
-  { key: 'account', label: 'settings.navGroups.account', items: [
-    { path: '/settings', label: 'consoleLayout.settings', icon: 'setting' },
+  { key: 'configuration', label: 'enterpriseNav.configuration', items: [
+    { path: '/models', label: 'consoleLayout.models', icon: 'control-platform', permission: 'models:manage' },
+    { path: '/knowledge', label: 'consoleLayout.knowledge', icon: 'folder', permission: 'enterprise_kbs:manage' },
+    { path: '/tools', label: 'enterpriseNav.tools', icon: 'tools', permission: 'tools:manage' },
+    { path: '/agents', label: 'consoleLayout.agents', icon: 'app', permission: 'enterprise_agents:manage' },
   ] },
   { key: 'workspace', label: 'settings.navGroups.workspace', items: [
     { path: '/enterprise', label: 'consoleLayout.space', icon: 'user-circle', roles: ['owner', 'admin'] },
-    { path: '/members', label: 'consoleLayout.members', icon: 'usergroup', permission: 'members:manage' },
-    { path: '/organization', label: 'enterpriseLayout.enterpriseOrganization', icon: 'view-organization', permission: 'org:manage' },
-    { path: '/roles', label: 'consoleLayout.roles', icon: 'user-safety', permission: 'roles:manage' },
     { path: '/policy', label: 'consoleLayout.policy', icon: 'setting', permission: 'policy:manage' },
   ] },
-  { key: 'models_runtime', label: 'settings.navGroups.modelsRuntime', items: [
-    { path: '/models', label: 'consoleLayout.modelManagement', icon: 'control-platform', permission: 'models:manage' },
-  ] },
   { key: 'integrations', label: 'integrations.title', items: [
+    { path: '/mcp-endpoints', label: 'enterpriseNav.mcp', icon: 'tools', permission: 'tools:manage' },
     { path: '/channels', label: 'integrations.tabs.im', icon: 'chat-message', permission: 'enterprise_agents:manage' },
-    { path: '/mcp-endpoints', label: 'consoleLayout.mcpPublish', icon: 'tools', permission: 'tools:manage' },
-    { path: '/wecom', label: 'adminWecom.title', icon: 'link', permission: 'org:manage' },
   ] },
   { key: 'data_extensions', label: 'settings.navGroups.dataExtensions', items: [
-    { path: '/vector-stores', label: 'settings.vectorStoreEngine', icon: 'data-base', permission: 'enterprise_kbs:manage' },
+    { path: '/vector-stores', label: 'enterpriseNav.vector', icon: 'data-base', permission: 'enterprise_kbs:manage' },
     { path: '/parsers', label: 'settings.parserEngine', icon: 'file-search', roles: ['owner', 'admin'] },
     { path: '/storage', label: 'settings.storageEngine', icon: 'cloud', permission: 'enterprise_kbs:manage' },
+    { path: '/sandbox', label: 'enterpriseNav.sandbox', icon: 'code', roles: ['owner', 'admin'] },
     { path: '/graph-stores', label: 'consoleLayout.graph', icon: 'chart-bubble', permission: 'enterprise_kbs:manage' },
   ] },
-  { key: 'system_administration', label: 'settings.navGroups.systemAdministration', items: [
+  { key: 'permissions', label: 'consoleLayout.permissions', items: [
+    { path: '/organization', label: 'enterpriseLayout.enterpriseOrganization', icon: 'view-organization', permission: 'org:manage' },
+    { path: '/members', label: 'enterpriseNav.users', icon: 'usergroup', permission: 'members:manage' },
+    { path: '/roles', label: 'enterpriseNav.roles', icon: 'user-safety', permission: 'roles:manage' },
+  ] },
+  { key: 'system', label: 'consoleLayout.system', items: [
+    { path: '/settings', label: 'consoleLayout.settings', icon: 'setting' },
     { path: '/runtime', label: 'adminRuntime.title', icon: 'queue', roles: ['owner', 'admin'] },
     { path: '/audit', label: 'adminAudit.title', icon: 'history', permission: 'audit:read' },
   ] },

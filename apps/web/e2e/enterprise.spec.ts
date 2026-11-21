@@ -45,10 +45,15 @@ test('WeKnora 分组下的链接直接可用，图标侧栏保留键盘访问', 
     ? { body: { apis: ['org:manage', 'members:manage', 'roles:manage', 'models:manage', 'tools:manage', 'enterprise_kbs:manage', 'enterprise_agents:manage', 'audit:read', 'policy:manage'] } } : undefined)
   await page.goto('')
   const navigation = page.locator('#enterprise-navigation')
-  await expect(navigation.locator('.nav-group-title')).toHaveText(['账户', '空间', '模型', '发布集成', '数据与扩展', '系统管理'])
-  await expect(navigation.locator('.nav-group').first().getByRole('link')).toHaveText(['知识库管理', '智能体管理', '工具箱'])
-  const integration = navigation.locator('.nav-group').filter({ has: page.getByText('发布集成', { exact: true }) })
-  await expect(integration.getByRole('link')).toHaveText(['IM 集成', 'MCP服务发布', '企业微信'])
+  await expect(navigation.locator('.nav-group-title')).toHaveText(['配置', '空间', '发布集成', '数据与扩展', '权限', '系统'])
+  const expected = [
+    ['模型', '知识库', '工具', '智能体'], ['企业空间', '企业策略'], ['MCP服务', 'IM 集成'],
+    ['向量引擎', '解析引擎', '存储引擎', '沙箱引擎', '知识图谱'],
+    ['企业组织', '用户', '角色'], ['系统设置', '运行状况', '审计日志'],
+  ]
+  for (const [index, links] of expected.entries()) {
+    await expect(navigation.locator('.nav-group').nth(index).getByRole('link')).toHaveText(links)
+  }
   const settings = navigation.getByRole('link', { name: '系统设置', exact: true })
   await expect(settings).toHaveClass(/\bactive\b/)
   await page.screenshot({ path: testInfo.outputPath('grouped-navigation.png') })
@@ -162,13 +167,13 @@ test('系统设置保存编辑展示偏好，抽屉与替换路由保持同一�
     await page.locator('.t-select-option:visible').filter({ hasText: label }).click()
   }
   await selectMode('抽屉')
-  await navigation.getByRole('link', { name: '模型管理', exact: true }).click()
+  await navigation.getByRole('link', { name: '模型', exact: true }).click()
   await page.locator('.model-header-actions').getByRole('button', { name: '添加模型', exact: true }).click()
   await expect(page.locator('.t-drawer--open')).toBeVisible()
   await page.locator('.t-drawer--open .t-drawer__close-btn').click()
   await navigation.getByRole('link', { name: '系统设置', exact: true }).click()
   await selectMode('替换路由')
-  await navigation.getByRole('link', { name: '模型管理', exact: true }).click()
+  await navigation.getByRole('link', { name: '模型', exact: true }).click()
   await page.locator('.model-header-actions').getByRole('button', { name: '添加模型', exact: true }).click()
   await expect(page).toHaveURL(/models\?editor=edit-[^&]+$/)
   await expect(page.locator('.editor-dialog-route:visible')).toBeVisible()
@@ -192,6 +197,7 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
     if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb1/documents') return { body: { items: [], total: 0 } }
     if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb2/faq/entries') return { body: { items: [], total: 0 } }
     if (path === '/api/v1/tenants/a/admin/agents') return { body: [{ id: 'agent1', tenant_id: 'a', ownership: 'enterprise', can_maintain: true, name: 'Agent reference', description: 'Agent content', status: 'draft', runtime_type: 'native', instructions: '', published_version_id: null, model_profile_version_id: null, version_counter: 0, budgets: {}, resource_bindings: [], created_at: '2026-11-18', updated_at: '2026-11-18' }] }
+    if (path === '/api/v1/tenants/a/admin/agent-tools') return { body: { tools: [], groups: [], default_tools: [], can_enable_tools: true } }
     if (path === '/api/v1/tenants/a/skills') return { body: [{ name: 'Skill reference', source: 'builtin', scope: 'builtin', source_tenant_id: 'a', version: 1, version_id: 'v1', tools: [], execution: 'sandbox', model_invocable: true, description: 'Skill content', disabled: false }] }
     if (path === '/api/v1/tenants/a/mcp-services') return { body: [{ id: 'm1', tenant_id: 'a', name: 'MCP reference', description: 'MCP content', transport: 'streamable_http', config: { url: 'https://mcp.example.test' }, enabled: true, config_epoch: 'e1', created_by: 'u', created_at: '2026-11-18', updated_at: '2026-11-18' }] }
   })
@@ -228,7 +234,7 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
     await page.getByRole('button', { name: '展开侧边栏' }).click()
   }
   await breadcrumb.getByRole('link', { name: '知识库管理' }).click()
-  await navigation.getByRole('link', { name: '智能体管理' }).click()
+  await navigation.getByRole('link', { name: '智能体', exact: true }).click()
   await expect(page).toHaveURL(/\/enterprise\/agents$/)
   const agentCard = cards.filter({ hasText: 'Agent reference' })
   await expect(agentCard).toBeVisible()
@@ -239,11 +245,12 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
   const archive = page.getByText('归档', { exact: true })
   await expect(archive).toBeVisible()
   await page.locator('.header h2').click()
-  await navigation.getByRole('link', { name: '工具箱', exact: true }).click()
+  await navigation.getByRole('link', { name: '工具', exact: true }).click()
+  await page.locator('.toolbox-tabs').getByRole('link', { name: '技能管理' }).click()
   await expect(page.locator('.skill-card')).toContainText('Skill reference')
   await page.locator('.toolbox-tabs').getByRole('link', { name: 'MCP服务注册' }).click()
   await expect(page.locator('.service-card')).toContainText('MCP reference')
-  await expect(navigation.getByRole('link', { name: 'MCP服务发布' })).toHaveAttribute('href', /mcp-endpoints$/)
+  await expect(navigation.getByRole('link', { name: 'MCP服务', exact: true })).toHaveAttribute('href', /mcp-endpoints$/)
   await page.screenshot({ path: testInfo.outputPath('mcp-reference-cards.png') })
   await expectResponsive(page)
 })
@@ -563,7 +570,7 @@ test('IM 集成从发布集成进入并绑定已登记的企业微信应用', as
     if (path === root + '/me/permissions') return { body: { apis: ['org:manage', 'enterprise_agents:manage'] } }
     if (path === root + '/admin/agents') return { body: [
       { id: 'agent', tenant_id: 'a', name: '客服智能体', ownership: 'enterprise', can_maintain: true, status: 'published' },
-      { id: 'personal', tenant_id: 'a', name: '个人智能体', ownership: 'personal', can_maintain: true, status: 'published' },
+      { id: 'personal', tenant_id: 'a', name: '个人智能体', ownership: 'personal', can_maintain: false, status: 'published' },
     ] }
     if (path === root + '/admin/channels') return { body: { items: writes.length ? [row] : [] } }
     if (path === root + '/admin/wecom') return { body: { apps: [{ id: 'app', name: '微信应用', purpose: 'agent', nexus_agent_id: 'agent', status: 'active' }] } }
@@ -582,6 +589,13 @@ test('IM 集成从发布集成进入并绑定已登记的企业微信应用', as
   await expect(page.locator('.t-select-option:visible').filter({ hasText: '个人智能体' })).toHaveCount(0)
   await page.locator('.t-select-option:visible').filter({ hasText: '客服智能体' }).click()
   await drawer.getByRole('textbox', { name: '渠道名称' }).fill('企业客服')
+  await expect(drawer.locator('.im-step')).toHaveText(['1基本信息', '2连接设置', '3文件存储', '4平台凭证'])
+  const next = drawer.getByRole('button', { name: '下一步', exact: true })
+  await next.click()
+  await expect(drawer.getByText('Webhook', { exact: true })).toBeVisible()
+  await next.click()
+  await expect(drawer.getByText('渠道使用所选智能体的知识库配置。')).toBeVisible()
+  await next.click()
   await select.last().click()
   await page.locator('.t-select-option:visible').filter({ hasText: '微信应用' }).click()
   await drawer.getByRole('button', { name: '保存', exact: true }).click()
@@ -614,4 +628,57 @@ test('MCP 发布从新增卡片保存端点并展示一次性配置', async ({ p
   await expect(page.locator('.token-snippet')).toContainText('one-time-mock-token')
   await expect(page.locator('.channel-card__title').filter({ hasText: 'new-endpoint' })).toBeVisible()
   expect(writes).toEqual([{ name: 'new-endpoint', description: '', tool_allowlist: [], kb_ids: [] }])
+})
+
+test('IM 微信渠道按企业策略接入并生成绑定二维码', async ({ page, api }) => {
+  await api.signIn()
+  const root = '/api/v1/tenants/a'
+  const row = { id: 'wechat', name: '微信', agent_id: 'personal', kind: 'wechat', status: 'binding', owner_user_id: 'u', bound: false, review_note: null }
+  const writes: unknown[] = []
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === root + '/me/permissions') return { body: { apis: ['enterprise_agents:manage'] } }
+    if (path === root + '/admin/agents') return { body: [
+      { id: 'personal', tenant_id: 'a', name: '个人智能体', ownership: 'personal', can_maintain: true, status: 'published' },
+    ] }
+    if (path === root + '/admin/channels') return { body: { items: writes.length ? [row] : [] } }
+    if (path === root + '/admin/policy') return { body: { personal_external_channels: true } }
+    if (path === root + '/agents/personal/channels' && request.method() === 'POST') {
+      writes.push(request.postDataJSON())
+      return { body: row }
+    }
+    if (path === root + '/channels/wechat/wechat/qr') return { body: { qrcode_url: 'https://example.test/mock-binding' } }
+    if (path === root + '/channels/wechat/wechat/status') return { body: { status: 'wait' } }
+  })
+  await page.goto('channels')
+  await page.locator('.channel-card--add').click()
+  const drawer = page.locator('.setting-drawer:visible')
+  await drawer.locator('.t-select').first().click()
+  await page.locator('.t-select-option:visible').filter({ hasText: '个人智能体' }).click()
+  await expect(drawer.locator('.t-select').last().locator('input')).toHaveValue('微信')
+  const next = drawer.getByRole('button', { name: '下一步', exact: true })
+  for (let step = 0; step < 3; step++) await next.click()
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.locator('.t-qrcode')).toBeVisible()
+  expect(writes).toEqual([{ kind: 'wechat', name: '微信' }])
+})
+
+test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page, api }) => {
+  await api.signIn()
+  api.handle(request => {
+    if (new URL(request.url()).pathname !== '/api/v1/tenants/a/agent-tools') return
+    return { body: { tools: [], groups: [], default_tools: [], can_enable_tools: true, sandbox_profiles: [
+      { name: 'isolated', type: 'docker', default: true, available: true, reason: '' },
+      { name: 'pending', type: 'bwrap', default: false, available: false, reason: 'sandbox_not_accepted' },
+    ] } }
+  })
+  await page.goto('settings')
+  await page.locator('#enterprise-navigation').getByRole('link', { name: '沙箱引擎' }).click()
+  await expect(page.locator('.sandbox-card')).toHaveCount(2)
+  await expect(page.locator('.sandbox-card').filter({ hasText: 'pending' })).toContainText('尚未通过隔离验收')
+  await page.locator('.sandbox-type-tabs').getByText('Docker 1', { exact: true }).click()
+  await expect(page.locator('.sandbox-card')).toContainText('isolated')
+  await page.getByRole('textbox', { name: '搜索' }).fill('not-matching')
+  await expect(page.locator('.sandbox-card')).toHaveCount(0)
+  await expectResponsive(page)
 })
