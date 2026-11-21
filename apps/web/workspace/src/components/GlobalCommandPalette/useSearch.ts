@@ -1,4 +1,4 @@
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { knowledgeSemanticSearch } from '@nexus-web/core/api/knowledge-base/index'
 import { searchMessages, type MessageSearchGroupItem } from '@nexus-web/core/api/chat-history'
 import { useOrganizationStore } from '@nexus-web/core/stores/organization'
@@ -347,16 +347,6 @@ export function useCmdkSearch(options: {
       const seq = ++requestSeq
       runSearch(trimmed, seq)
     }, debounceMs)
-  })
-
-  onMounted(() => {
-    // Preload KB and agent lists so name matches show up instantly on first
-    // keystroke. Sessions come from the menuStore (already populated by the
-    // sidebar) so no extra fetch needed here.
-    ensureKbs()
-    if (options.agentsEnabled?.() !== false) {
-      ensureAgents()
-    }
   })
 
   return {

@@ -1179,12 +1179,12 @@ watch(() => kbId.value, (newKbId, oldKbId) => {
   loadKnowledgeBaseInfo(newKbId);
 }, { immediate: true });
 
-watch(selectedTagIds, (newVal, oldVal) => {
-  if (oldVal === undefined) return;
+// 初始化详情时会重置标签数组，筛选条件相同无需再次加载文档。
+watch(() => selectedTagIds.value.join(','), () => {
   if (kbId.value) {
     loadKnowledgeFiles(kbId.value);
   }
-}, { deep: true });
+});
 
 watch(tagSearchQuery, (newVal, oldVal) => {
   if (newVal === oldVal) return;

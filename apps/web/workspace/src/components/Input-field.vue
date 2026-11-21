@@ -266,26 +266,6 @@ watch([selectedAgentId, agentKnowledgeBases, agentKBSelectionMode], ([newAgentId
   }
 }, { immediate: true });
 
-// 共享智能体时预取该智能体知识库列表，使已选标签在未打开 @ 时也能显示共享空间角标
-watch([selectedAgentId, () => settingsStore.selectedAgentSourceTenantId], async ([agentId, sourceTenantId]) => {
-  if (!props.nexusMode && sourceTenantId && agentId) {
-    try {
-      const list = await chatResources.ensureAgentKnowledgeBases(agentId, sourceTenantId);
-      sharedAgentKbList.value = list.map((kb: any) => ({
-        id: kb.id,
-        name: kb.name,
-        type: kb.type || 'document',
-        knowledge_count: kb.knowledge_count,
-        chunk_count: kb.chunk_count
-      }));
-    } catch {
-      sharedAgentKbList.value = [];
-    }
-  } else {
-    sharedAgentKbList.value = [];
-  }
-}, { immediate: true });
-
 // 智能体是否启用了网络搜索（仅显式开启才算支持）
 const isWebSearchEnabledByAgent = computed(() => {
   if (!hasAgentConfig.value) return null;
@@ -588,6 +568,26 @@ const props = defineProps({
     default: false
   }
 });
+
+// 共享智能体时预取该智能体知识库列表，使已选标签在未打开 @ 时也能显示共享空间角标
+watch([selectedAgentId, () => settingsStore.selectedAgentSourceTenantId], async ([agentId, sourceTenantId]) => {
+  if (!props.nexusMode && sourceTenantId && agentId) {
+    try {
+      const list = await chatResources.ensureAgentKnowledgeBases(agentId, sourceTenantId);
+      sharedAgentKbList.value = list.map((kb: any) => ({
+        id: kb.id,
+        name: kb.name,
+        type: kb.type || 'document',
+        knowledge_count: kb.knowledge_count,
+        chunk_count: kb.chunk_count
+      }));
+    } catch {
+      sharedAgentKbList.value = [];
+    }
+  } else {
+    sharedAgentKbList.value = [];
+  }
+}, { immediate: true });
 
 const isAgentEnabled = computed(() => settingsStore.isAgentEnabled);
 const isWebSearchEnabled = computed(() => settingsStore.isWebSearchEnabled);

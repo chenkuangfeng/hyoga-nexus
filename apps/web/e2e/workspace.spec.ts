@@ -54,6 +54,61 @@ function bootWorkspace(api: import('./fixtures').ApiMock) {
   })
 }
 
+test('对话输入框正常初始化，打开命令面板可加载知识库', async ({ page, api }) => {
+  await api.signIn()
+  bootWorkspace(api)
+  const vueErrors: string[] = []
+  page.on('console', message => {
+    if (message.type() === 'error' && message.text().startsWith('[Nexus] Unhandled Vue error:')) {
+      vueErrors.push(message.text())
+    }
+  })
+
+  const knowledgeBasesPath = '/api/v1/tenants/a/knowledge/bases'
+  const waitForKnowledgeBases = () => page.waitForResponse(
+    response => new URL(response.url()).pathname === knowledgeBasesPath && response.ok(),
+  )
+  await Promise.all([waitForKnowledgeBases(), page.goto('/')])
+  await expect(page.getByTestId('chat-composer').locator('textarea')).toBeVisible()
+
+  await Promise.all([
+    waitForKnowledgeBases(),
+    page.keyboard.press('Control+k'),
+  ])
+  await expect(page.locator('.cmdk__input')).toBeVisible()
+  expect(vueErrors).toEqual([])
+})
+
+test('打开知识库详情只加载一次文档列表并保留当前页面实例', async ({ page, api }) => {
+  await api.signIn()
+  bootWorkspace(api)
+  const path = '/api/v1/tenants/a/knowledge'
+  const detail = `${path}/bases/kb`
+  const base = { id: 'kb', tenant_id: 'a', name: '运行手册', type: 'document', storage_backend_id: 'local' }
+  api.handle(request => {
+    const url = new URL(request.url()).pathname
+    if (url === `${path}/bases`) return { body: { items: [base] } }
+    if (url === detail) return { body: base }
+    if (url === `${detail}/documents`) {
+      return { body: {
+        total: 1,
+        items: [{ id: 'doc', kb_id: 'kb', filename: 'ready.pdf', file_type: 'pdf', latest_version: { state: 'ready' } }],
+      } }
+    }
+    if (url === `${detail}/folders`) return { body: { folders: [], total_document_count: 1 } }
+    if (url === `${detail}/tags`) return { body: { items: [], total: 0 } }
+    if (url === `${path}/parser-engines`) return { body: { data: [] } }
+  })
+
+  await page.goto('/platform/knowledge-bases')
+  const timeOrigin = await page.evaluate(() => performance.timeOrigin)
+  await page.locator('.kb-directory .resource-directory-card').filter({ hasText: base.name }).locator('button').click()
+  await expect(page).toHaveURL(/\/platform\/knowledge-bases\/kb$/)
+  await expect(page.locator('.doc-card-area').getByText('ready', { exact: true }).first()).toBeVisible()
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin)
+  expect(api.requests.filter(request => request === `GET ${detail}/documents`)).toHaveLength(1)
+})
+
 test('数据库重建后清理旧空间缓存并重新完成开发登录', async ({ page, api }) => {
   bootWorkspace(api)
   const oldSpace = '09844aa5-952c-49e6-b97b-3adc37bbec05'

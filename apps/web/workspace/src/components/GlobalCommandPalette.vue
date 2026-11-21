@@ -207,7 +207,7 @@ const {
   knowledgeBases,
   agentMatches, sessionMatches,
   totalChunks, totalMessages,
-  clearResults,
+  clearResults, ensureKbs, ensureAgents,
 } = useCmdkSearch({
   lockedKbIds: () => (activeKbScope.value ? [activeKbScope.value.id] : []),
   agentsEnabled: () => deploymentCapabilities.isSupported('agents'),
@@ -593,6 +593,9 @@ const onGlobalKey = (e: KeyboardEvent) => {
 // attached to the document yet, so `.focus()` silently no-ops).
 watch(open, (val) => {
   if (val) {
+    // 等用户打开面板再加载候选。会话列表继续复用侧栏缓存。
+    void ensureKbs()
+    void ensureAgents()
     query.value = initialQuery.value || ''
     selectedKey.value = null
     // Infer KB scope from current route. Reset scopeDismissed on each open so
