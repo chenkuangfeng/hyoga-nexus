@@ -354,11 +354,22 @@ test('企业模型目录按类型和服务商筛选，并从卡片编辑与添�
     { id: 'south', name: 'South API', scope: 'tenant', base_url: 'https://south.example.test', key_configured: true, key_mask: '****', models: [embedding] },
   ]
   const writes: unknown[] = []
+  const draftTests: unknown[] = []
   api.handle(request => {
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
     if (path === root) return { body: { providers, defaults: { tenant: { chat: 'chat-v1' } }, can_manage_tenant: true } }
     if (path === root + '/providers/north/models/chat/test') return { body: { ok: true, message: 'Connection verified' } }
+    if (path === root + '/test' && request.method() === 'POST') {
+      draftTests.push(request.postDataJSON())
+      return { body: { ok: true, message: 'Draft connection verified' } }
+    }
+    if (path === root + '/providers/north/models/chat/copy' && request.method() === 'POST') {
+      const { suffix } = request.postDataJSON()
+      const row = { ...chat, id: 'copied-chat', version_id: 'copied-chat-v1', display_name: `Example Chat ${suffix}` }
+      providers[0].models.push(row)
+      return { body: { id: row.id, version_id: row.version_id } }
+    }
     if (path === root + '/providers/south/models' && request.method() === 'POST') {
       const input = request.postDataJSON()
       writes.push(input)
@@ -420,6 +431,15 @@ test('企业模型目录按类型和服务商筛选，并从卡片编辑与添�
   await dialog.locator('.t-select').first().click()
   await page.locator('.t-select-option:visible').filter({ hasText: 'South API' }).click()
   await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embed')
+  await dialog.getByRole('button', { name: '测试连接', exact: true }).click()
+  await expect(dialog.getByRole('status')).toHaveText('Draft connection verified')
+  expect(draftTests).toEqual([{
+    scope: 'tenant', provider_id: 'south', base_url: 'https://south.example.test', model_name: 'New Embed',
+    model_type: 'embedding', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
+  }])
+  await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embedding')
+  await expect(dialog.getByRole('status')).toHaveCount(0)
+  await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embed')
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
   await expect(cards).toHaveCount(2)
   expect(writes).toEqual([{
@@ -440,6 +460,16 @@ test('企业模型目录按类型和服务商筛选，并从卡片编辑与添�
   await expectResponsive(page)
   expect((await search.boundingBox())!.y).toBeGreaterThan((await typeTabs.boundingBox())!.y)
   await expect(page.locator('.model-card--add')).toBeInViewport()
+
+  await typeTabs.getByText('全部', { exact: true }).click()
+  await chatCard.getByRole('button', { name: '展开' }).click()
+  await page.getByRole('button', { name: '复制', exact: true }).click()
+  const copied = cards.filter({ hasText: 'Example Chat 副本' })
+  await expect(copied).toHaveCount(1)
+  await copied.getByRole('button', { name: 'Example Chat 副本' }).click()
+  dialog = page.locator('.t-dialog:visible')
+  await expect(dialog.getByRole('textbox', { name: '服务商模型名称' })).toHaveValue('Example Chat')
+  await expect(dialog.getByRole('textbox', { name: '显示名称（可选）' })).toHaveValue('Example Chat 副本')
 })
 
 test('企业服务商模板预填地址并清空密钥，编辑地址要求新密钥', async ({ page, api }) => {

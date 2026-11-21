@@ -13,9 +13,12 @@
 | `/providers/{id}/models/{profile_id}` | PUT / DELETE | 生成模型版本或停用 |
 | `/default` | PUT | 设置/清除 personal 或 tenant 默认 |
 | `/agents` | POST | 显式模型或默认模型创建并发布 Native 智能体 |
-| `/providers/{id}/models/{profile_id}/test` | POST | 有界流式连接测试 |
+| `/providers/{id}/models/{profile_id}/test` | POST | 测试已保存的配置 |
+| `/test` | POST | 测试未保存的模型配置 |
 
-Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始输入。测试间隔每供应商至少 10 秒（事务锁），总超时 15 秒、输出 32 token、无自动重试，不回传模型内容或供应商原始异常。网络策略由 Runtime 共用 transport 执行。
+管理端 `POST /api/v1/tenants/{tenant_id}/admin/model-settings/providers/{id}/models/{profile_id}/copy` 复制当前企业共享模型并返回新档案和版本 ID。模型创建、编辑及目录响应使用 `name` 表示上游模型 ID，`display_name` 表示展示名。
+
+Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始输入。测试间隔每供应商至少 10 秒（事务锁），总超时 15 秒，无自动重试。对话测试限制输出 32 Token，向量化测试发送一条文本，重排测试发送单条候选。测试返回状态和安全文案；视觉和语音返回不支持。网络策略由 Runtime 共用 transport 执行。
 
 数据库依赖与就绪检查通过 platform 数据库工厂读取工作目录 `configs/nexus.toml`，不加载 `.env`；非法或缺失配置保持既有 503 语义，健康检查不依赖数据库。配置解析错误不包含秘密。
 

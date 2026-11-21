@@ -9,8 +9,9 @@ import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
-  disableEnterpriseModel, disableEnterpriseModelProvider, listEnterpriseModelSettings, saveEnterpriseModel,
+  copyEnterpriseModel, disableEnterpriseModel, disableEnterpriseModelProvider, listEnterpriseModelSettings, saveEnterpriseModel,
   saveEnterpriseModelProvider, setEnterpriseModelDefault, testEnterpriseModel,
+  testEnterpriseModelDraft,
   enterpriseModelProtocol, type EnterpriseModelConnectionResult, type EnterpriseModelInput,
   type EnterpriseModelProvider, type EnterpriseModelProfile, type EnterpriseModelProtocol, type EnterpriseModelSettings,
   type EnterpriseModelType, type EnterpriseProviderInput,
@@ -30,11 +31,27 @@ const defaultsDraft = ref<Partial<Record<EnterpriseModelType, string>>>({})
 const providerDialog = ref(false), providerError = ref('')
 const editingProvider = ref<EnterpriseModelProvider | null>(null)
 const modelDialog = ref(false), modelProviderId = ref<string | null>(null), modelEditId = ref<string | null>(null)
-const modelForm = ref({ name: '', type: 'chat' as EnterpriseModelType, protocol: 'openai_chat_completions' as EnterpriseModelProtocol, temperature: null as number | null, reasoningEffort: '' })
+const rerankApis = [
+  { value: 'cohere', label: 'Cohere' },
+  { value: 'tei', label: 'Text Embeddings Inference (TEI)' },
+  { value: 'dashscope', label: 'DashScope' },
+]
+function emptyModelForm(type: EnterpriseModelType = 'chat') {
+  return { name: '', displayName: '', type, protocol: 'openai_chat_completions' as EnterpriseModelProtocol,
+    temperature: null as number | null, reasoningEffort: '', rerankApi: 'cohere' }
+}
+const modelForm = ref(emptyModelForm())
+watch(() => modelForm.value.type, type => {
+  if (type === 'embedding' && modelForm.value.protocol === 'anthropic_messages' && !modelEditId.value) {
+    modelForm.value.protocol = 'openai_chat_completions'
+  }
+})
+const draftConnection = ref<EnterpriseModelConnectionResult | null>(null), testingDraft = ref(false)
 const connections = ref<Record<string, EnterpriseModelConnectionResult>>({}), testingId = ref('')
-let epoch = 0, read = 0, confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
+let epoch = 0, read = 0, draftRequest = 0, confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
 const typeOptions = computed(() => types.map(value => ({ value, label: t(`adminModels.types.${value}`) })))
 const providers = computed(() => settings.value?.providers || [])
+const selectedProvider = computed(() => providers.value.find(row => row.id === modelProviderId.value))
 const providerOptions = computed(() => providers.value.map(provider => ({ value: provider.id, label: provider.name })))
 const providerActions = computed(() => providers.value.flatMap(provider => [
   { label: `${provider.name} · ${t('adminModels.editProvider')}`, key: `edit-${provider.id}`, run: () => openProvider(provider) },
@@ -50,18 +67,21 @@ const typeTabs = computed(() => {
 const query = computed(() => modelQuery.value.trim().toLowerCase())
 const filteredModels = computed(() => models.value.filter(({ model, provider }) =>
   (activeType.value === 'all' || model.model_type === activeType.value)
-  && [model.name, provider.name].some(name => name.toLowerCase().includes(query.value)),
+  && [model.name, modelLabel(model), provider.name].some(name => name.toLowerCase().includes(query.value)),
 ))
 const defaultOptions = computed(() => Object.fromEntries(types.map(type => [type, models.value
   .filter(({ model }) => model.model_type === type)
-  .map(({ provider, model }) => ({ value: model.version_id, label: `${provider.name} · ${model.name}` }))])))
+  .map(({ provider, model }) => ({ value: model.version_id, label: `${provider.name} · ${modelLabel(model)}` }))])))
+function modelLabel(model: EnterpriseModelProfile) {
+  return model.display_name || model.name
+}
 function currentScope(current: number, scope: string, user: string) {
   return current === epoch && scope === tenant.value && user === String(auth.user?.id || '') && canManage.value
 }
 function clearForms() {
   closeProvider()
   modelDialog.value = false; modelProviderId.value = null; modelEditId.value = null
-  modelForm.value = { name: '', type: 'chat', protocol: 'openai_chat_completions', temperature: null, reasoningEffort: '' }
+  modelForm.value = emptyModelForm()
   connections.value = {}; testingId.value = ''
 }
 function invalidate() {
@@ -114,26 +134,59 @@ function openModel(provider?: EnterpriseModelProvider, row?: EnterpriseModelProf
   modelEditId.value = row?.id || null
   const options = row?.options || {}
   modelForm.value = {
-    name: row?.name || '', type: row?.model_type ?? (activeType.value === 'all' ? 'chat' : activeType.value),
+    ...emptyModelForm(row?.model_type ?? (activeType.value === 'all' ? 'chat' : activeType.value)),
+    name: row?.name || '',
+    displayName: row && modelLabel(row) !== row.name ? modelLabel(row) : '',
     protocol: enterpriseModelProtocol(options.protocol),
     temperature: typeof options.temperature === 'number' ? options.temperature : null,
     reasoningEffort: typeof options.reasoning_effort === 'string' ? options.reasoning_effort : '',
+    rerankApi: rerankApis.find(api => api.value === options.rerank_api)?.value ?? 'cohere',
   }
   modelDialog.value = true; error.value = ''
 }
-async function saveModel() {
-  const providerId = modelProviderId.value
-  if (!tenant.value || !providerId || busy.value || !providers.value.some(row => row.id === providerId)) return
-  const name = modelForm.value.name.trim()
-  if (!name) { error.value = t('adminModels.modelRequired'); return }
-  const options: Record<string, unknown> = { protocol: modelForm.value.protocol }
-  if (modelForm.value.temperature !== null) options.temperature = modelForm.value.temperature
-  else if (modelEditId.value) {
-    const existing = providers.value.find(row => row.id === modelProviderId.value)?.models.find(row => row.id === modelEditId.value)
-    if (typeof existing?.options.temperature === 'number') options.temperature = existing.options.temperature
+const modelInput = computed<EnterpriseModelInput>(() => {
+  const form = modelForm.value
+  const existing = selectedProvider.value?.models.find(row => row.id === modelEditId.value)
+  const options: Record<string, unknown> = { protocol: form.protocol, reasoning_effort: form.reasoningEffort }
+  const temperature = form.temperature ?? existing?.options.temperature
+  if (typeof temperature === 'number') options.temperature = temperature
+  if (form.type === 'rerank') options.rerank_api = form.rerankApi
+  const displayName = form.displayName.trim()
+  return { name: form.name.trim(), model_type: form.type, options,
+    ...(displayName || modelEditId.value ? { display_name: displayName } : {}) }
+})
+const draftTestInput = computed(() => {
+  const { name, model_type, options } = modelInput.value
+  return JSON.stringify([modelDialog.value, selectedProvider.value?.id, name, model_type, options])
+})
+watch(draftTestInput, () => {
+  draftRequest++
+  testingDraft.value = false
+  draftConnection.value = null
+}, { flush: 'sync' })
+
+async function testModelDraft() {
+  const provider = selectedProvider.value, input = modelInput.value
+  if (!modelDialog.value || !provider || !input.name || !tenant.value || !canManage.value || testingDraft.value || busy.value) return
+  const current = epoch, request = ++draftRequest, scope = tenant.value, user = String(auth.user?.id || '')
+  testingDraft.value = true
+  draftConnection.value = null
+  try {
+    const result = await testEnterpriseModelDraft(scope, provider, input)
+    if (request === draftRequest && currentScope(current, scope, user)) draftConnection.value = result
+  } catch {
+    if (request === draftRequest && currentScope(current, scope, user)) {
+      draftConnection.value = { ok: false, message: t('adminModels.testFailed') }
+    }
+  } finally {
+    if (request === draftRequest && currentScope(current, scope, user)) testingDraft.value = false
   }
-  options.reasoning_effort = modelForm.value.reasoningEffort
-  const input: EnterpriseModelInput = { name, model_type: modelForm.value.type, options }
+}
+
+async function saveModel() {
+  const providerId = selectedProvider.value?.id, input = modelInput.value
+  if (!tenant.value || !canManage.value || !ready.value || !modelDialog.value || !providerId || busy.value) return
+  if (!input.name) { error.value = t('adminModels.modelRequired'); return }
   const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), profileId = modelEditId.value
   busy.value = true; error.value = ''
   try {
@@ -146,6 +199,19 @@ async function saveModel() {
     clearForms(); void MessagePlugin.success(t(profileId ? 'adminModels.modelVersionSaved' : 'adminModels.modelSaved'))
     await load(true)
   } catch { if (currentScope(current, scope, user)) error.value = t('adminModels.saveFailed') }
+  finally { if (currentScope(current, scope, user)) busy.value = false }
+}
+async function copyModel(provider: EnterpriseModelProvider, model: EnterpriseModelProfile) {
+  if (!tenant.value || !canManage.value || !ready.value || busy.value) return
+  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
+  busy.value = true; error.value = ''
+  try {
+    await copyEnterpriseModel(scope, provider.id, model.id, t('modelSettings.copySuffix').trim())
+    if (!currentScope(current, scope, user)) return
+    modelQuery.value = ''
+    void MessagePlugin.success(t('modelSettings.toasts.copied'))
+    await load(true)
+  } catch { if (currentScope(current, scope, user)) error.value = t('modelSettings.toasts.copyFailed') }
   finally { if (currentScope(current, scope, user)) busy.value = false }
 }
 async function saveDefault(type: EnterpriseModelType, value: unknown) {
@@ -170,7 +236,7 @@ async function saveDefault(type: EnterpriseModelType, value: unknown) {
 function confirmDisable(kind: 'provider' | 'model', provider: EnterpriseModelProvider, model?: EnterpriseModelProfile) {
   if (!canManage.value || !ready.value || busy.value || confirmation) return
   const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
-  const name = kind === 'provider' ? provider.name : model?.name || ''
+  const name = kind === 'provider' ? provider.name : model ? modelLabel(model) : ''
   const dialog = DialogPlugin.confirm({ header: t(kind === 'provider' ? 'adminModels.deleteProviderTitle' : 'adminModels.deleteModelTitle'),
     body: t(kind === 'provider' ? 'adminModels.deleteProviderConfirm' : 'adminModels.deleteModelConfirm', { name }), theme: 'danger',
     onConfirm: async () => {
@@ -299,8 +365,8 @@ onBeforeUnmount(invalidate)
                   </div>
                   <div class="model-card__body">
                     <h3 class="model-card__title">
-                      <button type="button" class="model-card__edit" :title="model.name" :disabled="busy"
-                        @click="openModel(provider, model)">{{ model.name }}</button>
+                      <button type="button" class="model-card__edit" :title="modelLabel(model)" :disabled="busy"
+                        @click="openModel(provider, model)">{{ modelLabel(model) }}</button>
                     </h3>
                     <p class="model-card__subtitle">
                       <span class="model-card__vendor" :title="provider.name">{{ provider.name }}</span>
@@ -316,6 +382,7 @@ onBeforeUnmount(invalidate)
                       <template #icon><t-icon name="play-circle" aria-hidden="true" /></template>
                     </t-button>
                     <ModelActions :label="t('common.expand')" :disabled="busy" icon-only :actions="[
+                      { label: t('common.copy'), key: 'copy', run: () => copyModel(provider, model) },
                       { label: t('adminModels.editProvider'), key: 'edit', run: () => openProvider(provider) },
                       { label: t('adminModels.disable'), key: 'disable', danger: true, run: () => confirmDisable('model', provider, model) },
                     ]" />
@@ -341,11 +408,22 @@ onBeforeUnmount(invalidate)
             :options="providerOptions" :placeholder="t('model.editor.providerPlaceholder')" :disabled="!!modelEditId" filterable />
         </label>
         <label>{{ t('adminModels.modelName') }}<t-input v-model="modelForm.name" maxlength="160" /></label>
+        <label>{{ t('model.editor.displayNameLabel') }}<t-input v-model="modelForm.displayName" maxlength="160" :placeholder="modelForm.name" /></label>
         <label>{{ t('adminModels.modelType') }}<t-select v-model="modelForm.type" :options="typeOptions" :disabled="!!modelEditId" /></label>
-        <label>{{ t('adminModels.protocol') }}<t-select v-model="modelForm.protocol" :options="[{value:'openai_chat_completions',label:t('adminModels.protocols.openai_chat_completions')},{value:'openai_responses',label:t('adminModels.protocols.openai_responses')},{value:'anthropic_messages',label:t('adminModels.protocols.anthropic_messages')}]" /></label>
-        <label>{{ t('adminModels.temperature') }}<t-input-number v-model="modelForm.temperature" :min="0" :max="2" :step="0.1" :decimal-places="1" /></label>
-        <label>{{ t('adminModels.reasoningEffort') }}<t-select v-model="modelForm.reasoningEffort" clearable :options="['none','minimal','low','medium','high','xhigh','max'].map(value => ({value,label:value}))" /></label>
+        <label v-if="modelForm.type === 'chat' || modelForm.type === 'embedding'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.protocol" :options="[{value:'openai_chat_completions',label:t('adminModels.protocols.openai_chat_completions')},{value:'openai_responses',label:t('adminModels.protocols.openai_responses')},...(modelForm.type === 'chat' ? [{value:'anthropic_messages',label:t('adminModels.protocols.anthropic_messages')}] : [])]" /></label>
+        <label v-if="modelForm.type === 'rerank'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.rerankApi" :options="rerankApis" /></label>
+        <template v-if="modelForm.type === 'chat'">
+          <label>{{ t('adminModels.temperature') }}<t-input-number v-model="modelForm.temperature" :min="0" :max="2" :step="0.1" :decimal-places="1" /></label>
+          <label>{{ t('adminModels.reasoningEffort') }}<t-select v-model="modelForm.reasoningEffort" clearable :options="['none','minimal','low','medium','high','xhigh','max'].map(value => ({value,label:value}))" /></label>
+        </template>
         <p class="field-hint">{{ t(modelEditId ? 'adminModels.versionHint' : 'adminModels.modelOptionsHint') }}</p>
+        <div v-if="['chat', 'embedding', 'rerank'].includes(modelForm.type)">
+          <t-button variant="outline" :loading="testingDraft" :disabled="busy || testingDraft || !selectedProvider || !modelInput.name"
+            :aria-description="t('adminModels.testHint')" @click="testModelDraft">{{ t('adminModels.test') }}</t-button>
+          <p class="field-hint">{{ t('adminModels.testHint') }}</p>
+          <p v-if="draftConnection" class="connection-result" :class="{ 'is-success': draftConnection.ok }"
+            role="status">{{ draftConnection.message }}</p>
+        </div>
       </div>
     </EditorDialog>
   </section>

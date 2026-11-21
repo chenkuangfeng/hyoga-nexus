@@ -5,6 +5,7 @@ export type EnterpriseModelType = 'chat' | 'embedding' | 'rerank' | 'vision' | '
 export type EnterpriseModelProtocol = 'openai_chat_completions' | 'openai_responses' | 'anthropic_messages'
 export interface EnterpriseModelProfile {
   id: string; name: string; model_type: EnterpriseModelType; version_id: string; version: number
+  display_name?: string
   options: Record<string, unknown>
 }
 export interface EnterpriseModelProvider {
@@ -18,7 +19,7 @@ export interface EnterpriseModelSettings {
   can_manage_tenant: boolean
 }
 export interface EnterpriseProviderInput { name: string; base_url: string; scope: 'tenant'; api_key?: string }
-export interface EnterpriseModelInput { name: string; model_type: EnterpriseModelType; options: Record<string, unknown> }
+export interface EnterpriseModelInput { name: string; display_name?: string; model_type: EnterpriseModelType; options: Record<string, unknown> }
 export interface EnterpriseModelConnectionResult { ok: boolean; message: string; code?: string }
 
 const types: EnterpriseModelType[] = ['chat', 'embedding', 'rerank', 'vision', 'speech']
@@ -31,7 +32,8 @@ function positiveInt(value: unknown): number { if (typeof value !== 'number' || 
 function modelType(value: unknown): EnterpriseModelType { if (typeof value !== 'string' || !types.includes(value as EnterpriseModelType)) throw invalid(); return value as EnterpriseModelType }
 function modelFromResponse(value: unknown): EnterpriseModelProfile {
   const row = object(value)
-  return { id: string(row.id), name: string(row.name), model_type: modelType(row.model_type), version_id: string(row.version_id),
+  return { id: string(row.id), name: string(row.name), display_name: row.display_name === undefined ? undefined : string(row.display_name),
+    model_type: modelType(row.model_type), version_id: string(row.version_id),
     version: positiveInt(row.version), options: object(row.options) }
 }
 function providerFromResponse(value: unknown): ModelProviderResponse {
@@ -77,6 +79,13 @@ export async function saveEnterpriseModel(tenant: string, providerId: string, in
   if (!id || (profileId && id !== profileId) || !string(result.version_id)) throw invalid()
 }
 
+/** Clone a shared configuration server-side, retaining its upstream model identifier. */
+export async function copyEnterpriseModel(tenant: string, providerId: string, profileId: string, suffix: string): Promise<void> {
+  const result = object(await post(`${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/copy`, { suffix }))
+  const copyId = string(result.id)
+  if (!copyId || copyId === profileId || !string(result.version_id)) throw invalid()
+}
+
 /** Disable a tenant provider and revoke its credentials; history remains on the server. */
 export async function disableEnterpriseModelProvider(tenant: string, providerId: string): Promise<void> {
   const result = object(await del(`${root(tenant)}/providers/${encodeURIComponent(providerId)}`))
@@ -97,7 +106,19 @@ export async function setEnterpriseModelDefault(tenant: string, modelTypeValue: 
 
 /** Run the backend's bounded, sanitized connection check for one saved model. */
 export async function testEnterpriseModel(tenant: string, providerId: string, profileId: string): Promise<EnterpriseModelConnectionResult> {
-  const row = object(await post(`${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/test`, {}))
+  return connectionResult(await post(`${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/test`, {}))
+}
+
+/** Test current form values using the shared provider's saved credential. */
+export async function testEnterpriseModelDraft(tenant: string, provider: EnterpriseModelProvider, input: EnterpriseModelInput): Promise<EnterpriseModelConnectionResult> {
+  return connectionResult(await post(`${root(tenant)}/test`, {
+    scope: 'tenant', provider_id: provider.id, base_url: provider.base_url,
+    model_name: input.name, model_type: input.model_type, options: input.options,
+  }))
+}
+
+function connectionResult(value: unknown): EnterpriseModelConnectionResult {
+  const row = object(value)
   if (typeof row.ok !== 'boolean') throw invalid()
   const result: EnterpriseModelConnectionResult = { ok: row.ok, message: string(row.message) }
   if (row.code !== undefined) result.code = string(row.code)

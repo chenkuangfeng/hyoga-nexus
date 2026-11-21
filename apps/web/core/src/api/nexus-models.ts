@@ -15,6 +15,7 @@ export type ModelScope = 'personal' | 'tenant'
 export interface NexusModel {
   id: string
   name: string
+  display_name?: string
   model_type: NexusModelType
   version_id: string
   version: number

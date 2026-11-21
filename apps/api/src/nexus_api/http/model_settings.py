@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
@@ -22,6 +23,8 @@ from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.identity.service import require_membership
 from nexus_runtimes.native.models.network import validate_url, provider_client
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
+from nexus_runtimes.native.models.embeddings import create_embedder
+from nexus_runtimes.native.models.rerank import create_reranker
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}', tags=['Model settings'])
 
@@ -44,6 +47,7 @@ class ModelInput(BaseModel):
     The capability type is set when the model is created and cannot change on later edits."""
 
     name: str = Field(min_length=1, max_length=160)
+    display_name: str | None = Field(default=None, max_length=settings.MAX_MODEL_DISPLAY_NAME)
     options: dict[str, object] = Field(default_factory=dict)
     model_type: ModelType = 'chat'
 
@@ -69,6 +73,12 @@ class DraftTestInput(BaseModel):
     options: dict[str, object] = Field(default_factory=dict)
     provider_id: UUID | None = None
     api_key: SecretStr | None = None
+
+
+class CopyModelInput(BaseModel):
+    """Localized suffix for the new display name, allocated by the service."""
+
+    suffix: str = Field(default='Copy', min_length=1, max_length=32)
 
 
 class AgentInput(BaseModel):
@@ -121,7 +131,8 @@ def delete_provider(tenant_id: UUID, provider_id: UUID, principal: Principal = D
 @tenant_admin_route(router, '/model-settings/providers/{provider_id}/models', methods=['POST'], status_code=201)
 def add_model(tenant_id: UUID, provider_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Create an immutable configured model under a manageable provider."""
-    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), model_options=body.options, model_type=body.model_type)
+    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name),
+                               model_options=body.options, model_type=body.model_type, display_name=body.display_name)
 
 
 def model_name(value: str) -> str:
@@ -134,7 +145,18 @@ def model_name(value: str) -> str:
 @tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}', methods=['PUT'])
 def edit_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: ModelInput, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Append a model version; preserve already published AgentVersion references."""
-    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), profile_id, model_options=body.options, model_type=body.model_type)
+    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), profile_id,
+                               model_options=body.options, model_type=body.model_type, display_name=body.display_name)
+
+
+@router.post('/admin/model-settings/providers/{provider_id}/models/{profile_id}/copy', status_code=201)
+def copy_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: CopyModelInput,
+               principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Copy the current version of an enterprise model into an independent profile."""
+    suffix = body.suffix.strip()
+    if not suffix or not suffix.isprintable():
+        raise ValueError('Invalid model copy suffix')
+    return settings.copy_enterprise_model(db, principal, tenant_id, provider_id, profile_id, ' ' + suffix)
 
 
 @tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}', methods=['DELETE'])
@@ -186,7 +208,7 @@ def create_native_agent(tenant_id: UUID, body: AgentInput, principal: Principal 
     return {'id': str(agent.id), 'published_version_id': str(version.id), 'name': agent.name}
 
 
-UNSUPPORTED_TYPE_MESSAGE = '该模型类型的连接测试将在知识库阶段提供'
+UNSUPPORTED_TYPE_MESSAGE = '该模型类型暂不支持连接测试'
 DEFAULT_FAILURE_MESSAGE = '连接未通过，请检查地址、模型名称和 Key'
 #: Safe, fixed explanations per stable fault code; supplier text is never echoed.
 CONNECTION_FAILURE_MESSAGES = {
@@ -209,15 +231,30 @@ draft_test_started: dict[tuple[UUID, UUID], datetime] = {}
 
 
 async def check_connection(*, key: str, base_url: str, model_name: str, options: dict[str, object], model_type: str) -> dict[str, object]:
-    """Run one bounded streaming request and return a sanitized result.
+    """Run one bounded request using the configured protocol and return a sanitized result.
 
-    Only chat models are executed in this stage; other types return `unsupported_for_type` without
-    contacting the supplier. Responses carry no generated text and no raw supplier error."""
-    if model_type != 'chat':
+    Responses carry no generated text, vectors, scores or raw supplier errors.
+    """
+    if model_type not in ('chat', 'embedding', 'rerank'):
         return {'ok': False, 'code': 'unsupported_for_type', 'message': UNSUPPORTED_TYPE_MESSAGE}
     model = None
     try:
-        if options.get('protocol', 'openai_chat_completions') == 'openai_chat_completions':
+        options = {'protocol': 'openai_chat_completions', **options, 'base_url': base_url}
+        if model_type == 'embedding':
+            model = create_embedder(model=model_name, api_key=key, options=options, timeout=12)
+            async with asyncio.timeout(15):
+                vectors = await model.embed(['ping'])
+            if len(vectors) != 1 or not vectors[0] or not all(math.isfinite(value) for value in vectors[0]):
+                raise RuntimeFault('model_stream_invalid')
+            return {'ok': True, 'message': '连接成功，向量化响应正常'}
+        if model_type == 'rerank':
+            model = create_reranker(model=model_name, api_key=key, options=options, timeout=12)
+            async with asyncio.timeout(15):
+                scores = await model.rerank('ping', ['ping'])
+            if len(scores) != 1 or scores[0][0] != 0 or not math.isfinite(scores[0][1]):
+                raise RuntimeFault('model_stream_invalid')
+            return {'ok': True, 'message': '连接成功，重排响应正常'}
+        if options['protocol'] == 'openai_chat_completions':
             model = OpenAICompatibleModel(model=model_name, api_key=key, base_url=base_url,
                                          timeout=12, http_client=provider_client(base_url, timeout=12), options=options)
         else:
@@ -229,6 +266,8 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
         return {'ok': True, 'message': '连接成功，流式响应正常'}
     except RuntimeFault as exc:
         return {'ok': False, 'code': exc.code, 'message': CONNECTION_FAILURE_MESSAGES.get(exc.code, DEFAULT_FAILURE_MESSAGE)}
+    except TimeoutError:
+        return {'ok': False, 'code': 'model_timeout', 'message': CONNECTION_FAILURE_MESSAGES['model_timeout']}
     except Exception:
         return {'ok': False, 'code': 'model_provider_unavailable', 'message': '连接未通过，请检查配置或稍后重试'}
     finally:
@@ -238,7 +277,7 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
 
 @tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}/test', methods=['POST'])
 async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
-    """Test an authorized saved model with a bounded minimal streaming request.
+    """Test an authorized saved model with a bounded minimal request.
 
     The supplier may charge for the request. Per-provider tests are limited to one start
     every ten seconds and a fifteen-second total deadline. Responses omit generated content
@@ -268,6 +307,7 @@ async def test_draft(tenant_id: UUID, body: DraftTestInput, principal: Principal
     shared provider needs `models:manage`. Errors never echo the Key, the address or supplier text."""
     options = settings.validate_model_options(dict(body.options))
     model_type = settings.validate_model_type(body.model_type)
+    name = model_name(body.model_name)
     try:
         base_url = validate_url(body.base_url)
     except RuntimeFault:
@@ -277,6 +317,8 @@ async def test_draft(tenant_id: UUID, body: DraftTestInput, principal: Principal
         stored_key = None
         if body.provider_id:
             provider = settings.provider_access(db, tenant_id, user.id, body.provider_id, manage=True)
+            if body.scope != ('personal' if provider.owner_user_id else 'tenant'):
+                raise NotFound('Provider unavailable')
             if provider.last_test_at and provider.last_test_at.replace(tzinfo=timezone.utc) > utc_now() - DRAFT_TEST_COOLDOWN:
                 raise Conflict('Please wait 10 seconds before testing again')
             provider.last_test_at = utc_now()
@@ -299,4 +341,4 @@ async def test_draft(tenant_id: UUID, body: DraftTestInput, principal: Principal
                 raise Conflict('Please wait 10 seconds before testing again')
             draft_test_started[(tenant_id, user.id)] = utc_now()
         audit(db, tenant_id, user.id, 'provider.connection_test', 'model_provider', target, {'draft': not body.provider_id, 'model_type': model_type})
-    return await check_connection(key=key, base_url=base_url, model_name=body.model_name.strip(), options={**options, 'base_url': base_url}, model_type=model_type)
+    return await check_connection(key=key, base_url=base_url, model_name=name, options=options, model_type=model_type)

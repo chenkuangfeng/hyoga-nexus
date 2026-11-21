@@ -192,8 +192,11 @@ def view(db: Session, row: Provider) -> dict[str, object]:
     for link in db.scalars(select(Link).where(Link.provider_id == row.id, Link.active.is_(True))):
         profile = db.get(Profile, link.profile_id)
         version = db.get(Version, profile.current_version_id)
-        models.append({'id': str(profile.id), 'name': version.model_name, 'model_type': profile.model_type,
-                       'version_id': str(version.id), 'version': version.version, 'options': version.options})
+        options = dict(version.options)
+        display_name = options.pop('display_name', '') or version.model_name
+        models.append({'id': str(profile.id), 'name': version.model_name, 'display_name': display_name,
+                       'model_type': profile.model_type, 'version_id': str(version.id),
+                       'version': version.version, 'options': options})
     return {'id': str(row.id), 'name': row.name, 'base_url': row.base_url,
             'scope': 'personal' if row.owner_user_id else 'tenant',
             'key_configured': True, 'key_mask': '••••••••', 'models': models}
@@ -300,13 +303,27 @@ def new_version(db: Session, provider: Provider, profile: Profile, model_name: s
     return version
 
 
-def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None, model_type: str = 'chat') -> dict[str, str]:
+def _new_profile(db: Session, provider: Provider, user_id: UUID, model_type: str) -> Profile:
+    profile = Profile(id=new_id(), tenant_id=provider.tenant_id, name='configured-' + str(new_id()),
+                      provider=provider.name, model_type=model_type, created_by=user_id, created_at=utc_now())
+    db.add(profile)
+    db.flush()
+    db.add(Link(profile_id=profile.id, provider_id=provider.id, active=True))
+    return profile
+
+
+MAX_MODEL_DISPLAY_NAME = 160
+
+
+def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None, model_type: str = 'chat', *, display_name: str | None = None) -> dict[str, str]:
     """Create a provider-bound profile or append its next version after management authorization.
 
     Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten.
     The capability type is fixed when the profile is created; changing it on edit is a Conflict."""
     model_options = validate_model_options(model_options or {})
     model_type = validate_model_type(model_type)
+    if display_name is not None:
+        model_options = {**model_options, 'display_name': display_name.strip()}
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         provider = provider_access(db, tenant_id, user.id, provider_id, manage=True)
@@ -318,14 +335,48 @@ def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: 
             if profile.model_type != model_type:
                 raise Conflict('Model type cannot be changed; add a new model instead')
         else:
-            profile = Profile(id=new_id(), tenant_id=tenant_id, name='configured-' + str(new_id()),
-                provider=provider.name, model_type=model_type, created_by=user.id, created_at=utc_now())
-            db.add(profile)
-            db.flush()
-            db.add(Link(profile_id=profile.id, provider_id=provider.id, active=True))
+            profile = _new_profile(db, provider, user.id, model_type)
         version = new_version(db, provider, profile, model_name, model_options)
         audit(db, tenant_id, user.id, 'provider.model_saved', 'model_profile', str(profile.id), {'model_type': model_type})
         return {'id': str(profile.id), 'version_id': str(version.id)}
+
+
+def copy_enterprise_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID,
+                          profile_id: UUID, suffix: str) -> dict[str, str]:
+    """Copy the current shared model to a new profile under the locked provider.
+
+    Reuse its provider credential reference and model ID. Only the display name
+    is allocated anew. Defaults and resource bindings keep their original IDs.
+    """
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        require_api_permission(db, tenant_id, user.id, 'models:manage')
+        provider = provider_access(db, tenant_id, user.id, provider_id, manage=True)
+        if provider.owner_user_id is not None:
+            raise NotFound('Provider unavailable')
+        link = db.get(Link, profile_id)
+        if not link or link.provider_id != provider.id or not link.active:
+            raise NotFound('Model unavailable')
+        source = db.get(Profile, profile_id)
+        version = db.get(Version, source.current_version_id)
+        label = version.options.get('display_name') or version.model_name
+        versions = db.scalars(
+            select(Version).join(Profile, Profile.current_version_id == Version.id)
+            .join(Link, Link.profile_id == Profile.id)
+            .where(Link.provider_id == provider.id, Link.active.is_(True))
+        )
+        taken = {row.options.get('display_name') or row.model_name for row in versions}
+        for number in range(1, len(taken) + 2):
+            tail = suffix if number == 1 else f'{suffix} {number}'
+            display_name = f'{label[:MAX_MODEL_DISPLAY_NAME - len(tail)].rstrip()}{tail}'
+            if display_name not in taken:
+                break
+        profile = _new_profile(db, provider, user.id, source.model_type)
+        copied = new_version(db, provider, profile, version.model_name,
+                             {**version.options, 'display_name': display_name})
+        audit(db, tenant_id, user.id, 'provider.model_copied', 'model_profile', str(profile.id),
+              {'source_profile_id': str(profile_id), 'model_type': source.model_type})
+        return {'id': str(profile.id), 'version_id': str(copied.id)}
 
 
 def disable(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, profile_id: UUID | None = None) -> None:
@@ -436,7 +487,7 @@ def validate_model_type(value: str) -> str:
 
 def validate_model_options(options: dict) -> dict:
     """Whitelist user-visible protocol settings; addresses and secrets stay provider-owned."""
-    allowed = {'protocol', 'stream', 'temperature', 'reasoning_effort', 'text_tools'}
+    allowed = {'protocol', 'stream', 'temperature', 'reasoning_effort', 'text_tools', 'rerank_api'}
     if set(options) - allowed:
         raise ValueError('Unsupported model option')
     if options.get('protocol', 'openai_chat_completions') not in ('openai_chat_completions', 'openai_responses', 'anthropic_messages'):
@@ -451,4 +502,6 @@ def validate_model_options(options: dict) -> dict:
             raise ValueError('Temperature must be between 0 and 2')
     if options.get('reasoning_effort', '') not in ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'):
         raise ValueError('Unsupported reasoning effort')
+    if options.get('rerank_api', 'cohere') not in ('cohere', 'tei', 'dashscope'):
+        raise ValueError('Unsupported rerank protocol')
     return options

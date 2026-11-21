@@ -17,7 +17,7 @@ export function modelsFromSettings(view: ModelSettingsView): Array<Record<string
   for (const provider of view.providers) {
     for (const model of provider.models) {
       out.push({
-        id: model.version_id, name: model.name, display_name: model.name,
+        id: model.version_id, name: model.name, display_name: model.display_name || model.name,
         type: TYPE_MAP[model.model_type] ?? 'KnowledgeQA', source: 'remote',
         description: provider.name, parameters: { base_url: provider.base_url, provider: provider.name },
         is_default: Object.values(view.defaults).some(scope => Object.values(scope || {}).includes(model.version_id)),

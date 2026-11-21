@@ -231,6 +231,12 @@ WeKnora e1f9a6166 `Toolbox.vue` 的技能与 MCP 注册职责拆分保留，MCP 
 
 三页的 .reference.less 保留对应原版卡片样式；只对 grid 最小宽度作窄屏适配。provider-card.less 与原 SVG/查找工具抽入 core，工作台保留兼容导出入口，两应用不互相引用源码。原版不存在的 Nexus 管理能力保留现有设置组件，不伪造上游页面或服务端操作。后续所有来源于 WeKnora 的页面调整也须先阅读对应原文件，并记录必要差异。
 
+## 企业模型操作
+
+企业模型页参考 WeKnora e1f9a6166 的 `views/settings/ModelSettings.vue` 与 `components/ModelEditorDialog.vue`。卡片菜单的复制动作生成同服务商的独立档案。卡片、搜索和模型选择器使用展示名，编辑器同时显示上游模型 ID。Nexus 按服务商复用凭据，模型编辑不接收 Key。
+
+创建和编辑表单使用所选服务商测试当前配置，已保存的模型可从卡片测试。支持对话、向量化和重排。更改测试参数、关闭编辑器或切换企业会使旧结果失效。
+
 ## 用量报表与限额状态边界
 
 UsagePage 是 Nexus 自身用量契约的管理页，沿用现有页面和公共设置样式；WeKnora e1f9a6166 的 ModelSettings.vue 用量对话框实际展示模型资源引用冲突，未将它当作 Token 报表来源。

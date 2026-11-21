@@ -278,7 +278,7 @@ def test_model_type_is_validated_fixed_and_limits_defaults(settings_client):
 
 
 def test_draft_connection_test_persists_nothing_and_reports_unsupported_types(settings_client, monkeypatch):
-    """Unsaved configurations can be tested; non-chat types never reach the supplier."""
+    """Unsaved configurations can be tested; unimplemented probes never reach the supplier."""
     client, path, *_ = settings_client
     import nexus_api.http.model_settings as endpoint
     calls = []
@@ -298,13 +298,78 @@ def test_draft_connection_test_persists_nothing_and_reports_unsupported_types(se
     assert len(client.get(path).json()['providers']) == before
     # Rate limit applies to draft tests per user, like saved-model tests.
     assert client.post(path + '/test', json=body).status_code == 409
-    skipped = client.post(path + '/test', json={**body, 'model_type': 'embedding'})
+    skipped = client.post(path + '/test', json={**body, 'model_type': 'vision'})
     assert skipped.status_code == 409  # still inside the cooldown window, so the limit is checked first
     endpoint.draft_test_started.clear()
     before_calls = len(calls)
-    skipped = client.post(path + '/test', json={**body, 'model_type': 'embedding'})
+    skipped = client.post(path + '/test', json={**body, 'model_type': 'vision'})
     assert skipped.json()['code'] == 'unsupported_for_type'
     assert len(calls) == before_calls
+
+
+def test_enterprise_model_copy_keeps_model_id_and_provider_but_creates_a_distinct_version(settings_client, database):
+    client, path, identity, owner, member, _ = settings_client
+    admin_path = path.replace('/model-settings', '/admin/model-settings')
+    shared = add_provider(client, path, scope='tenant')
+    personal = add_provider(client, path)
+    source_route = f'/providers/{shared["id"]}/models'
+    model = client.post(path + source_route, json={
+        'name': 'upstream-id', 'display_name': 'Readable label',
+        'model_type': 'rerank', 'options': {'rerank_api': 'tei'},
+    }).json()
+    personal_model = add_model(client, path, personal)
+    assert client.put(path + '/default', json={
+        'scope': 'tenant', 'model_type': 'rerank', 'version_id': model['version_id'],
+    }).status_code == 200
+    route = admin_path + source_route + '/' + model['id'] + '/copy'
+    identity[0] = member
+    assert client.post(route, json={}).status_code == 403
+    identity[0] = owner
+    assert client.post(f'{admin_path}/providers/{personal["id"]}/models/{personal_model["id"]}/copy', json={}).status_code == 404
+    results = [client.post(route, json={'suffix': '副本'}) for _ in range(2)]
+    assert all(result.status_code == 201 for result in results)
+    listed = client.get(admin_path).json()
+    assert listed['defaults']['tenant'] == {'rerank': model['version_id']}
+    rows = next(provider['models'] for provider in listed['providers'] if provider['id'] == shared['id'])
+    assert {row['display_name'] for row in rows} == {'Readable label', 'Readable label 副本', 'Readable label 副本 2'}
+    assert all(row['name'] == 'upstream-id' and row['version'] == 1 and row['options']['rerank_api'] == 'tei' for row in rows)
+    assert len({row['id'] for row in rows}) == 3
+    with database() as db:
+        versions = [db.get(ModelProfileVersionRecord, UUID(row['version_id'])) for row in rows]
+        assert len({version.credential_reference_id for version in versions}) == 1
+
+
+@pytest.mark.parametrize(('model_type', 'adapter_module', 'response', 'expected_path'), [
+    ('embedding', 'embeddings', {'data': [{'index': 0, 'embedding': [0.1, 0.2]}]}, '/v1/embeddings'),
+    ('rerank', 'rerank', {'results': [{'index': 0, 'relevance_score': 0.5}]}, '/v1/rerank'),
+])
+def test_enterprise_connection_probes_use_configured_adapter(
+    settings_client, monkeypatch, model_type, adapter_module, response, expected_path,
+):
+    from importlib import import_module
+    client, path, *_ = settings_client
+    provider = add_provider(client, path, scope='tenant')
+    admin_path = path.replace('/model-settings', '/admin/model-settings')
+    adapter = import_module(f'nexus_runtimes.native.models.{adapter_module}')
+    calls = []
+
+    def upstream(request):
+        calls.append(request)
+        assert request.url.path == expected_path
+        assert request.headers['Authorization'] == 'Bearer test-private-key'
+        return httpx.Response(200, json=response)
+
+    monkeypatch.setattr(adapter, 'provider_client', lambda *args, **kwargs: httpx.AsyncClient(transport=httpx.MockTransport(upstream)))
+    draft = {'provider_id': provider['id'], 'model_name': 'probe-model', 'model_type': model_type,
+             'scope': 'tenant', 'base_url': provider['base_url']}
+    result = client.post(admin_path + '/test', json=draft)
+    assert result.status_code == 200
+    assert result.json()['ok'] is True
+    assert set(result.json()) == {'ok', 'message'}
+    assert 'test-private-key' not in result.text
+    assert len(calls) == 1
+    assert client.post(admin_path + '/test', json=draft).status_code == 409
+    assert client.get(path).json()['providers'][0]['models'] == []
 
 
 def test_draft_test_requires_a_key_for_new_providers_and_scope_permission(settings_client):

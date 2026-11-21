@@ -189,7 +189,7 @@ export default {
     addModel: '添加模型', editModel: '编辑模型', addModelTitle: '添加模型', editModelTitle: '编辑模型并创建新版本', modelName: '服务商模型名称', modelType: '模型类型',
     modelRequired: '请输入服务商模型名称。', modelSaved: '模型已添加。', modelVersionSaved: '新模型版本已保存；已有智能体继续使用原版本。', modelVersion: '版本 {version}', noModels: '该服务商尚未添加模型。', noProviders: '尚未配置企业模型服务商。',
     protocol: '接口协议', temperature: 'Temperature（可选，0–2）', reasoningEffort: '推理强度（可选）', modelOptionsHint: '协议和参数会写入不可变模型版本。模型类型创建后不可更改。', versionHint: '保存会追加新版本，不会改写已发布智能体引用的旧版本。',
-    test: '测试连接', testHint: '连接测试会向服务商发送一条最小聊天请求，可能产生费用；仅聊天模型执行真实请求，其他类型由服务端返回暂不支持。', testFailed: '连接测试失败，请稍后重试。',
+    test: '测试连接', testHint: '连接测试会向服务商发送一条短请求，可能产生费用。支持对话、向量化和重排模型。', testFailed: '连接测试失败，请稍后重试。',
     types: { chat: '对话', embedding: '向量化', rerank: '重排', vision: '视觉', speech: '语音' },
     protocols: { openai_chat_completions: 'OpenAI Chat Completions', openai_responses: 'OpenAI Responses', anthropic_messages: 'Anthropic Messages' },
     save: '保存'

@@ -53,7 +53,7 @@ export function filterCards(cards: ModelCard[], type: NexusModelType | 'all', qu
 /** Chat models usable by agents (only `chat` type; R5 "智能体的模型下拉只列出对话模型"). */
 export function chatModelOptions(view: ModelSettingsView): Array<{ value: string; label: string; provider: string }> {
   return flattenModelCards(view).filter(card => card.type === 'chat')
-    .map(card => ({ value: card.model.version_id, label: card.model.name, provider: card.provider.name }))
+    .map(card => ({ value: card.model.version_id, label: card.model.display_name || card.model.name, provider: card.provider.name }))
 }
 
 /** Personal default first, then space default (same order as `create_native_agent`). */
