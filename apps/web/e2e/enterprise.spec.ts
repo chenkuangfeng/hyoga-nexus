@@ -183,7 +183,7 @@ test('系统设置保存编辑展示偏好，抽屉与替换路由保持同一�
   await selectMode('抽屉')
   await modelsMenu.click()
   await navigation.getByRole('link', { name: '模型管理', exact: true }).click()
-  await page.getByRole('button', { name: '添加服务商', exact: true }).click()
+  await page.locator('.model-header-actions').getByRole('button', { name: '添加模型', exact: true }).click()
   await expect(page.locator('.t-drawer--open')).toBeVisible()
   await page.locator('.t-drawer--open .t-drawer__close-btn').click()
   await settingsMenu.click()
@@ -191,7 +191,7 @@ test('系统设置保存编辑展示偏好，抽屉与替换路由保持同一�
   await selectMode('替换路由')
   await modelsMenu.click()
   await navigation.getByRole('link', { name: '模型管理', exact: true }).click()
-  await page.getByRole('button', { name: '添加服务商', exact: true }).click()
+  await page.locator('.model-header-actions').getByRole('button', { name: '添加模型', exact: true }).click()
   await expect(page).toHaveURL(/models\?editor=edit-[^&]+$/)
   await expect(page.locator('.editor-dialog-route:visible')).toBeVisible()
   await expect.poll(async () => await page.locator('.editor-dialog-route:visible .t-dialog').evaluate(element => { const rect = element.getBoundingClientRect(); return Math.abs(rect.top) <= 1 && rect.bottom <= innerHeight + 1 && rect.height >= innerHeight - 2 })).toBe(true)
@@ -472,45 +472,59 @@ test('企业模型目录按类型和服务商筛选，并从卡片编辑与添�
   await expect(dialog.getByRole('textbox', { name: '显示名称（可选）' })).toHaveValue('Example Chat 副本')
 })
 
-test('企业服务商模板预填地址并清空密钥，编辑地址要求新密钥', async ({ page, api }) => {
+test('企业从同一表单添加模型和服务商，失败后可直接重试', async ({ page, api }) => {
   await api.signIn()
   const root = '/api/v1/tenants/a/admin/model-settings'
   let provider: { id: string; name: string; base_url: string; scope: string; key_configured: boolean; key_mask: string; models: unknown[] } | undefined
-  const writes: unknown[] = []
+  const writes: unknown[] = [], draftTests: unknown[] = []
   api.handle(request => {
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
     if (path === root) return { body: { providers: provider ? [provider] : [], defaults: {}, can_manage_tenant: true } }
-    if (path === root + '/providers' && request.method() === 'POST' ||
-        path === root + '/providers/new' && request.method() === 'PUT') {
+    if (path === root + '/test' && request.method() === 'POST') {
+      draftTests.push(request.postDataJSON())
+      return { body: { ok: true, message: 'Draft connection verified' } }
+    }
+    if (path === root + '/models' && request.method() === 'POST') {
+      const { provider: input, ...model } = request.postDataJSON()
+      writes.push({ ...model, provider: input })
+      if (writes.length === 1) return { status: 422, body: { error: 'Model rejected' } }
+      const row = { ...model, id: 'model', version_id: 'model-v1', version: 1 }
+      provider = { id: 'new', name: input.name, base_url: input.base_url, scope: 'tenant', key_configured: true, key_mask: '****', models: [row] }
+      return { body: { id: row.id, version_id: row.version_id } }
+    }
+    if (path === root + '/providers/new' && request.method() === 'PUT' && provider) {
       const input = request.postDataJSON()
       writes.push(input)
-      provider = { id: 'new', name: input.name, base_url: input.base_url, scope: input.scope, key_configured: true, key_mask: '****', models: [] }
+      provider = { ...provider, name: input.name, base_url: input.base_url }
       return { body: provider }
     }
   })
 
   await page.setViewportSize({ width: 375, height: 900 })
   await page.goto('models')
-  await page.getByRole('button', { name: '添加服务商', exact: true }).click()
-  const editor = page.locator('.setting-drawer .t-dialog:visible')
-  const save = editor.getByRole('button', { name: '保存并关闭' })
-  const template = editor.locator('.t-select')
+  await expect(page.getByRole('button', { name: '添加服务商', exact: true })).toHaveCount(0)
+  await page.locator('.model-card--add').click()
+  const editor = page.locator('.t-dialog:visible')
+  const save = editor.getByRole('button', { name: '保存', exact: true })
+  const service = editor.locator('.t-select').first()
   const name = editor.getByLabel('服务商名称')
+  const modelName = editor.getByLabel('服务商模型名称')
   const address = editor.getByLabel('API 地址')
   const key = editor.getByLabel('API Key')
-  await expect(editor.getByRole('heading', { name: '接入配置' })).toBeVisible()
   await expect(save).toBeInViewport()
   await save.click()
   await expect(editor).toContainText('请输入服务商名称。')
+  await name.fill('Custom Gateway')
+  await save.click()
   await expect(editor).toContainText('请输入有效的 HTTP 或 HTTPS API 地址。')
   expect(writes).toHaveLength(0)
 
   const choose = async (label: string) => {
-    await template.click()
+    await service.click()
     await page.locator('.t-select-option:visible').filter({ hasText: label }).click()
   }
-  await choose('OpenAI')
+  await choose('OpenAI ·')
   await expect(name).toHaveValue('OpenAI')
   await expect(address).toHaveValue('https://api.openai.com/v1')
   await key.fill('example-key-for-openai')
@@ -523,29 +537,43 @@ test('企业服务商模板预填地址并清空密钥，编辑地址要求新�
 
   await choose('DeepSeek')
   await name.fill('Enterprise Gateway')
+  await modelName.fill('example-chat')
   await address.fill('https://gateway.example.test/v1')
   await key.fill('example-gateway-key')
+  await editor.getByRole('button', { name: '测试连接', exact: true }).click()
+  await expect(editor.getByRole('status')).toHaveText('Draft connection verified')
+  expect(draftTests).toEqual([{
+    scope: 'tenant', base_url: 'https://gateway.example.test/v1', api_key: 'example-gateway-key',
+    model_name: 'example-chat', model_type: 'chat', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
+  }])
+  await save.click()
+  await expect(editor).toContainText('模型配置保存失败')
+  await expect(modelName).toHaveValue('example-chat')
+  await expect(key).toHaveValue('example-gateway-key')
   await save.click()
   await expect(editor).toHaveCount(0)
-  expect(writes).toEqual([{
-    name: 'Enterprise Gateway', base_url: 'https://gateway.example.test/v1', api_key: 'example-gateway-key', scope: 'tenant',
-  }])
+  await expect(page.locator('.model-grid article')).toContainText('example-chat')
+  const expected = {
+    name: 'example-chat', model_type: 'chat', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
+    provider: { name: 'Enterprise Gateway', base_url: 'https://gateway.example.test/v1', api_key: 'example-gateway-key' },
+  }
+  expect(writes).toEqual([expected, expected])
 
   await page.getByRole('button', { name: '服务商', exact: true }).click()
   await page.getByRole('button', { name: 'Enterprise Gateway · 编辑服务商' }).click()
   await expect(editor).toContainText('编辑企业模型服务商')
-  await expect(template).toHaveCount(0)
   await expect(name).toHaveValue('Enterprise Gateway')
   await expect(address).toHaveValue('https://gateway.example.test/v1')
   await expect(key).toHaveValue('')
   await address.fill('https://another.example.test/v1')
-  await save.click()
+  const saveProvider = editor.getByRole('button', { name: '保存并关闭' })
+  await saveProvider.click()
   await expect(editor).toContainText('修改 API 地址需要重新填写 API Key。')
-  expect(writes).toHaveLength(1)
+  expect(writes).toHaveLength(2)
   await key.fill('example-new-key')
-  await save.click()
+  await saveProvider.click()
   await expect(editor).toHaveCount(0)
-  expect(writes[1]).toEqual({
+  expect(writes[2]).toEqual({
     name: 'Enterprise Gateway', base_url: 'https://another.example.test/v1', api_key: 'example-new-key', scope: 'tenant',
   })
 })

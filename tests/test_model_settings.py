@@ -339,6 +339,41 @@ def test_enterprise_model_copy_keeps_model_id_and_provider_but_creates_a_distinc
         assert len({version.credential_reference_id for version in versions}) == 1
 
 
+def test_enterprise_model_and_provider_are_created_in_one_transaction(settings_client, database, monkeypatch):
+    from nexus_platform.models import provider_settings
+
+    client, path, identity, owner, member, _ = settings_client
+    route = path.replace('/model-settings', '/admin/model-settings') + '/models'
+    body = {
+        'name': 'model-id', 'display_name': 'My model',
+        'provider': {'name': 'Gateway', 'base_url': 'https://model.example/v1', 'api_key': 'first-model-secret'},
+    }
+    identity[0] = member
+    assert client.post(route, json=body).status_code == 403
+    identity[0] = owner
+
+    def fail_version(*args, **kwargs):
+        raise ValueError('Model version rejected')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(provider_settings, 'new_version', fail_version)
+        assert client.post(route, json=body).status_code == 422
+    assert client.get(path).json()['providers'] == []
+    with database() as db:
+        assert db.scalar(select(ProviderCredentialRecord)) is None
+
+    created = client.post(route, json=body)
+    assert created.status_code == 201
+    assert 'first-model-secret' not in created.text
+    catalog = client.get(path)
+    assert 'first-model-secret' not in catalog.text
+    provider, = catalog.json()['providers']
+    model, = provider['models']
+    assert (provider['name'], provider['scope']) == ('Gateway', 'tenant')
+    assert (model['id'], model['version_id']) == (created.json()['id'], created.json()['version_id'])
+    assert (model['name'], model['display_name']) == ('model-id', 'My model')
+
+
 @pytest.mark.parametrize(('model_type', 'adapter_module', 'response', 'expected_path'), [
     ('embedding', 'embeddings', {'data': [{'index': 0, 'embedding': [0.1, 0.2]}]}, '/v1/embeddings'),
     ('rerank', 'rerank', {'results': [{'index': 0, 'relevance_score': 0.5}]}, '/v1/rerank'),

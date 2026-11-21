@@ -52,6 +52,19 @@ class ModelInput(BaseModel):
     model_type: ModelType = 'chat'
 
 
+class SharedProviderInput(ProviderInput):
+    """New shared provider credentials submitted alongside its first model."""
+
+    scope: Literal['tenant'] = 'tenant'
+    api_key: SecretStr
+
+
+class ModelWithProviderInput(ModelInput):
+    """Combined creation request so a failed model never leaves an empty provider."""
+
+    provider: SharedProviderInput
+
+
 class DefaultInput(BaseModel):
     """Scoped default preference for one model type; a null version clears that preference."""
 
@@ -140,6 +153,18 @@ def model_name(value: str) -> str:
     if not value.strip():
         raise ValueError('Model name is required')
     return value.strip()
+
+
+@router.post('/admin/model-settings/models', status_code=201)
+def add_model_with_provider(tenant_id: UUID, body: ModelWithProviderInput, principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)):
+    """Create a new shared provider and its first model atomically."""
+    provider = provider_values(body.provider)
+    return settings.create_enterprise_model_with_provider(
+        db, principal, tenant_id, provider_name=provider['name'], base_url=provider['base_url'],
+        api_key=provider['api_key'], model_name=model_name(body.name), model_type=body.model_type,
+        model_options=body.options, display_name=body.display_name,
+    )
 
 
 @tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}', methods=['PUT'])

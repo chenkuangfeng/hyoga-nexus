@@ -16,6 +16,8 @@
 | `/providers/{id}/models/{profile_id}/test` | POST | 测试已保存的配置 |
 | `/test` | POST | 测试未保存的模型配置 |
 
+管理端 `POST /api/v1/tenants/{tenant_id}/admin/model-settings/models` 接收模型字段与嵌套的 `provider` 接入配置。在一个事务内创建企业共享服务商、加密凭据及首个模型版本，成功响应返回档案和版本 ID。
+
 管理端 `POST /api/v1/tenants/{tenant_id}/admin/model-settings/providers/{id}/models/{profile_id}/copy` 复制当前企业共享模型并返回新档案和版本 ID。模型创建、编辑及目录响应使用 `name` 表示上游模型 ID，`display_name` 表示展示名。
 
 Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始输入。测试间隔每供应商至少 10 秒（事务锁），总超时 15 秒，无自动重试。对话测试限制输出 32 Token，向量化测试发送一条文本，重排测试发送单条候选。测试返回状态和安全文案；视觉和语音返回不支持。网络策略由 Runtime 共用 transport 执行。

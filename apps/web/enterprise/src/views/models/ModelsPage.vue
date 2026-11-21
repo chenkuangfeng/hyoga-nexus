@@ -2,19 +2,21 @@
 import UsagePage from '../usage/UsagePage.vue'
 import ModelActions from './ModelActions.vue'
 import ModelProviderEditor from './ModelProviderEditor.vue'
+import { isApiAddress, providerPresets } from './providerConfig'
 import EditorDialog from '@nexus-web/core/components/settings/EditorDialog.vue'
 /** 企业模型目录：只管理当前企业共享 Provider、模型版本和租户默认值。 */
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
-  copyEnterpriseModel, disableEnterpriseModel, disableEnterpriseModelProvider, listEnterpriseModelSettings, saveEnterpriseModel,
+  copyEnterpriseModel, createEnterpriseModelWithProvider, disableEnterpriseModel, disableEnterpriseModelProvider,
+  listEnterpriseModelSettings, saveEnterpriseModel,
   saveEnterpriseModelProvider, setEnterpriseModelDefault, testEnterpriseModel,
   testEnterpriseModelDraft,
   enterpriseModelProtocol, type EnterpriseModelConnectionResult, type EnterpriseModelInput,
   type EnterpriseModelProvider, type EnterpriseModelProfile, type EnterpriseModelProtocol, type EnterpriseModelSettings,
-  type EnterpriseModelType, type EnterpriseProviderInput,
+  type EnterpriseModelType, type EnterpriseProviderInput, type NewEnterpriseProvider,
 } from '@nexus-web/core/api/enterprise-models'
 import { useEnterpriseContext } from '../../stores/context'
 
@@ -31,6 +33,7 @@ const defaultsDraft = ref<Partial<Record<EnterpriseModelType, string>>>({})
 const providerDialog = ref(false), providerError = ref('')
 const editingProvider = ref<EnterpriseModelProvider | null>(null)
 const modelDialog = ref(false), modelProviderId = ref<string | null>(null), modelEditId = ref<string | null>(null)
+const providerDraft = reactive({ name: '', baseUrl: '', apiKey: '' })
 const rerankApis = [
   { value: 'cohere', label: 'Cohere' },
   { value: 'tei', label: 'Text Embeddings Inference (TEI)' },
@@ -52,7 +55,31 @@ let epoch = 0, read = 0, draftRequest = 0, confirmation: ReturnType<typeof Dialo
 const typeOptions = computed(() => types.map(value => ({ value, label: t(`adminModels.types.${value}`) })))
 const providers = computed(() => settings.value?.providers || [])
 const selectedProvider = computed(() => providers.value.find(row => row.id === modelProviderId.value))
-const providerOptions = computed(() => providers.value.map(provider => ({ value: provider.id, label: provider.name })))
+const providerOptions = computed(() => [
+  ...providers.value.map(provider => ({ value: provider.id, label: provider.name })),
+  ...(!modelEditId.value ? [
+    ...providerPresets.map(preset => ({ value: preset.value, label: `${preset.label} · ${t('adminModels.providerTemplate')}` })),
+    { value: 'custom', label: t('modelSettings.source.custom') },
+  ] : []),
+])
+const addingProvider = computed(() => !modelEditId.value && (modelProviderId.value === 'custom'
+  || providerPresets.some(preset => preset.value === modelProviderId.value)))
+const newProviderInput = computed<NewEnterpriseProvider | null>(() => addingProvider.value ? {
+  name: providerDraft.name.trim(), base_url: providerDraft.baseUrl.trim(), api_key: providerDraft.apiKey,
+} : null)
+const providerInputError = computed(() => {
+  const provider = newProviderInput.value
+  if (!provider) return ''
+  if (!provider.name) return t('adminModels.providerNameRequired')
+  if (!isApiAddress(provider.base_url)) return t('adminModels.providerAddressInvalid')
+  return provider.api_key.trim() ? '' : t('adminModels.keyRequired')
+})
+watch(modelProviderId, value => {
+  const preset = providerPresets.find(row => row.value === value)
+  providerDraft.name = preset?.label ?? ''
+  providerDraft.baseUrl = preset?.baseUrl ?? ''
+  providerDraft.apiKey = ''
+}, { flush: 'sync' })
 const providerActions = computed(() => providers.value.flatMap(provider => [
   { label: `${provider.name} · ${t('adminModels.editProvider')}`, key: `edit-${provider.id}`, run: () => openProvider(provider) },
   { label: `${provider.name} · ${t('adminModels.disable')}`, key: `disable-${provider.id}`, danger: true, run: () => confirmDisable('provider', provider) },
@@ -80,8 +107,7 @@ function currentScope(current: number, scope: string, user: string) {
 }
 function clearForms() {
   closeProvider()
-  modelDialog.value = false; modelProviderId.value = null; modelEditId.value = null
-  modelForm.value = emptyModelForm()
+  closeModel()
   connections.value = {}; testingId.value = ''
 }
 function invalidate() {
@@ -101,9 +127,9 @@ async function load(refreshAfterWrite = false) {
   } catch { if (currentScope(current, scope, user) && request === read) error.value = t('adminModels.loadFailed') }
   finally { if (currentScope(current, scope, user) && request === read) loading.value = false }
 }
-function openProvider(row?: EnterpriseModelProvider) {
+function openProvider(row: EnterpriseModelProvider) {
   if (!canManage.value || !ready.value || busy.value) return
-  editingProvider.value = row ?? null
+  editingProvider.value = row
   providerError.value = ''
   providerDialog.value = true
   error.value = ''
@@ -114,8 +140,9 @@ function closeProvider() {
   providerError.value = ''
 }
 async function saveProvider(input: Omit<EnterpriseProviderInput, 'scope'>) {
-  if (!tenant.value || !canManage.value || !ready.value || !providerDialog.value || busy.value) return
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = editingProvider.value?.id
+  const id = editingProvider.value?.id
+  if (!tenant.value || !canManage.value || !ready.value || !providerDialog.value || !id || busy.value) return
+  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
   busy.value = true
   providerError.value = ''
   try {
@@ -126,11 +153,17 @@ async function saveProvider(input: Omit<EnterpriseProviderInput, 'scope'>) {
   } catch { if (currentScope(current, scope, user)) providerError.value = t('adminModels.saveFailed') }
   finally { if (currentScope(current, scope, user)) busy.value = false }
 }
-/** 新增时可选企业服务商，编辑时继续使用原服务商和模型类型。 */
+function closeModel() {
+  modelDialog.value = false; modelProviderId.value = null; modelEditId.value = null
+  providerDraft.apiKey = ''
+  modelForm.value = emptyModelForm()
+  error.value = ''
+}
+
+/** 在模型表单选择已配置服务商、模板或自定义接入。 */
 function openModel(provider?: EnterpriseModelProvider, row?: EnterpriseModelProfile) {
   if (!canManage.value || !ready.value || busy.value) return
-  if (!providers.value.length) { openProvider(); return }
-  modelProviderId.value = provider?.id ?? (providers.value.length === 1 ? providers.value[0].id : null)
+  modelProviderId.value = provider?.id ?? (providers.value.length ? (providers.value.length === 1 ? providers.value[0].id : null) : 'custom')
   modelEditId.value = row?.id || null
   const options = row?.options || {}
   modelForm.value = {
@@ -157,17 +190,17 @@ const modelInput = computed<EnterpriseModelInput>(() => {
 })
 const draftTestInput = computed(() => {
   const { name, model_type, options } = modelInput.value
-  return JSON.stringify([modelDialog.value, selectedProvider.value?.id, name, model_type, options])
+  return JSON.stringify([modelDialog.value, modelProviderId.value, name, model_type, options])
 })
-watch(draftTestInput, () => {
+watch([draftTestInput, () => providerDraft.baseUrl, () => providerDraft.apiKey], () => {
   draftRequest++
   testingDraft.value = false
   draftConnection.value = null
 }, { flush: 'sync' })
 
 async function testModelDraft() {
-  const provider = selectedProvider.value, input = modelInput.value
-  if (!modelDialog.value || !provider || !input.name || !tenant.value || !canManage.value || testingDraft.value || busy.value) return
+  const provider = selectedProvider.value ?? newProviderInput.value, input = modelInput.value
+  if (!modelDialog.value || !provider || providerInputError.value || !input.name || !tenant.value || !canManage.value || testingDraft.value || busy.value) return
   const current = epoch, request = ++draftRequest, scope = tenant.value, user = String(auth.user?.id || '')
   testingDraft.value = true
   draftConnection.value = null
@@ -184,13 +217,15 @@ async function testModelDraft() {
 }
 
 async function saveModel() {
-  const providerId = selectedProvider.value?.id, input = modelInput.value
-  if (!tenant.value || !canManage.value || !ready.value || !modelDialog.value || !providerId || busy.value) return
+  const providerId = selectedProvider.value?.id, provider = newProviderInput.value, input = modelInput.value
+  if (!tenant.value || !canManage.value || !ready.value || !modelDialog.value || (!providerId && !provider) || busy.value) return
+  if (providerInputError.value) { error.value = providerInputError.value; return }
   if (!input.name) { error.value = t('adminModels.modelRequired'); return }
   const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), profileId = modelEditId.value
   busy.value = true; error.value = ''
   try {
-    await saveEnterpriseModel(scope, providerId, input, profileId || undefined)
+    if (provider) await createEnterpriseModelWithProvider(scope, provider, input)
+    else if (providerId) await saveEnterpriseModel(scope, providerId, input, profileId || undefined)
     if (!currentScope(current, scope, user)) return
     if (!profileId) {
       if (activeType.value !== 'all') activeType.value = input.model_type
@@ -293,11 +328,8 @@ onBeforeUnmount(invalidate)
           <t-button variant="outline" size="small" :loading="loading" :disabled="busy" @click="load()">
             {{ t('connectionUi.refresh') }}
           </t-button>
-          <template v-if="activeTab === 'models' && providers.length">
-            <ModelActions :label="t('model.editor.providerLabel')" :disabled="!ready || busy" :actions="providerActions" />
-            <t-button variant="outline" size="small" :disabled="!ready || busy" @click="openProvider()">
-              {{ t('adminModels.addProvider') }}
-            </t-button>
+          <template v-if="activeTab === 'models'">
+            <ModelActions v-if="providers.length" :label="t('model.editor.providerLabel')" :disabled="!ready || busy" :actions="providerActions" />
             <t-button theme="primary" size="small" :disabled="!ready || busy" @click="openModel()">
               <template #icon><t-icon name="add" aria-hidden="true" /></template>
               {{ t('adminModels.addModel') }}
@@ -356,7 +388,6 @@ onBeforeUnmount(invalidate)
               <t-button variant="outline" @click="modelQuery = ''">{{ t('common.clear') }}</t-button>
             </div>
             <template v-else>
-              <p v-if="!providers.length" class="model-empty-hint">{{ t('adminModels.noProviders') }}</p>
               <div class="model-grid">
                 <article v-for="{ provider, model } in filteredModels" :key="model.id" class="model-card"
                   :class="'model-card--' + model.model_type">
@@ -390,7 +421,7 @@ onBeforeUnmount(invalidate)
                 </article>
                 <button type="button" class="model-card model-card--add" :disabled="busy" @click="openModel()">
                   <span class="model-card--add__icon" aria-hidden="true"><t-icon name="add" /></span>
-                  <span>{{ t(providers.length ? 'adminModels.addModel' : 'adminModels.addProvider') }}</span>
+                  <span>{{ t('adminModels.addModel') }}</span>
                 </button>
               </div>
             </template>
@@ -398,17 +429,30 @@ onBeforeUnmount(invalidate)
         </t-loading>
       </template>
     </template>
-    <ModelProviderEditor :visible="providerDialog" :provider="editingProvider" :busy="busy" :error="providerError"
+    <ModelProviderEditor v-if="editingProvider" :visible="providerDialog" :provider="editingProvider" :busy="busy" :error="providerError"
       @save="saveProvider" @close="closeProvider" />
-    <EditorDialog :visible="modelDialog" :header="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" width="min(600px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy || !modelProviderId }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" @confirm="saveModel" @close="!busy && (modelDialog = false)">
+    <EditorDialog :visible="modelDialog" :header="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" width="min(600px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminModels.save'), loading: busy, disabled: busy || !modelProviderId }" :cancel-btn="{ content: t('common.cancel'), disabled: busy }" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @confirm="saveModel" @close="!busy && closeModel()">
       <div class="editor-form">
         <t-alert v-if="error" theme="error" :message="error" />
         <label for="enterprise-model-provider">{{ t('model.editor.providerLabel') }}
           <t-select v-model="modelProviderId" :input-props="{ id: 'enterprise-model-provider' }"
-            :options="providerOptions" :placeholder="t('model.editor.providerPlaceholder')" :disabled="!!modelEditId" filterable />
+            :options="providerOptions" :placeholder="t('model.editor.providerPlaceholder')" :disabled="!!modelEditId || busy" filterable />
+        </label>
+        <label v-if="addingProvider">{{ t('adminModels.providerName') }}
+          <t-input v-model="providerDraft.name" :maxlength="160" :disabled="busy" />
         </label>
         <label>{{ t('adminModels.modelName') }}<t-input v-model="modelForm.name" maxlength="160" /></label>
         <label>{{ t('model.editor.displayNameLabel') }}<t-input v-model="modelForm.displayName" maxlength="160" :placeholder="modelForm.name" /></label>
+        <template v-if="addingProvider">
+          <label>{{ t('adminModels.baseUrl') }}
+            <t-input v-model="providerDraft.baseUrl" :maxlength="512" :disabled="busy" autocomplete="off" :spell-check="false" />
+          </label>
+          <label>{{ t('adminModels.apiKey') }}
+            <t-input v-model="providerDraft.apiKey" type="password" :disabled="busy" autocomplete="new-password" :spell-check="false">
+              <template #prefix-icon><t-icon name="lock-on" aria-hidden="true" /></template>
+            </t-input>
+          </label>
+        </template>
         <label>{{ t('adminModels.modelType') }}<t-select v-model="modelForm.type" :options="typeOptions" :disabled="!!modelEditId" /></label>
         <label v-if="modelForm.type === 'chat' || modelForm.type === 'embedding'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.protocol" :options="[{value:'openai_chat_completions',label:t('adminModels.protocols.openai_chat_completions')},{value:'openai_responses',label:t('adminModels.protocols.openai_responses')},...(modelForm.type === 'chat' ? [{value:'anthropic_messages',label:t('adminModels.protocols.anthropic_messages')}] : [])]" /></label>
         <label v-if="modelForm.type === 'rerank'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.rerankApi" :options="rerankApis" /></label>
@@ -418,7 +462,7 @@ onBeforeUnmount(invalidate)
         </template>
         <p class="field-hint">{{ t(modelEditId ? 'adminModels.versionHint' : 'adminModels.modelOptionsHint') }}</p>
         <div v-if="['chat', 'embedding', 'rerank'].includes(modelForm.type)">
-          <t-button variant="outline" :loading="testingDraft" :disabled="busy || testingDraft || !selectedProvider || !modelInput.name"
+          <t-button variant="outline" :loading="testingDraft" :disabled="busy || testingDraft || (!selectedProvider && !newProviderInput) || !!providerInputError || !modelInput.name"
             :aria-description="t('adminModels.testHint')" @click="testModelDraft">{{ t('adminModels.test') }}</t-button>
           <p class="field-hint">{{ t('adminModels.testHint') }}</p>
           <p v-if="draftConnection" class="connection-result" :class="{ 'is-success': draftConnection.ok }"

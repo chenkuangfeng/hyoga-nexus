@@ -19,6 +19,7 @@ export interface EnterpriseModelSettings {
   can_manage_tenant: boolean
 }
 export interface EnterpriseProviderInput { name: string; base_url: string; scope: 'tenant'; api_key?: string }
+export type NewEnterpriseProvider = Pick<EnterpriseProviderInput, 'name' | 'base_url'> & { api_key: string }
 export interface EnterpriseModelInput { name: string; display_name?: string; model_type: EnterpriseModelType; options: Record<string, unknown> }
 export interface EnterpriseModelConnectionResult { ok: boolean; message: string; code?: string }
 
@@ -79,6 +80,12 @@ export async function saveEnterpriseModel(tenant: string, providerId: string, in
   if (!id || (profileId && id !== profileId) || !string(result.version_id)) throw invalid()
 }
 
+/** Save the model and a new shared provider together. */
+export async function createEnterpriseModelWithProvider(tenant: string, provider: NewEnterpriseProvider, input: EnterpriseModelInput): Promise<void> {
+  const row = object(await post(`${root(tenant)}/models`, { ...input, provider }))
+  if (!string(row.id) || !string(row.version_id)) throw invalid()
+}
+
 /** Clone a shared configuration server-side, retaining its upstream model identifier. */
 export async function copyEnterpriseModel(tenant: string, providerId: string, profileId: string, suffix: string): Promise<void> {
   const result = object(await post(`${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/copy`, { suffix }))
@@ -110,9 +117,10 @@ export async function testEnterpriseModel(tenant: string, providerId: string, pr
 }
 
 /** Test current form values using the shared provider's saved credential. */
-export async function testEnterpriseModelDraft(tenant: string, provider: EnterpriseModelProvider, input: EnterpriseModelInput): Promise<EnterpriseModelConnectionResult> {
+export async function testEnterpriseModelDraft(tenant: string, provider: EnterpriseModelProvider | NewEnterpriseProvider, input: EnterpriseModelInput): Promise<EnterpriseModelConnectionResult> {
   return connectionResult(await post(`${root(tenant)}/test`, {
-    scope: 'tenant', provider_id: provider.id, base_url: provider.base_url,
+    scope: 'tenant', base_url: provider.base_url,
+    ...('id' in provider ? { provider_id: provider.id } : { api_key: provider.api_key }),
     model_name: input.name, model_type: input.model_type, options: input.options,
   }))
 }

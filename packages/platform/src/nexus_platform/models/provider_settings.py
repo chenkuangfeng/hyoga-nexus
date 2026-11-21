@@ -221,6 +221,28 @@ def list_settings(db: Session, principal: Principal, tenant_id: UUID) -> dict[st
         return {'providers': providers, 'defaults': defaults, 'can_manage_tenant': membership.role in ADMIN_ROLES}
 
 
+def _create_provider(db: Session, tenant_id: UUID, owner_user_id: UUID | None, *,
+                     name: str, base_url: str, api_key: str | None) -> Provider:
+    """Persist the provider and its encrypted credential in the caller transaction."""
+    if not api_key:
+        raise ValueError('API Key is required')
+    credential_id = new_id()
+    row = Provider(id=new_id(), tenant_id=tenant_id,
+        owner_user_id=owner_user_id,
+        name=name, base_url=base_url, credential_id=credential_id,
+        active=True)
+    db.add(Credential(id=credential_id, tenant_id=tenant_id, backend='encrypted',
+        handle='encrypted://' + str(credential_id), scope={'tenant_id': str(tenant_id)},
+        status='active', created_at=utc_now()))
+    db.flush()
+    db.add(row)
+    db.flush()
+    db.add(StoredKey(credential_id=credential_id, provider_id=row.id, base_url=base_url,
+                     encrypted_key=encrypt(api_key, credential_id)))
+    db.flush()
+    return row
+
+
 def save_provider(db: Session, principal: Principal, tenant_id: UUID, *, name: str, base_url: str, scope: str, api_key: str | None, provider_id: UUID | None = None) -> dict[str, object]:
     """Create or update an authorized provider in one transaction and return public metadata.
 
@@ -239,22 +261,10 @@ def save_provider(db: Session, principal: Principal, tenant_id: UUID, *, name: s
                 require_api_permission(db, tenant_id, user.id, "models:manage")
             elif not personal_models_allowed(db, tenant_id):
                 raise Forbidden('Your enterprise does not allow personal models')
-            if not api_key:
-                raise ValueError('API Key is required')
-            credential_id = new_id()
-            row = Provider(id=new_id(), tenant_id=tenant_id,
-                owner_user_id=user.id if scope == 'personal' else None,
-                name=name, base_url=base_url, credential_id=credential_id,
-                active=True)
-            db.add(Credential(id=credential_id, tenant_id=tenant_id, backend='encrypted',
-                handle='encrypted://' + str(credential_id), scope={'tenant_id': str(tenant_id)},
-                status='active', created_at=utc_now()))
-            db.flush()
-            db.add(row)
-            db.flush()
-            db.add(StoredKey(credential_id=credential_id, provider_id=row.id, base_url=base_url,
-                             encrypted_key=encrypt(api_key, credential_id)))
-            db.flush()
+            row = _create_provider(db, tenant_id, user.id if scope == 'personal' else None,
+                                   name=name, base_url=base_url, api_key=api_key)
+            audit(db, tenant_id, user.id, 'provider.saved', 'model_provider', str(row.id))
+            return view(db, row)
         row.name = name
         if row.base_url != base_url:
             # Destination changes also require an explicit replacement credential.
@@ -315,15 +325,42 @@ def _new_profile(db: Session, provider: Provider, user_id: UUID, model_type: str
 MAX_MODEL_DISPLAY_NAME = 160
 
 
+def _settings_options(options: dict | None, display_name: str | None) -> dict:
+    checked = validate_model_options(options or {})
+    return checked if display_name is None else {**checked, 'display_name': display_name.strip()}
+
+
+def _save_version(db: Session, provider: Provider, profile: Profile, user_id: UUID,
+                  model_name: str, options: dict) -> dict[str, str]:
+    version = new_version(db, provider, profile, model_name, options)
+    audit(db, provider.tenant_id, user_id, 'provider.model_saved', 'model_profile', str(profile.id),
+          {'model_type': profile.model_type})
+    return {'id': str(profile.id), 'version_id': str(version.id)}
+
+
+def create_enterprise_model_with_provider(
+    db: Session, principal: Principal, tenant_id: UUID, *, provider_name: str, base_url: str,
+    api_key: str, model_name: str, model_type: str, model_options: dict, display_name: str | None,
+) -> dict[str, str]:
+    """Create a shared provider and its first model under one authorization and transaction."""
+    options = _settings_options(model_options, display_name)
+    model_type = validate_model_type(model_type)
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        require_api_permission(db, tenant_id, user.id, 'models:manage')
+        provider = _create_provider(db, tenant_id, None, name=provider_name, base_url=base_url, api_key=api_key)
+        audit(db, tenant_id, user.id, 'provider.saved', 'model_provider', str(provider.id))
+        profile = _new_profile(db, provider, user.id, model_type)
+        return _save_version(db, provider, profile, user.id, model_name, options)
+
+
 def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None, model_type: str = 'chat', *, display_name: str | None = None) -> dict[str, str]:
     """Create a provider-bound profile or append its next version after management authorization.
 
     Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten.
     The capability type is fixed when the profile is created; changing it on edit is a Conflict."""
-    model_options = validate_model_options(model_options or {})
+    model_options = _settings_options(model_options, display_name)
     model_type = validate_model_type(model_type)
-    if display_name is not None:
-        model_options = {**model_options, 'display_name': display_name.strip()}
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         provider = provider_access(db, tenant_id, user.id, provider_id, manage=True)
@@ -336,9 +373,7 @@ def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: 
                 raise Conflict('Model type cannot be changed; add a new model instead')
         else:
             profile = _new_profile(db, provider, user.id, model_type)
-        version = new_version(db, provider, profile, model_name, model_options)
-        audit(db, tenant_id, user.id, 'provider.model_saved', 'model_profile', str(profile.id), {'model_type': model_type})
-        return {'id': str(profile.id), 'version_id': str(version.id)}
+        return _save_version(db, provider, profile, user.id, model_name, model_options)
 
 
 def copy_enterprise_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID,
