@@ -8,7 +8,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router、vue-i18n 与 Vite。页面�
 | --- | --- | --- |
 | [core](core/README.md) | 公共 API、认证、语言、主题、登录与改密、共享编辑器与渠道组件 | 三项目共享能力；应用不得相互依赖 |
 | [workspace](workspace/README.md) | 员工工作台与 embed 独立入口 | 对话、智能体、知识库、渠道、工具箱、账户设置等员工功能 |
-| [admin](admin/README.md) | 企业管理后台，部署路径 `/admin/` | 独立权限外壳，提供企业、成员、角色、资源、模型、工具、知识库、渠道、用量、运行状态及审计治理页面 |
+| [enterprise](enterprise/README.md) | 企业管理应用，部署路径 `/enterprise/` | 独立权限外壳，提供企业、成员、角色、资源、模型、工具、知识库、渠道、用量、运行状态及审计治理页面 |
 
 ## 使用
 
@@ -18,17 +18,19 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router、vue-i18n 与 Vite。页面�
 corepack enable
 corepack pnpm install --frozen-lockfile
 corepack pnpm dev:workspace # 5173
-corepack pnpm dev:admin     # 5174/admin/
+corepack pnpm dev:enterprise     # 5174/enterprise/
 ```
+
+要在开发环境从工作台免密进入企业管理，请同时启动两个应用。工作台在当前地址的 `/enterprise/` 代理企业管理应用，保留当前浏览器会话和所选企业。生产部署将两个构建产物放在同一站点，配置见 [Nginx 示例](docs/nginx.example.conf)。
 
 `pnpm dev` 是工作台开发命令的别名。两个服务默认将 `/api` 代理到 `http://127.0.0.1:8000`，可用 `VITE_DEV_PROXY_TARGET` 覆盖。两个应用默认同域部署，共用认证存储；真实权限始终由后端校验。
 
 ## 构建与检查
 
-- `pnpm build`：串行构建 `workspace/dist` 与 `admin/dist`。
+- `pnpm build`：串行构建 `workspace/dist` 与 `enterprise/dist`。
 - `pnpm type-check`：串行检查公共包和两个应用。
 - `pnpm test`：工程依赖边界、公共包及两个应用的测试。
-- `pnpm preview`：预览工作台；`pnpm --filter @nexus-web/admin preview`：预览管理后台。
+- `pnpm preview`：预览工作台；`pnpm --filter @nexus-web/enterprise preview`：预览管理后台。
 - 生产静态部署的 Nginx 路由示例见 [nginx.example.conf](docs/nginx.example.conf)。
 - `pnpm check-i18n`：检查公共语言包；语言键扫描覆盖三个项目。
 
@@ -41,4 +43,4 @@ corepack pnpm dev:admin     # 5174/admin/
 - [实施任务](../../openspec/changes/2026-11-11-enterprise-saas/tasks.md)
 - [部署与反向代理](docs/nginx.example.conf)
 
-企业解析引擎治理由 Admin `/parsers` 提供，面向当前企业 owner/admin。工作台旧 parser 书签显示管理应用迁移说明；知识库内选择解析规则继续保留。目录状态表示配置是否齐全，服务连通测试仍待后端契约。
+企业解析引擎治理由企业管理应用 `/parsers` 提供，面向当前企业 owner/admin。工作台旧 parser 书签显示管理应用迁移说明；知识库内选择解析规则继续保留。目录状态表示配置是否齐全，服务连通测试仍待后端契约。

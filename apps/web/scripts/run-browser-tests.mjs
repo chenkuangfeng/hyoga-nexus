@@ -8,8 +8,8 @@ const args = process.argv.slice(2)
 const preview = args[0] === 'preview'
 if (preview) args.shift()
 const selected = args[0] && !args[0].startsWith('-') ? args.shift() : undefined
-if (selected && !['admin', 'workspace'].includes(selected)) throw new Error('Expected app: admin or workspace')
-const apps = selected ? [selected] : ['workspace', 'admin']
+if (selected && !['enterprise', 'workspace'].includes(selected)) throw new Error('Expected app: enterprise or workspace')
+const apps = selected ? [selected] : ['workspace', 'enterprise']
 for (const app of apps) {
   const child = spawn(process.execPath, [cli, 'test', `--project=${app}`, ...args], {
     stdio: 'inherit', env: { ...process.env, NEXUS_E2E_APP: app, ...(preview ? { NEXUS_E2E_PREVIEW: '1' } : {}) },

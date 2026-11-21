@@ -3,7 +3,7 @@ import { mergeConfig } from 'vite'
 import { createWebConfig } from '../vite.config'
 
 const app = process.env.NEXUS_E2E_APP
-if (app !== 'workspace' && app !== 'admin') throw new Error('NEXUS_E2E_APP must be workspace or admin')
+if (app !== 'workspace' && app !== 'enterprise') throw new Error('NEXUS_E2E_APP must be workspace or enterprise')
 export default mergeConfig(createWebConfig(app), {
   // 自动扫描所有懒加载的 Office/图表页面会在首个登录用例前耗尽小内存机器。
   // 用例仍加载实际页面依赖；需要的 CommonJS 依赖必须在此显式预打包。

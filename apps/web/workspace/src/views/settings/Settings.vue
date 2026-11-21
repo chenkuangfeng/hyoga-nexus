@@ -9,14 +9,14 @@ import { useUIStore } from '@/stores/ui'
 import GeneralSettings from './GeneralSettings.vue'
 import UserProfile from './UserProfile.vue'
 import NexusMemorySettings from './NexusMemorySettings.vue'
-import AdminSectionMoved from './AdminSectionMoved.vue'
-import { isMigratedAdminSection } from '@/config/settingsRoute'
+import EnterpriseSectionMoved from './EnterpriseSectionMoved.vue'
+import { isMigratedEnterpriseSection } from '@/config/settingsRoute'
 const route = useRoute(), router = useRouter(), ui = useUIStore(), { t } = useI18n()
 const allowed = ['general', 'userprofile', 'mymemory']
 const visible = computed(() => route.path === '/platform/settings' || ui.showSettingsModal)
 const section = computed(() => {
   const candidate = route.path === '/platform/settings' ? route.query.section : ui.settingsInitialSection
-  return typeof candidate === 'string' && (allowed.includes(candidate) || isMigratedAdminSection(candidate)) ? candidate : 'general'
+  return typeof candidate === 'string' && (allowed.includes(candidate) || isMigratedEnterpriseSection(candidate)) ? candidate : 'general'
 })
 const groups = computed(() => [{ key: 'account', label: t('settings.navGroups.account'), items: [
   { key: 'general', label: t('general.title'), icon: 'setting' },
@@ -45,7 +45,7 @@ const shell = useModalShell({ visible: () => visible.value, close })
       <GeneralSettings v-if="section === 'general'" />
       <UserProfile v-else-if="section === 'userprofile'" />
       <NexusMemorySettings v-else-if="section === 'mymemory'" />
-      <AdminSectionMoved v-else-if="isMigratedAdminSection(section)" :section="section" />
+      <EnterpriseSectionMoved v-else-if="isMigratedEnterpriseSection(section)" :section="section" />
     </div></div>
   </SettingsModalShell>
 </template>

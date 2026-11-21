@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 const require = createRequire(import.meta.url), web = fileURLToPath(new URL('..', import.meta.url))
 const cli = join(dirname(require.resolve('vue-tsc/package.json')), 'bin/vue-tsc.js')
 const selected = process.argv[2]
-if (selected && !['core', 'workspace', 'admin'].includes(selected)) throw new Error('Expected core, workspace or admin')
+if (selected && !['core', 'workspace', 'enterprise'].includes(selected)) throw new Error('Expected core, workspace or enterprise')
 const options = process.env.NODE_OPTIONS || '--max-old-space-size=768 --max-semi-space-size=4'
 async function run(args) {
   const child = spawn(process.execPath, args, { cwd: web, stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: options, MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX || '2' } })
@@ -22,7 +22,7 @@ async function run(args) {
 }
 await run([cli, '--build', 'core/tsconfig.types.json'])
 await run([join(web, 'scripts/verify-type-resolution.mjs'), 'core'])
-for (const app of selected === 'core' ? [] : selected ? [selected] : ['workspace', 'admin']) {
+for (const app of selected === 'core' ? [] : selected ? [selected] : ['workspace', 'enterprise']) {
   await run([join(web, 'scripts/type-projects.mjs'), app])
   const manifest = JSON.parse(readFileSync(join(web, app, 'node_modules/.cache/nexus-types/manifest.json'), 'utf8'))
   for (const [i, project] of manifest.projects.entries()) {

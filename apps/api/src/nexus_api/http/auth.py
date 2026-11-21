@@ -115,28 +115,16 @@ def _tenant_info(space: dict) -> dict:
             "kind": space["kind"], "storage_quota": 0, "storage_used": 0, "created_at": None, "updated_at": None}
 
 
-#: Holding any of these, or being owner or admin, opens the enterprise admin console (openspec 2026-11-11 E2).
-ADMIN_ENTRY_PERMISSIONS = frozenset({
-    "members:manage", "roles:manage", "org:manage", "policy:manage", "audit:read", "models:manage", "tools:manage",
-    "enterprise_agents:manage", "enterprise_kbs:manage",
-})
-
-
-def _entries(db: Session, principal: Principal, tenant_id, role: str) -> list[str]:
-    """Front-end applications the user may open in one enterprise: ``workspace`` always, ``admin`` with governance."""
-    if role in ("owner", "admin"):
-        return ["workspace", "admin"]
-    from nexus_platform.authz.permissions import effective_permissions
-    from nexus_platform.identity.service import resolve_user
-    with db.begin():
-        user_id = resolve_user(db, principal).id
-        apis = effective_permissions(db, tenant_id, user_id).apis
-    return ["workspace", "admin"] if apis & ADMIN_ENTRY_PERMISSIONS else ["workspace"]
+def _entries(tenant: TenantRecord, role: str) -> list[str]:
+    """Return app entries for the user's base membership role in the given space."""
+    if tenant.kind == "enterprise" and role in (TenantRole.OWNER, TenantRole.ADMIN):
+        return ["workspace", "enterprise"]
+    return ["workspace"]
 
 
 def _memberships(db: Session, principal: Principal) -> list[dict]:
     rows = tenants.list_tenants(db, principal)
-    return [{**_space_view(tenant, role), "entries": _entries(db, principal, tenant.id, role)} for tenant, role in rows]
+    return [{**_space_view(tenant, role), "entries": _entries(tenant, role)} for tenant, role in rows]
 
 
 @router.get("/config")

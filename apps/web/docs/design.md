@@ -2,7 +2,7 @@
 
 Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n 与 Vite。`apps/web` 是 pnpm workspace，公共包与两个应用的边界见下文。下文页面、组件与业务状态路径相对 `workspace/src`，API、认证与语言路径相对 `core/src`。
 
-员工工作台外壳为 `workspace/src/views/platform/index.vue`，左侧为 `workspace/src/components/menu.vue`，右侧为业务路由与共享的设置、上传任务、命令面板等组件。路由在 `workspace/src/router/index.ts`，登录入口为 `/login`，会话地址为 `/platform/chat/:chatid`。认证与当前企业由 `core/src/stores/auth.ts` 统一管理，布局偏好由工作台 `workspace/src/stores/ui.ts` 管理。平台管理路由已删除，未知地址使用公共 404 页面；独立企业管理应用部署于 `/admin/`。生产反向代理需分别为 `/`、`/admin/` 和 `/embed/` 配置静态回退，并将 `/api/`、`/wecom/` 转给 API。
+员工工作台外壳为 `workspace/src/views/platform/index.vue`，左侧为 `workspace/src/components/menu.vue`，右侧为业务路由与共享的设置、上传任务、命令面板等组件。路由在 `workspace/src/router/index.ts`，登录入口为 `/login`，会话地址为 `/platform/chat/:chatid`。认证与当前企业由 `core/src/stores/auth.ts` 统一管理，布局偏好由工作台 `workspace/src/stores/ui.ts` 管理。平台管理路由已删除，未知地址使用公共 404 页面；独立企业管理应用部署于 `/enterprise/`。生产反向代理需分别为 `/`、`/enterprise/` 和 `/embed/` 配置静态回退，并将 `/api/`、`/wecom/` 转给 API。
 
 模型设置（设置 → 模型管理，`views/settings/NexusModelSettings.vue` 与 `NexusModelEditorDialog.vue`）沿用 WeKnora `ModelSettings.vue`、`ModelEditorDialog.vue` 的布局与样式（类型标签页与计数、搜索、卡片网格、添加卡片、居中编辑抽屉、底部测试连接），数据来自 `api/nexus-models.ts`（`/tenants/{id}/model-settings`）。WeKnora 的一条模型对应 Nexus 的「供应商 + 模型档案」：`views/settings/nexusModelCards.ts`（纯函数，有单元测试）把供应商下的模型展开为卡片，并决定保存时复用已有供应商还是先建供应商（失败重试复用已建供应商）。服务商下拉列出调用者可管理的供应商与「自定义（OpenAI 兼容接口）」；编辑时修改 Key 会轮换整个供应商的 Key，界面提示受影响的模型数。默认模型在卡片菜单中按作用域设置（个人默认；空间共享模型且调用者为管理员时还可设空间默认），卡片显示默认标签。Key 只在提交时发送，提交后清空，不写入浏览器存储。省略 WeKnora 的内置模型、模型目录、调试抽屉、用量对话框、Ollama 与云服务来源。
 
@@ -33,11 +33,13 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## pnpm workspace
 
-`core`、`workspace`、`admin` 使用唯一锁文件与 `pnpm-workspace.yaml` 的 catalog。`tsconfig.base.json` 开启严格类型检查；两个 Vite 配置调用根 `createWebConfig` 工厂，统一 API 代理、PDF WASM 复制和依赖拆包。工作台保留主页面和 embed 两个入口，管理应用 base 为 `/admin/`。
+`core`、`workspace`、`enterprise` 使用唯一锁文件与 `pnpm-workspace.yaml` 的 catalog。`tsconfig.base.json` 开启严格类型检查；两个 Vite 配置调用根 `createWebConfig` 工厂，统一 API 代理、PDF WASM 复制和依赖拆包。工作台保留主页面和 embed 两个入口，管理应用 base 为 `/enterprise/`。
 
 原 `src` 和 `public` 分别移入 `workspace/src`、`workspace/public`；公共 API、认证、主题、编辑器及渠道组件抽到 `core/src`，公共包不引用应用。应用用 `@nexus-web/core/...` 访问公共源码，Vite 排除其依赖预构建并统一 Vue 实例。登录、改密保留原有组件与流程，管理应用登录后进入本应用首页。
 
 工作台恢复浏览器缓存的会话时，首次进入受保护路由前通过 `GET /api/v1/auth/me` 校验身份与所选空间。工作台和管理端共用失效处理：该接口对当前选择的空间返回 404 时清理本地会话，并由路由返回登录页。开发模式会重新免密登录并保存服务端返回的空间 ID，密码模式显示登录表单。
+
+当前企业空间的 owner 和管理员由服务端获得 `enterprise` 应用入口。工作台沿用 WeKnora `UserMenu.vue` 的底部菜单布局，在设置下方显示「企业管理」链接。生产反向代理和工作台开发代理均提供同源 `/enterprise/`，独立应用读取同一浏览器会话及所选企业，并重新请求 `/auth/me` 校验入口资格。治理操作继续使用原 API 权限。
 
 `stores/entries.ts` 按当前企业查询应用入口；不存在的企业、缺失 entries 的旧缓存返回空入口。`scripts/check-boundaries.ts` 检查静态导入、导出和动态导入的方向。平台管理页面、专用模型目录适配器、桌面绑定与自动初始化入口已删除；旧集成页和本地浏览器连接入口已删除，管理端智能体目录承接渠道入口，MCP endpoint 归发布集成；员工端不挂载这些页面。管理端已接入权限外壳、企业/组织/成员/角色治理、策略、智能体与知识库管理、模型与 MCP、存储/检索、工具与技能、渠道、用量、运行状态及审计页面。智能体与知识库完整编辑器及 IM 面板由 core 复用。embed 服务端契约与 MCP 个人 endpoint 尚未完成；双应用完整构建/浏览器验收和工作台产物隔离仍待 E2.8。
 
@@ -57,15 +59,15 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 企业管理端策略与权限
 
-`AdminLayout.vue` 持续挂载侧栏、当前企业和成员企业选择器，业务子路由在右侧 `RouterView` 切换。`admin/src/router.ts` 的受保护导航先使 `stores/context.ts` 的业务权限失效，再刷新认证与权限；强制改密优先于业务。普通切页校验期间保留同一账号和企业上次确认的菜单，校验完成后按最新 API 权限更新。菜单快照只用于显示，业务操作仍须通过权限检查。没有 `entries.admin` 时显示无权限；权限请求失败时清除菜单快照并展示重试。上下文不持久化权限；账号、企业或管理入口变化立即递增请求代次并清空权限及菜单快照。
+`EnterpriseLayout.vue` 持续挂载侧栏、当前企业和成员企业选择器，业务子路由在右侧 `RouterView` 切换。`enterprise/src/router.ts` 的受保护导航先使 `stores/context.ts` 的业务权限失效，再刷新认证与权限；强制改密优先于业务。普通切页校验期间保留同一账号和企业上次确认的菜单，校验完成后按最新 API 权限更新。菜单快照只用于显示，业务操作仍须通过权限检查。没有 `entries.enterprise` 时显示无权限；权限请求失败时清除菜单快照并展示重试。上下文不持久化权限；账号、企业或管理入口变化立即递增请求代次并清空权限及菜单快照。
 
-`/admin/policy` 的 `views/EnterprisePolicy.vue` 调用公共 `core/src/api/enterprise-admin.ts`：GET/PATCH `/tenants/{id}/admin/policy`，组织选项通过 `/org-units/tree` 读取。策略的枚举、布尔值与保留天数经过运行时校验。页面保留服务端快照，`policyChanges` 只提交不同字段；组织配置不可读时保留已有部门 ID，表单只显示配置数量，不暴露内部 ID 或允许手填。保存前说明渠道停用与内容清理后果，显式 null 关闭自动清理。每个请求、确认弹窗及保存结果校验代次，身份变化、权限重载或卸载使原操作失效。
+`/enterprise/policy` 的 `views/EnterprisePolicy.vue` 调用公共 `core/src/api/enterprise-admin.ts`：GET/PATCH `/tenants/{id}/admin/policy`，组织选项通过 `/org-units/tree` 读取。策略的枚举、布尔值与保留天数经过运行时校验。页面保留服务端快照，`policyChanges` 只提交不同字段；组织配置不可读时保留已有部门 ID，表单只显示配置数量，不暴露内部 ID 或允许手填。保存前说明渠道停用与内容清理后果，显式 null 关闭自动清理。每个请求、确认弹窗及保存结果校验代次，身份变化、权限重载或卸载使原操作失效。
 
 界面参考 WeKnora `Settings.vue` 的设置导航、权限兜底与分组样式，以及 `TenantInfo.vue` 的加载、错误和提交反馈；采用 TDesign 表单与语义主题变量，按 Nexus 的企业策略契约重写，不调用 WeKnora 租户设置接口。首页不展示虚构统计，未迁移业务仅说明状态。开发时工作台链接、邀请与开户转交同主机 5173 端口；生产保持同源路径，查询参数原样保留。
 
 ## 管理端成员与邀请
 
-`/admin/members` 由 `views/members/MembersPage.vue` 和 `useMemberAdministration.ts` 组成，复用已接通的管理外壳与权限上下文。界面参考 WeKnora `TenantMembers.vue` 的成员/待邀请标签、搜索与角色操作、邀请表单和链接流程，按 Nexus 现有 DTO 重写；不导入工作台组件，审计由独立 AuditPage 承接。成员列表展示 active/suspended，管理 API 以事务锁保护 owner 状态，停用和恢复确认后调用状态端点并刷新行；操作者修改自身状态后重校准认证与企业权限。剪贴板函数迁到 `core`，原工作台路径保留转导出。
+`/enterprise/members` 由 `views/members/MembersPage.vue` 和 `useMemberAdministration.ts` 组成，复用已接通的管理外壳与权限上下文。界面参考 WeKnora `TenantMembers.vue` 的成员/待邀请标签、搜索与角色操作、邀请表单和链接流程，按 Nexus 现有 DTO 重写；不导入工作台组件，审计由独立 AuditPage 承接。成员列表展示 active/suspended，管理 API 以事务锁保护 owner 状态，停用和恢复确认后调用状态端点并刷新行；操作者修改自身状态后重校准认证与企业权限。剪贴板函数迁到 `core`，原工作台路径保留转导出。
 
 公共 `api/enterprise-members.ts` 调用现有 `/tenants/{id}/members`、`members/by-email`、`invitations` 和 `invite-links`，无需本批修改后端契约。管理端成员列表一次返回全部 active/suspended 行，工作台候选接口仍只返回 active 行，搜索分页在客户端完成；响应的企业 ID 必须匹配路径，修改角色的用户 ID 也须匹配请求。人员邀请与链接采用联合类型，链接路径仅允许 `/join?token=...`，不接受外部地址、片段或额外参数。
 
@@ -73,7 +75,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 邮箱流程只在选择创建新账号时提交用户名和临时密码；返回值明确区分 invited 与 created。邀请链接的有效期按 1–30 天校验；撤销只影响未完成的邀请/后续链接使用。加入申请已在管理端接通。停用只在 active 与 suspended 间转换，DELETE 仍写入 revoked；企微目录同步不能重激活人工停用成员，离职/移出范围仍撤销成员。工作台旧成员治理页已删除，E2.8 仍需确认工作台产物隔离。
 
-管理端 API 地址与静态页面路径分开：公共 `getApiBaseUrl` 去掉页面 base 末尾的 `/admin`，`/admin/` 请求 `/api/v1/...`，`/nexus/admin/` 请求 `/nexus/api/v1/...`；员工端与其他子路径部署继续保留自身前缀。这样管理页面不会请求不存在的 `/admin/api/v1/...`。
+管理端 API 地址与静态页面路径分开：公共 `getApiBaseUrl` 去掉页面 base 末尾的 `/enterprise`，`/enterprise/` 请求 `/api/v1/...`，`/nexus/enterprise/` 请求 `/nexus/api/v1/...`；员工端与其他子路径部署继续保留自身前缀。这样管理页面不会请求不存在的 `/enterprise/api/v1/...`。
 
 ## 管理端加入申请审批
 
@@ -86,7 +88,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 管理端部门组织
 
-`/admin/organization` 由 `OrganizationPage.vue` 和 `useOrganizationAdministration.ts` 组合，管理组织节点，成员归属流程由用户管理承接，以及 WeKnora 组织设置的表格、反馈和确认模式。公共 `enterprise-organizations.ts` 调用当前企业 `/org-units` 的树、节点和成员归属接口，运行时校验单根、唯一节点、完整父引用、无环连通结构及回执企业/节点/成员。树遍历与子树排除采用迭代算法，避免深层组织递归溢出。
+`/enterprise/organization` 由 `OrganizationPage.vue` 和 `useOrganizationAdministration.ts` 组合，管理组织节点，成员归属流程由用户管理承接，以及 WeKnora 组织设置的表格、反馈和确认模式。公共 `enterprise-organizations.ts` 调用当前企业 `/org-units` 的树、节点和成员归属接口，运行时校验单根、唯一节点、完整父引用、无环连通结构及回执企业/节点/成员。树遍历与子树排除采用迭代算法，避免深层组织递归溢出。
 
 完整树与可选企业成员并行加载且分别反馈失败；所选节点的直接成员另用请求序号，阻止迟到响应覆盖新选择。企业、账号和权限代次变化同步清空状态；确认还绑定节点选择及成员请求序号。写入后重读树、候选和节点成员，首次分配自动设为主部门等规则由服务端结果决定。移动只提交变化字段，保留未变的停用父节点；根不提供父节点选择。删除既检查已读直接成员，也保留服务端历史关联冲突反馈。
 
@@ -95,7 +97,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 企业管理主框架与内容样式
 
-企业管理主框架以当前 workspace 的 `menu.vue` 与 `UserMenu.vue` 为视觉基线，在 `admin/src/AdminLayout.vue` 实现独立外壳：260px 可折叠侧栏（折叠 48px）、顶部品牌和折叠按钮、图标导航、固定左下角用户入口。账户弹层提供当前成员身份的企业切换及退出，不提供关闭或返回工作台入口。折叠偏好使用独立本地键，窄窗口展开为 220px；导航区独立滚动，主内容独立滚动。折叠控件与账户入口支持键盘及可读标签，弹层支持 Escape、外部点击关闭与焦点恢复。
+企业管理主框架以当前 workspace 的 `menu.vue` 与 `UserMenu.vue` 为视觉基线，在 `enterprise/src/EnterpriseLayout.vue` 实现独立外壳：260px 可折叠侧栏（折叠 48px）、顶部品牌和折叠按钮、图标导航、固定左下角用户入口。账户弹层提供当前成员身份的企业切换及退出，不提供关闭或返回工作台入口。折叠偏好使用独立本地键，窄窗口展开为 220px；导航区独立滚动，主内容独立滚动。折叠控件与账户入口支持键盘及可读标签，弹层支持 Escape、外部点击关闭与焦点恢复。
 
 工作台菜单包含会话、邀请和资源逻辑，管理端不引入这些依赖，也不互相导入应用组件。认证、企业权限、主题 CSS、TDesign 覆盖、`settings-section.less` 与 `settings-table.less` 由 core 复用；`SettingsModalShell` 继续服务工作台设置与编辑器，管理端业务内容保留公共设置行与表格风格。
 
@@ -104,12 +106,12 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 企业信息
 
-管理端 `/admin/enterprise` 由 `EnterpriseInfo.vue` 编排，公共 `enterprise-info.ts` 校验现有 GET/PATCH `/tenants/current` 的完整详情和目标企业 ID，删除沿用 DELETE `/tenants/{id}`。页面使用公共设置行，owner 可编辑和归档；只有名称/描述变化时才提交，删除确认绑定当前快照名称。权限与作用域代次驱动请求失效，失败保留可重试状态。删除成功清除本地身份，在管理应用内重新登录。企业编码接口和工作台旧管理页隔离仍待后续。
+管理端 `/enterprise/enterprise` 由 `EnterpriseInfo.vue` 编排，公共 `enterprise-info.ts` 校验现有 GET/PATCH `/tenants/current` 的完整详情和目标企业 ID，删除沿用 DELETE `/tenants/{id}`。页面使用公共设置行，owner 可编辑和归档；只有名称/描述变化时才提交，删除确认绑定当前快照名称。权限与作用域代次驱动请求失效，失败保留可重试状态。删除成功清除本地身份，在管理应用内重新登录。企业编码接口和工作台旧管理页隔离仍待后续。
 
 
 ## 角色与权限
 
-`admin/src/views/roles/RolesPage.vue` 组合列表、权限选择和成员分配，`useRoleAdministration.ts` 负责服务端目录、操作者授权、表单确认和身份隔离。`core/src/api/enterprise-roles.ts` 消费现有角色与权限接口，运行时校验权限数组、内置标记及角色企业 ID；不改变后端契约。
+`enterprise/src/views/roles/RolesPage.vue` 组合列表、权限选择和成员分配，`useRoleAdministration.ts` 负责服务端目录、操作者授权、表单确认和身份隔离。`core/src/api/enterprise-roles.ts` 消费现有角色与权限接口，运行时校验权限数组、内置标记及角色企业 ID；不改变后端契约。
 
 核心目录/角色/操作者授权全部成功后开放编辑，成员和分配列表独立读取且需成员管理权限。选择范围受当前操作者授权约束，内置角色只读，所有写入确认后执行。写入成功后刷新身份与当前企业权限，区分原写入失败和后续刷新失败；身份代次保证旧操作不能在企业切换后继续刷新和展示成功。部门批量分配按下述流程实现，角色到企业智能体的使用授权按下述流程实现，完整资源管理仍待后续。
 
@@ -122,7 +124,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 工作台旧部门设置收尾
 
-工作台设置导航不再注册部门管理，旧 `OrgStructure.vue` 已删除，其组织读写不会再随设置页面打包。旧 `section=org-structure` 保留 `AdminSectionMoved.vue` 迁移说明，依据当前企业服务端 entries 提供显式管理应用链接；开发使用同主机 5174，生产按应用 base 构造 admin/organization。不会自动跨应用导航，管理端继续校准身份和组织权限。旧书签被识别为迁移区，不受原部门能力/owner 导航门槛影响，也不会因当前导航没有此项而自动丢回通用设置。
+工作台设置导航不再注册部门管理，旧 `OrgStructure.vue` 已删除，其组织读写不会再随设置页面打包。旧 `section=org-structure` 保留 `EnterpriseSectionMoved.vue` 迁移说明，依据当前企业服务端 entries 提供显式管理应用链接；开发与生产都使用工作台同源的 enterprise/organization。不会自动跨应用导航，管理端继续校准身份和组织权限。旧书签被识别为迁移区，不受原部门能力/owner 导航门槛影响，也不会因当前导航没有此项而自动丢回通用设置。
 
 旧企业信息页现已由账户成员身份区和独立管理端承接后移除；旧成员治理页也已移除，其他管理配置与产物隔离仍待后续验收，加入企业和企业切换保留账户流程，员工不再提供共享空间管理界面。
 
@@ -139,7 +141,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ## 工作台旧成员治理页清理
 
-工作台不再注册 members 设置导航，删除旧 `TenantMembers.vue` 和只被其引用的 `JoinApplicationsPanel.vue`。旧 members/部门书签共用参数化 `AdminSectionMoved.vue`，按内部目标枚举构造独立管理应用地址；成员迁移说明提供 members/audit 链接，无入口时说明权限不足，不请求治理接口。成员功能已由管理端成员页、审批面板和审计页承接，前后端真实权限保持不变；共享空间及个人加入/邀请流程保留。
+工作台不再注册 members 设置导航，删除旧 `TenantMembers.vue` 和只被其引用的 `JoinApplicationsPanel.vue`。旧 members/部门书签共用参数化 `EnterpriseSectionMoved.vue`，按内部目标枚举构造独立管理应用地址；成员迁移说明提供 members/audit 链接，无入口时说明权限不足，不请求治理接口。成员功能已由管理端成员页、审批面板和审计页承接，前后端真实权限保持不变；共享空间及个人加入/邀请流程保留。
 
 ### 企业智能体编辑器复用
 
@@ -149,7 +151,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 ### 企业知识库目录、编辑与管理员指定
 
-`admin/views/knowledge` 以组合函数管理原生目录、目标及内容管理员，`core/api/enterprise-knowledge.ts` 校验现有原生知识库与管理员 DTO。只显示所属企业的 enterprise 记录，拒绝不一致的共享标记与重复记录；不通过旧适配器推断归属或管理权限。成员列表独立加载且受 `members:manage` 限制，列表失败不影响已成功加载的管理员撤销。新增使用完整服务端响应，撤销后重读，区别写入失败与写入成功后刷新失败。`KnowledgeContentPage.vue` 按库类型组合文档、FAQ、Wiki 管理，`core/api/enterprise-knowledge-content.ts` 对相同后端契约做运行时响应校验；企业、用户、目标、管理权限和卸载代次阻止迟到结果污染页面，Wiki 编辑提交版本号以展示并发冲突。知识库卡片通过同一客户端调用显式企业路径 DELETE，权限及代次守卫保护确认和回执，成功后重新读取目录。完整设置编辑器中的共享面板沿用组织共享 API，新增和改级别由服务端校验 tenant 可见范围及 `external_sharing`，撤销现有共享仍可执行。当前尚未迁移批量导入导出、标签/目录、分块预览、Wiki 修订历史；共享空间端完整业务验收仍待 E2.8。
+`enterprise/src/views/knowledge` 以组合函数管理原生目录、目标及内容管理员，`core/api/enterprise-knowledge.ts` 校验现有原生知识库与管理员 DTO。只显示所属企业的 enterprise 记录，拒绝不一致的共享标记与重复记录；不通过旧适配器推断归属或管理权限。成员列表独立加载且受 `members:manage` 限制，列表失败不影响已成功加载的管理员撤销。新增使用完整服务端响应，撤销后重读，区别写入失败与写入成功后刷新失败。`KnowledgeContentPage.vue` 按库类型组合文档、FAQ、Wiki 管理，`core/api/enterprise-knowledge-content.ts` 对相同后端契约做运行时响应校验；企业、用户、目标、管理权限和卸载代次阻止迟到结果污染页面，Wiki 编辑提交版本号以展示并发冲突。知识库卡片通过同一客户端调用显式企业路径 DELETE，权限及代次守卫保护确认和回执，成功后重新读取目录。完整设置编辑器中的共享面板沿用组织共享 API，新增和改级别由服务端校验 tenant 可见范围及 `external_sharing`，撤销现有共享仍可执行。当前尚未迁移批量导入导出、标签/目录、分块预览、Wiki 修订历史；共享空间端完整业务验收仍待 E2.8。
 
 身份代次、查询代次与目标代次阻止旧确认和迟到结果污染当前企业；提交中锁定重复写入与目标切换，身份变化仍立即清理状态。完整知识库编辑器及其真实依赖位于 `core/src/components/knowledge-editor/`，通过宿主注入导航、作用域代理隔离异步请求。工作台保留个人创建与设置导航；管理端使用现有企业创建/更新接口，保存时合并原生 settings 快照和未知配置并单次 PATCH，存储/向量绑定只读。创建后读取失败可重试同一 ID。目录受众面板通过现有接口维护成员及部门范围，分别按 `members:manage`、`org:manage` 读取候选；不可读类别原样保留，智能体绑定冲突由服务端拒绝。管理员操作继续按资源权限控制。卡片/面板沿用后台设计，选择目标后将焦点移到管理员区，窄屏表格仅内部滚动。内容页面复用文档/FAQ/Wiki 原生接口，按类型显示 CRUD、上传下载和重新索引能力；版本冲突提示要求重载后重编辑，系统 Wiki 页面只读。管理外壳进入 600px 以下自动收起侧栏，保留手动展开和独立桌面偏好。知识库删除/共享治理仍未完成。
 
@@ -177,7 +179,7 @@ MCP 客户端服务目录的交互实现位于 `core/components/mcp-admin/`，�
 
 ## 企业存储与向量库入口隔离
 
-工作台不再导入 StorageBackendSettings/VectorStoreSettings。固定 MIGRATED_ADMIN_SECTIONS 注册表为旧部门、成员、存储与向量库书签提供标题、说明和 Admin 目标；hasOwnProperty 检查防止继承属性成为目标。Settings 保留旧 section 值，并对迁移说明绕过原写页面的角色与能力门槛，说明本身只消费身份 entries，不请求或写入配置。AdminSectionMoved 链接随当前身份变化，不自动跳转，成员旧书签仍提供独立审计入口。
+工作台不再导入 StorageBackendSettings/VectorStoreSettings。固定 MIGRATED_ENTERPRISE_SECTIONS 注册表为旧部门、成员、存储与向量库书签提供标题、说明和 企业管理目标；hasOwnProperty 检查防止继承属性成为目标。Settings 保留旧 section 值，并对迁移说明绕过原写页面的角色与能力门槛，说明本身只消费身份 entries，不请求或写入配置。EnterpriseSectionMoved 链接随当前身份变化，不自动跳转，成员旧书签仍提供独立审计入口。
 
 core 的 KBStorageSettings/KBVectorStoreSettings 继续通过真实目录适配器读取可用配置，现有绑定与快捷调用保留。共享适配器和文案不是旧页面的独占资源，不随治理页删除。
 
@@ -189,7 +191,7 @@ core 的 KBStorageSettings/KBVectorStoreSettings 继续通过真实目录适配�
 
 Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路径的目录及脱敏配置，owner/admin 角色与服务端写入授权一致。PUT 是全量替换：合并服务端快照，保留兼容字段，已保存密钥使用六星占位保留或明确删除，布尔值以三态处理。DocReader、mineru_tier 和自托管 mineru_enable_ocr 等未被当前执行器消费的字段只保留，不开放编辑。
 
-保存确认与请求绑定身份代次；切换企业、账号、角色、权限上下文或卸载清空草稿，迟到响应失效。一次性新密钥提交时从表单清除，回执必须脱敏，保存结果与后续目录刷新分别反馈。MIGRATED_ADMIN_SECTIONS 将 parser 旧入口映射到独立 Admin `/parsers`，不自动跳转。
+保存确认与请求绑定身份代次；切换企业、账号、角色、权限上下文或卸载清空草稿，迟到响应失效。一次性新密钥提交时从表单清除，回执必须脱敏，保存结果与后续目录刷新分别反馈。MIGRATED_ENTERPRISE_SECTIONS 将 parser 旧入口映射到独立 Admin `/parsers`，不自动跳转。
 
 ## 浏览器回归
 
@@ -201,7 +203,7 @@ Admin ParserPage 通过 core enterprise-parsers 客户端读取规范管理路�
 
 `build.mjs` 逐个构建两个应用。`prebundled-vendors.ts` 在主 Rollup 图之前使用同版本 esbuild 串行预打包 TDesign、完整高亮器、KaTeX、SheetJS、VueOffice、PDF.js 和 worker，发布同源、带内容摘要的 ESM。所有模块共用同一官方 Vue 生产运行时与 VueDemi；检测到额外响应式运行时即失败。TDesign CSS 仍由两应用 main.ts 导入；其他预打包依赖若出现未处理 CSS 则失败。VueOffice 保持 Vue 3 入口，PDF worker URL 与 wasm 复制流程保留。Mermaid 发布官方浏览器 ESM 的完整模块闭包，统一 .js 扩展与相对引用，不依赖 CDN。
 
-`build-boundaries.ts` 检查实际生产模块图，禁止工作台包含 admin/src，反向同样禁止。它验证应用源码边界，不代替剩余企业治理功能迁移。
+`build-boundaries.ts` 检查实际生产模块图，禁止工作台包含 enterprise/src，反向同样禁止。它验证应用源码边界，不代替剩余企业治理功能迁移。
 
 `type-check.mjs` 先完整检查 core 并生成临时声明，然后按原 tsconfig 枚举应用的全部源文件。`type-projects.mjs` 根据静态/动态导入和类型导入构建依赖图，将强连通分量保留在同一工程，按依赖优先的原生 TypeScript 引用工程依次运行 vue-tsc。每个业务源文件恰为一个工程的根文件，全部全局声明与模板检查保留；不使用 noCheck 或模板跳过选项。每个编译进程结束后释放模板虚拟代码，临时声明和构建信息仅在各包 node_modules/.cache/nexus-types。本组根文件的别名始终指向源码，只有已检查的依赖使用声明，防止重建时读取自身旧声明并覆盖输入。
 
@@ -211,7 +213,7 @@ Node 默认堆为 768MB，Go 预打包器默认 GOMEMLIMIT=192MiB/GOMAXPROCS=2�
 
 ## 管理端设置目录与界面来源
 
-导航数据位于 `admin/src/navigation.ts`，一级菜单顺序为企业、智能体、知识库、模型、发布集成、数据和扩展、工具箱、权限、系统，具体子项见管理应用 README。`AdminLayout.vue` 参考 WeKnora e1f9a6166 `frontend/src/views/settings/Settings.vue` 的子菜单箭头与缩进，复用原管理端侧栏导航行和主题。一级菜单使用原生按钮和 `aria-expanded`，默认全部收起，一次展开一个。展开状态保存在布局内，随账号、企业或管理入口变化清空，切换业务子路由及浏览器历史时保留。当前入口在二级菜单收起时高亮其一级菜单。侧栏收窄时保留两级菜单图标和可读名称。
+导航数据位于 `enterprise/src/navigation.ts`，一级菜单顺序为企业、智能体、知识库、模型、发布集成、数据和扩展、工具箱、权限、系统，具体子项见管理应用 README。`EnterpriseLayout.vue` 参考 WeKnora e1f9a6166 `frontend/src/views/settings/Settings.vue` 的子菜单箭头与缩进，复用原管理端侧栏导航行和主题。一级菜单使用原生按钮和 `aria-expanded`，默认全部收起，一次展开一个。展开状态保存在布局内，随账号、企业或管理入口变化清空，切换业务子路由及浏览器历史时保留。当前入口在二级菜单收起时高亮其一级菜单。侧栏收窄时保留两级菜单图标和可读名称。
 
 WeKnora e1f9a6166 `Toolbox.vue` 的技能与 MCP 注册职责拆分保留，MCP endpoint 属于发布集成。用量位于模型管理内，渠道位于智能体卡片菜单，投稿审核位于技能管理内，长期记忆位于企业空间。过滤后隐藏空菜单，业务写入仍由服务端授权。
 

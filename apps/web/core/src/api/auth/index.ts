@@ -320,7 +320,7 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
  * us in a peer tenant) stay invisible until the user logs out and back
  * in.
  */
-export type AppEntry = 'workspace' | 'admin'
+export type AppEntry = 'workspace' | 'enterprise'
 
 export interface MembershipInfo {
   entries?: AppEntry[]

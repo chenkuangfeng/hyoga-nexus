@@ -85,11 +85,14 @@
             :title="$t('tenant.switcher.menuLabel')" />
         </div>
         <div class="menu-divider"></div>
-        <!-- 菜单只保留：用户信息（上方）、切换空间（上方）、设置、退出。 -->
         <div class="menu-item" @click="handleSettings">
           <t-icon name="setting" class="menu-icon" />
           <span>{{ $t('general.settings') }}</span>
         </div>
+        <a v-if="authStore.currentEntries.includes('enterprise')" class="menu-item enterprise-management-link" :href="enterpriseHref">
+          <t-icon name="system-sum" class="menu-icon" aria-hidden="true" />
+          <span>{{ $t('adminConsole.title') }}</span>
+        </a>
         <div class="menu-divider"></div>
         <div class="menu-item danger" @click="handleLogout">
             <t-icon name="logout" class="menu-icon" />
@@ -174,11 +177,13 @@ import type { TenantInfo } from '@nexus-web/core/api/tenant/index'
 import { useRoleLabel, useHomeTenant } from '@nexus-web/core/composables/useRoleLabel'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
 import { openNewUserGuide } from '@nexus-web/core/config/contextualGuides'
+import { enterpriseSettingsLocation } from '@/config/settingsRoute'
 const { t } = useI18n()
 
 const router = useRouter()
 const uiStore = useUIStore()
 const authStore = useAuthStore()
+const enterpriseHref = enterpriseSettingsLocation(import.meta.env.BASE_URL)
 const { formatRole, roleIcon } = useRoleLabel()
 const { homeTenantId, isHomeTenantActive, isHomeTenant } = useHomeTenant()
 
@@ -890,6 +895,15 @@ onUnmounted(() => {
 
   &:hover {
     background: var(--td-bg-color-container-hover);
+  }
+
+  &.enterprise-management-link {
+    text-decoration: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--td-brand-color);
+      outline-offset: -2px;
+    }
   }
 
   &.danger {

@@ -1,6 +1,6 @@
 # @nexus-web/workspace
 
-员工工作台 Vite 应用，主入口为 `index.html`，另有独立嵌入入口 `embed.html`。公共认证、API、语言和主题引用 `@nexus-web/core`；工作台与 `/admin/` 管理后台独立构建，两个应用不互相导入。
+员工工作台 Vite 应用，主入口为 `index.html`，另有独立嵌入入口 `embed.html`。公共认证、API、语言和主题引用 `@nexus-web/core`；工作台与 `/enterprise/` 管理后台独立构建，两个应用不互相导入。
 
 在 `apps/web/` 执行 `pnpm dev:workspace`（5173）、`pnpm --filter @nexus-web/workspace build` 或 `pnpm --filter @nexus-web/workspace test`。产物为 `workspace/dist`。开发服务保留 `/embed/:channelId` 到嵌入 HTML 的回退和 API WebSocket 代理。
 

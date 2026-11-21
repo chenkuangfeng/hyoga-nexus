@@ -63,9 +63,11 @@ export function isEmbedPage(): boolean {
 
 export function redirectToLogin() {
   if (typeof window === 'undefined') return
-  if (window.location.pathname === '/login') return
+  const base = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '')
+  const login = `${base}/login`
+  if (window.location.pathname === login) return
   if (isEmbedPage()) return
-  window.location.href = '/login'
+  window.location.href = login
 }
 
 export function clearAuthStorage() {

@@ -1,8 +1,8 @@
 /** 检查实际生产模块图，不把管理应用源码打入工作台，反向同样禁止。 */
 import { resolve } from 'node:path'
 import type { Plugin } from 'vite'
-export function buildBoundaries(webRoot: string, app: 'workspace' | 'admin'): Plugin {
-  const forbidden = `${resolve(webRoot, app === 'workspace' ? 'admin' : 'workspace', 'src').replaceAll('\\', '/')}/`
+export function buildBoundaries(webRoot: string, app: 'workspace' | 'enterprise'): Plugin {
+  const forbidden = `${resolve(webRoot, app === 'workspace' ? 'enterprise' : 'workspace', 'src').replaceAll('\\', '/')}/`
   return {
     name: 'application-build-boundaries', apply: 'build',
     generateBundle() {

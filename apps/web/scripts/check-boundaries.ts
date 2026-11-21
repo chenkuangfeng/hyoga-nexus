@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, extname, relative, resolve } from 'node:path'
 import ts from 'typescript'
 
-export type WebPackage = 'core' | 'workspace' | 'admin'
-const packages: WebPackage[] = ['core', 'workspace', 'admin']
+export type WebPackage = 'core' | 'workspace' | 'enterprise'
+const packages: WebPackage[] = ['core', 'workspace', 'enterprise']
 
 export function forbiddenImport(root: string, owner: WebPackage, file: string, specifier: string): boolean {
   let target: string

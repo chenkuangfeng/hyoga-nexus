@@ -12,7 +12,7 @@ export interface ApiMock {
 export const test = base.extend<{ api: ApiMock }>({
   api: [async ({ page }, use) => {
     const unexpected: string[] = [], errors: string[] = [], requests: string[] = [], handlers: ApiHandler[] = []
-    let entries = ['workspace', 'admin']
+    let entries = ['workspace', 'enterprise']
     page.on('pageerror', error => errors.push(error.message))
     await page.route('**/api/v1/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname
@@ -31,7 +31,7 @@ export const test = base.extend<{ api: ApiMock }>({
         await route.fulfill({ json: { success: true, data: {
           user: { id: 'u', username: 'Owner', email: 'owner@example.test', tenant_id: 'a' },
           tenant: { id: 'a', name: 'Acme' },
-          memberships: [{ tenant_id: 'a', tenant_name: 'Acme', role: 'owner', entries }],
+          memberships: [{ tenant_id: 'a', tenant_name: 'Acme', role: entries.includes('enterprise') ? 'owner' : 'contributor', entries }],
         } } }); return
       }
       if (request.method() === 'GET' && path === '/api/v1/tenants/a/me/permissions') {
@@ -40,7 +40,7 @@ export const test = base.extend<{ api: ApiMock }>({
       unexpected.push(`${request.method()} ${path}`)
       await route.fulfill({ status: 501, json: { error: 'undeclared_e2e_api' } })
     })
-    await use({ requests, handle: handler => handlers.push(handler), signIn: async (allowed = ['workspace', 'admin']) => {
+    await use({ requests, handle: handler => handlers.push(handler), signIn: async (allowed = ['workspace', 'enterprise']) => {
       entries = allowed
       await page.addInitScript(() => {
         if (!['http:', 'https:'].includes(location.protocol)) return

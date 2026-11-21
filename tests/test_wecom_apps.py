@@ -191,7 +191,7 @@ def test_admin_and_agent_apps_land_on_their_pages(env):
     landed = _enter(client, fake, created['id'], 'c9', 'zhang')
     assert landed.headers['location'] == f'/agents/{agent.id}/chat'
     admin_app = client.get(f'/api/v1/tenants/{tid}/admin/wecom').json()['apps'][0]
-    assert _enter(client, fake, admin_app['id'], 'c10', 'zhang').headers['location'] == '/admin/'
+    assert _enter(client, fake, admin_app['id'], 'c10', 'zhang').headers['location'] == '/enterprise/'
 
 
 def test_qr_sign_in_uses_the_enterprise_code(env):

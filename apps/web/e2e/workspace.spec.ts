@@ -26,9 +26,9 @@ test('旧解析书签只显示显式管理链接，不读取治理配置', async
     if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/system/capabilities') return { body: { data: { capabilities: {}, edition: 'community' } } }
   })
   await page.goto('/platform/settings?section=parser')
-  const link = page.locator('a[href$="/admin/parsers"]')
+  const link = page.locator('a[href$="/enterprise/parsers"]')
   await expect(link).toBeVisible()
-  await expect(link).toHaveAttribute('href', process.env.NEXUS_E2E_PREVIEW === '1' ? '/admin/parsers' : 'http://127.0.0.1:5174/admin/parsers')
+  await expect(link).toHaveAttribute('href', '/enterprise/parsers')
   await expect(page).toHaveURL(/5193\/platform\/settings\?section=parser$/)
   expect(api.requests.some(path => /parser-engine|\/admin\//.test(path))).toBe(false)
   await expectResponsive(page)
@@ -92,7 +92,41 @@ test('数据库重建后清理旧空间缓存并重新完成开发登录', async
   expect(await page.evaluate(() => localStorage.getItem('weknora_selected_tenant_id'))).toBe('a')
 })
 
-test('员工主菜单仅三项，设置弹出且账户仅三项，旧工具地址不加载管理能力', async ({ page, api }) => {
+test('企业 owner 从设置下方打开企业管理并沿用工作台会话', async ({ page, api }) => {
+  bootWorkspace(api)
+  await page.addInitScript(() => {
+    if (location.pathname !== '/platform/knowledge-bases') return
+    localStorage.setItem('weknora_token', 'workspace-session')
+    localStorage.setItem('weknora_selected_tenant_id', 'a')
+  })
+  await page.goto('/platform/knowledge-bases')
+  await page.locator('.user-button').click()
+  const link = page.getByRole('link', { name: '企业管理', exact: true })
+  await expect(link).toHaveAttribute('href', '/enterprise/')
+  await expect(link.locator('xpath=preceding-sibling::*[1]')).toHaveText('设置')
+  await link.focus()
+  const authMe = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/auth/me')
+  await link.press('Enter')
+  const request = await authMe
+  expect(request.headers().authorization).toBe('Bearer workspace-session')
+  expect(request.headers()['x-tenant-id']).toBe('a')
+  await expect(page).toHaveURL(/5193\/enterprise\/settings$/)
+  await expect(page.locator('#enterprise-navigation')).toBeVisible()
+  expect(api.requests).not.toContain('POST /api/v1/auth/login')
+})
+
+test('普通成员看不到企业管理入口且直达页面显示无权限', async ({ page, api }) => {
+  await api.signIn(['workspace'])
+  bootWorkspace(api)
+  await page.goto('/platform/knowledge-bases')
+  await page.locator('.user-button').click()
+  await expect(page.getByRole('link', { name: '企业管理', exact: true })).toHaveCount(0)
+  await page.goto('/enterprise/')
+  await expect(page.getByText('无权访问企业管理后台', { exact: true })).toBeVisible()
+  expect(api.requests).not.toContain('GET /api/v1/tenants/a/me/permissions')
+})
+
+test('员工主菜单仅三项，设置弹出且个人设置仅三项，旧工具地址不加载管理能力', async ({ page, api }) => {
   await api.signIn(); bootWorkspace(api)
   await page.goto('/platform/knowledge-bases')
   await expect(page.locator('[data-guide^="nav-"]')).toHaveCount(3)

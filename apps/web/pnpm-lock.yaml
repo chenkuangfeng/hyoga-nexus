@@ -215,7 +215,7 @@ importers:
         specifier: 'catalog:'
         version: 3.3.14(typescript@6.0.3)
 
-  admin:
+  enterprise:
     dependencies:
       '@nexus-web/core':
         specifier: workspace:*

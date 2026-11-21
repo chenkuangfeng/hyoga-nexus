@@ -1,7 +1,7 @@
 packages:
   - core
   - workspace
-  - admin
+  - enterprise
 
 catalog:
   "@intlify/core-base": "11.4.18"

@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url'
 const require = createRequire(import.meta.url), web = fileURLToPath(new URL('..', import.meta.url))
 const cli = join(dirname(require.resolve('vite/package.json')), 'bin/vite.js')
 const selected = process.argv[2]
-if (selected && !['workspace', 'admin'].includes(selected)) throw new Error('Expected workspace or admin')
-for (const app of selected ? [selected] : ['workspace', 'admin']) {
+if (selected && !['workspace', 'enterprise'].includes(selected)) throw new Error('Expected workspace or enterprise')
+for (const app of selected ? [selected] : ['workspace', 'enterprise']) {
   const child = spawn(process.execPath, [cli, 'build', '--config', join(web, app, 'vite.config.ts')], {
     cwd: web, stdio: 'inherit', env: { ...process.env,
       NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=768 --max-semi-space-size=4',

@@ -77,6 +77,7 @@ def test_password_login_sets_http_only_cookie_and_logout_revokes(client):
     cookie = response.headers["set-cookie"]
     assert "nexus_session=" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie
     assert response.json()["memberships"][0]["id"] == str(tenant_id)
+    assert response.json()["memberships"][0]["entries"] == ["workspace", "enterprise"]
     me = client.get("/api/v1/auth/me")
     assert me.status_code == 200 and me.json()["data"]["user"]["username"] == "owner-one"
     assert client.get("/api/v1/tenants").json()[0]["id"] == str(tenant_id)
@@ -120,13 +121,17 @@ def test_password_change_revokes_sessions_and_requires_current_password(client):
     assert _login(client, "owner-one", "brand-new-password").status_code == 200
 
 
-def test_admin_creates_member_account_and_member_logs_in(client):
+@pytest.mark.parametrize(("role", "entries"), [
+    ("contributor", ["workspace"]),
+    ("admin", ["workspace", "enterprise"]),
+])
+def test_admin_creates_member_account_and_member_logs_in(client, role, entries):
     _bootstrap_owner(client.factory)
     _login(client, "owner-one")
     tenant_id = client.get("/api/v1/tenants").json()[0]["id"]
     created = client.post(f"/api/v1/tenants/{tenant_id}/accounts", headers=CSRF,
                           json={"username": "Staff.One", "email": "staff.one@example.com", "display_name": "Staff",
-                                "password": "staff-password-1", "role": "contributor"})
+                                "password": "staff-password-1", "role": role})
     assert created.status_code == 201, created.text
     assert created.json()["username"] == "staff.one"
     duplicate = client.post(f"/api/v1/tenants/{tenant_id}/accounts", headers=CSRF,
@@ -135,6 +140,7 @@ def test_admin_creates_member_account_and_member_logs_in(client):
     client.post("/api/v1/auth/logout", headers=CSRF)
     signed_in = client.post("/api/v1/auth/login", json={"email": "staff.one@example.com", "password": "staff-password-1"})
     assert signed_in.status_code == 200 and signed_in.json()["user"]["must_change_password"] is True
+    assert signed_in.json()["memberships"][0]["entries"] == entries
     # Until the initial password is changed, only the password and session routes answer.
     assert client.get(f"/api/v1/tenants/{tenant_id}/roles").status_code == 403
     assert client.get("/api/v1/auth/me").status_code == 200

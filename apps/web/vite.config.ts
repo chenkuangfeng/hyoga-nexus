@@ -56,6 +56,8 @@ const DEV_PROXY_TARGET =
   process.env.VITE_DEV_PROXY_TARGET ||
   process.env.FRONTEND_BACKEND_URL ||
   'http://127.0.0.1:8000'
+const ENTERPRISE_DEV_TARGET = process.env.NEXUS_ENTERPRISE_DEV_TARGET || 'http://127.0.0.1:5174'
+const ENTERPRISE_PREVIEW_TARGET = process.env.NEXUS_ENTERPRISE_PREVIEW_TARGET || 'http://127.0.0.1:4174'
 
 function resolveVueOfficePptxEntry(): string {
   try {
@@ -123,11 +125,11 @@ function browserVendor(name: string, entry?: string): BrowserVendor {
 }
 
 /** 创建共享构建配置，保持两个应用的独立入口、部署路径和相同的 API 代理行为。 */
-export function createWebConfig(app: 'workspace' | 'admin') {
+export function createWebConfig(app: 'workspace' | 'enterprise') {
   const appRoot = resolve(__dirname, app)
   return defineConfig({
     root: appRoot,
-    base: app === 'admin' ? '/admin/' : '/',
+    base: app === 'enterprise' ? '/enterprise/' : '/',
     publicDir: resolve(__dirname, 'workspace/public'),
     optimizeDeps: { exclude: ['@nexus-web/core'] },
     define: {
@@ -203,10 +205,12 @@ export function createWebConfig(app: 'workspace' | 'admin') {
       },
     },
     server: {
-      port: app === 'admin' ? 5174 : 5173,
+      port: app === 'enterprise' ? 5174 : 5173,
       host: true,
       // 代理配置，用于开发环境
       proxy: {
+        // 保持工作台与企业管理同源，让新页面直接校验当前会话和空间。
+        ...(app === 'workspace' ? { '/enterprise/': { target: ENTERPRISE_DEV_TARGET, ws: true } } : {}),
         '/mcp/': {
           target: DEV_PROXY_TARGET,
           changeOrigin: true,
@@ -238,9 +242,10 @@ export function createWebConfig(app: 'workspace' | 'admin') {
     // 同样的压缩 / 拆包 / CSS 加载顺序，可提前暴露只在生产构建出现的问题
     // （如主题变量被打包顺序覆盖）。用法：npm run build && npm run preview
     preview: {
-      port: app === 'admin' ? 4174 : 4173,
+      port: app === 'enterprise' ? 4174 : 4173,
       host: true,
       proxy: {
+        ...(app === 'workspace' ? { '/enterprise/': { target: ENTERPRISE_PREVIEW_TARGET } } : {}),
         '/mcp/': {
           target: DEV_PROXY_TARGET,
           changeOrigin: true,

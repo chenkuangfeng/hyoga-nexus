@@ -293,7 +293,7 @@ def _target(app: WeComAppRecord, qr: bool) -> str:
     if qr or app.purpose == 'workspace':
         return '/'
     if app.purpose == 'admin':
-        return '/admin/'
+        return '/enterprise/'
     return f'/agents/{app.nexus_agent_id}/chat'
 
 

@@ -4,5 +4,5 @@ import type { AppEntry, MembershipInfo } from '../api/auth'
 export function entriesForTenant(memberships: readonly MembershipInfo[], tenantId: string): AppEntry[] {
   const entries = memberships.find(row => String(row.tenant_id) === tenantId)?.entries
   if (!Array.isArray(entries)) return []
-  return entries.filter((entry): entry is AppEntry => entry === 'workspace' || entry === 'admin')
+  return entries.filter((entry): entry is AppEntry => entry === 'workspace' || entry === 'enterprise')
 }

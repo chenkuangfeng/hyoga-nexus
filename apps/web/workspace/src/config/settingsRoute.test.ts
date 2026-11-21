@@ -27,12 +27,12 @@ test('设置地址清除旧集成与平台参数，并保留正常设置', () =>
 })
 
 test('迁移的部门书签有明确管理应用入口，开发与生产链接保留部署边界', async () => {
-  const { adminOrganizationLocation, isMigratedAdminSection } = await import('./settingsRoute')
-  assert.equal(isMigratedAdminSection('org-structure'), true)
-  assert.equal(isMigratedAdminSection('members'), true)
-  assert.equal(adminOrganizationLocation('/', 'http://192.0.2.1:5173', true), 'http://192.0.2.1:5174/admin/organization')
-  assert.equal(adminOrganizationLocation('/nexus/', 'https://example.test', false), '/nexus/admin/organization')
-  assert.equal(adminOrganizationLocation('/', 'https://example.test', false), '/admin/organization')
+  const { enterpriseSettingsLocation, isMigratedEnterpriseSection } = await import('./settingsRoute')
+  assert.equal(isMigratedEnterpriseSection('org-structure'), true)
+  assert.equal(isMigratedEnterpriseSection('members'), true)
+  assert.equal(enterpriseSettingsLocation('/'), '/enterprise/')
+  assert.equal(enterpriseSettingsLocation('/nexus/', 'organization'), '/nexus/enterprise/organization')
+  assert.equal(enterpriseSettingsLocation('/', 'organization'), '/enterprise/organization')
 })
 
 test('旧部门书签只显示已实现的迁移说明，不再受 owner 导航门槛限制', async () => {
@@ -68,21 +68,21 @@ test('旧 /platform/tenant 实际路由落到账户资料，保留成员身份�
 })
 
 test('旧成员管理书签属于迁移说明，管理端成员和审计链接保持独立应用地址', async () => {
- const {isMigratedAdminSection,adminSettingsLocation}=await import('./settingsRoute')
- assert.equal(isMigratedAdminSection('members'),true)
- assert.equal(adminSettingsLocation('/','http://192.0.2.1:5173',true,'members'),'http://192.0.2.1:5174/admin/members')
- assert.equal(adminSettingsLocation('/nexus/','https://example.test',false,'audit'),'/nexus/admin/audit')
+ const {isMigratedEnterpriseSection,enterpriseSettingsLocation}=await import('./settingsRoute')
+ assert.equal(isMigratedEnterpriseSection('members'),true)
+ assert.equal(enterpriseSettingsLocation('/','members'),'/enterprise/members')
+ assert.equal(enterpriseSettingsLocation('/nexus/','audit'),'/nexus/enterprise/audit')
  assert.equal(normalizeSettingsSection('members'),'members')
 })
 
 test('存储与向量库旧书签保留迁移说明，目标仅来自固定枚举', async () => {
- const { isMigratedAdminSection, MIGRATED_ADMIN_SECTIONS, adminSettingsLocation } = await import('./settingsRoute')
+ const { isMigratedEnterpriseSection, MIGRATED_ENTERPRISE_SECTIONS, enterpriseSettingsLocation } = await import('./settingsRoute')
  for (const section of ['storage', 'vectorstore', 'parser'] as const) {
-   assert.equal(isMigratedAdminSection(section), true)
+   assert.equal(isMigratedEnterpriseSection(section), true)
    assert.equal(normalizeSettingsSection(section), section)
    assert.deepEqual(buildSettingsRouteQuery(section, { tab: 'old', panel: 'write', unrelated: 'keep' }), { section, unrelated: 'keep' })
-   const target = MIGRATED_ADMIN_SECTIONS[section].target
-   assert.equal(adminSettingsLocation('/nexus/', 'https://example.test', false, target), `/nexus/admin/${target}`)
+   const target = MIGRATED_ENTERPRISE_SECTIONS[section].target
+   assert.equal(enterpriseSettingsLocation('/nexus/', target), `/nexus/enterprise/${target}`)
  }
- for (const invalid of ['__proto__', 'constructor', 'https://evil.test/', 'vectorstore/../../']) assert.equal(isMigratedAdminSection(invalid), false)
+ for (const invalid of ['__proto__', 'constructor', 'https://evil.test/', 'vectorstore/../../']) assert.equal(isMigratedEnterpriseSection(invalid), false)
 })

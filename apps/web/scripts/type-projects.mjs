@@ -6,7 +6,7 @@ import ts from 'typescript'
 import { parse } from '@vue/compiler-sfc'
 
 const web = fileURLToPath(new URL('..', import.meta.url)), app = process.argv[2]
-if (!['workspace', 'admin'].includes(app)) throw new Error('Expected workspace or admin')
+if (!['workspace', 'enterprise'].includes(app)) throw new Error('Expected workspace or enterprise')
 const appRoot = join(web, app), sourceRoot = join(appRoot, 'src'), configPath = join(appRoot, 'tsconfig.json')
 const raw = ts.readConfigFile(configPath, ts.sys.readFile)
 if (raw.error) throw new Error(ts.flattenDiagnosticMessageText(raw.error.messageText, '\n'))

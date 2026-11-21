@@ -1,0 +1,21 @@
+{
+  "name": "@nexus-web/enterprise",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "type-check": "node ../scripts/type-check.mjs enterprise",
+    "test": "tsx --test",
+    "dev": "vite",
+    "build": "node ../scripts/build.mjs enterprise",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pinia": "catalog:",
+    "tdesign-vue-next": "catalog:",
+    "vue": "catalog:",
+    "vue-i18n": "catalog:",
+    "vue-router": "catalog:",
+    "@nexus-web/core": "workspace:*"
+  }
+}

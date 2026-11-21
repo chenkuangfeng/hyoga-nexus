@@ -36,7 +36,7 @@ test('router and settings point to the Nexus pages', () => {
   assert.match(router, /path: "agents",[\s\S]{0,200}NexusAgentList\.vue/)
   const settings = readFileSync(new URL('../settings/Settings.vue', import.meta.url), 'utf8')
   assert.equal(settings.includes('NexusModelSettings.vue'), false)
-  const adminRouter = readFileSync(new URL('../../../../admin/src/router.ts', import.meta.url), 'utf8')
+  const adminRouter = readFileSync(new URL('../../../../enterprise/src/router.ts', import.meta.url), 'utf8')
   assert.match(adminRouter, /views\/models\/ModelsPage\.vue/)
 
 })

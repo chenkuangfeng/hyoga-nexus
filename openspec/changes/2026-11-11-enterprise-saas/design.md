@@ -120,7 +120,7 @@ apps/web/                         pnpm workspace 根（不是应用）
 │   ├── index.html                工作台入口（含单智能体模式路由 /agents/:agentId/chat）
 │   ├── embed.html                对外嵌入页入口（第二个 Vite 入口）
 │   └── src/
-└── admin/                        @nexus-web/admin：企业管理后台（Vite 应用，base 为 /admin/）
+└── enterprise/                   @nexus-web/enterprise：企业管理应用（Vite 应用，base 为 /enterprise/）
     ├── index.html
     └── src/
 ```
@@ -129,7 +129,7 @@ apps/web/                         pnpm workspace 根（不是应用）
 
 ### 4.2 依赖规则
 
-- `core` 不得导入 `workspace` 或 `admin`；两个应用互不导入。由 `apps/web/scripts/check-boundaries.test.ts` 扫描 import 路径。
+- `core` 不得导入 `workspace` 或 `enterprise`；两个应用互不导入。由 `apps/web/scripts/check-boundaries.test.ts` 扫描 import 路径。
 - 只有两个应用都用到的代码，或者属于平台基础能力（请求层、认证、企业切换、权限、主题、i18n）的代码，才放进 `core`。
 - 接口函数与类型统一放在 `core/src/api`。
 - 依赖版本用 `catalog:` 统一；`core` 以 peerDependencies 声明 Vue、TDesign、pinia、vue-router、vue-i18n，避免出现两份实例。
@@ -137,17 +137,17 @@ apps/web/                         pnpm workspace 根（不是应用）
 
 ### 4.3 两个应用
 
-| | 员工工作台 `workspace` | 企业管理后台 `admin` |
+| | 员工工作台 `workspace` | 企业管理应用 `enterprise` |
 |---|---|---|
-| 面向 | 企业全体员工 | 有治理权限的企业成员 |
+| 面向 | 企业全体员工 | 当前企业空间的 owner 和管理员 |
 | 形态 | 桌面与手机 | 只做桌面 |
-| 部署路径 | `/`；单智能体模式 `/agents/:agentId/chat`；嵌入页 `/embed/:channelId` | `/admin/` |
+| 部署路径 | `/`；单智能体模式 `/agents/:agentId/chat`；嵌入页 `/embed/:channelId` | `/enterprise/` |
 | 企微应用用途 | `workspace`、`agent` | `admin` |
-| 进入条件 | `entries.workspace`；单智能体模式另需该智能体的使用权 | `entries.admin`；不满足时显示无权限页 |
+| 进入条件 | `entries.workspace`；单智能体模式另需该智能体的使用权 | `entries.enterprise`；不满足时显示无权限页 |
 
 - **单智能体模式**：只显示该智能体的对话（会话列表、对话区、产物），没有其他导航，适合企微里“一个智能体一个应用”的场景。
 - 登录页（邮箱密码、企微扫码）与改密页来自 `core`。默认同域名部署，两个应用共用登录状态。
-- `/auth/me` 增加 `entries`：`workspace`（当前企业的有效成员）、`admin`（持有任一治理权限，或是 owner、admin）。路由守卫只读取 `entries`。
+- `/auth/me` 增加 `entries`：`workspace`（当前企业的有效成员）、`enterprise`（当前企业空间 owner 或管理员）。路由守卫只读取 `entries`。
 - 管理类接口统一加前缀 `/api/v1/tenants/{id}/admin/...`，旧路径保留一个版本周期；权限判断在每个接口内。
 
 ### 4.4 命令、构建与部署
@@ -156,11 +156,11 @@ apps/web/                         pnpm workspace 根（不是应用）
 |---|---|
 | `pnpm install --frozen-lockfile` | 安装三个项目的依赖 |
 | `pnpm dev:workspace` | 工作台开发服务（5173，`/api` 代理到 API） |
-| `pnpm dev:admin` | 管理后台开发服务（5174，base `/admin/`） |
-| `pnpm build` | 分别产出 `workspace/dist` 与 `admin/dist` |
+| `pnpm dev:enterprise` | 企业管理开发服务（5174，base `/enterprise/`） |
+| `pnpm build` | 分别产出 `workspace/dist` 与 `enterprise/dist` |
 | `pnpm type-check`、`pnpm test`、`pnpm test:browser` | 类型检查、单元测试与边界检查、两个应用的浏览器测试 |
 
-部署：反向代理把 `/admin/` 指向 `admin/dist`，`/embed/` 指向 `workspace/dist/embed.html`，`/wecom/` 与 `/api` 指向 API 服务，其余指向 `workspace/dist`。
+部署：反向代理把 `/enterprise/` 指向 `enterprise/dist`，`/embed/` 指向 `workspace/dist/embed.html`，`/wecom/` 与 `/api` 指向 API 服务，其余指向 `workspace/dist`。
 
 ### 4.5 删除清单
 
@@ -244,7 +244,7 @@ apps/web/                         pnpm workspace 根（不是应用）
 
 ### 部门组织界面的当前实现边界
 
-管理端 `/admin/organization` 消费既有 `/org-units` 契约，不新增权限：树、节点及归属操作需要 `org:manage`，全企业成员候选另需 `members:manage`。节点 `sync_managed=true` 时结构只读，成员归属按独立来源维护，启用节点下可新增手工子部门；首次归属的主部门标记采用服务器刷新结果。根不可移动/删除，移动排除自身及子树，危险操作确认，切换选择或身份后旧响应与确认失效。
+管理端 `/enterprise/organization` 消费既有 `/org-units` 契约，不新增权限：树、节点及归属操作需要 `org:manage`，全企业成员候选另需 `members:manage`。节点 `sync_managed=true` 时结构只读，成员归属按独立来源维护，启用节点下可新增手工子部门；首次归属的主部门标记采用服务器刷新结果。根不可移动/删除，移动排除自身及子树，危险操作确认，切换选择或身份后旧响应与确认失效。
 
 组织服务按 `sync_managed` 保护节点写入；成员归属区分 manual/wecom/mixed 来源，详见 E2.5.8。管理端按来源显示撤销操作，并通过现有企微设置页刷新同步状态。
 
@@ -293,7 +293,7 @@ tenant_wecom_apps(id PK, tenant_id, wecom_agentid, secret_ciphertext, name,
 1. 管理后台为每个应用生成主页地址 `https://<host>/wecom/apps/{app_id}/entry`，管理员把它填到企微应用的“应用主页”。
 2. `GET /wecom/apps/{app_id}/entry`：生成一次性 `state`，跳转到企微网页授权（使用该应用的 `wecom_agentid`）。
 3. 回调 `GET /wecom/apps/{app_id}/callback?code=&state=`：校验 `state`，用该应用的密钥换取 `userid`，按 `(wecom, corp_id, userid)` 找到账号；未绑定且已同步的成员自动开户（`contributor`）；签发会话，并把当前企业设为该应用所属的企业。
-4. 按用途跳转：`workspace` → `/`；`admin` → `/admin/`（无治理权限时显示无权限页）；`agent` → `/agents/{nexus_agent_id}/chat`（无使用权时显示无权限页）。
+4. 按用途跳转：`workspace` → `/`；`admin` → `/enterprise/`（无企业管理入口时显示无权限页）；`agent` → `/agents/{nexus_agent_id}/chat`（无使用权时显示无权限页）。
 
 企微可见范围只决定谁能看到应用，所有权限仍以 Nexus 的判断为准。
 
@@ -387,7 +387,7 @@ channel_identities / channel_session_bindings：沿用架构 2.14 的 ChannelIde
 
 ### E2.5.3 企业信息迁移批
 
-在已确认的 E2 管理业务迁移范围内，新增 `/admin/enterprise`，导航和页面仅向当前企业 owner 开放。参考固定版本 WeKnora `TenantInfo.vue` 的设置行、内联编辑、删除危险区和企业名确认；沿用 Nexus 现有 GET/PATCH `/tenants/current` 和 DELETE `/tenants/{id}`，不变更 API、权限或数据模型。现有 PATCH 服务端允许 owner/admin，页面遵循本提案 owner 范围，最终授权仍由服务端复核。
+在已确认的 E2 管理业务迁移范围内，新增 `/enterprise/enterprise`，导航和页面仅向当前企业 owner 开放。参考固定版本 WeKnora `TenantInfo.vue` 的设置行、内联编辑、删除危险区和企业名确认；沿用 Nexus 现有 GET/PATCH `/tenants/current` 和 DELETE `/tenants/{id}`，不变更 API、权限或数据模型。现有 PATCH 服务端允许 owner/admin，页面遵循本提案 owner 范围，最终授权仍由服务端复核。
 
 名称限制 1–160 字符、描述不超过 500 字符，与服务端一致；仅提交变化字段，空描述明确清除。详情响应运行时校验类型及企业 ID。保存成功更新当前企业可读名称和成员身份列表；作用域和权限代次变化清空快照、草稿及删除确认，迟到响应不得写入新作用域。读取/保存/删除失败分别保留可重试反馈；删除确认输入当前企业名称，提交中禁止关闭和重复操作。删除成功清除本地身份与管理上下文，在 admin 内进入登录页，不跳转工作台。
 
@@ -395,7 +395,7 @@ TenantView 返回既有可空企业编码，管理端只读展示和复制，见
 
 ### E2.5.3 角色与权限迁移批
 
-在已确认的管理业务迁移范围内，新增 `/admin/roles`，以服务端 `roles:manage` 控制导航与页面。对照固定版本 WeKnora `OrganizationSettingsModal.vue` 的成员列表、角色选择及授权确认交互；其组织级角色与 Nexus 企业自定义授权模型不同，因此复用列表与表单组织方式，按 Nexus 现有 roles HTTP/service 实现：权限目录、当前操作者权限、角色列表、自定义角色创建/权限替换、成员角色分配与撤销。无角色删除/改名接口，不提供此类操作；内置角色只读可分配，菜单及 API 授权不得超出操作者已有权限，最终仍由服务端复核。
+在已确认的管理业务迁移范围内，新增 `/enterprise/roles`，以服务端 `roles:manage` 控制导航与页面。对照固定版本 WeKnora `OrganizationSettingsModal.vue` 的成员列表、角色选择及授权确认交互；其组织级角色与 Nexus 企业自定义授权模型不同，因此复用列表与表单组织方式，按 Nexus 现有 roles HTTP/service 实现：权限目录、当前操作者权限、角色列表、自定义角色创建/权限替换、成员角色分配与撤销。无角色删除/改名接口，不提供此类操作；内置角色只读可分配，菜单及 API 授权不得超出操作者已有权限，最终仍由服务端复核。
 
 角色目录与当前授权读取成功前禁止写入，不把读取失败当空权限。成员候选通过现有活跃成员接口按名称展示，需要额外 `members:manage`；无该权限仍可管理角色，成员授权区显示不可用原因，不允许手填 ID。owner 已有全部权限，不作为新增分配候选。角色和成员授权写入前确认；写入后刷新身份与权限，防止撤销自身管理权后继续操作。切换企业/账号/权限代次、刷新和卸载时清空表单及确认，迟到请求不得更新新作用域。写入失败保留草稿，明确反馈；写入成功后权限刷新失败不误报原写入失败。
 
@@ -435,7 +435,7 @@ TenantView 返回既有可空企业编码，管理端只读展示和复制，见
 
 ### E2.5.3 审计日志迁移批
 
-在已确认的管理业务迁移范围内，新增 `/admin/audit`，按服务端 `audit:read` 控制导航及页面。参考固定版本 WeKnora `TenantMembers.vue` 的审计时间/操作者/动作/目标/结果及展开详情，按 Nexus 实际返回的 metadata 实现文本详情，不伪造 actor_role、请求路径或正文。现有 GET `/tenants/{id}/audit-log?limit=` 最近优先，limit 1–500，无游标；页面提供 100/500 条读取与已加载范围内筛选，明确并非全量检索。
+在已确认的管理业务迁移范围内，新增 `/enterprise/audit`，按服务端 `audit:read` 控制导航及页面。参考固定版本 WeKnora `TenantMembers.vue` 的审计时间/操作者/动作/目标/结果及展开详情，按 Nexus 实际返回的 metadata 实现文本详情，不伪造 actor_role、请求路径或正文。现有 GET `/tenants/{id}/audit-log?limit=` 最近优先，limit 1–500，无游标；页面提供 100/500 条读取与已加载范围内筛选，明确并非全量检索。
 
 导出沿用 GET `/tenants/{id}/admin/audit/export?start=&end=`，UTC 自然日含首尾，开始不晚于结束，日期差最多 366 天，与服务端一致。使用认证请求层获取 NDJSON Blob 后本地下载，不把令牌放链接、不跳过服务端 audit:read。导出自带哈希链且服务端记录 audit.exported，不宣称已实现审计正文查看；audit:read_content 不替代当前列表/导出权限。
 
@@ -453,7 +453,7 @@ TenantView 返回既有可空企业编码，管理端只读展示和复制，见
 
 核对旧 TenantMembers 的成员列表、邀请/临时密码开户、邀请链接/撤销、基础角色调整/移除、加入申请审批与审计，管理端 MembersPage、JoinRequestsPanel、AuditPage 已承接。原成员列表本身需要 members:manage，不是普通员工可读名册；旧页的静态角色矩阵不作为新的权限事实来源。
 
-删除工作台旧成员治理页及仅由它引用的 JoinApplicationsPanel，移除 members 设置导航和未使用的成员管理快捷阈值；保留 members 旧书签/内部快捷调用的迁移说明，复用旧部门迁移组件，提供显式管理端成员与审计链接，入口按当前企业 entries.admin 显示，具体权限由 admin 校准。不自动跨应用跳转，不加载成员/邀请/申请/审计接口。保留共享空间、加入企业、个人邀请、账号成员身份和退出企业，以及仍被其他模块使用的 API 与角色/审计翻译。
+删除工作台旧成员治理页及仅由它引用的 JoinApplicationsPanel，移除 members 设置导航和未使用的成员管理快捷阈值；保留 members 旧书签/内部快捷调用的迁移说明，复用旧部门迁移组件，提供显式管理端成员与审计链接，入口按当前企业 entries.enterprise 显示，具体权限由 admin 校准。不自动跨应用跳转，不加载成员/邀请/申请/审计接口。保留共享空间、加入企业、个人邀请、账号成员身份和退出企业，以及仍被其他模块使用的 API 与角色/审计翻译。
 
 ### E2.5.5 企业成员临时停用与恢复（2026-11-15 已确认）
 
@@ -514,7 +514,7 @@ core 的 EnterpriseInfo 增加可空 code；运行时只接受 string/null，缺
 
 Admin 的 StoragePage 已承接本地后端列表/新增/删除/已保存测试，VectorStoresPage 已承接能力目录、配置新增/编辑/删除和连接测试；旧存储页的编辑/默认/草稿测试只调用 PlannedFeatureError，不代表可用能力。删除工作台 StorageBackendSettings/VectorStoreSettings 及普通设置导航。
 
-保留 storage/vectorstore 旧查询参数和知识库编辑器的 openSettings 快捷调用，统一挂载 AdminSectionMoved 迁移说明，按 currentEntries.admin 提供显式 /admin/storage 或 /admin/vector-stores 链接；没有管理入口则提示联系管理员，不自动跨应用导航、不读取目录或修改配置。迁移说明对所有有效成员可见，不受已移除写页面的旧 admin 门槛或部署能力开关阻断。标题/描述/目标使用固定枚举映射，未知键不能生成任意 URL。部门/成员和审计旧入口保持原行为。
+保留 storage/vectorstore 旧查询参数和知识库编辑器的 openSettings 快捷调用，统一挂载 EnterpriseSectionMoved 迁移说明，按 currentEntries.enterprise 提供显式 /enterprise/storage 或 /enterprise/vector-stores 链接；没有管理入口则提示联系管理员，不自动跨应用导航、不读取目录或修改配置。迁移说明对所有有效成员可见，不受已移除写页面的旧 admin 门槛或部署能力开关阻断。标题/描述/目标使用固定枚举映射，未知键不能生成任意 URL。部门/成员和审计旧入口保持原行为。
 
 知识库编辑器的存储/向量库读取、选择和已有绑定继续使用 core 适配器，因此不删除这些公共 API、共享字段和 providerLogo。解析器等尚无完整 Admin 承接的页面留待后续；本批不扩展存储后端契约。
 
@@ -575,3 +575,9 @@ E6.3 已有 UsagePage 与 enterprise-usage 客户端，本批修复其状态边�
 以 WeKnora `frontend/src/views/knowledge/KnowledgeBaseList.vue`、`views/agent/AgentList.vue`、`components/ResourceListToolbar.vue` 和 `components/css/resource-card.less` 为基准。管理端复用原版目录尺寸与卡片 mixin，标题同行放置排序、新建和刷新，工具栏左侧展示企业目录范围及总数，右侧搜索。卡片顶部放资源标识、名称和更多操作，底部承载现有的知识库类型、内容数量或智能体发布信息。排序基于当前已加载目录。知识库内容页参考 `KnowledgeBase.vue` 的面包屑和内容工具栏，使用现有文档、FAQ、Wiki 数据及操作。
 
 管理端接入既有创建编辑器、受众、维护员、渠道、归档与删除动作。界面只展示当前企业目录与服务端已提供的数据，因此原版收藏、最近访问、跨空间筛选和文件夹树等信息无对应时不显示。
+
+### 企业管理应用命名与同源会话
+
+工作台账户菜单参照固定版本 WeKnora 的 `frontend/src/components/UserMenu.vue` 菜单行组织，在设置下方增加带可见焦点的普通链接。服务端按当前成员的空间类型和基础角色计算 `memberships[].entries` 中的 `enterprise`，工作台菜单及企业应用均以实时校准后的入口为准。无入口的用户打开独立应用时显示权限提示，具体治理请求由原接口继续鉴权。
+
+独立包、构建目录和公开页面路径统一为 `enterprise`。生产部署以同源 `/enterprise/` 提供应用，并将旧 `/admin/` 页面书签转到新路径。开发时工作台 Vite 代理 `/enterprise/` 到企业应用 Vite，浏览器仍处于原主机和端口。现有会话和当前空间通过同源存储复用，企业应用进入时重新调用 `/auth/me` 校验。链接不包含凭据。

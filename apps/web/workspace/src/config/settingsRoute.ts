@@ -35,27 +35,19 @@ export function settingsQueryUnchanged(currentQuery: object, nextQuery: Settings
 }
 
 /** Fixed migration destinations; old bookmarks never supply an arbitrary target URL. */
-export const MIGRATED_ADMIN_SECTIONS = {
+export const MIGRATED_ENTERPRISE_SECTIONS = {
   'org-structure': { target: 'organization', titleKey: 'adminOrganization.title', messageKey: 'adminMigration.organizationMoved' },
   members: { target: 'members', titleKey: 'adminMembers.title', messageKey: 'adminMigration.membersMoved' },
   parser: { target: 'parsers', titleKey: 'adminParsers.title', messageKey: 'adminMigration.parsersMoved' },
   storage: { target: 'storage', titleKey: 'adminStorage.title', messageKey: 'adminMigration.storageMoved' },
   vectorstore: { target: 'vector-stores', titleKey: 'adminVector.title', messageKey: 'adminMigration.vectorStoreMoved' },
 } as const
-export type MigratedAdminSection = keyof typeof MIGRATED_ADMIN_SECTIONS
+export type MigratedEnterpriseSection = keyof typeof MIGRATED_ENTERPRISE_SECTIONS
 /** 旧设置书签只保留迁移说明，不重新挂载管理实现。 */
-export function isMigratedAdminSection(section: string): section is MigratedAdminSection {
-  return Object.prototype.hasOwnProperty.call(MIGRATED_ADMIN_SECTIONS, section)
+export function isMigratedEnterpriseSection(section: string): section is MigratedEnterpriseSection {
+  return Object.prototype.hasOwnProperty.call(MIGRATED_ENTERPRISE_SECTIONS, section)
 }
-/** 已迁移管理功能的显式跨应用入口；目标由内部枚举决定，不接受任意外部 URL。 */
-export function adminSettingsLocation(base: string, origin: string, development: boolean, target: 'organization' | 'members' | 'audit' | 'storage' | 'vector-stores' | 'parsers'): string {
-  const path = `${base.replace(/\/+$/, '')}/admin/${target}`
-  if (!development) return path
-  const url = new URL(path, origin)
-  url.port = '5174'
-  return url.href
-}
-/** 保留已有部门入口辅助函数，避免旧兼容调用产生变化。 */
-export function adminOrganizationLocation(base: string, origin: string, development: boolean): string {
-  return adminSettingsLocation(base, origin, development, 'organization')
+/** 企业应用始终使用工作台同源路径，目标来自固定设置项。 */
+export function enterpriseSettingsLocation(base: string, target: '' | 'organization' | 'members' | 'audit' | 'storage' | 'vector-stores' | 'parsers' = ''): string {
+  return `${base.replace(/\/+$/, '')}/enterprise/${target}`
 }

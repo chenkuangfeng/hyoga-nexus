@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import test, { type TestContext } from 'node:test'
 import { reactive } from 'vue'
 import { fixture } from '@nexus-web/core/test-utils/vueFixture'
-import { isMigratedAdminSection } from '../../config/settingsRoute'
+import { isMigratedEnterpriseSection } from '../../config/settingsRoute'
 
 const fixtures = new WeakMap<TestContext, ReturnType<typeof fixture>>()
 function setup(t: TestContext, path = '/platform/settings', back: unknown = null) {
@@ -15,7 +15,7 @@ function setup(t: TestContext, path = '/platform/settings', back: unknown = null
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/ui': { useUIStore: () => ui },
     '@nexus-web/core/composables/useModalShell': { useModalShell: () => ({ requestClose() {} }) },
-    '@/config/settingsRoute': { isMigratedAdminSection },
+    '@/config/settingsRoute': { isMigratedEnterpriseSection },
   })
   return { ...mounted, route, ui, actions }
 }

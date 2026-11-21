@@ -39,7 +39,7 @@ def test_allowlisted_and_public_hosts_pass(deployment_config):
 def test_memberships_list_the_apps_each_role_may_open(client):
     client.post('/api/v1/auth/register', json={'username': 'ann', 'email': 'ann@example.com', 'password': PASSWORD})
     login = client.post('/api/v1/auth/login', json={'email': 'ann@example.com', 'password': PASSWORD}).json()
-    assert [m['entries'] for m in login['memberships']] == [['workspace', 'admin']]
+    assert [m['entries'] for m in login['memberships']] == [['workspace', 'enterprise']]
     headers = {'Authorization': f"Bearer {login['token']}", 'X-Tenant-ID': str(login['memberships'][0]['id'])}
     client.post('/api/v1/auth/register', json={'username': 'bob', 'email': 'bob@example.com', 'password': PASSWORD})
     space = login['memberships'][0]['id']

@@ -5,7 +5,7 @@
 ## 技术栈与组织
 
 - 使用 Vue 3、TypeScript、TDesign（`tdesign-vue-next`）、pinia、vue-router、vue-i18n、axios 和 Vite 工具链，与 WeKnora 前端一致（2026-11-03 确认）。新组件优先使用 `<script setup lang="ts">` 与 Composition API；避免无必要引入第二套组件库或状态方案。
-- `apps/web` 为 pnpm workspace：公共基础能力在 `core/src/`，员工工作台在 `workspace/src/`，企业管理后台在 `admin/src/`。公共包不得导入应用，两个应用不得互相导入。各项目页面放在 `src/views/`，可复用组件放在 `src/components/`，请求封装放在 `src/api/`，跨页面组合逻辑放在 `src/composables/`，共享类型放在 `src/types/`。目录边界按实际规模渐进建立，不为占位而复制业务逻辑。
+- `apps/web` 为 pnpm workspace：公共基础能力在 `core/src/`，员工工作台在 `workspace/src/`，企业管理应用在 `enterprise/src/`。公共包不得导入应用，两个应用不得互相导入。各项目页面放在 `src/views/`，可复用组件放在 `src/components/`，请求封装放在 `src/api/`，跨页面组合逻辑放在 `src/composables/`，共享类型放在 `src/types/`。目录边界按实际规模渐进建立，不为占位而复制业务逻辑。
 - 单文件组件保持单一职责。页面负责组合和导航；复杂交互拆到 composable；纯展示组件通过 props/emits 交互，不直接调用全局 API 或持有隐式跨页面状态。
 - 后端 API 通过类型化客户端/模块封装。组件不得自行拼接重复 URL、定义与服务端冲突的 DTO，或绕过统一错误处理。
 

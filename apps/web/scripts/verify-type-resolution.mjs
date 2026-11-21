@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 const web = fileURLToPath(new URL('..', import.meta.url)), app = process.argv[2]
-if (!['core', 'workspace', 'admin'].includes(app)) throw new Error('Expected core, workspace or admin')
+if (!['core', 'workspace', 'enterprise'].includes(app)) throw new Error('Expected core, workspace or enterprise')
 const appRoot = join(web, app), coreTypes = join(web, 'core/node_modules/.cache/nexus-types/core')
 const root = app === 'core' ? coreTypes : join(appRoot, 'node_modules/.cache/nexus-types/types')
 const raw = ts.readConfigFile(join(appRoot, 'tsconfig.json'), ts.sys.readFile)

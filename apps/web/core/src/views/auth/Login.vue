@@ -433,7 +433,7 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
   if (skipRedirect) return
   // An invitation opened while signed out (share link or shared-space code) is handled on /join after sign-in.
   router.replace(hasPendingInviteToken() || hasPendingInviteCode() ? '/join'
-    : authStore.hasValidTenant ? (import.meta.env.BASE_URL === '/admin/' ? '/' : '/platform/knowledge-bases') : '/onboarding/workspace')
+    : authStore.hasValidTenant ? (import.meta.env.BASE_URL === '/enterprise/' ? '/' : '/platform/knowledge-bases') : '/onboarding/workspace')
 }
 
 const getBackendOIDCRedirectURI = () => `${window.location.origin}/api/v1/auth/oidc/callback`
@@ -515,7 +515,7 @@ const acceptAndEnter = async (token: string) => {
   } finally {
     loading.value = false
     await nextTick()
-    router.replace(import.meta.env.BASE_URL === '/admin/' ? '/' : '/platform/knowledge-bases')
+    router.replace(import.meta.env.BASE_URL === '/enterprise/' ? '/' : '/platform/knowledge-bases')
   }
 }
 
