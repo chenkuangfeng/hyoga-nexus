@@ -342,3 +342,102 @@ test('系统设置主题色即时应用，刷新后保留', async ({ page, api }
   await expect(blue).toHaveAttribute('aria-checked', 'true')
   await expectResponsive(page)
 })
+
+test('企业模型目录按类型和服务商筛选，并从卡片编辑与添加模型', async ({ page, api }) => {
+  await api.signIn()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const root = '/api/v1/tenants/a/admin/model-settings'
+  const chat = { id: 'chat', name: 'Example Chat', model_type: 'chat', version_id: 'chat-v1', version: 1, options: {} }
+  const embedding = { id: 'embedding', name: 'Example Embed', model_type: 'embedding', version_id: 'embed-v1', version: 1, options: {} }
+  const providers = [
+    { id: 'north', name: 'North API', scope: 'tenant', base_url: 'https://north.example.test', key_configured: true, key_mask: '****', models: [chat] },
+    { id: 'south', name: 'South API', scope: 'tenant', base_url: 'https://south.example.test', key_configured: true, key_mask: '****', models: [embedding] },
+  ]
+  const writes: unknown[] = []
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
+    if (path === root) return { body: { providers, defaults: { tenant: { chat: 'chat-v1' } }, can_manage_tenant: true } }
+    if (path === root + '/providers/north/models/chat/test') return { body: { ok: true, message: 'Connection verified' } }
+    if (path === root + '/providers/south/models' && request.method() === 'POST') {
+      const input = request.postDataJSON()
+      writes.push(input)
+      const row = { ...embedding, ...input, id: 'new', version_id: 'new-v1' }
+      providers[1].models.push(row)
+      return { body: row }
+    }
+    if (path === root + '/providers/south/models/embedding' && request.method() === 'DELETE') {
+      providers[1].models = providers[1].models.filter(model => model.id !== 'embedding')
+      return { body: { status: 'disabled' } }
+    }
+  })
+  await page.goto('models')
+  const cards = page.locator('.model-grid article')
+  const typeTabs = page.locator('.model-type-tabs')
+  await expect(cards).toHaveCount(2)
+  await expect(typeTabs.locator('.model-tab-count')).toHaveText(['2', '1', '1', '0', '0', '0'])
+  await expect(page.locator('.model-grid > :last-child')).toHaveText('添加模型')
+
+  const search = page.locator('.model-search input')
+  expect((await search.boundingBox())!.x).toBeGreaterThan((await typeTabs.boundingBox())!.x)
+  expect((await cards.nth(0).boundingBox())!.y).toBe((await cards.nth(1).boundingBox())!.y)
+  await search.fill('  north api  ')
+  await expect(cards).toHaveCount(1)
+  await expect(cards).toContainText('Example Chat')
+  await search.fill('没有这个模型')
+  await expect(page.getByText('无结果', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '清空', exact: true }).click()
+  await expect(cards).toHaveCount(2)
+
+  const chatCard = cards.filter({ hasText: 'Example Chat' })
+  await chatCard.getByRole('button', { name: '测试连接' }).click()
+  await expect(chatCard.getByRole('status')).toHaveText('Connection verified')
+  await chatCard.getByRole('button', { name: 'Example Chat' }).press('Enter')
+  let dialog = page.locator('.t-dialog:visible')
+  await expect(dialog).toContainText('编辑模型并创建新版本')
+  await expect(dialog.locator('.t-select input').first()).toHaveValue('North API')
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+
+  const providerMenu = page.getByRole('button', { name: '服务商', exact: true })
+  await providerMenu.press('Enter')
+  await expect(providerMenu).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: 'North API · 编辑服务商' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(providerMenu).toBeFocused()
+  await providerMenu.click()
+  await page.getByRole('button', { name: 'South API · 编辑服务商' }).click()
+  dialog = page.locator('.t-dialog:visible')
+  await expect(dialog).toContainText('编辑企业模型服务商')
+  await expect(dialog.locator('input[type="password"]')).toHaveValue('')
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+
+  await typeTabs.getByText('向量化', { exact: true }).click()
+  await expect(cards).toHaveCount(1)
+  await page.locator('.model-card--add').click()
+  dialog = page.locator('.t-dialog:visible')
+  await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeDisabled()
+  await dialog.locator('.t-select').first().click()
+  await page.locator('.t-select-option:visible').filter({ hasText: 'South API' }).click()
+  await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embed')
+  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(cards).toHaveCount(2)
+  expect(writes).toEqual([{
+    name: 'New Embed', model_type: 'embedding', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
+  }])
+
+  await cards.filter({ hasText: 'Example Embed' }).getByRole('button', { name: '展开' }).click()
+  await page.getByText('停用', { exact: true }).click()
+  await expect(page.locator('.t-dialog:visible')).toContainText('Example Embed')
+  await page.locator('.t-dialog:visible .t-dialog__footer button').last().click()
+  await expect(cards).toHaveCount(1)
+  await expect(cards).toContainText('New Embed')
+  const sections = page.locator('.model-sections')
+  await sections.getByText('企业默认模型', { exact: true }).click()
+  await expect(page.locator('.defaults-panel .t-select input').first()).toHaveValue('North API · Example Chat')
+  await sections.getByText('模型管理', { exact: true }).click()
+  await expect(cards).toHaveCount(1)
+  await expectResponsive(page)
+  expect((await search.boundingBox())!.y).toBeGreaterThan((await typeTabs.boundingBox())!.y)
+  await expect(page.locator('.model-card--add')).toBeInViewport()
+})
