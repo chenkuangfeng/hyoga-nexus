@@ -25,6 +25,12 @@ corepack pnpm dev:enterprise     # 5174/enterprise/
 
 `pnpm dev` 是工作台开发命令的别名。两个服务默认将 `/api` 代理到 `http://127.0.0.1:8000`，可用 `VITE_DEV_PROXY_TARGET` 覆盖。两个应用默认同域部署，共用认证存储；真实权限始终由后端校验。
 
+### 从旧版 `admin` 目录升级
+
+更新到使用 `enterprise` 目录的版本后，停止旧前端进程，在 `apps/web` 重新执行 `corepack pnpm install --frozen-lockfile`。pnpm 会为新目录生成依赖链接，旧目录的安装状态不能直接用于新包。
+
+如果企业管理仍提示 `Failed to resolve import "vue"`，从 `apps/web` 运行 `corepack pnpm --filter @nexus-web/enterprise exec node -p "require.resolve('vue')"`。如果解析失败，执行 `corepack pnpm install --frozen-lockfile --force` 重建链接，再用 `corepack pnpm dev:enterprise` 启动。
+
 ## 构建与检查
 
 - `pnpm build`：串行构建 `workspace/dist` 与 `enterprise/dist`。
