@@ -71,6 +71,29 @@ def fixtures(protocol, reason='normal', calls=False):
     return {'content': blocks, 'stop_reason': finish}, events + [{'type': 'message_delta', 'delta': {'stop_reason': finish}}, {'type': 'message_stop'}]
 
 
+@pytest.mark.parametrize('effort', ['', 'none', 'high'])
+def test_chat_omits_empty_reasoning_effort(effort):
+    def handler(request):
+        payload = json.loads(request.content)
+        assert payload['temperature'] == 0
+        if effort:
+            assert payload['reasoning_effort'] == effort
+        else:
+            assert 'reasoning_effort' not in payload
+        return httpx.Response(200, text=wire([chat({'content': 'OK'}, 'stop')]))
+
+    async def scenario():
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        model = OpenAICompatibleModel(model='fake', api_key='secret-marker', http_client=client,
+                                      options={'reasoning_effort': effort, 'temperature': 0})
+        try:
+            assert [chunk.kind async for chunk in model.stream(REQUEST)] == ['text', 'done']
+        finally:
+            await model.close()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize('protocol', PROTOCOLS)
 @pytest.mark.parametrize('streaming', [True, False])
 @pytest.mark.parametrize('reason', ['normal', 'length', 'filter'])

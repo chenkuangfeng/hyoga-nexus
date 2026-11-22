@@ -46,6 +46,10 @@
 - 降级时只保留对话默认值，删除 `model_profiles.model_type`。
 - 往返升降级在 SQLite 上验证通过；PostgreSQL 未验证（见 `verification.md`）。
 
+### R7 未指定思考强度
+- Chat Completions 遇到空字符串思考强度时省略 `reasoning_effort`，使用服务商默认行为。
+- 保存模型时，显式提交空字符串会清除新版本的思考强度选项。请求省略字段时沿用旧版本的有效设置。
+
 ## 不在本规格内
 - Ollama 来源与本地模型下载。
 - 服务端模型目录与管理员目录编辑。

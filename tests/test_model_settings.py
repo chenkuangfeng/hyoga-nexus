@@ -253,6 +253,27 @@ def test_defaults_fallback_and_model_edit_advances_only_defaults(settings_client
     assert 'personal' not in client.get(path).json()['defaults']
 
 
+def test_model_update_clears_reasoning_effort_only_when_requested(settings_client, database):
+    client, path, *_ = settings_client
+    provider = add_provider(client, path, 'tenant')
+    models = f'{path}/providers/{provider["id"]}/models'
+    created = client.post(models, json={'name': 'chat-model', 'options': {'reasoning_effort': 'high'}})
+    assert created.status_code == 201
+    original = created.json()
+    model = f'{models}/{original["id"]}'
+    renamed = client.put(model, json={'name': 'renamed-chat'})
+    assert renamed.status_code == 200
+    cleared = client.put(model, json={'name': 'renamed-chat', 'options': {'reasoning_effort': ''}})
+    assert cleared.status_code == 200
+    with database() as db:
+        def options(result):
+            return db.get(ModelProfileVersionRecord, UUID(result['version_id'])).options
+
+        assert options(original)['reasoning_effort'] == 'high'
+        assert options(renamed.json())['reasoning_effort'] == 'high'
+        assert 'reasoning_effort' not in options(cleared.json())
+
+
 def test_model_type_is_validated_fixed_and_limits_defaults(settings_client):
     """Typed models: unknown types are rejected, a model keeps its type, and defaults are per type."""
     client, path, *_ = settings_client

@@ -50,6 +50,8 @@ function onEscape(event: KeyboardEvent) {
 <style scoped>
 .model-actions-panel {
   display: grid;
+  /* The popup is attached to the trigger wrapper to keep the tab order. */
+  width: max-content;
   max-width: min(280px, calc(100vw - 64px));
   max-height: 280px;
   overflow: auto;

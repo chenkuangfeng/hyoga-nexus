@@ -45,9 +45,11 @@ class OpenAICompatibleModel:
         options = dict(model=self._model, messages=messages, stream=True,
                        max_completion_tokens=request.max_output_tokens,
                        stream_options={'include_usage': True})
-        for name in ('temperature', 'reasoning_effort'):
-            if name in self._options:
-                options[name] = self._options[name]
+        if 'temperature' in self._options:
+            options['temperature'] = self._options['temperature']
+        # Older profiles use an empty string for the supplier's default effort.
+        if effort := self._options.get('reasoning_effort'):
+            options['reasoning_effort'] = effort
         if request.tools:
             options['tools'] = [{'type': 'function', 'function': {
                 'name': t.name, 'description': t.description, 'parameters': sanitize_schema(t.parameters)}} for t in request.tools]

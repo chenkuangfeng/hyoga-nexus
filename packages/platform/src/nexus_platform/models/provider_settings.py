@@ -299,6 +299,8 @@ def new_version(db: Session, provider: Provider, profile: Profile, model_name: s
     old = db.get(Version, profile.current_version_id) if profile.current_version_id else None
     options = dict(old.options) if old else {'protocol': 'openai_chat_completions'}
     options.update(model_options or {})
+    if options.get('reasoning_effort') == '':
+        options.pop('reasoning_effort')
     options['base_url'] = provider.base_url
     version = Version(id=new_id(), tenant_id=provider.tenant_id, profile_id=profile.id,
         version=old.version + 1 if old else 1, model_name=model_name, options=options,

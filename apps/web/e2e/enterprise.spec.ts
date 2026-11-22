@@ -444,8 +444,25 @@ test('企业模型目录按类型和服务商筛选，并从卡片编辑与添�
   await expect(page.locator('.model-card--add')).toBeInViewport()
 
   await typeTabs.getByText('全部', { exact: true }).click()
-  await chatCard.getByRole('button', { name: '展开' }).click()
-  await page.getByRole('button', { name: '复制', exact: true }).click()
+  const modelMenu = chatCard.getByRole('button', { name: '展开' })
+  await modelMenu.press('Enter')
+  const copyAction = page.getByRole('button', { name: '复制', exact: true })
+  await expect(copyAction).toBeInViewport({ ratio: 1 })
+  const panel = page.locator('.model-actions-panel:visible')
+  const labelLineCounts = await panel.getByRole('button').evaluateAll(buttons =>
+    buttons.map(button => {
+      const range = document.createRange()
+      range.selectNodeContents(button.querySelector('.t-button__text') ?? button)
+      return new Set(Array.from(range.getClientRects(), rect => rect.y)).size
+    }),
+  )
+  expect(labelLineCounts).toEqual([1, 1, 1])
+  await page.keyboard.press('Tab')
+  await expect(copyAction).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(modelMenu).toBeFocused()
+  await modelMenu.click()
+  await copyAction.click()
   const copied = cards.filter({ hasText: 'Example Chat 副本' })
   await expect(copied).toHaveCount(1)
   await copied.getByRole('button', { name: 'Example Chat 副本' }).click()
