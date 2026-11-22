@@ -20,6 +20,8 @@ PinnedTransport 校验 URL 与每次请求的 origin，在发送前解析 DNS，
 
 Chat Completions 将已有模型版本的空字符串思考强度视为使用服务商默认行为，请求中省略该字段。
 
+向量适配器使用同一 HTTP 错误分类与拒绝正文上限。认证、请求拒绝、限流和传输失败以稳定错误码交给连接测试、调试及运行时调用方。
+
 `models/errors.py` 使用受限结构化 code/type 和 HTTP 状态分类，不解析自由文本。公开异常只含稳定码；内部 ModelFault 保留 Retry-After、缓冲前是否已输出及禁止恢复标记，兼容 RuntimeFault 消费点而不修改 core。HTTPX 响应 hook 在 SDK 读取拒绝正文前限制为 64 KiB；结构化适配器也有独立读取上限。两种传输均释放响应，SDK 自身重试关闭。
 
 `protocols/state.py` 管理单响应调用身份、参数、块闭合与终态，`structured.py` 只组织 HTTP、可见文本与结果交付。Responses 使用 item_id/回退 output_index 聚合，并以 call_id 关联工具结果；Anthropic 保留初始 input、要求工具块闭合，允许有效 stop reason 后 EOF。Chat 保持严格 finish_reason；DONE 哨兵不足以独立证明完成。结构化显式 failed/error、未知状态、缺终态、坏 JSON 均不得变成正常完成。

@@ -276,6 +276,7 @@ def create_native_agent(tenant_id: UUID, body: AgentInput, principal: Principal 
 
 UNSUPPORTED_TYPE_MESSAGE = '该模型类型暂不支持连接测试'
 DEFAULT_FAILURE_MESSAGE = '连接未通过，请检查地址、模型名称和 Key'
+EMBEDDING_REJECTED_MESSAGE = '向量请求被拒绝：请确认 API 地址支持 /embeddings，并填写服务商提供的向量模型 ID。'
 #: Safe, fixed explanations per stable fault code; supplier text is never echoed.
 CONNECTION_FAILURE_MESSAGES = {
     'model_authentication_failed': '服务商拒绝了 Key：请确认 API Key 正确、未过期，且有该模型的访问权限',
@@ -330,7 +331,10 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
                 pass
         return {'ok': True, 'message': '连接成功，流式响应正常'}
     except RuntimeFault as exc:
-        return {'ok': False, 'code': exc.code, 'message': CONNECTION_FAILURE_MESSAGES.get(exc.code, DEFAULT_FAILURE_MESSAGE)}
+        message = CONNECTION_FAILURE_MESSAGES.get(exc.code, DEFAULT_FAILURE_MESSAGE)
+        if model_type == 'embedding' and exc.code == 'model_request_rejected':
+            message = EMBEDDING_REJECTED_MESSAGE
+        return {'ok': False, 'code': exc.code, 'message': message}
     except TimeoutError:
         return {'ok': False, 'code': 'model_timeout', 'message': CONNECTION_FAILURE_MESSAGES['model_timeout']}
     except Exception:

@@ -428,6 +428,32 @@ def test_enterprise_connection_probes_use_configured_adapter(
     assert client.get(path).json()['providers'][0]['models'] == []
 
 
+@pytest.mark.parametrize(('status', 'code'), [
+    (404, 'model_request_rejected'), (401, 'model_authentication_failed'),
+    (429, 'model_rate_limited'), (503, 'model_provider_unavailable'),
+    (None, 'model_timeout'),
+])
+def test_embedding_probe_preserves_safe_failure_diagnosis(monkeypatch, status, code):
+    from nexus_api.http.model_settings import check_connection
+    from nexus_runtimes.native.models import embeddings
+
+    def upstream(request):
+        assert request.url.path == '/embeddings'
+        if status is None:
+            raise httpx.ReadTimeout('upstream-secret', request=request)
+        return httpx.Response(status, json={'error': {'message': 'upstream-secret'}})
+
+    monkeypatch.setattr(embeddings, 'provider_client',
+                        lambda *args, **kwargs: httpx.AsyncClient(transport=httpx.MockTransport(upstream)))
+    result = asyncio.run(check_connection(key='test-key', base_url='https://model.example',
+                                          model_name='test-embedding', options={}, model_type='embedding'))
+    assert result['ok'] is False
+    assert result['code'] == code
+    assert 'upstream-secret' not in result['message']
+    if status == 404:
+        assert '/embeddings' in result['message'] and '向量模型 ID' in result['message']
+
+
 def test_draft_test_requires_a_key_for_new_providers_and_scope_permission(settings_client):
     client, path, identity, owner, member, _ = settings_client
     missing = client.post(path + '/test', json={'base_url': 'https://model.example/v1', 'model_name': 'm', 'scope': 'personal'})

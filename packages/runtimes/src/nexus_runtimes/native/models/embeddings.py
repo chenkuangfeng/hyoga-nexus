@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from openai import AsyncOpenAI
+from openai import APIConnectionError, APIError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 from nexus_core.runtime import RuntimeFault
+from .errors import ERROR_BODY_LIMIT, bound_error_response, failure
 from .network import provider_client
 
 #: Protocols whose providers expose `/embeddings`.
@@ -25,14 +26,25 @@ class OpenAICompatibleEmbedder:
     def __init__(self, *, model: str, api_key: str, base_url: str, timeout: float = 30,
                  share_connections: bool = False) -> None:
         self._model = model
+        client = provider_client(base_url, timeout=timeout, share_connections=share_connections)
+        client.event_hooks['response'].append(bound_error_response)
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0,
-                                   http_client=provider_client(base_url, timeout=timeout,
-                                                               share_connections=share_connections))
+                                   http_client=client)
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         out: list[list[float]] = []
         for start in range(0, len(texts), BATCH):
-            reply = await self._client.embeddings.create(model=self._model, input=list(texts[start:start + BATCH]))
+            try:
+                reply = await self._client.embeddings.create(model=self._model, input=list(texts[start:start + BATCH]))
+            except APITimeoutError:
+                raise RuntimeFault('model_timeout') from None
+            except APIConnectionError:
+                raise RuntimeFault('model_provider_unavailable') from None
+            except APIStatusError as exc:
+                body = exc.body if len(exc.response.content) <= ERROR_BODY_LIMIT else None
+                raise failure(body, status=exc.status_code, headers=exc.response.headers) from None
+            except APIError as exc:
+                raise failure(exc.body) from None
             out.extend(list(item.embedding) for item in sorted(reply.data, key=lambda item: item.index))
         return out
 
