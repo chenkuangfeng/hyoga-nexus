@@ -16,8 +16,11 @@
           :title="row.path || undefined"
           @click.stop="choose(row.path)"
         >
-          <t-icon :name="row.isRoot ? 'folder-open' : 'folder'" class="folder-picker__icon" />
-          <span class="folder-picker__name">{{ row.label }}</span>
+          <button type="button" class="folder-picker__select"
+            :disabled="effectiveCurrentPath === row.path && !allowReselect" @click.stop="choose(row.path)">
+            <t-icon :name="row.isRoot ? 'folder-open' : 'folder'" class="folder-picker__icon" />
+            <span class="folder-picker__name">{{ row.label }}</span>
+          </button>
           <button
             type="button"
             class="folder-picker__add"
@@ -329,6 +332,22 @@ const commitNewFolder = async () => {
   flex: 0 0 auto;
   font-size: var(--app-text-lg);
   color: var(--td-text-color-placeholder);
+}
+
+.folder-picker__select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: inherit;
 }
 
 .folder-picker__name {

@@ -6,7 +6,7 @@ import { formatReferenceSnippet } from '@/utils/referenceSources';
 import KnowledgeTagPopover from './KnowledgeTagPopover.vue';
 import DocumentFileIcon from './DocumentFileIcon.vue';
 import DocumentActionMenu from './DocumentActionMenu.vue';
-import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
+import FolderPickerMenu, { type FolderOption } from '@nexus-web/core/components/knowledge/documents/FolderPickerMenu.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { shownStall } from '@/utils/knowledgeProcessingStall';
 import type { FolderEntry } from '@nexus-web/core/components/knowledge/documents/folderTree';

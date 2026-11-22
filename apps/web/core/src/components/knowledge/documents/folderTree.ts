@@ -276,6 +276,14 @@ export function folderOptionFromPath(path: string): { path: string; name: string
   }
 }
 
+/** Flatten stored subfolders for destination pickers, which provide their own root row. */
+export function buildFolderOptions(folders: KnowledgeFolderNode[], depth = 0): Array<{ path: string; name: string; depth: number }> {
+  return folders.flatMap(({ path, name, children }) => [
+    { path, name, depth },
+    ...buildFolderOptions(children ?? [], depth + 1),
+  ])
+}
+
 /** Sort folder picker rows in tree order (parent before child, siblings lexicographic). */
 export function sortFolderOptions<T extends { path: string }>(options: T[]): T[] {
   return [...options].sort((a, b) => {

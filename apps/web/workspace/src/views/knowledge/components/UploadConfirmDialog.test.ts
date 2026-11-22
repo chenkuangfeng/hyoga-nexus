@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
-const dialog = readFileSync(new URL('./UploadConfirmDialog.vue', import.meta.url), 'utf8')
+const dialog = readFileSync(new URL('../../../../../core/src/components/knowledge/documents/UploadConfirmDialog.vue', import.meta.url), 'utf8')
 const host = readFileSync(new URL('../../../components/UploadConfirmHost.vue', import.meta.url), 'utf8')
 const knowledgeBase = readFileSync(new URL('../KnowledgeBase.vue', import.meta.url), 'utf8')
 const platform = readFileSync(new URL('../../platform/index.vue', import.meta.url), 'utf8')
@@ -43,7 +43,7 @@ test('takes the upload destination folder from the confirmation result', () => {
 })
 
 test('creates sub-folders from per-row actions without changing the selected destination', () => {
-  const picker = readFileSync(new URL('./FolderPickerMenu.vue', import.meta.url), 'utf8')
+  const picker = readFileSync(new URL('../../../../../core/src/components/knowledge/documents/FolderPickerMenu.vue', import.meta.url), 'utf8')
   assert.match(picker, /startCreatingUnder/)
   assert.match(picker, /folder-picker__add/)
   assert.match(picker, /folder-picker__item--create/)

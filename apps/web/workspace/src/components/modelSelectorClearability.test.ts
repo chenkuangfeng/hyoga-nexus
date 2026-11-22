@@ -6,7 +6,7 @@ const selector = readFileSync(new URL('../../../core/src/components/ModelSelecto
 const agentEditor = readFileSync(new URL('../views/agent/AgentEditorModal.vue', import.meta.url), 'utf8')
 const kbModelConfig = readFileSync(new URL('../../../core/src/components/knowledge-editor/settings/KBModelConfig.vue', import.meta.url), 'utf8')
 const kbEditor = readFileSync(new URL('../../../core/src/components/knowledge-editor/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
-const uploadConfirm = readFileSync(new URL('../views/knowledge/components/UploadConfirmDialog.vue', import.meta.url), 'utf8')
+const uploadConfirm = readFileSync(new URL('../../../core/src/components/knowledge/documents/UploadConfirmDialog.vue', import.meta.url), 'utf8')
 
 function modelSelectorTag(source: string, selectedModelBinding: string): string {
   const tag = source

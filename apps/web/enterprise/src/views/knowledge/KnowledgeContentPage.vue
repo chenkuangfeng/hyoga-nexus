@@ -8,7 +8,9 @@ import { useAuthStore } from '@nexus-web/core/stores/auth'
 import KbFolderTree from '@nexus-web/core/components/knowledge/documents/KbFolderTree.vue'
 import KbDocumentLayout from '@nexus-web/core/components/knowledge/documents/KbDocumentLayout.vue'
 import KbUploadSourceDropdown from '@nexus-web/core/components/knowledge/documents/KbUploadSourceDropdown.vue'
-import { buildUploadFileName, folderPathExists } from '@nexus-web/core/components/knowledge/documents/folderTree'
+import UploadConfirmDialog from '@nexus-web/core/components/knowledge/documents/UploadConfirmDialog.vue'
+import { buildFolderOptions, buildUploadFileName, folderPathExists } from '@nexus-web/core/components/knowledge/documents/folderTree'
+import type { UploadConfirmResult } from '@nexus-web/core/components/knowledge/documents/uploadConfirm'
 import type { KnowledgeFolderTree } from '@nexus-web/core/api/knowledge-base/index'
 import { useEnterpriseContext } from '../../stores/context'
 import { listEnterpriseKnowledgeBases, type EnterpriseKnowledgeBase } from '@nexus-web/core/api/enterprise-knowledge'
@@ -33,7 +35,9 @@ const loading = ref(false), working = ref(false), error = ref(''), ready = ref(f
 const keyword = ref(''), page = ref(1), pageSize = 20, total = ref(0)
 const documents = ref<EnterpriseKnowledgeDocument[]>([]), faqEntries = ref<EnterpriseFaqEntry[]>([]), wikiPages = ref<EnterpriseWikiPage[]>([])
 const uploadLabel = ref(''), uploadPercent = ref(0)
+const pendingUpload = ref<File[] | null>(null)
 const folderTree = ref<KnowledgeFolderTree | null>(null), folder = ref(''), folderLoading = ref(false)
+const folderOptions = computed(() => buildFolderOptions(folderTree.value?.folders ?? []))
 const folderCollapsed = ref(false), wikiTab = ref('pages')
 const documentMode = computed(() => knowledgeBase.value?.type === 'document'
   || (knowledgeBase.value?.type === 'wiki' && wikiTab.value === 'documents'))
@@ -57,7 +61,8 @@ function reset() {
   knowledgeBase.value = null; knowledgeBases.value = []; loading.value = false; working.value = false; error.value = ''; ready.value = false
   page.value = 1; total.value = 0; documents.value = []; faqEntries.value = []; wikiPages.value = []
   folderTree.value = null; folder.value = ''; folderLoading.value = false; folderCollapsed.value = false; wikiTab.value = 'pages'
-  uploadLabel.value = ''; uploadPercent.value = 0; faqDialog.value = false; faqSaving.value = false; faqEditId.value = null
+  pendingUpload.value = null; uploadLabel.value = ''; uploadPercent.value = 0
+  faqDialog.value = false; faqSaving.value = false; faqEditId.value = null
   wikiDialog.value = false; wikiLoading.value = false; wikiSaving.value = false; wikiEditSlug.value = null
 }
 function currentScope(current: number, scope: string, user: string, id: string) {
@@ -154,16 +159,25 @@ async function renameFolder({ from, to }: { from: string; to: string }) {
 
 function selectWikiTab(value: unknown) {
   if (working.value || (value !== 'pages' && value !== 'documents')) return
+  if (value !== wikiTab.value) pendingUpload.value = null
   wikiTab.value = value
   keyword.value = ''
   refreshSearch()
   void refreshFolders()
 }
 
-async function uploadFiles(files: File[]) {
-  if (!files.length || !knowledgeBase.value || working.value) return
+function openUploadConfirmation(files: File[]) {
+  if (!files.length || !ready.value || !canManage.value || !documentMode.value || working.value || pendingUpload.value) return
+  pendingUpload.value = files
+}
+
+async function uploadFiles(result: UploadConfirmResult) {
+  if (!pendingUpload.value || result.mode !== 'file' || !result.files?.length || !knowledgeBase.value
+    || !canManage.value || !documentMode.value || working.value) return
+  const { files, targetFolder = '' } = result
+  pendingUpload.value = null
   const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = knowledgeBase.value.id
-  const destination = folder.value, failed: string[] = []
+  const failed: string[] = []
   working.value = true; let uploaded = 0, deduplicated = 0
   for (const file of files) {
     if (!currentScope(current, scope, user, id)) break
@@ -171,7 +185,7 @@ async function uploadFiles(files: File[]) {
     try {
       const result = await uploadEnterpriseKnowledgeDocument(scope, id, file, (loaded, totalBytes) => {
         if (currentScope(current, scope, user, id)) uploadPercent.value = Math.min(100, Math.floor(loaded / totalBytes * 100))
-      }, buildUploadFileName(file, destination))
+      }, buildUploadFileName(file, targetFolder))
       if (!currentScope(current, scope, user, id)) return
       uploaded++; if (result.deduplicated) deduplicated++
     } catch { failed.push(file.name) }
@@ -324,9 +338,9 @@ onBeforeUnmount(reset)
         <t-button v-if="knowledgeBase.type === 'faq'" theme="primary" :disabled="working" @click="blankFaq">
           <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addFaq') }}
         </t-button>
-        <KbUploadSourceDropdown v-if="documentMode" :include-url="false" :disabled="working"
-          trigger-icon="upload" :trigger-label="t('knowledgeBase.addDocument')"
-          @files="uploadFiles" />
+        <KbUploadSourceDropdown v-if="documentMode" :include-url="false" :disabled="working || !!pendingUpload"
+          trigger-icon="add" :trigger-label="t('knowledgeBase.addDocument')"
+          @files="openUploadConfirmation" />
         <t-button v-if="knowledgeBase.type === 'wiki' && !documentMode" variant="outline" :disabled="working" @click="blankWiki">
           <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addWiki') }}
         </t-button>
@@ -340,6 +354,9 @@ onBeforeUnmount(reset)
     </t-loading>
     <footer v-if="ready && total" class="pagination"><span>{{ t('adminKnowledge.content.total', { count: total }) }}</span><t-button variant="outline" :disabled="page <= 1 || loading || working" @click="goToPage(page - 1)">{{ t('adminKnowledge.content.previous') }}</t-button><span>{{ page }} / {{ pageCount }}</span><t-button variant="outline" :disabled="page >= pageCount || loading || working" @click="goToPage(page + 1)">{{ t('adminKnowledge.content.next') }}</t-button></footer>
     </KbDocumentLayout>
+    <UploadConfirmDialog v-if="documentMode" :visible="!!pendingUpload" use-library-defaults
+      :files="pendingUpload ?? undefined" :target-folder="folder" :folder-options="folderOptions"
+      @confirm="uploadFiles" @update:visible="pendingUpload = null" />
     <t-dialog :visible="faqDialog" :header="t(faqEditId ? 'adminKnowledge.content.editFaq' : 'adminKnowledge.content.addFaq')" width="min(680px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminKnowledge.content.save'), loading: faqSaving, disabled: faqSaving }" :cancel-btn="{ content: t('common.cancel'), disabled: faqSaving }" :close-btn="!faqSaving" :close-on-overlay-click="!faqSaving" @confirm="saveFaq" @close="!faqSaving && (faqDialog = false)">
       <div class="editor-form"><label>{{ t('adminKnowledge.content.question') }}<t-input v-model="faqForm.standardQuestion" maxlength="1000" /></label><label>{{ t('adminKnowledge.content.answers') }}<t-textarea v-model="faqForm.answers" :autosize="{ minRows: 3, maxRows: 8 }" :placeholder="t('adminKnowledge.content.answersHint')" /></label><label>{{ t('adminKnowledge.content.similarQuestions') }}<t-textarea v-model="faqForm.similarQuestions" :autosize="{ minRows: 2, maxRows: 5 }" /></label><label>{{ t('adminKnowledge.content.negativeQuestions') }}<t-textarea v-model="faqForm.negativeQuestions" :autosize="{ minRows: 2, maxRows: 5 }" /></label><label>{{ t('adminKnowledge.content.category') }}<t-input v-model="faqForm.category" maxlength="160" /></label><label>{{ t('adminKnowledge.content.answerStrategy') }}<t-select v-model="faqForm.strategy" :options="[{label:t('adminKnowledge.content.allAnswers'),value:'all'},{label:t('adminKnowledge.content.firstAnswer'),value:'first'}]" /></label><div class="checks"><t-checkbox v-model="faqForm.enabled">{{ t('adminKnowledge.content.enabled') }}</t-checkbox><t-checkbox v-model="faqForm.recommended">{{ t('adminKnowledge.content.recommended') }}</t-checkbox></div></div>
     </t-dialog>

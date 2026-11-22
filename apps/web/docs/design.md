@@ -309,4 +309,4 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 
 ## 知识库文档目录和上传
 
-员工工作台和企业管理端复用 `core/src/components/knowledge/documents/` 中的目录布局、树、新建目录弹窗和文件选择器。目录树及选择器沿用 WeKnora e1f9a6166 同名组件。选中目录后可上传文件或本地文件夹，传输保留文件夹名称及其中文件的相对路径。工作台继续使用已有的上传确认和解析任务队列，企业端展示当前批次进度。企业 Wiki 从「文档」标签进入源文件管理。手动创建目录可保存没有文件的目录，浏览器文件夹选择传入包含文件的路径。
+员工工作台和企业管理端复用 `core/src/components/knowledge/documents/` 中的目录布局、树、新建目录弹窗、文件选择器和上传确认弹窗。目录树及选择器沿用 WeKnora e1f9a6166 的同名组件，上传确认沿用其 `views/knowledge/components/UploadConfirmDialog.vue` 和 `FolderPickerMenu.vue`。确认前可增删文件及调整目标目录，传输保留本地文件夹名称和相对路径。工作台继续使用上传与解析任务队列，企业端使用知识库默认解析配置并展示当前批次进度，企业或知识库等作用域变化时丢弃待确认批次。企业 Wiki 从「文档」标签进入源文件管理。手动创建目录可保存没有文件的目录，浏览器文件夹选择传入包含文件的路径。

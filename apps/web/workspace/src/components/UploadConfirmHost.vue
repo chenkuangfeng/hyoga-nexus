@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import UploadConfirmDialog from '@/views/knowledge/components/UploadConfirmDialog.vue'
+import UploadConfirmDialog from '@nexus-web/core/components/knowledge/documents/UploadConfirmDialog.vue'
 import { useUploadConfirmStore } from '@/stores/uploadConfirm'
+import { useUIStore } from '@/stores/ui'
 
 const uploadConfirmStore = useUploadConfirmStore()
+const uiStore = useUIStore()
 
 const handleConfirm = (payload: Parameters<typeof uploadConfirmStore.resolveConfirm>[0]) => {
   uploadConfirmStore.resolveConfirm(payload)
@@ -29,5 +31,6 @@ const handleCancel = () => {
     :folder-options="uploadConfirmStore.folderOptions"
     @confirm="handleConfirm"
     @cancel="handleCancel"
+    @open-model-settings="uiStore.openSettings('models', $event)"
   />
 </template>

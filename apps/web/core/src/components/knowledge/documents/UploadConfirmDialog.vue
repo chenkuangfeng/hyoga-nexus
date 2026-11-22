@@ -2,8 +2,9 @@
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="dialogVisible" class="upload-confirm-overlay">
-        <div class="upload-confirm-modal" role="dialog" :aria-label="dialogTitle">
-          <button class="close-btn" type="button" :aria-label="t('general.close')" @click="handleCancel">
+        <div class="upload-confirm-modal" :class="{ 'upload-confirm-modal--defaults': useLibraryDefaults }"
+          role="dialog" :aria-label="dialogTitle" @keydown.esc.stop="handleCancel">
+          <button ref="closeButton" class="close-btn" type="button" :aria-label="t('common.close')" @click="handleCancel">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
             </svg>
@@ -19,6 +20,8 @@
                     <KbUploadSourceDropdown
                       :accept-file-types="acceptFileTypes"
                       :supported-file-types="supportedFileTypes"
+                      :include-url="!useLibraryDefaults"
+                      :popup-z-index="3100"
                       :tooltip="t('uploadConfirm.continueAdd')"
                       placement="bottom-left"
                       @files="appendFiles"
@@ -122,7 +125,7 @@
               </div>
             </aside>
 
-            <aside class="settings-sidebar">
+            <aside v-if="!useLibraryDefaults" class="settings-sidebar">
               <div class="settings-sidebar-header">
                 <h2 class="settings-sidebar-title">{{ t('uploadConfirm.parseConfig') }}</h2>
               </div>
@@ -157,7 +160,13 @@
             </aside>
 
             <div class="config-panel">
-              <div class="content-wrapper upload-confirm-content">
+              <div v-if="useLibraryDefaults" class="content-wrapper">
+                <div class="section-header">
+                  <h2 class="section-title">{{ t('uploadConfirm.parseConfig') }}</h2>
+                  <p class="section-desc">{{ t('knowledgeStages.processConfig.kbDefault') }}</p>
+                </div>
+              </div>
+              <div v-else class="content-wrapper upload-confirm-content">
                   <div v-show="activeSection === 'tags'" class="section">
                     <div class="section-content">
                       <div class="section-header">
@@ -665,16 +674,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import ModelSelector from '@nexus-web/core/components/ModelSelector.vue'
 import KBParserSettings from '@nexus-web/core/components/knowledge-editor/settings/KBParserSettings.vue'
-import GraphSettings from '../settings/GraphSettings.vue'
+import GraphSettings from './GraphSettings.vue'
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources'
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources'
-import { useUIStore } from '@/stores/ui'
-import { formatFileSize, getFileIcon } from '@/utils/files'
+import { formatFileSize, getFileIcon } from '@nexus-web/core/utils/files'
 import { getUploadFileKey } from '@nexus-web/core/components/knowledge/documents/uploadSources'
 import { listKnowledgeTags, mergeImageActions, fetchImageAttrSchema, FALLBACK_IMAGE_ATTR_SCHEMA, type ImageActionsConfig, type ImageAttrSchema } from '@nexus-web/core/api/knowledge-base/index'
 import { imageAttrDisplay, imageAttrConditionDisplay } from '@nexus-web/core/utils/imageAttrDisplay'
@@ -695,7 +703,7 @@ import type {
   UploadConfirmMode,
   UploadConfirmReparseSource,
   UploadConfirmResult,
-} from '@/stores/uploadConfirm'
+} from './uploadConfirm'
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac', 'ogg']
@@ -762,7 +770,9 @@ interface UploadUIState {
 
 const props = withDefaults(defineProps<{
   visible: boolean
-  kbInfo: any
+  kbInfo?: any
+  /** File-only uploads processed with server-side knowledge base defaults. */
+  useLibraryDefaults?: boolean
   mode?: UploadConfirmMode
   files?: File[]
   urls?: string[]
@@ -793,6 +803,7 @@ const emit = defineEmits<{
   'update:visible': [value: boolean]
   confirm: [payload: UploadConfirmResult]
   cancel: []
+  'open-model-settings': [kind: 'vllm' | 'asr']
 }>()
 
 const { t, te } = useI18n()
@@ -812,7 +823,6 @@ const imageAttrConditionDisplays = computed(() =>
 )
 const chatResources = useChatResourcesStore()
 const editorResources = useEditorResourcesStore()
-const uiStore = useUIStore()
 
 const allModels = ref<any[]>([])
 const embeddingTakesImages = computed(() => {
@@ -850,6 +860,24 @@ const dialogVisible = computed({
   get: () => props.visible,
   set: (value: boolean) => emit('update:visible', value),
 })
+
+const closeButton = ref<HTMLButtonElement | null>(null)
+let previousFocus: HTMLElement | null = null
+function restoreFocus() {
+  if (previousFocus?.isConnected) previousFocus.focus()
+  previousFocus = null
+}
+watch(() => props.visible, async (visible) => {
+  if (!visible) {
+    restoreFocus()
+    return
+  }
+  if (typeof document === 'undefined') return
+  previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  await nextTick()
+  if (props.visible) closeButton.value?.focus()
+}, { immediate: true })
+onBeforeUnmount(restoreFocus)
 
 // Deep paths are shown as root / segment / segment in the picker row.
 const destinationBreadcrumb = computed(() => {
@@ -1193,6 +1221,7 @@ function getSectionNavStatus(
 
 const canConfirm = computed(() => {
   if (props.mode === 'file' && batchItemCount.value === 0) return false
+  if (props.useLibraryDefaults) return true
   if (props.mode === 'manual' && !props.manualPreview?.content?.trim()) return false
   if (hasImages.value) {
     if (!uiState.value.multimodalConfig.enabled || !uiState.value.multimodalConfig.vllmModelId) {
@@ -1523,6 +1552,7 @@ watch(
     localTargetFolder.value = props.mode === 'file' ? (props.targetFolder || '') : ''
     pendingFolderPaths.value = []
     destinationPickerVisible.value = false
+    if (props.useLibraryDefaults) return
     initFromKbInfo(props.kbInfo)
     if (props.mode === 'reparse') {
       applyOverridesToState(props.reparsePreview?.processOverrides)
@@ -1533,6 +1563,7 @@ watch(
     loadSystemInfo()
     loadTags()
   },
+  { immediate: true },
 )
 
 watch(isGraphSectionAvailable, (available) => {
@@ -1594,11 +1625,11 @@ const handleMultimodalVLLMChange = (modelId: string) => {
 }
 
 const handleAddVLLMModel = () => {
-  uiStore.openSettings('models', 'vllm')
+  emit('open-model-settings', 'vllm')
 }
 
 const handleAddASRModel = () => {
-  uiStore.openSettings('models', 'asr')
+  emit('open-model-settings', 'asr')
 }
 
 const handleNodeExtractUpdate = (config: UploadUIState['nodeExtractConfig']) => {
@@ -1648,13 +1679,13 @@ const handleConfirm = () => {
     MessagePlugin.warning(t('uploadConfirm.noItems'))
     return
   }
-  if (!validateBeforeConfirm()) return
-  if (uiState.value.multimodalConfig.enabled && imagePipelineInvalid.value) {
+  if (!props.useLibraryDefaults && !validateBeforeConfirm()) return
+  if (!props.useLibraryDefaults && uiState.value.multimodalConfig.enabled && imagePipelineInvalid.value) {
     MessagePlugin.warning(t('imagePipeline.errors.noActionEnabled'))
     return
   }
 
-  const processConfig = buildProcessOverrides()
+  const processConfig = props.useLibraryDefaults ? {} : buildProcessOverrides()
   if (props.mode === 'manual' && props.manualPreview) {
     emit('confirm', {
       processConfig,
@@ -1829,6 +1860,15 @@ const handleConfirm = () => {
   border-radius: var(--app-radius-xl);
   background: var(--td-bg-color-container);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.upload-confirm-modal--defaults {
+  max-width: 680px;
+  height: min(440px, 85vh);
+
+  .files-panel {
+    width: 55%;
+  }
 }
 
 .close-btn {
@@ -2527,6 +2567,15 @@ const handleConfirm = () => {
     max-height: 140px;
     border-right: none;
     border-bottom: 1px solid var(--td-component-stroke);
+  }
+
+  .upload-confirm-modal--defaults .files-panel {
+    width: auto;
+    max-height: 56%;
+
+    .sidebar-header-row {
+      padding-inline-end: 44px;
+    }
   }
 
   .settings-sidebar {

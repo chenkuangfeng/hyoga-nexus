@@ -10,7 +10,7 @@ import { createRenderer, h } from 'vue'
 import * as imageProcessingConfig from '@nexus-web/core/utils/imageProcessingConfig'
 
 const require = createRequire(import.meta.url)
-const filename = fileURLToPath(new URL('./UploadConfirmDialog.vue', import.meta.url))
+const filename = fileURLToPath(new URL('../../../../../core/src/components/knowledge/documents/UploadConfirmDialog.vue', import.meta.url))
 const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
 const script = compileScript(descriptor, { id: 'upload-image-vector-test' }).content
   .replace('__expose();', '')
@@ -28,7 +28,6 @@ function fixture(kbInfo: any) {
       if (name === 'vue-i18n') return { useI18n: () => ({ t: (key: string) => key, te: () => false }) }
       if (name === '@nexus-web/core/stores/chatResources') return { useChatResourcesStore: () => ({}) }
       if (name === '@nexus-web/core/stores/editorResources') return { useEditorResourcesStore: () => ({}) }
-      if (name === '@/stores/ui') return { useUIStore: () => ({}) }
       if (name === '@nexus-web/core/api/knowledge-base/index') return { mergeImageActions: () => ({ ocr: { on: [] } }) }
       if (name === '@nexus-web/core/utils/imageProcessingConfig') return imageProcessingConfig
       return { default: {} }

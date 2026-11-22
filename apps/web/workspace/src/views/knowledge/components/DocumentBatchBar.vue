@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
+import FolderPickerMenu, { type FolderOption } from '@nexus-web/core/components/knowledge/documents/FolderPickerMenu.vue';
 
 defineProps<{
   count: number;

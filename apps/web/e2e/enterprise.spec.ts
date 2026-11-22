@@ -667,7 +667,7 @@ test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page,
   await expectResponsive(page)
 })
 
-test('企业知识库创建目录并上传本地文件夹到该目录', async ({ page, api }, testInfo) => {
+test('企业知识库确认上传、切换目标目录并保留本地文件夹层级', async ({ page, api }, testInfo) => {
   page.setDefaultTimeout(15000)
   await api.signIn()
   const root = '/api/v1/tenants/a/admin/knowledge/bases', kb = root + '/kb'
@@ -716,14 +716,48 @@ test('企业知识库创建目录并上传本地文件夹到该目录', async ({
   await dialog.getByRole('button', { name: '创建', exact: true }).click()
   await expect(tree.locator('.kb-folder-row.active')).toContainText('目标')
 
-  await page.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
+  const fileInput = page.locator('.content-actions input[type="file"]:not([webkitdirectory])')
+  const upload = page.getByRole('dialog', { name: '上传文档确认' })
+  const plain = {
     name: 'plain.txt', mimeType: 'text/plain', buffer: Buffer.from('plain'),
+  }
+  await fileInput.setInputFiles(plain)
+  await expect(upload.getByText('plain.txt', { exact: true })).toBeVisible()
+  await expect(upload.getByText('使用知识库默认配置')).toBeVisible()
+  await expect(upload.getByRole('button', { name: '更改上传位置' })).toContainText('目标')
+  await expect(upload.getByRole('button', { name: '关闭', exact: true })).toBeFocused()
+  await page.setViewportSize({ width: 375, height: 740 })
+  await expect(upload.getByRole('button', { name: '确认上传并解析' })).toBeInViewport()
+  await page.keyboard.press('Escape')
+  await expect(upload).toHaveCount(0)
+  expect(documents).toHaveLength(0)
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  await tree.locator('.kb-folder-row').first().click()
+  await fileInput.setInputFiles(plain)
+  await upload.getByRole('button', { name: '更改上传位置' }).click()
+  await page.locator('.upload-destination-popup:visible').getByRole('button', { name: '目标', exact: true }).press('Enter')
+  await expect(upload.getByRole('button', { name: '更改上传位置' })).toContainText('目标')
+  await upload.getByRole('button', { name: '继续添加' }).click()
+  await expect(page.getByText('上传文件夹', { exact: true })).toBeVisible()
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByText('上传文档', { exact: true }).click(),
+  ])
+  await chooser.setFiles({
+    name: 'discard.txt', mimeType: 'text/plain', buffer: Buffer.from('discard'),
   })
+  await upload.getByRole('listitem').filter({ hasText: 'discard.txt' }).getByRole('button', { name: '移除' }).click()
+  await upload.getByRole('button', { name: '确认上传并解析' }).click()
+  await expect.poll(() => documents.length).toBe(1)
+  await tree.locator('.kb-folder-row').filter({ hasText: '目标' }).click()
   await expect(page.getByText('plain.txt', { exact: true })).toBeVisible()
   const local = testInfo.outputPath('local')
   mkdirSync(join(local, 'nested'), { recursive: true })
   writeFileSync(join(local, 'nested', 'nested.txt'), 'nested')
-  await page.locator('input[webkitdirectory]').setInputFiles(local)
+  await page.locator('.content-actions input[webkitdirectory]').setInputFiles(local)
+  await expect(upload).toContainText('local/nested')
+  await upload.getByRole('button', { name: '确认上传并解析' }).click()
   await expect.poll(() => documents.length).toBe(2)
   await expect(tree.locator('.kb-folder-row').filter({ hasText: 'local' })).toBeVisible()
   await tree.locator('.kb-folder-row').filter({ hasText: 'local' }).getByRole('button', { name: '展开该文件夹' }).click()

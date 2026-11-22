@@ -68,6 +68,7 @@ import { listMoveTargets, moveKnowledge, getKnowledgeMoveProgress } from '@nexus
 import { resolveKnowledgeDownloadFileName } from './knowledgeDownloadFileName';
 import {
   buildUploadFileName,
+  buildFolderOptions,
   canMoveFolderTo,
   childFolders,
   folderBreadcrumbs as buildFolderBreadcrumbs,
@@ -940,17 +941,7 @@ const handleFolderCreate = async (path: string) => {
 // nothing is re-parsed, re-chunked or re-embedded.
 
 // Flat folder list shared by every "move to folder" picker.
-const folderOptions = computed(() => {
-  const result: Array<{ path: string; name: string; depth: number }> = [];
-  const walk = (nodes: KnowledgeFolderTree['folders'], depth: number) => {
-    nodes.forEach((node) => {
-      result.push({ path: node.path, name: node.name, depth });
-      walk(node.children || [], depth + 1);
-    });
-  };
-  walk(folderTree.value?.folders || [], 0);
-  return result;
-});
+const folderOptions = computed(() => buildFolderOptions(folderTree.value?.folders ?? []));
 
 const moveKnowledgeIntoFolder = async (ids: string[], folderPath: string) => {
   if (!kbId.value || ids.length === 0) return;

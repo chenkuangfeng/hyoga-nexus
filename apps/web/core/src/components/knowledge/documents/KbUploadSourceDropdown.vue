@@ -4,6 +4,7 @@
       ref="fileInputRef"
       type="file"
       class="hidden-file-input"
+      tabindex="-1"
       multiple
       :accept="acceptFileTypes || undefined"
       @change="(e) => handleFilesChange(e, false)"
@@ -12,6 +13,7 @@
       ref="folderInputRef"
       type="file"
       class="hidden-file-input"
+      tabindex="-1"
       webkitdirectory
       multiple
       @change="(e) => handleFilesChange(e, true)"
@@ -22,6 +24,7 @@
         :options="dropdownOptions"
         trigger="click"
         :placement="placement"
+        :popup-props="popupZIndex ? { zIndex: popupZIndex } : undefined"
         @click="handleActionSelect"
       >
         <t-button
@@ -82,6 +85,7 @@ const props = withDefaults(defineProps<{
   triggerClass?: string
   dataGuide?: string
   tooltip?: string
+  popupZIndex?: number
   placement?: 'top' | 'bottom' | 'bottom-right' | 'bottom-left'
 }>(), {
   acceptFileTypes: '',
