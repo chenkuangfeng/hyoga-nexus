@@ -314,4 +314,7 @@ test('员工知识库新建目录并将所选文件上传到当前目录', async
   await upload.getByRole('button', { name: '确认上传并解析' }).click()
   await expect.poll(() => uploaded).toBe(true)
   await expect(page.locator('.doc-card-area').getByText('manual', { exact: true }).first()).toBeVisible()
+  await expect(page.locator('.doc-list-view').getByRole('button', { name: 'manual', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '卡片视图', exact: true }).click()
+  await expect(page.locator('.doc-card-view').getByRole('button', { name: 'manual', exact: true })).toBeVisible()
 })

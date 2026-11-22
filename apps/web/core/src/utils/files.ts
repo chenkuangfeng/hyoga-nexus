@@ -39,3 +39,16 @@ export function getFileIcon(input: string | { type?: string; file_type?: string;
   if (['mp4', 'mov', 'webm', 'mkv', 'avi'].includes(ext)) return 'video';
   return 'file';
 }
+
+/** Strip a leading dot and lowercase. Prefers an explicit type over the filename suffix. */
+export function resolveFilePreviewExt(fileName?: string, fileType?: string): string {
+  const normalizedType = String(fileType || '')
+    .trim()
+    .replace(/^\./, '')
+    .toLowerCase()
+  if (normalizedType) return normalizedType
+  const name = String(fileName || '')
+  const dot = name.lastIndexOf('.')
+  if (dot < 0 || dot === name.length - 1) return ''
+  return name.slice(dot + 1).toLowerCase()
+}

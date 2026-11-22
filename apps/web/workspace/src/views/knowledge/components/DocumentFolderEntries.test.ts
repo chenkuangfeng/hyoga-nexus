@@ -72,14 +72,12 @@ function loadView(file: URL, extraDependencies: Record<string, unknown> = {}): a
   const module = evaluateModule(script, {
     vue,
     'vue-i18n': vueI18n,
-    '@/utils/files': files,
-    '@/utils/referenceSources': referenceSources,
-    '@/utils/knowledgeProcessingStall': processingStall,
-    './KnowledgeTagPopover.vue': noopComponent,
+    '@nexus-web/core/utils/files': files,
+    '@nexus-web/core/utils/referenceSnippet': referenceSources,
+    '@nexus-web/core/utils/knowledgeProcessingStall': processingStall,
     './DocumentFileIcon.vue': noopComponent,
     './DocumentActionMenu.vue': noopComponent,
     '@nexus-web/core/components/knowledge/documents/FolderPickerMenu.vue': noopComponent,
-    '@/components/knowledge-processing-timeline.vue': noopComponent,
     ...extraDependencies,
   })
   componentCache.set(key, module.default)
@@ -197,7 +195,7 @@ const documents = [
 ]
 
 function mountList(overrides: Record<string, unknown> = {}) {
-  return mountView(new URL('./DocumentListView.vue', import.meta.url), {
+  return mountView(new URL('../../../../../core/src/components/knowledge/documents/DocumentListView.vue', import.meta.url), {
     items: documents,
     subFolders: [folder],
     kbId: 'kb',
@@ -208,7 +206,7 @@ function mountList(overrides: Record<string, unknown> = {}) {
 }
 
 function mountCards(overrides: Record<string, unknown> = {}) {
-  return mountView(new URL('./DocumentCardView.vue', import.meta.url), {
+  return mountView(new URL('../../../../../core/src/components/knowledge/documents/DocumentCardView.vue', import.meta.url), {
     items: documents,
     subFolders: [folder],
     kbId: 'kb',
@@ -221,7 +219,7 @@ function mountCards(overrides: Record<string, unknown> = {}) {
 
 test('the list renders one folder row before the document rows', () => {
   const opened: string[] = []
-  const view = mountList({ onOpenFolder: (path: string) => opened.push(path) })
+  const view = mountList({ canEdit: true, onOpenFolder: (path: string) => opened.push(path) })
   try {
     const rows = allElements(view.root).filter((element) => classesOf(element).includes('doc-list-row'))
     const folderRows = rows.filter((row) => row.props['data-folder-path'] !== undefined)
@@ -237,6 +235,7 @@ test('the list renders one folder row before the document rows', () => {
       allElements(folderRows[0]).filter((element) => classesOf(element).includes('doc-list-check')).length,
       0,
     )
+    assert.ok(documentRows.every(row => allElements(row).some(element => classesOf(element).includes('doc-list-check'))))
 
     folderRows[0].props.onClick({ stopPropagation() {} })
     assert.deepEqual(opened, [folder.path])

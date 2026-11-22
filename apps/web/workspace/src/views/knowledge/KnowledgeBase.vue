@@ -5,7 +5,7 @@ import { MessagePlugin } from "tdesign-vue-next";
 import DocContent from "@/components/doc-content.vue";
 import useKnowledgeBase from '@/hooks/useKnowledgeBase';
 import { useRoute, useRouter } from 'vue-router';
-import EmptyKnowledge from '@/components/empty-knowledge.vue';
+import EmptyKnowledge from '@nexus-web/core/components/knowledge/documents/EmptyKnowledge.vue';
 import ContextualGuide from '@/components/ContextualGuide.vue';
 import KBInfoPopover from '@/components/KBInfoPopover.vue';
 import KBSwitcherDropdown from '@/components/KBSwitcherDropdown.vue';
@@ -45,9 +45,13 @@ import { isBatchDownloadableKnowledge } from './knowledgeDownloadFileName';
 import { waitForKnowledgeDeletion } from '@/utils/knowledgeDeletion';
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
 import FAQEntryManager from './components/FAQEntryManager.vue';
-import DocumentListView from './components/DocumentListView.vue';
-import DocumentCardView from './components/DocumentCardView.vue';
+import DocumentListView from '@nexus-web/core/components/knowledge/documents/DocumentListView.vue';
+import KnowledgeTagPopover from './components/KnowledgeTagPopover.vue';
+import DocumentCardView from '@nexus-web/core/components/knowledge/documents/DocumentCardView.vue';
+import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
+import { useDocumentViewMode } from '@nexus-web/core/components/knowledge/documents/useDocumentViewMode';
+import KbDocumentToolbar from '@nexus-web/core/components/knowledge/documents/KbDocumentToolbar.vue';
 import KbUploadSourceDropdown from '@nexus-web/core/components/knowledge/documents/KbUploadSourceDropdown.vue';
 import KbDocumentLayout from '@nexus-web/core/components/knowledge/documents/KbDocumentLayout.vue';
 import KbFolderTree from '@nexus-web/core/components/knowledge/documents/KbFolderTree.vue';
@@ -71,7 +75,6 @@ import {
   buildFolderOptions,
   canMoveFolderTo,
   childFolders,
-  folderBreadcrumbs as buildFolderBreadcrumbs,
   folderDocumentCounts,
   folderPathExists as folderExistsInTree,
   isFilteringDocuments,
@@ -445,18 +448,7 @@ const moveMode = ref<'reuse_vectors' | 'reparse'>('reuse_vectors');
 const moveSubmitting = ref(false);
 let movePollTimer: ReturnType<typeof setInterval> | null = null;
 
-// View mode (grid / list) — persisted per browser
-type DocViewMode = 'grid' | 'list';
-const VIEW_MODE_KEY = 'nexus.kb.docs.viewMode';
-const initViewMode = (): DocViewMode => {
-  try {
-    return localStorage.getItem(VIEW_MODE_KEY) === 'grid' ? 'grid' : 'list';
-  } catch { return 'list'; }
-};
-const viewMode = ref<DocViewMode>(initViewMode());
-watch(viewMode, (v) => {
-  try { localStorage.setItem(VIEW_MODE_KEY, v); } catch { /* ignore */ }
-});
+const viewMode = useDocumentViewMode();
 
 // Multi-select state — shared between grid and list views.
 // Vue 3.5 tracks Set#add/delete natively, so direct mutation is reactive.
@@ -790,7 +782,6 @@ const showDocumentFolderPath = computed(() => hasFolders.value && isFiltering.va
 const visibleSubFolders = computed(() =>
   isFiltering.value ? [] : childFolders(folderTree.value, selectedFolderPath.value),
 );
-const folderBreadcrumbs = computed(() => buildFolderBreadcrumbs(selectedFolderPath.value));
 // What the breadcrumb reports is the folder's own contents the way a file
 // manager counts them: the documents this list can show plus its direct
 // sub-folders, which the sidebar tree lists as rows. A recursive document total
@@ -2428,40 +2419,17 @@ watch(cardList, () => {
           </template>
           <div class="tag-content">
             <div class="doc-card-area">
-              <div class="doc-filter-bar">
-                <nav class="doc-folder-path" :aria-label="$t('knowledgeBase.folderTree.title')">
-                  <button v-if="showFolderTree && folderTreeCollapsed" type="button" class="doc-folder-path__tree-toggle"
-                    :aria-expanded="false" :title="$t('knowledgeBase.folderTree.expand')"
-                    :aria-label="$t('knowledgeBase.folderTree.expand')"
-                    @click="handleFolderTreeCollapsedChange(false)">
-                    <t-icon name="view-list" size="16px" />
-                  </button>
-                  <button v-if="folderBreadcrumbs.length" type="button" class="doc-folder-path__crumb" :title="kbInfo?.name" @click="handleFolderSelect('')">
-                    {{ kbInfo?.name }}
-                  </button>
-                  <span v-else class="doc-folder-path__crumb is-current" :title="kbInfo?.name" aria-current="page">{{ kbInfo?.name }}</span>
-                  <template v-for="(crumb, index) in folderBreadcrumbs" :key="crumb.path">
-                    <t-icon name="chevron-right" class="doc-folder-path__sep" />
-                    <span v-if="index === folderBreadcrumbs.length - 1" class="doc-folder-path__crumb is-current" :title="crumb.name" aria-current="page">{{ crumb.name }}</span>
-                    <button v-else type="button" class="doc-folder-path__crumb" :title="crumb.name" @click="handleFolderSelect(crumb.path)">{{ crumb.name }}</button>
-                  </template>
-                  <span v-if="!docListLoading" class="doc-folder-path__count">
-                    <template v-if="isFiltering">{{ $t('knowledgeBase.folderTree.filteredCount', { count: folderContentsCount.documents }) }}</template>
-                    <template v-else-if="showFolderContentsCount">{{ $t('knowledgeBase.folderTree.folderContentsCount', folderContentsMessage) }}</template>
-                    <template v-else>{{ $t('knowledgeBase.documentCount', { count: folderContentsCount.documents }) }}</template>
-                  </span>
-                  <t-tooltip v-if="showFolderTree && isFiltering" :content="$t('knowledgeBase.folderTree.searchingSubtree')">
-                    <t-icon name="info-circle" class="doc-folder-path__sep" />
-                  </t-tooltip>
-                </nav>
-                <div class="doc-filter-bar__trailing">
-                  <t-input v-model.trim="docSearchKeyword" :placeholder="$t('knowledgeBase.docSearchPlaceholder')"
-                    :aria-label="$t('knowledgeBase.docSearchPlaceholder')" clearable class="doc-search-input" @clear="loadKnowledgeFiles(kbId)"
-                    @enter="loadKnowledgeFiles(kbId)">
-                    <template #prefix-icon>
-                      <t-icon name="search" size="16px" />
-                    </template>
-                  </t-input>
+              <KbDocumentToolbar v-model:keyword="docSearchKeyword" v-model:view-mode="viewMode"
+                :name="kbInfo?.name" :path="selectedFolderPath" :tree-collapsed="showFolderTree && folderTreeCollapsed"
+                :loading="docListLoading" :filtering="showFolderTree && isFiltering"
+                @open-folder="handleFolderSelect" @expand-tree="handleFolderTreeCollapsedChange(false)"
+                @search="loadKnowledgeFiles(kbId)">
+                <template #count>
+                  <template v-if="isFiltering">{{ $t('knowledgeBase.folderTree.filteredCount', { count: folderContentsCount.documents }) }}</template>
+                  <template v-else-if="showFolderContentsCount">{{ $t('knowledgeBase.folderTree.folderContentsCount', folderContentsMessage) }}</template>
+                  <template v-else>{{ $t('knowledgeBase.documentCount', { count: folderContentsCount.documents }) }}</template>
+                </template>
+                <template #controls>
                   <t-popup v-model:visible="filtersExpanded" trigger="click" placement="bottom-right"
                     overlay-class-name="document-filter-popup" :overlay-inner-style="{ padding: 0 }">
                     <button type="button" class="doc-filter-toggle" :class="{ active: filtersExpanded || activeFilterCount > 0 }"
@@ -2557,29 +2525,15 @@ watch(cardList, () => {
                         :class="{ open: documentSortPanelVisible }" />
                       </button>
                     </t-popup>
-                  <div class="doc-view-toggle" role="group" :aria-label="$t('knowledgeBase.viewModeToggle')">
-                    <t-tooltip :content="$t('knowledgeBase.viewModeGrid')" placement="top">
-                      <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'grid' }"
-                        :aria-label="$t('knowledgeBase.viewModeGrid')" @click="viewMode = 'grid'" :aria-pressed="viewMode === 'grid'">
-                        <t-icon name="view-module" size="16px" />
-                      </button>
-                    </t-tooltip>
-                    <t-tooltip :content="$t('knowledgeBase.viewModeList')" placement="top">
-                      <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'list' }"
-                        :aria-label="$t('knowledgeBase.viewModeList')" @click="viewMode = 'list'" :aria-pressed="viewMode === 'list'">
-                        <t-icon name="view-list" size="16px" />
-                      </button>
-                    </t-tooltip>
-                  </div>
-                  <div v-if="canEdit" class="doc-filter-actions">
+                </template>
+                  <template v-if="canEdit" #upload>
                     <KbUploadSourceDropdown ref="uploadSourceRef" :accept-file-types="acceptFileTypes"
                       :supported-file-types="[...supportedFileTypes]" include-manual trigger-icon="add" :trigger-label="t('knowledgeBase.addDocument')"
                       trigger-class="content-bar-icon-btn" data-guide="kb-detail-add-doc"
                       :tooltip="t('knowledgeBase.addDocument')" placement="bottom-right" @files="handleUploadSourceFiles"
                       @url="handleUploadSourceUrl" @manual="handleManualCreate" />
-                  </div>
-                </div>
-              </div>
+                  </template>
+              </KbDocumentToolbar>
               <div class="doc-scroll-container"
                 :class="{
                   'is-empty': !cardList.length && !visibleSubFolders.length && !docListLoading,
@@ -2611,7 +2565,7 @@ watch(cardList, () => {
                   </div>
                 </div>
                 <template v-else-if="(cardList.length || visibleSubFolders.length) && viewMode === 'grid'">
-                  <DocumentCardView :kb-id="kbId"
+                  <DocumentCardView :kb-id="kbId" :tag-editor="KnowledgeTagPopover" :processing-timeline="KnowledgeProcessingTimeline"
                     :items="cardList"
                     :folder-options="folderOptions"
                     :sub-folders="visibleSubFolders"
@@ -2642,7 +2596,7 @@ watch(cardList, () => {
                   />
                 </template>
                 <template v-else-if="(cardList.length || visibleSubFolders.length) && viewMode === 'list'">
-                  <DocumentListView :kb-id="kbId" :items="cardList" :folder-options="folderOptions"
+                  <DocumentListView :kb-id="kbId" :tag-editor="KnowledgeTagPopover" :items="cardList" :folder-options="folderOptions"
                     :sub-folders="visibleSubFolders"
                     :selected-ids="selectedIds"
                     :can-edit="canEdit" :can-download="canDownloadKnowledge" :can-mutate-knowledge="canMutateKnowledge"
@@ -2677,7 +2631,7 @@ watch(cardList, () => {
                     <p v-else-if="folderEmptyState === 'folder'" class="doc-empty-folder">
                       {{ $t('knowledgeBase.folderTree.emptyFolder') }}
                     </p>
-                    <EmptyKnowledge v-else />
+                    <EmptyKnowledge v-else can-drop />
                   </div>
                 </template>
               </div>
@@ -2729,6 +2683,7 @@ watch(cardList, () => {
 }
 
 </style>
+<style scoped lang="less" src="@nexus-web/core/styles/document-surface.less"></style>
 <style scoped lang="less">
 .knowledge-layout {
   display: flex;
@@ -2804,113 +2759,6 @@ watch(cardList, () => {
 
 // 标签筛选浮层：点击工具栏入口展开，不占文档列表横向空间
 
-.tag-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  overflow: hidden;
-  background: transparent;
-}
-
-.doc-card-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  position: relative;
-  container-type: inline-size;
-  container-name: doc-card-area;
-}
-
-// Wrap by content as well as pane width: long paths must not squeeze out actions.
-.doc-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-shrink: 0;
-  padding: 0 0 16px;
-  border-bottom: 1px solid var(--td-component-stroke);
-  &__trailing {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    min-width: 0;
-    max-width: 100%;
-    margin-left: auto;
-    > :not(.doc-search-input) { flex-shrink: 0; }
-  }
-  .doc-search-input { width: 220px; min-width: 100px; }
-  :deep(.doc-search-input .t-input) {
-    background: transparent;
-    border-color: var(--td-component-stroke);
-    border-radius: var(--app-radius-md);
-    font-size: var(--app-text-md);
-  }
-  .doc-filter-actions :deep(.content-bar-icon-btn) {
-    height: 32px;
-    padding: 0 12px;
-    border-radius: var(--app-radius-md);
-    background: var(--td-brand-color);
-    color: var(--td-text-color-anti);
-    &:hover { background: var(--td-brand-color-hover); }
-  }
-}
-.doc-folder-path {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  min-height: 32px;
-  line-height: 20px;
-  flex-wrap: wrap;
-  &__tree-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 10px;
-    font: inherit;
-    font-size: var(--app-text-md);
-    border: 1px solid var(--td-component-stroke);
-    border-radius: var(--app-radius-md);
-    background: var(--td-bg-color-container);
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-    &:hover { background: var(--td-bg-color-container-hover); color: var(--td-text-color-primary); }
-  }
-  &__crumb {
-    max-width: 160px;
-    padding: 6px 2px;
-    border: 0;
-    background: transparent;
-    color: var(--td-text-color-secondary);
-    font: inherit;
-    font-size: var(--app-text-md);
-    line-height: 20px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-    &:is(button):hover { color: var(--td-brand-color); }
-    &.is-current { color: var(--td-text-color-primary); font-weight: 600; cursor: default; }
-  }
-  &__count { padding: 6px 0; line-height: 20px; margin-left: 6px; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  &__sep, &__scope { align-self: center; flex-shrink: 0; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); }
-}
 .doc-filter-toggle {
   display: inline-flex;
   align-items: center;
@@ -2932,29 +2780,6 @@ watch(cardList, () => {
   display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px;
   padding: 0 2px; color: var(--td-brand-color); font-weight: 600;
   font-size: var(--app-text-xs); font-variant-numeric: tabular-nums;
-}
-.doc-view-toggle {
-  display: inline-flex;
-  align-items: center;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
-  padding: 2px;
-  .doc-view-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--app-radius-xs);
-    background: transparent;
-    color: var(--td-text-color-placeholder);
-    cursor: pointer;
-    &:hover { color: var(--td-text-color-primary); }
-    &.active { background: var(--td-bg-color-container); color: var(--td-brand-color); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
-  }
 }
 .doc-filter-panel {
   width: 340px;
@@ -3067,16 +2892,10 @@ watch(cardList, () => {
   &:disabled { cursor: not-allowed; opacity: 0.5; }
   &.active { color: var(--app-selection-text); border-color: var(--td-component-border); background: var(--app-selection-bg); }
 }
-.doc-filter-bar button:focus-visible, .doc-filter-panel button:focus-visible {
+.doc-filter-panel button:focus-visible {
   outline: 2px solid var(--app-focus-border); outline-offset: 2px;
 }
 .doc-list-skeleton-row { padding: 16px 40px; }
-@container doc-card-area (max-width: 780px) {
-  .doc-filter-bar { flex-wrap: wrap; gap: 12px; }
-  .doc-filter-bar__trailing { width: 100%; }
-  .doc-filter-bar .doc-search-input { flex: 1; width: auto; }
-}
-
 .doc-sort-trigger {
   display: inline-flex;
   align-items: center;
@@ -3111,31 +2930,6 @@ watch(cardList, () => {
     transition: transform 0.2s ease;
 
     &.open { transform: rotate(180deg); }
-  }
-}
-
-@container doc-card-area (max-width: 540px) {
-  .doc-filter-bar__trailing { flex-wrap: wrap; }
-  .doc-filter-bar .doc-search-input { flex: 1 0 100%; }
-}
-
-.doc-scroll-container {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-
-  &.is-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow-y: hidden;
-  }
-
-  &.is-marquee-active {
-    cursor: crosshair;
   }
 }
 
@@ -3438,16 +3232,6 @@ watch(cardList, () => {
     justify-content: space-between;
     border-top: 1px solid var(--td-component-stroke);
   }
-}
-
-.doc-empty-state {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  min-height: 100%;
 }
 
 .knowledge-card {

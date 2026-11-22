@@ -704,7 +704,11 @@ test('企业知识库确认上传、切换目标目录并保留本地文件夹�
         documents.push(document)
         return { status: 201, body: { document, deduplicated: false } }
       }
-      const items = documents.filter(doc => doc.folder_path === url.searchParams.get('folder_path'))
+      const folder = url.searchParams.get('folder_path') || ''
+      const keyword = url.searchParams.get('keyword') || ''
+      const recursive = url.searchParams.get('folder_recursive') === 'true'
+      const items = documents.filter(doc => doc.filename.includes(keyword) &&
+        (doc.folder_path === folder || (recursive && (!folder || doc.folder_path.startsWith(folder + '/')))))
       return { body: { items, total: items.length } }
     }
   })
@@ -716,7 +720,7 @@ test('企业知识库确认上传、切换目标目录并保留本地文件夹�
   await dialog.getByRole('button', { name: '创建', exact: true }).click()
   await expect(tree.locator('.kb-folder-row.active')).toContainText('目标')
 
-  const fileInput = page.locator('.content-actions input[type="file"]:not([webkitdirectory])')
+  const fileInput = page.locator('.doc-filter-actions input[type="file"]:not([webkitdirectory])')
   const upload = page.getByRole('dialog', { name: '上传文档确认' })
   const plain = {
     name: 'plain.txt', mimeType: 'text/plain', buffer: Buffer.from('plain'),
@@ -751,17 +755,34 @@ test('企业知识库确认上传、切换目标目录并保留本地文件夹�
   await upload.getByRole('button', { name: '确认上传并解析' }).click()
   await expect.poll(() => documents.length).toBe(1)
   await tree.locator('.kb-folder-row').filter({ hasText: '目标' }).click()
-  await expect(page.getByText('plain.txt', { exact: true })).toBeVisible()
+  const list = page.locator('.doc-list-view')
+  await expect(list.getByRole('button', { name: 'plain.txt', exact: true })).toBeVisible()
+  await list.getByRole('button', { name: 'plain.txt · 操作' }).click()
+  const menu = page.locator('.card-more:visible')
+  await expect(menu.getByRole('button', { name: '删除文档' })).toBeVisible()
+  await expect(menu.getByText('取消解析', { exact: true })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: '卡片视图', exact: true }).click()
+  const cards = page.locator('.doc-card-view')
+  await expect(cards.getByRole('button', { name: 'plain.txt', exact: true })).toBeVisible()
+  await expect(list).toHaveCount(0)
   const local = testInfo.outputPath('local')
   mkdirSync(join(local, 'nested'), { recursive: true })
   writeFileSync(join(local, 'nested', 'nested.txt'), 'nested')
-  await page.locator('.content-actions input[webkitdirectory]').setInputFiles(local)
+  await page.locator('.doc-filter-actions input[webkitdirectory]').setInputFiles(local)
   await expect(upload).toContainText('local/nested')
   await upload.getByRole('button', { name: '确认上传并解析' }).click()
   await expect.poll(() => documents.length).toBe(2)
-  await expect(tree.locator('.kb-folder-row').filter({ hasText: 'local' })).toBeVisible()
-  await tree.locator('.kb-folder-row').filter({ hasText: 'local' }).getByRole('button', { name: '展开该文件夹' }).click()
-  await tree.locator('.kb-folder-row').filter({ hasText: 'nested' }).click()
-  await expect(page.getByText('nested.txt', { exact: true })).toBeVisible()
+  await cards.getByRole('button', { name: 'local', exact: true }).click()
+  await page.getByRole('button', { name: '列表视图', exact: true }).click()
+  await list.getByRole('button', { name: 'nested', exact: true }).click()
+  await expect(list.getByRole('button', { name: 'nested.txt', exact: true })).toBeVisible()
+  await expect(page.locator('.doc-folder-path')).toContainText('nested')
+  await page.locator('.doc-folder-path').getByRole('button', { name: '目标', exact: true }).click()
+  await expect(list.getByRole('button', { name: 'plain.txt', exact: true })).toBeVisible()
+  await page.getByRole('textbox', { name: '搜索文档名称...' }).fill('nested')
+  await expect(list.getByRole('button', { name: 'nested.txt', exact: true })).toBeVisible()
+  await expect(list.getByRole('button', { name: 'plain.txt', exact: true })).toHaveCount(0)
   await expectResponsive(page)
 })

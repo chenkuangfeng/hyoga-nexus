@@ -12,12 +12,12 @@
 </template>
 
 <script setup lang="ts">
-import ArtifactFileIcon from '@/views/chat/components/ArtifactFileIcon.vue';
+import ArtifactFileIcon from '../../ArtifactFileIcon.vue';
 defineProps<{ sourceType?: string; fileName: string }>();
 </script>
 
 <style scoped lang="less">
-@import '@/components/css/artifact-file-icon.less';
+@import '../../../styles/artifact-file-icon.less';
 .document-source-icon {
   position: relative;
   display: inline-flex;

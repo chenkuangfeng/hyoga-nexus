@@ -1,0 +1,52 @@
+.tag-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+  background: transparent;
+}
+
+.doc-card-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  container-type: inline-size;
+  container-name: doc-card-area;
+}
+
+.doc-scroll-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+
+  &.is-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: hidden;
+  }
+
+  &.is-marquee-active {
+    cursor: crosshair;
+  }
+}
+
+.doc-empty-state {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  min-height: 100%;
+}

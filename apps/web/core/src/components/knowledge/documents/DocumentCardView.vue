@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { formatFileSize } from '@/utils/files';
-import { formatReferenceSnippet } from '@/utils/referenceSources';
-import KnowledgeTagPopover from './KnowledgeTagPopover.vue';
+import { formatFileSize } from '@nexus-web/core/utils/files';
+import { formatReferenceSnippet } from '@nexus-web/core/utils/referenceSnippet';
+import type { Component } from 'vue';
+import type { DocumentAction, HostDocumentAction } from './documentActions';
 import DocumentFileIcon from './DocumentFileIcon.vue';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import FolderPickerMenu, { type FolderOption } from '@nexus-web/core/components/knowledge/documents/FolderPickerMenu.vue';
-import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
-import { shownStall } from '@/utils/knowledgeProcessingStall';
+import { shownStall } from '@nexus-web/core/utils/knowledgeProcessingStall';
 import type { FolderEntry } from '@nexus-web/core/components/knowledge/documents/folderTree';
 
 interface KnowledgeCard {
@@ -37,15 +37,18 @@ interface KnowledgeCard {
   channel?: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
+  tagEditor?: Component;
+  processingTimeline?: Component;
+  actionsFor?: (id: string) => readonly HostDocumentAction[];
   items: KnowledgeCard[];
   kbId: string;
-  selectedIds: Set<string>;
-  batchMode: boolean;
-  canEdit: boolean;
-  canDownload: boolean;
-  canMutateKnowledge: boolean;
-  traceAvailableById: Record<string, boolean>;
+  selectedIds?: Set<string>;
+  batchMode?: boolean;
+  canEdit?: boolean;
+  canDownload?: boolean;
+  canMutateKnowledge?: boolean;
+  traceAvailableById?: Record<string, boolean>;
   /** Every folder of the knowledge base, for the "move to folder" picker. */
   folderOptions?: FolderOption[];
   /**
@@ -60,19 +63,26 @@ const props = defineProps<{
    */
   showFolderPath?: boolean;
   // Move sub-flow state
-  moveMenuMode: 'normal' | 'targets' | 'confirm';
-  moveTargetKbs: any[];
-  moveTargetsLoading: boolean;
-  moveSelectedTargetName: string;
-  moveMode: 'reuse_vectors' | 'reparse';
-  moveSubmitting: boolean;
-}>();
+  moveMenuMode?: 'normal' | 'targets' | 'confirm';
+  moveTargetKbs?: any[];
+  moveTargetsLoading?: boolean;
+  moveSelectedTargetName?: string;
+  moveMode?: 'reuse_vectors' | 'reparse';
+  moveSubmitting?: boolean;
+}>(), {
+  selectedIds: () => new Set<string>(),
+  traceAvailableById: () => ({}),
+  moveMenuMode: 'normal',
+  moveTargetKbs: () => [],
+  moveSelectedTargetName: '',
+  moveMode: 'reuse_vectors',
+});
 
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeCard): void;
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: KnowledgeCard): void;
-  (e: 'action', action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'batch-manage' | 'delete', item: KnowledgeCard): void;
+  (e: 'action', action: DocumentAction, item: KnowledgeCard): void;
   (e: 'tags-changed', payload?: { deletedTagId?: string }): void;
   (e: 'open-folder', path: string): void;
   (e: 'move-to-folder', item: KnowledgeCard, folderPath: string): void;
@@ -317,7 +327,7 @@ const editTags = (item: KnowledgeCard) => {
 };
 
 // --- Action handlers ---
-const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'batch-manage' | 'delete', item: KnowledgeCard) => {
+const handleAction = (action: DocumentAction, item: KnowledgeCard) => {
   // The folder picker opens inside this same popup, so keep the menu open.
   if (action === 'move-folder') {
     folderPickerItemId.value = item.id;
@@ -342,6 +352,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
       class="knowledge-card folder-card"
       :data-folder-path="folder.path"
       role="button"
+      :aria-label="folder.name"
       tabindex="0"
       @click="onOpenFolder(folder.path)"
       @keydown.enter="onOpenFolder(folder.path)"
@@ -422,12 +433,13 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
 
               <!-- Normal menu -->
               <div v-else-if="moveMenuMode === 'normal'" class="card-menu">
-                <button type="button" class="card-menu-item card-tag-menu-action" @click.stop="editTags(item)">
+                <button type="button" class="card-menu-item card-tag-menu-action" v-if="tagEditor" @click.stop="editTags(item)">
                   <t-icon class="icon" name="tag" />
                   <span>{{ t('knowledgeBase.tagEditDialogHeading') }}</span>
                 </button>
                 <DocumentActionMenu
                   :item="item"
+                  :allowed-actions="actionsFor?.(item.id)"
                   :can-download="canDownload"
                   :can-mutate-knowledge="canMutateKnowledge"
                   :trace-visible="isTraceMenuVisible(item)"
@@ -436,6 +448,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                   @edit="handleAction('edit', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
+                  @host-action="handleAction($event, item)"
                   @cancel-parse="handleAction('cancel-parse', item)"
                   @move="handleAction('move', item)"
                   @move-folder="handleAction('move-folder', item)"
@@ -588,7 +601,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
       </div>
 
       <div class="card-bottom">
-        <KnowledgeTagPopover v-if="canEdit || item.tags?.length" class="card-tags-anchor"
+        <component :is="tagEditor || 'div'" v-if="tagEditor && (canEdit || item.tags?.length)" class="card-tags-anchor"
           :kb-id="kbId" :knowledge-id="item.id" :tags="item.tags || []" :disabled="!canEdit"
           :visible="tagEditorId === item.id"
           @update:visible="(visible: boolean) => { if (visible) tagEditorId = item.id; else if (tagEditorId === item.id) tagEditorId = null }"
@@ -604,7 +617,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               <t-icon name="add" size="12px" />{{ t('knowledgeBase.tagAddAction') }}
             </button>
           </div>
-        </KnowledgeTagPopover>
+        </component>
 
         <button v-if="showFolderPath && item.folder_path" type="button" class="card-folder"
           :title="item.folder_path" @click.stop="onOpenFolder(item.folder_path)">
@@ -627,20 +640,22 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
       <template v-if="hoveredCardItem">
         <div class="card-popover-title">{{ hoveredCardItem.file_name }}</div>
         <div v-if="isParseInFlight(hoveredCardItem.parse_status)" class="card-popover-status parsing">
-          <KnowledgeProcessingTimeline
+          <component :is="processingTimeline" v-if="processingTimeline"
             :knowledge-id="hoveredCardItem.id"
             :parse-status="hoveredCardItem.parse_status"
             :auto-poll="false"
             :compact="true"
           />
+          <span v-else>{{ t('knowledgeBase.statusProcessing') }}</span>
         </div>
         <div v-else-if="hoveredCardItem.parse_status === 'failed'" class="card-popover-status failure">
-          <KnowledgeProcessingTimeline
+          <component :is="processingTimeline" v-if="processingTimeline"
             :knowledge-id="hoveredCardItem.id"
             :parse-status="hoveredCardItem.parse_status"
             :auto-poll="false"
             :compact="true"
           />
+          <span v-else>{{ hoveredCardItem.error_message || t('knowledgeBase.statusFailed') }}</span>
         </div>
         <div v-else-if="hoveredCardItem.parse_status === 'draft'" class="card-popover-status draft">
           {{ $t('knowledgeBase.draft') }}

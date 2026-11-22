@@ -1,3 +1,5 @@
+import { formatReferenceSnippet } from '@nexus-web/core/utils/referenceSnippet'
+export { formatReferenceSnippet } from '@nexus-web/core/utils/referenceSnippet'
 import type { SourceLocator } from './sourceLocator'
 
 export type ReferenceItemKind = 'web' | 'document' | 'tool'
@@ -93,19 +95,6 @@ function truncateText(text: string, maxLen: number): string {
   return `${normalized.slice(0, maxLen)}…`
 }
 
-export function formatReferenceSnippet(text: string | undefined): string {
-  let value = String(text || '').replace(/\s+/g, ' ').trim()
-  if (!value) return ''
-  value = value.replace(/^(\.{3}|…+)\s*/, '')
-  value = value.replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
-  value = value.replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
-  value = value.replace(/`([^`]+)`/g, '$1')
-  value = value.replace(/\*\*([^*]+)\*\*/g, '$1')
-  value = value.replace(/\*([^*]+)\*/g, '$1')
-  value = value.replace(/(^|\s)#+\s*/g, '$1')
-  value = value.replace(/\s+/g, ' ').trim()
-  return value
-}
 
 function isWebReference(item: KnowledgeReferenceLike): boolean {
   return item.chunk_type === 'web_search'

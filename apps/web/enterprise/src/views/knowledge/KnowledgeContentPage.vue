@@ -7,9 +7,15 @@ import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import KbFolderTree from '@nexus-web/core/components/knowledge/documents/KbFolderTree.vue'
 import KbDocumentLayout from '@nexus-web/core/components/knowledge/documents/KbDocumentLayout.vue'
+import KbDocumentToolbar from '@nexus-web/core/components/knowledge/documents/KbDocumentToolbar.vue'
+import DocumentListView from '@nexus-web/core/components/knowledge/documents/DocumentListView.vue'
+import DocumentCardView from '@nexus-web/core/components/knowledge/documents/DocumentCardView.vue'
+import EmptyKnowledge from '@nexus-web/core/components/knowledge/documents/EmptyKnowledge.vue'
+import { useDocumentViewMode } from '@nexus-web/core/components/knowledge/documents/useDocumentViewMode'
+import type { DocumentAction, HostDocumentAction } from '@nexus-web/core/components/knowledge/documents/documentActions'
 import KbUploadSourceDropdown from '@nexus-web/core/components/knowledge/documents/KbUploadSourceDropdown.vue'
 import UploadConfirmDialog from '@nexus-web/core/components/knowledge/documents/UploadConfirmDialog.vue'
-import { buildFolderOptions, buildUploadFileName, folderPathExists } from '@nexus-web/core/components/knowledge/documents/folderTree'
+import { buildFolderOptions, buildUploadFileName, childFolders, folderPathExists } from '@nexus-web/core/components/knowledge/documents/folderTree'
 import type { UploadConfirmResult } from '@nexus-web/core/components/knowledge/documents/uploadConfirm'
 import type { KnowledgeFolderTree } from '@nexus-web/core/api/knowledge-base/index'
 import { useEnterpriseContext } from '../../stores/context'
@@ -38,6 +44,25 @@ const uploadLabel = ref(''), uploadPercent = ref(0)
 const pendingUpload = ref<File[] | null>(null)
 const folderTree = ref<KnowledgeFolderTree | null>(null), folder = ref(''), folderLoading = ref(false)
 const folderOptions = computed(() => buildFolderOptions(folderTree.value?.folders ?? []))
+const viewMode = useDocumentViewMode()
+const documentQuery = ref('')
+const subFolders = computed(() => documentQuery.value ? [] : childFolders(folderTree.value, folder.value))
+const documentsById = computed(() => new Map(documents.value.map(row => [row.id, row])))
+const documentItems = computed(() => documents.value.map(row => ({
+  id: row.id,
+  file_name: row.filename,
+  file_type: row.file_type,
+  folder_path: row.folder_path,
+  file_size: row.latest_version?.size ?? row.current_version?.size,
+  type: 'file',
+  source: 'upload',
+  channel: 'web',
+  parse_status: row.parse_status,
+  summary_status: row.summary ? 'completed' : 'none',
+  description: row.summary ?? undefined,
+  error_message: row.latest_version?.error_message ?? undefined,
+  updated_at: row.updated_at,
+})))
 const folderCollapsed = ref(false), wikiTab = ref('pages')
 const documentMode = computed(() => knowledgeBase.value?.type === 'document'
   || (knowledgeBase.value?.type === 'wiki' && wikiTab.value === 'documents'))
@@ -61,6 +86,7 @@ function reset() {
   knowledgeBase.value = null; knowledgeBases.value = []; loading.value = false; working.value = false; error.value = ''; ready.value = false
   page.value = 1; total.value = 0; documents.value = []; faqEntries.value = []; wikiPages.value = []
   folderTree.value = null; folder.value = ''; folderLoading.value = false; folderCollapsed.value = false; wikiTab.value = 'pages'
+  documentQuery.value = keyword.value.trim()
   pendingUpload.value = null; uploadLabel.value = ''; uploadPercent.value = 0
   faqDialog.value = false; faqSaving.value = false; faqEditId.value = null
   wikiDialog.value = false; wikiLoading.value = false; wikiSaving.value = false; wikiEditSlug.value = null
@@ -84,7 +110,7 @@ async function loadRows(current: number, scope: string, user: string, id: string
       if (!active()) return
       wikiPages.value = result.items; total.value = result.total
     } else {
-      const result = await listEnterpriseKnowledgeDocuments(scope, id, query, offset, pageSize, folder.value)
+      const result = await listEnterpriseKnowledgeDocuments(scope, id, documentQuery.value, offset, pageSize, folder.value)
       if (!active()) return
       documents.value = result.items; total.value = result.total
     }
@@ -107,7 +133,11 @@ async function load() {
   } catch { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.loadFailed') }
   finally { if (currentScope(current, scope, user, id)) loading.value = false }
 }
-function refreshSearch() { page.value = 1; const current = epoch; void loadRows(current, tenant.value, String(auth.user?.id || ''), kbId.value) }
+function refreshSearch() {
+  documentQuery.value = keyword.value.trim()
+  page.value = 1
+  void loadRows(epoch, tenant.value, String(auth.user?.id || ''), kbId.value)
+}
 function goToPage(next: number) { if (next < 1 || next > pageCount.value || next === page.value) return; page.value = next; void loadRows(epoch, tenant.value, String(auth.user?.id || ''), kbId.value) }
 async function refreshFolders() {
   if (!documentMode.value) return
@@ -209,6 +239,25 @@ function download(row: EnterpriseKnowledgeDocument) {
   }).catch(() => { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.downloadFailed') })
     .finally(() => { if (currentScope(current, scope, user, id)) working.value = false })
 }
+/** Project the valid enterprise operations into the shared document menu. */
+function documentActions(id: string): HostDocumentAction[] {
+  const row = documentsById.value.get(id)
+  if (!row || working.value) return []
+  const actions: HostDocumentAction[] = []
+  if (row.latest_version || row.current_version) actions.push('download')
+  if (row.latest_version?.state === 'failed') actions.push('retry')
+  if (row.latest_version?.state === 'ready') actions.push('reparse')
+  actions.push('delete')
+  return actions
+}
+function actOnDocument(action: DocumentAction, { id }: { id: string }) {
+  const row = documentsById.value.get(id)
+  if (!row || !canManage.value || !documentMode.value || working.value) return
+  if (action === 'download' && (row.latest_version || row.current_version)) download(row)
+  if ((action === 'retry' && row.latest_version?.state === 'failed')
+    || (action === 'reparse' && row.latest_version?.state === 'ready')) retryDocument(row)
+  if (action === 'delete') confirmDelete('document', row)
+}
 function confirmDelete(kind: 'document' | 'faq' | 'wiki', item: EnterpriseKnowledgeDocument | EnterpriseFaqEntry | EnterpriseWikiPage) {
   if (working.value || !knowledgeBase.value || (kind === 'wiki' && ['index', 'log'].includes((item as EnterpriseWikiPage).page_type))) return
   const name = kind === 'document' ? (item as EnterpriseKnowledgeDocument).filename : kind === 'faq' ? (item as EnterpriseFaqEntry).standard_question : (item as EnterpriseWikiPage).title
@@ -287,11 +336,19 @@ async function saveWiki() {
   finally { if (currentScope(current, scope, user, id)) wikiSaving.value = false }
 }
 watch([tenant, () => auth.user?.id, () => context.revision, canManage, kbId], () => { void load() }, { immediate: true, flush: 'sync' })
+watch(keyword, (value, _previous, onCleanup) => {
+  if (!documentMode.value || !ready.value || value.trim() === documentQuery.value) return
+  const current = epoch
+  const timer = window.setTimeout(() => {
+    if (current === epoch && documentMode.value && keyword.value.trim() !== documentQuery.value) refreshSearch()
+  }, 300)
+  onCleanup(() => window.clearTimeout(timer))
+})
 onBeforeUnmount(reset)
 </script>
 
 <template>
-  <section class="knowledge-content-page">
+  <section class="knowledge-content-page" :class="{ 'document-mode': documentMode }">
     <header class="document-header">
       <nav :aria-label="t('adminKnowledge.content.title')">
         <h2 class="document-breadcrumb">
@@ -314,19 +371,65 @@ onBeforeUnmount(reset)
       <t-tab-panel value="pages" :label="t('adminKnowledge.content.titleColumn')" />
       <t-tab-panel value="documents" :label="t('knowledgeEditor.wikiBrowser.tabDocuments')" />
     </t-tabs>
-    <KbDocumentLayout>
+    <KbDocumentLayout v-if="ready && knowledgeBase && documentMode">
       <template #folders>
         <KbFolderTree v-if="ready && documentMode && !folderCollapsed" :tree="folderTree"
           :root-label="knowledgeBase?.name" :selected-path="folder" :loading="folderLoading"
           :can-edit="!working" :create-folder="createFolder" @select="selectFolder" @rename="renameFolder"
           @update:collapsed="folderCollapsed = $event" />
       </template>
+      <div class="tag-content">
+        <div class="doc-card-area">
+          <KbDocumentToolbar v-model:keyword="keyword" v-model:view-mode="viewMode"
+            :name="knowledgeBase.name" :path="folder" :tree-collapsed="folderCollapsed"
+            :loading="loading" :filtering="!!documentQuery" @open-folder="selectFolder"
+            @expand-tree="folderCollapsed = false" @search="refreshSearch">
+            <template #count>
+              {{ documentQuery
+                ? t('knowledgeBase.folderTree.filteredCount', { count: total })
+                : subFolders.length
+                  ? t('knowledgeBase.folderTree.folderContentsCount', { folders: subFolders.length, documents: total })
+                  : t('knowledgeBase.documentCount', { count: total }) }}
+            </template>
+            <template #controls>
+              <t-button variant="outline" :disabled="working" :loading="loading"
+                :aria-label="t('connectionUi.refresh')" @click="load">
+                <template #icon><t-icon name="refresh" /></template>
+              </t-button>
+            </template>
+            <template #upload>
+              <KbUploadSourceDropdown :include-url="false" :disabled="working || !!pendingUpload"
+                trigger-icon="add" :trigger-label="t('knowledgeBase.addDocument')" trigger-class="content-bar-icon-btn"
+                @files="openUploadConfirmation" />
+            </template>
+          </KbDocumentToolbar>
+          <div class="doc-scroll-container" :class="{ 'is-empty': !loading && !documentItems.length && !subFolders.length }">
+            <t-loading v-if="loading && !documentItems.length" class="document-loading" />
+            <template v-else-if="documentItems.length || subFolders.length">
+              <DocumentListView v-if="viewMode === 'list'" :kb-id="kbId" :items="documentItems"
+                :sub-folders="subFolders" :actions-for="documentActions" :can-edit="!working" :can-select="false"
+                :show-folder-path="!!documentQuery" :loading="loading" @open-folder="selectFolder"
+                @open="item => actOnDocument('download', item)" @action="actOnDocument" />
+              <DocumentCardView v-else :kb-id="kbId" :items="documentItems" :sub-folders="subFolders"
+                :actions-for="documentActions" :can-edit="!working" :show-folder-path="!!documentQuery"
+                @open-folder="selectFolder" @open="item => actOnDocument('download', item)" @action="actOnDocument" />
+            </template>
+            <div v-else class="doc-empty-state">
+              <p v-if="documentQuery">{{ t('knowledgeBase.folderTree.emptySearch') }}</p>
+              <p v-else-if="folder">{{ t('knowledgeBase.folderTree.emptyFolder') }}</p>
+              <EmptyKnowledge v-else />
+            </div>
+          </div>
+          <footer v-if="pageCount > 1" class="pagination document-pagination">
+            <t-button variant="outline" :disabled="page <= 1 || loading || working" @click="goToPage(page - 1)">{{ t('adminKnowledge.content.previous') }}</t-button>
+            <span>{{ page }} / {{ pageCount }}</span>
+            <t-button variant="outline" :disabled="page >= pageCount || loading || working" @click="goToPage(page + 1)">{{ t('adminKnowledge.content.next') }}</t-button>
+          </footer>
+        </div>
+      </div>
+    </KbDocumentLayout>
+    <template v-else>
     <div v-if="ready && knowledgeBase" class="content-toolbar">
-      <t-button v-if="documentMode && folderCollapsed" variant="text"
-        :aria-label="t('knowledgeBase.folderTree.expand')" @click="folderCollapsed = false">
-        <template #icon><t-icon name="view-list" /></template>
-      </t-button>
-      <span v-if="documentMode" class="active-folder" :title="folder">{{ folder || t('knowledgeBase.folderTree.rootRow') }}</span>
       <t-input v-model="keyword" class="content-search" clearable :placeholder="t('adminKnowledge.content.search')" :aria-label="t('adminKnowledge.content.search')" @enter="refreshSearch">
         <template #prefix-icon><t-icon name="search" size="16px" /></template>
       </t-input>
@@ -338,9 +441,6 @@ onBeforeUnmount(reset)
         <t-button v-if="knowledgeBase.type === 'faq'" theme="primary" :disabled="working" @click="blankFaq">
           <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addFaq') }}
         </t-button>
-        <KbUploadSourceDropdown v-if="documentMode" :include-url="false" :disabled="working || !!pendingUpload"
-          trigger-icon="add" :trigger-label="t('knowledgeBase.addDocument')"
-          @files="openUploadConfirmation" />
         <t-button v-if="knowledgeBase.type === 'wiki' && !documentMode" variant="outline" :disabled="working" @click="blankWiki">
           <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addWiki') }}
         </t-button>
@@ -350,10 +450,10 @@ onBeforeUnmount(reset)
     <t-loading :loading="loading">
       <div v-if="knowledgeBase?.type === 'faq'" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.question') }}</th><th>{{ t('adminKnowledge.content.answer') }}</th><th>{{ t('adminKnowledge.content.category') }}</th><th>{{ t('adminKnowledge.content.indexState') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in faqEntries" :key="row.id"><td>{{ row.standard_question }}</td><td>{{ row.answers.join(' / ') }}</td><td>{{ row.category || '—' }}</td><td><t-tag :theme="row.index_state === 'ready' ? 'success' : row.index_state === 'failed' ? 'danger' : 'warning'">{{ statusLabel(row.index_state) }}</t-tag></td><td class="row-actions"><t-button variant="text" :disabled="working" @click="editFaq(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working" @click="confirmDelete('faq', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!faqEntries.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noFaq') }}</td></tr></tbody></table></div>
       <div v-else-if="knowledgeBase?.type === 'wiki' && !documentMode" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.titleColumn') }}</th><th>{{ t('adminKnowledge.content.slug') }}</th><th>{{ t('adminKnowledge.content.wikiType') }}</th><th>{{ t('adminKnowledge.content.status') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in wikiPages" :key="row.id"><td>{{ row.title }}</td><td><code>{{ row.slug }}</code></td><td>{{ row.page_type }}</td><td>{{ row.status }}</td><td class="row-actions"><t-button variant="text" :disabled="working || ['index','log'].includes(row.page_type)" @click="editWiki(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working || ['index','log'].includes(row.page_type)" @click="confirmDelete('wiki', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!wikiPages.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noWiki') }}</td></tr></tbody></table></div>
-      <div v-else class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.filename') }}</th><th>{{ t('adminKnowledge.content.size') }}</th><th>{{ t('adminKnowledge.content.state') }}</th><th>{{ t('adminKnowledge.content.updated') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in documents" :key="row.id"><td><span class="filename">{{ row.filename }}</span><small v-if="row.latest_version?.error_message" class="row-error">{{ row.latest_version.error_message }}</small></td><td>{{ row.latest_version?.size ?? row.current_version?.size ?? 0 }} B</td><td><t-tag :theme="row.latest_version?.state === 'ready' ? 'success' : row.latest_version?.state === 'failed' ? 'danger' : 'warning'">{{ statusLabel(row.latest_version?.state || 'pending') }}</t-tag></td><td>{{ row.updated_at }}</td><td class="row-actions"><t-button variant="text" :disabled="working || !(row.latest_version || row.current_version)" @click="download(row)">{{ t('adminKnowledge.content.download') }}</t-button><t-button v-if="row.latest_version && ['failed','ready'].includes(row.latest_version.state)" variant="text" :disabled="working" @click="retryDocument(row)">{{ t(row.latest_version.state === 'failed' ? 'adminKnowledge.content.retry' : 'adminKnowledge.content.reindex') }}</t-button><t-button variant="text" theme="danger" :disabled="working" @click="confirmDelete('document', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!documents.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noDocuments') }}</td></tr></tbody></table></div>
+
     </t-loading>
     <footer v-if="ready && total" class="pagination"><span>{{ t('adminKnowledge.content.total', { count: total }) }}</span><t-button variant="outline" :disabled="page <= 1 || loading || working" @click="goToPage(page - 1)">{{ t('adminKnowledge.content.previous') }}</t-button><span>{{ page }} / {{ pageCount }}</span><t-button variant="outline" :disabled="page >= pageCount || loading || working" @click="goToPage(page + 1)">{{ t('adminKnowledge.content.next') }}</t-button></footer>
-    </KbDocumentLayout>
+    </template>
     <UploadConfirmDialog v-if="documentMode" :visible="!!pendingUpload" use-library-defaults
       :files="pendingUpload ?? undefined" :target-folder="folder" :folder-options="folderOptions"
       @confirm="uploadFiles" @update:visible="pendingUpload = null" />
@@ -366,9 +466,15 @@ onBeforeUnmount(reset)
   </section>
 </template>
 
+<style lang="less" src="@nexus-web/core/styles/document-more.less"></style>
+<style scoped lang="less" src="@nexus-web/core/styles/document-surface.less"></style>
 <style scoped>
 .knowledge-content-page { min-width: 0; min-height: 0; flex: 1; overflow-y: auto; padding: 20px 28px 24px; }
+.knowledge-content-page.document-mode { display: flex; flex-direction: column; gap: 16px; overflow: hidden; padding-bottom: 0; }
+.document-mode .document-header { margin-bottom: 0; }
 .document-header { margin-bottom: 16px; }
+.document-loading { display: flex; justify-content: center; padding: 28px; }
+.document-pagination { margin: 0; padding: 12px 0; flex-shrink: 0; border-top: 1px solid var(--td-component-stroke); }
 .document-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: var(--app-text-4xl); font-weight: 600; line-height: 32px; }
 .breadcrumb-link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 0; color: inherit; background: none; border: 0; font: inherit; text-decoration: none; cursor: pointer; }
 .breadcrumb-link:hover { color: var(--td-brand-color); }
@@ -376,7 +482,6 @@ onBeforeUnmount(reset)
 .breadcrumb-current span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-current :deep(.t-icon), .breadcrumb-separator { flex-shrink: 0; color: var(--td-text-color-placeholder); }
 .document-subtitle { margin: 4px 0 0; color: var(--td-text-color-secondary); overflow-wrap: anywhere; }
-.active-folder { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .content-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--td-component-stroke); }
 .content-search { width: 260px; max-width: 100%; }
 .content-actions { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -387,8 +492,7 @@ th, td { padding: 13px 16px; border-bottom: 1px solid var(--td-component-stroke)
 th { background: var(--td-bg-color-secondarycontainer); font-weight: 500; }
 tr:last-child td { border-bottom: 0; }
 .row-actions { white-space: nowrap; }
-.filename { overflow-wrap: anywhere; }
-.row-error, .form-hint { display: block; margin-top: 6px; color: var(--td-error-color); white-space: pre-wrap; }
+.form-hint { display: block; margin-top: 6px; color: var(--td-error-color); white-space: pre-wrap; }
 .empty { padding: 48px 16px; color: var(--td-text-color-secondary); text-align: center; }
 .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 20px; }
 .editor-form { display: grid; gap: 16px; max-height: min(68vh, 720px); overflow-y: auto; padding: 2px; }

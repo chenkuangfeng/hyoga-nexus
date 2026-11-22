@@ -11,8 +11,8 @@ import en from '@nexus-web/core/i18n/locales/en-US'
 
 const tree = readFileSync(new URL('../../../../../core/src/components/knowledge/documents/KbFolderTree.vue', import.meta.url), 'utf8')
 const batchBar = readFileSync(new URL('./DocumentBatchBar.vue', import.meta.url), 'utf8')
-const cardView = readFileSync(new URL('./DocumentCardView.vue', import.meta.url), 'utf8')
-const listView = readFileSync(new URL('./DocumentListView.vue', import.meta.url), 'utf8')
+const cardView = readFileSync(new URL('../../../../../core/src/components/knowledge/documents/DocumentCardView.vue', import.meta.url), 'utf8')
+const listView = readFileSync(new URL('../../../../../core/src/components/knowledge/documents/DocumentListView.vue', import.meta.url), 'utf8')
 
 // The root folder's own path IS the empty string, so a falsy "nothing is being
 // renamed" sentinel matches it and leaves a stray rename input on the root row.

@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { HostDocumentAction } from './documentActions';
+
+const actionDetails: Record<HostDocumentAction, { icon: string; label: string }> = {
+  download: { icon: 'download', label: 'common.download' },
+  reparse: { icon: 'refresh', label: 'adminKnowledge.content.reindex' },
+  retry: { icon: 'refresh', label: 'adminKnowledge.content.retry' },
+  delete: { icon: 'delete', label: 'knowledgeBase.deleteDocument' },
+};
 
 interface KnowledgeItem {
   id: string;
@@ -16,6 +24,8 @@ const props = defineProps<{
   traceVisible: boolean;
   /** Whether the knowledge base has a folder structure to file documents into. */
   foldersAvailable?: boolean;
+  /** When set, the host supplies actions and handles any confirmation. */
+  allowedActions?: readonly HostDocumentAction[];
 }>();
 
 const emit = defineEmits<{
@@ -23,6 +33,7 @@ const emit = defineEmits<{
   (e: 'edit'): void;
   (e: 'view-trace'): void;
   (e: 'reparse'): void;
+  (e: 'host-action', action: HostDocumentAction): void;
   (e: 'cancel-parse'): void;
   (e: 'move'): void;
   (e: 'move-folder'): void;
@@ -41,6 +52,14 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
 </script>
 
 <template>
+  <template v-if="allowedActions">
+    <button v-for="action in allowedActions" :key="action" type="button" class="doc-action-menu-item"
+      :class="{ danger: action === 'delete' }" @click.stop="emit('host-action', action)">
+      <t-icon class="icon" :name="actionDetails[action].icon" />
+      <span>{{ $t(actionDetails[action].label) }}</span>
+    </button>
+  </template>
+  <template v-else>
   <!-- 下载原始文档 -->
   <div
     v-if="canDownload && (item.type === 'file' || item.type === 'manual')"
@@ -122,6 +141,7 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
       <span>{{ $t('knowledgeBase.deleteDocument') }}</span>
     </div>
   </t-popconfirm>
+  </template>
 </template>
 
 <style scoped lang="less">
@@ -189,5 +209,12 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
       background: var(--td-error-color-2);
     }
   }
+}
+
+button.doc-action-menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
 }
 </style>

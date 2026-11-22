@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { MAX_FILE_SIZE_MB } from '@nexus-web/core/utils/index'
+defineProps<{ canDrop?: boolean }>()
 </script>
 <template>
     <div class="empty">
-        <img class="empty-img" src="@/assets/img/upload.svg" alt="">
-        <span class="empty-txt">{{ $t('knowledgeBase.emptyKnowledgeDragDrop') }}</span>
+        <img class="empty-img" src="../../../assets/img/upload.svg" alt="">
+        <span class="empty-txt">{{ $t(canDrop ? 'knowledgeBase.emptyKnowledgeDragDrop' : 'adminKnowledge.content.noDocuments') }}</span>
         <span class="empty-type-txt">{{ $t('knowledgeBase.pdfDocFormat', { size: MAX_FILE_SIZE_MB }) }}</span>
         <span class="empty-type-txt">{{ $t('knowledgeBase.textMarkdownFormat', { size: MAX_FILE_SIZE_MB }) }}</span>
     </div>

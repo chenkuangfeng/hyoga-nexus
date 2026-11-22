@@ -23,7 +23,7 @@ import { diffWikiLines, type WikiDiffLine } from '@/utils/wikiLineDiff';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@nexus-web/core/stores/auth';
 import DocumentPreview from '@/components/document-preview.vue';
-import DocumentFileIcon from '@/views/knowledge/components/DocumentFileIcon.vue';
+import DocumentFileIcon from '@nexus-web/core/components/knowledge/documents/DocumentFileIcon.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';

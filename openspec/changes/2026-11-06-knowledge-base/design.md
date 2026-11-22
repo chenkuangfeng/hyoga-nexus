@@ -125,3 +125,5 @@ index_concurrency = 1              # 本机内存小，默认串行（Octop 同�
 沿用 WeKnora `KbFolderTree.vue`、`KbUploadSourceDropdown.vue` 与 `internal/types/knowledge_folder.go` 的目录和相对路径交互。将目录树、目录创建对话框和文件选择器抽到 Web core，由双方保留各自权限与文档任务入口。新增 `knowledge_folders` 存储显式创建或上传的目录。目录树合并新记录和已有文档路径。上传接受独立目标路径，兼容旧工作台的路径式文件名。同名版本与内容去重限定在目标目录。上传完成后以数据库保存的路径为准。文件存储继续使用不含用户路径的 UUID 对象键。浏览器文件夹选择只提供包含文件的路径，空目录由新建入口补充。
 
 复用 WeKnora `UploadConfirmDialog.vue` 与 `FolderPickerMenu.vue` 在 Workspace 的实现，将弹窗和目录选择器提升到 Web core。Workspace 通过事件接回模型设置导航。企业文档页与 Wiki 文档标签页使用同一文件列表、目录选择及确认交互，显示知识库默认解析配置，并沿用企业上传接口及进度反馈。页面在用户、企业、知识库或权限变化时关闭待确认批次。提交以弹窗确认的目录和文件为准。
+
+将 Workspace 源自 WeKnora 的 `DocumentListView.vue`、`DocumentCardView.vue`、`DocumentFileIcon.vue`、`DocumentActionMenu.vue` 和目录工具栏提升到 Web core。Workspace 注入标签编辑器和解析轨迹组件，企业端将已校验的原生文档映射为共享视图数据，并按文档状态启用下载、重新解析和删除。两端共享浏览子目录、搜索面包屑和视图偏好，保留各自的服务端权限与查询流程。

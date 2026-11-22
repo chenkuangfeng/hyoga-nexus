@@ -1,3 +1,6 @@
+import { resolveFilePreviewExt } from '@nexus-web/core/utils/files'
+export { resolveFilePreviewExt } from '@nexus-web/core/utils/files'
+
 /**
  * Shared file-preview type resolution used by DocumentPreview, chat
  * attachments, and skill-generated artifacts.
@@ -233,19 +236,6 @@ const DEFAULT_EXT_BY_KIND: Record<FilePreviewKind, string> = {
 }
 
 const SNIFF_BYTES = 16384
-
-/** Strip a leading dot and lowercase. Prefers an explicit type over the filename suffix. */
-export function resolveFilePreviewExt(fileName?: string, fileType?: string): string {
-  const normalizedType = String(fileType || '')
-    .trim()
-    .replace(/^\./, '')
-    .toLowerCase()
-  if (normalizedType) return normalizedType
-  const name = String(fileName || '')
-  const dot = name.lastIndexOf('.')
-  if (dot < 0 || dot === name.length - 1) return ''
-  return name.slice(dot + 1).toLowerCase()
-}
 
 export function resolvePreviewKind(ext: string): FilePreviewKind {
   if (!ext) return 'unsupported'

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { formatFileSize } from '@/utils/files';
-import KnowledgeTagPopover from './KnowledgeTagPopover.vue';
+import { formatFileSize } from '@nexus-web/core/utils/files';
+import type { Component } from 'vue';
+import type { DocumentAction, HostDocumentAction } from './documentActions';
 import DocumentFileIcon from './DocumentFileIcon.vue';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import FolderPickerMenu, { type FolderOption } from '@nexus-web/core/components/knowledge/documents/FolderPickerMenu.vue';
-import { shownStall } from '@/utils/knowledgeProcessingStall';
+import { shownStall } from '@nexus-web/core/utils/knowledgeProcessingStall';
 import type { FolderEntry } from '@nexus-web/core/components/knowledge/documents/folderTree';
 
 interface Tag {
@@ -29,20 +30,24 @@ interface KnowledgeItem {
   updated_at?: string;
   source?: string;
   description?: string;
+  error_message?: string;
   channel?: string;
   isMore?: boolean;
   stalled_minutes?: number;
   stall_state?: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
+  tagEditor?: Component;
+  canSelect?: boolean;
+  actionsFor?: (id: string) => readonly HostDocumentAction[];
   items: KnowledgeItem[];
   kbId: string;
-  selectedIds: Set<string>;
-  canEdit: boolean;
-  canDownload: boolean;
-  canMutateKnowledge: boolean;
-  traceVisibleIds: Record<string, boolean>;
+  selectedIds?: Set<string>;
+  canEdit?: boolean;
+  canDownload?: boolean;
+  canMutateKnowledge?: boolean;
+  traceVisibleIds?: Record<string, boolean>;
   loading?: boolean;
   /** Every folder of the knowledge base, for the "move to folder" picker. */
   folderOptions?: FolderOption[];
@@ -59,19 +64,27 @@ const props = defineProps<{
    */
   showFolderPath?: boolean;
   // Move sub-flow state
-  moveMenuMode: 'normal' | 'targets' | 'confirm';
-  moveTargetKbs: any[];
-  moveTargetsLoading: boolean;
-  moveSelectedTargetName: string;
-  moveMode: 'reuse_vectors' | 'reparse';
-  moveSubmitting: boolean;
-}>();
+  moveMenuMode?: 'normal' | 'targets' | 'confirm';
+  moveTargetKbs?: any[];
+  moveTargetsLoading?: boolean;
+  moveSelectedTargetName?: string;
+  moveMode?: 'reuse_vectors' | 'reparse';
+  moveSubmitting?: boolean;
+}>(), {
+  canSelect: true,
+  selectedIds: () => new Set<string>(),
+  traceVisibleIds: () => ({}),
+  moveMenuMode: 'normal',
+  moveTargetKbs: () => [],
+  moveSelectedTargetName: '',
+  moveMode: 'reuse_vectors',
+});
 
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeItem): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
-  (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem): void;
+  (e: 'action', action: DocumentAction, item: KnowledgeItem): void;
   (e: 'probe-trace', item: KnowledgeItem): void;
   (e: 'tags-changed', payload?: { deletedTagId?: string }): void;
   (e: 'open-folder', path: string): void;
@@ -256,7 +269,7 @@ const onFolderPicked = (item: KnowledgeItem, path: string) => {
   emit('move-to-folder', item, path);
 };
 
-const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem) => {
+const handleAction = (action: DocumentAction, item: KnowledgeItem) => {
   // The folder picker opens inside this same popup, so keep the menu open.
   if (action === 'move-folder') {
     folderPickerItemId.value = item.id;
@@ -277,7 +290,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
     <div ref="stickySentinel" class="doc-list-sticky-sentinel" aria-hidden="true"></div>
     <div class="doc-list-header" :class="{ 'is-stuck': headerStuck }" role="row">
       <div class="cell cell-check" role="columnheader" @click.stop>
-        <t-checkbox v-if="canEdit || canDownload" class="doc-list-check" size="small" :checked="allSelected" :indeterminate="someSelected"
+        <t-checkbox v-if="canSelect !== false && (canEdit || canDownload)" class="doc-list-check" size="small" :checked="allSelected" :indeterminate="someSelected"
           :disabled="!items.length" :title="t('knowledgeBase.selectAll')" @change="onHeaderCheckboxChange" />
       </div>
       <div class="cell cell-name" role="columnheader">{{ t('knowledgeBase.columnName') }}</div>
@@ -313,7 +326,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         :class="{ selected: selectedIds.has(item.id), 'menu-open': moreOpen === item.id }" :data-select-id="item.id"
         role="row" @click="emit('open', item)">
         <div class="cell cell-check" role="cell" @click.stop>
-          <t-checkbox v-if="canEdit || canDownload" class="doc-list-check" size="small" :checked="selectedIds.has(item.id)" :title="item.file_name"
+          <t-checkbox v-if="canSelect !== false && (canEdit || canDownload)" class="doc-list-check" size="small" :checked="selectedIds.has(item.id)" :title="item.file_name"
             @change="(c: boolean, ctx?: { e?: Event }) => onRowCheckboxChange(item, c, ctx)" />
         </div>
 
@@ -325,6 +338,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
               <button type="button" class="row-file-name" :title="item.description ? `${item.file_name}\n${item.description}` : item.file_name"
                 @click.stop="emit('open', item)">{{ item.file_name }}</button>
             </div>
+            <small v-if="actionsFor && item.error_message" class="row-file-error">{{ item.error_message }}</small>
             <span class="row-file-meta">
               <span class="row-source"><t-icon :name="getSourceInfo(item).icon" />{{ getSourceInfo(item).label }}</span>
               <template v-if="formatFileSize(item.file_size)">
@@ -343,7 +357,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         </div>
 
         <div class="cell cell-tags" role="cell">
-          <KnowledgeTagPopover :kb-id="kbId" :knowledge-id="item.id" :tags="item.tags || []" :disabled="!canEdit"
+          <component v-if="tagEditor" :is="tagEditor" :kb-id="kbId" :knowledge-id="item.id" :tags="item.tags || []" :disabled="!canEdit"
             :visible="tagEditorId === item.id"
             @update:visible="(visible: boolean) => { if (visible) tagEditorId = item.id; else if (tagEditorId === item.id) tagEditorId = null }"
             @changed="emit('tags-changed', $event)">
@@ -359,14 +373,14 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
                 {{ t('knowledgeBase.tagAddAction') }}
               </button>
             </div>
-          </KnowledgeTagPopover>
+          </component>
         </div>
 
         <div class="cell cell-status" role="cell">
           <template v-if="statusByRow.get(item.id) as StatusInfo | undefined">
             <t-tag v-if="statusByRow.get(item.id)!.label !== '--'" size="small" :theme="statusByRow.get(item.id)!.theme"
               variant="light" class="row-status-tag" :class="`status-${statusByRow.get(item.id)!.theme}`"
-              :title="statusByRow.get(item.id)!.hint">
+              :title="statusByRow.get(item.id)!.hint || item.error_message">
               <template v-if="statusByRow.get(item.id)!.icon" #icon>
                 <t-icon :name="statusByRow.get(item.id)!.icon!"
                   :class="{ 'icon-spin': statusByRow.get(item.id)!.spin }" />
@@ -398,12 +412,13 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
               <!-- Normal menu -->
               <div v-else-if="moveMenuMode === 'normal'" class="card-menu">
-                <button type="button" class="card-menu-item row-tag-menu-action" @click.stop="moreOpen = null; tagEditorId = item.id">
+                <button type="button" v-if="tagEditor" class="card-menu-item row-tag-menu-action" @click.stop="moreOpen = null; tagEditorId = item.id">
                   <t-icon name="discount" class="icon" />
                   <span>{{ t('knowledgeBase.tagEditDialogHeading') }}</span>
                 </button>
                 <DocumentActionMenu
                   :item="item"
+                  :allowed-actions="actionsFor?.(item.id)"
                   :can-download="canDownload"
                   :can-mutate-knowledge="canMutateKnowledge"
                   :trace-visible="!!traceVisibleIds[item.id] || (item.parse_status === 'pending' || item.parse_status === 'processing' || item.parse_status === 'finalizing')"
@@ -411,6 +426,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
                   @edit="handleAction('edit', item)"
                   @view-trace="handleAction('view-trace', item)"
                   @reparse="handleAction('reparse', item)"
+                  @host-action="handleAction($event, item)"
                   @cancel-parse="handleAction('cancel-parse', item)"
                   @move="handleAction('move', item)"
                   @move-folder="handleAction('move-folder', item)"
@@ -571,7 +587,9 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   &:focus-within .row-more-btn,
   &:hover .row-more-btn,
   &.menu-open .row-more-btn,
-  &.selected .row-more-btn {
+  &.selected .row-file-error { color: var(--td-error-color); overflow-wrap: anywhere; }
+
+.row-more-btn {
     opacity: 1;
   }
 }
