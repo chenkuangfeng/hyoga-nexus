@@ -4,6 +4,7 @@ import test, { type TestContext } from 'node:test'
 import { createI18n } from 'vue-i18n'
 import * as vue from 'vue'
 import * as stall from '../../utils/knowledgeProcessingStall.ts'
+import * as folders from '@nexus-web/core/components/knowledge/documents/folderTree'
 import { fixture, flush } from '@nexus-web/core/test-utils/vueFixture'
 import enUS from '@nexus-web/core/i18n/locales/en-US'
 import zhCN from '@nexus-web/core/i18n/locales/zh-CN'
@@ -80,6 +81,7 @@ async function setup(t: TestContext, tree: unknown) {
     '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({}) },
 
     '@/utils/kbPermission': {}, '@/utils/knowledgeDeletion': {}, '@/utils/knowledgeTrace': {},
+    '@nexus-web/core/components/knowledge/documents/folderTree': folders,
     '@/utils/knowledgeProcessingStall': stall, '@nexus-web/core/api/wiki/index': {}, '@nexus-web/core/api/knowledge-base/index': {},
     '@nexus-web/core/api/knowledge-base/index': { listKnowledgeFolders, listKnowledgeTags: async () => ({ data: { data: [], total: 0 } }) },
   })

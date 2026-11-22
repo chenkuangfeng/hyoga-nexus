@@ -35,6 +35,7 @@ import {
   getKnowledgeSpans,
   getKnowledgeDetails,
   listKnowledgeFolders,
+  createKnowledgeFolder,
   moveKnowledgeToFolder,
   renameKnowledgeFolder,
   downKnowledgeDetails,
@@ -47,8 +48,9 @@ import FAQEntryManager from './components/FAQEntryManager.vue';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
-import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
-import KbFolderTree from './components/KbFolderTree.vue';
+import KbUploadSourceDropdown from '@nexus-web/core/components/knowledge/documents/KbUploadSourceDropdown.vue';
+import KbDocumentLayout from '@nexus-web/core/components/knowledge/documents/KbDocumentLayout.vue';
+import KbFolderTree from '@nexus-web/core/components/knowledge/documents/KbFolderTree.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import type { KnowledgeProcessOverrides } from '@nexus-web/core/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult } from '@/stores/uploadConfirm';
@@ -73,7 +75,7 @@ import {
   folderPathExists as folderExistsInTree,
   isFilteringDocuments,
   ROOT_FOLDER_PATH,
-} from './folderTree';
+} from '@nexus-web/core/components/knowledge/documents/folderTree';
 import {
   DEFAULT_DOCUMENT_SORT,
   DOCUMENT_SORT_OPTIONS,
@@ -766,9 +768,7 @@ const folderTreeLoading = ref(false);
 const selectedFolderPath = ref<string>(ROOT_FOLDER_PATH);
 const folderTreeCollapsed = ref(readStoredFlag(FOLDER_TREE_COLLAPSED_KEY));
 const hasFolders = computed(() => (folderTree.value?.folders?.length ?? 0) > 0);
-// The folder column only earns its space once the knowledge base actually has
-// folders, so knowledge bases filled with single-file uploads look unchanged.
-const showFolderTree = computed(() => !isFAQ.value && hasFolders.value);
+const showFolderTree = computed(() => !isFAQ.value && (canEdit.value || hasFolders.value));
 // Browsing lists one folder's own contents; filtering searches its whole
 // subtree. There is no mode switch: the list follows what the user is doing.
 const isFiltering = computed(() =>
@@ -925,6 +925,14 @@ const loadFolderTree = async (kbIdValue: string) => {
 const handleFolderSelect = (path: string) => {
   if (selectedFolderPath.value === path) return;
   selectedFolderPath.value = path;
+};
+
+const handleFolderCreate = async (path: string) => {
+  const targetKb = kbId.value;
+  if (!targetKb || !canEdit.value) return;
+  const created = await createKnowledgeFolder(targetKb, path);
+  await loadFolderTree(targetKb);
+  if (isCurrentKb(targetKb)) handleFolderSelect(created);
 };
 
 // ── Re-filing documents and renaming folders ──
@@ -1730,13 +1738,13 @@ const ensureDocumentKbReady = () => {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return false;
   }
-  if (!kbInfo.value || !kbInfo.value.summary_model_id) {
+  if (!kbInfo.value) {
     MessagePlugin.warning(t('knowledgeBase.notInitialized'));
     return false;
   }
   // Embedding model only required when RAG indexing is enabled
   const strategy = (kbInfo.value as any).indexing_strategy
-  const needsEmbedding = !strategy || strategy.vector_enabled || strategy.keyword_enabled
+  const needsEmbedding = !strategy || strategy.vector_enabled
   if (needsEmbedding && !kbInfo.value.embedding_model_id) {
     MessagePlugin.warning(t('knowledgeBase.notInitialized'));
     return false;
@@ -2419,11 +2427,14 @@ watch(cardList, () => {
       <!-- wiki/graph tabs only exist on wiki KBs; a stale tab (?tab= or one
            carried over from a previous KB) falls back to documents. -->
       <template v-if="activeKbTab === 'documents' || (!isWiki && activeKbTab !== 'gallery')">
-        <div class="knowledge-main">
+        <KbDocumentLayout>
+          <template #folders>
           <KbFolderTree v-if="showFolderTree && !folderTreeCollapsed" :tree="folderTree" :selected-path="selectedFolderPath"
             :loading="folderTreeLoading" :can-edit="canEdit" :root-label="kbInfo?.name"
+            :create-folder="handleFolderCreate"
             @select="handleFolderSelect" @update:collapsed="handleFolderTreeCollapsedChange"
             @rename="handleFolderRename" />
+          </template>
           <div class="tag-content">
             <div class="doc-card-area">
               <div class="doc-filter-bar">
@@ -2691,7 +2702,7 @@ watch(cardList, () => {
               </div>
             </div>
           </div>
-        </div>
+        </KbDocumentLayout>
       </template>
 
       <!-- DocContent drawer (shared by documents tab and wiki source refs) -->
@@ -2798,30 +2809,6 @@ watch(cardList, () => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-// Directory navigation and the document content share the available width.
-.knowledge-main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  background: transparent;
-  border: none;
-}
-
-@media (max-width: 1000px) {
-  .knowledge-main {
-    flex-direction: column;
-    :deep(.kb-folder-tree) {
-      width: 100%;
-      max-height: 200px;
-      padding: 0 0 12px;
-      margin: 0 0 16px;
-      border-right: 0;
-      border-bottom: 1px solid var(--td-component-stroke);
-    }
-    :deep(.kb-folder-tree__header) { height: 28px; padding-bottom: 4px; }
-  }
 }
 
 // 标签筛选浮层：点击工具栏入口展开，不占文档列表横向空间

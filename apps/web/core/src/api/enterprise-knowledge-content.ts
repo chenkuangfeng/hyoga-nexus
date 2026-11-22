@@ -1,5 +1,6 @@
 /** 企业知识库内容客户端：显式企业路径、运行时响应校验、沿用现有文档/FAQ/Wiki 契约。 */
 import { del, get, getDown, post, postUpload, put } from '../utils/request'
+import type { KnowledgeFolderNode, KnowledgeFolderTree } from './knowledge-base/index'
 
 export type KnowledgeDocumentState = 'pending' | 'parsed' | 'embedded' | 'ready' | 'failed' | 'superseded'
 export interface KnowledgeDocumentVersion {
@@ -58,19 +59,43 @@ function documentFromResponse(value: unknown, kb: string): EnterpriseKnowledgeDo
     latest_version: row.latest_version === null ? null : versionFromResponse(row.latest_version),
     created_at: string(row.created_at), updated_at: string(row.updated_at) }
 }
-export async function listEnterpriseKnowledgeDocuments(tenant: string, kb: string, keyword: string, offset: number, limit: number): Promise<KnowledgeDocumentPage> {
+export async function listEnterpriseKnowledgeDocuments(tenant: string, kb: string, keyword: string, offset: number,
+  limit: number, folder?: string): Promise<KnowledgeDocumentPage> {
   const query = new URLSearchParams({ keyword, offset: String(offset), limit: String(limit) })
+  if (folder !== undefined) {
+    query.set('folder_path', folder)
+    query.set('folder_recursive', String(Boolean(keyword)))
+  }
   const row = object(await get(`${base(tenant, kb)}/documents?${query}`)), items = array(row.items).map(item => documentFromResponse(item, kb))
   if (new Set(items.map(item => item.id)).size !== items.length) throw invalid()
   return { items, total: count(row.total) }
 }
-export async function uploadEnterpriseKnowledgeDocument(tenant: string, kb: string, file: File, progress?: (loaded: number, total: number) => void): Promise<{ document: EnterpriseKnowledgeDocument; deduplicated: boolean }> {
+export async function uploadEnterpriseKnowledgeDocument(tenant: string, kb: string, file: File,
+  progress?: (loaded: number, total: number) => void, fileName?: string): Promise<{ document: EnterpriseKnowledgeDocument; deduplicated: boolean }> {
   const form = new FormData(); form.append('file', file)
+  if (fileName) form.append('filename', fileName)
   const result = object(await postUpload(`${base(tenant, kb)}/documents`, form, event => {
     if (event.total) progress?.(event.loaded, event.total)
   }))
   if (typeof result.deduplicated !== 'boolean') throw invalid()
   return { document: documentFromResponse(result.document, kb), deduplicated: result.deduplicated }
+}
+
+function folderFromResponse(value: unknown): KnowledgeFolderNode {
+  const row = object(value)
+  return { path: string(row.path), name: string(row.name), document_count: count(row.document_count),
+    total_count: count(row.total_count), children: array(row.children).map(folderFromResponse) }
+}
+export async function listEnterpriseKnowledgeFolders(tenant: string, kb: string): Promise<KnowledgeFolderTree> {
+  const row = object(await get(`${base(tenant, kb)}/folders`))
+  return { root_document_count: count(row.root_document_count), total_document_count: count(row.total_document_count),
+    folders: array(row.folders).map(folderFromResponse) }
+}
+export async function createEnterpriseKnowledgeFolder(tenant: string, kb: string, path: string): Promise<string> {
+  return string(object(await post(`${base(tenant, kb)}/folders`, { path })).path)
+}
+export async function renameEnterpriseKnowledgeFolder(tenant: string, kb: string, source: string, target: string): Promise<void> {
+  await put(`${base(tenant, kb)}/folders`, { source, target })
 }
 export async function retryEnterpriseKnowledgeDocument(tenant: string, id: string): Promise<void> {
   const row = object(await post(`${root(tenant)}/documents/${encodeURIComponent(id)}/retry`, {}))

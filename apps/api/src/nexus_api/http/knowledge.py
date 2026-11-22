@@ -9,6 +9,7 @@ Choosing a feature the capability catalog marks ``planned`` answers 422 ``capabi
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -31,6 +32,7 @@ from nexus_platform.persistence.models import (AuditRecord, KnowledgeBaseRecord,
 from nexus_platform.shared_spaces import kb_shares
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}/knowledge', tags=['Knowledge'])
+logger = logging.getLogger(__name__)
 
 for _feature in ('retrieval_test', 'share', 'activity'):
     capabilities.mark_available('kb_feature', _feature)
@@ -267,6 +269,7 @@ async def graph_overview(tenant_id: UUID, kb_id: UUID, request: Request, names: 
 # ---------------------------------------------------------------- documents
 
 @router.get('/bases/{kb_id}/documents')
+@admin_router.get('/bases/{kb_id}/documents')
 def list_documents(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_length=200),
                    tag_ids: str = Query('', max_length=2000), folder_path: str | None = Query(None, max_length=1024),
                    folder_recursive: bool = True, file_type: str = Query('', max_length=16),
@@ -281,29 +284,42 @@ def list_documents(tenant_id: UUID, kb_id: UUID, keyword: str = Query('', max_le
 
 
 @router.post('/bases/{kb_id}/documents', status_code=201)
+@admin_router.post('/bases/{kb_id}/documents', status_code=201)
 async def upload_document(tenant_id: UUID, kb_id: UUID, file: UploadFile = File(...),
-                          filename: str | None = Form(None), principal: Principal = Depends(get_principal),
+                          filename: str | None = Form(None), folder_path: str | None = Form(None, max_length=1024),
+                          principal: Principal = Depends(get_principal),
                           db: Session = Depends(get_database_session)) -> dict[str, Any]:
-    """Multipart upload (field ``file``). Same bytes already in the base: ``deduplicated: true``, no new version."""
+    """Upload into a directory, accepting the legacy path-qualified filename."""
     limit = knowledge_settings().max_upload_mb * 1024 * 1024
     data = await file.read(limit + 1)
-    name = filename or file.filename or ''
-    user = _user(db, principal, tenant_id)
-    kb, digest, duplicate = service.prepare_upload(db, tenant_id, user.id, kb_id, name, data, limit)
+    name = (filename or file.filename or '').replace('\\', '/')
+    relative, _, name = name.rpartition('/')
+    folder = organize.clean_folder(relative if folder_path is None and filename else folder_path)
+    user_id = _user(db, principal, tenant_id).id
+    kb, digest, duplicate = service.prepare_upload(db, tenant_id, user_id, kb_id, name, data, limit, folder=folder)
     if duplicate is not None:
         return {'document': service.document_view(db, duplicate), 'deduplicated': True}
     existing = db.scalar(select(KnowledgeDocumentRecord.id).where(
         KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active',
-        KnowledgeDocumentRecord.filename == name.strip().replace('\\', '/').rsplit('/', 1)[-1]))
+        KnowledgeDocumentRecord.folder_path == folder, KnowledgeDocumentRecord.filename == name.strip()))
     document_id, version_id = existing or uuid4(), uuid4()
     blob = stores.blob_store_for(db, kb)
     key = service.blob_key(kb, document_id, version_id)
     db.rollback()  # end the read transaction before the (possibly slow) file write; do not touch kb after this
     await blob.put(key, data)
     with db.begin():
-        kb = access.maintainable_base(db, kb_id, tenant_id, user.id)
-        doc, _ = service.add_version(db, kb, user.id, name, digest, len(data), document_id, version_id)
-    return {'document': service.document_view(db, doc), 'deduplicated': False}
+        kb = access.lock_maintainable_base(db, kb_id, tenant_id, user_id)
+        duplicate = service.find_upload_duplicate(db, kb.id, folder, digest)
+        doc = duplicate
+        if doc is None:
+            doc, _ = service.add_version(db, kb, user_id, name, digest, len(data), document_id, version_id, folder=folder)
+        result = {'document': service.document_view(db, doc), 'deduplicated': duplicate is not None}
+    if duplicate is not None:
+        try:
+            await blob.delete(key)
+        except Exception:
+            logger.warning('Could not remove a redundant knowledge upload')
+    return result
 
 
 @router.get('/documents/{document_id}')
@@ -470,6 +486,7 @@ def set_document_tags(tenant_id: UUID, body: TagBatchInput, principal: Principal
 
 
 @router.get('/bases/{kb_id}/folders')
+@admin_router.get('/bases/{kb_id}/folders')
 def get_folders(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get_principal),
                 db: Session = Depends(get_database_session)):
     user = _user(db, principal, tenant_id)
@@ -477,11 +494,26 @@ def get_folders(tenant_id: UUID, kb_id: UUID, principal: Principal = Depends(get
 
 
 @router.put('/bases/{kb_id}/folders')
+@admin_router.put('/bases/{kb_id}/folders')
 def rename_folder(tenant_id: UUID, kb_id: UUID, body: FolderRenameInput, principal: Principal = Depends(get_principal),
                   db: Session = Depends(get_database_session)):
     with db.begin():
         user = _user(db, principal, tenant_id)
         return {'moved': organize.rename_folder(db, tenant_id, user.id, kb_id, body.source, body.target)}
+
+
+class FolderCreateInput(BaseModel):
+    path: str = Field(min_length=1, max_length=1024)
+
+
+@router.post('/bases/{kb_id}/folders', status_code=201)
+@admin_router.post('/bases/{kb_id}/folders', status_code=201)
+def create_folder(tenant_id: UUID, kb_id: UUID, body: FolderCreateInput, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)):
+    """Create an empty document directory under the current knowledge base."""
+    with db.begin():
+        user = _user(db, principal, tenant_id)
+        return {'path': organize.create_folder(db, tenant_id, user.id, kb_id, body.path)}
 
 
 @router.put('/bases/{kb_id}/pin')

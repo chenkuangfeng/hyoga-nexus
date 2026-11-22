@@ -59,3 +59,7 @@ Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始
 TenantView 与 tenant_view 映射现有 tenants.code（string/null），用于当前企业、管理详情、列表和创建/更新回执。原有成员读取及管理写入授权保持一致；TenantUpdate 不提供编码修改字段，无数据库迁移。
 
 知识库 HTTP 创建入口按应用职责隔离：普通入口完成身份与成员校验后抛出 Forbidden，不调用建库服务；管理入口固定 enterprise 归属并执行现有企业知识库管理权限检查。领域建库服务保留历史个人库与内部装配兼容性，客户端不能通过普通入口创建个人库。文档上传、分块、FAQ、Wiki 等接口继续按资源维护权限逐请求授权。
+
+## 知识库文档目录
+
+`GET /knowledge/bases/{kb_id}/folders` 返回目录树和文档计数，`POST` 接收 `{path}` 并创建持久目录，`PUT` 重命名目录和下级路径。文档上传 `POST /knowledge/bases/{kb_id}/documents` 接受 multipart `folder_path`。旧客户端也可在 `filename` 传递相对目录和文件名。企业管理路径在租户 ID 后增加 `/admin`，使用相同的文档维护授权。

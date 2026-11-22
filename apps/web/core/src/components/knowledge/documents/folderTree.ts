@@ -1,4 +1,4 @@
-import type { KnowledgeFolderNode, KnowledgeFolderTree } from '@nexus-web/core/api/knowledge-base/index'
+import type { KnowledgeFolderNode, KnowledgeFolderTree } from '../../../api/knowledge-base/index'
 
 /**
  * Pure helpers behind the knowledge base folder sidebar.

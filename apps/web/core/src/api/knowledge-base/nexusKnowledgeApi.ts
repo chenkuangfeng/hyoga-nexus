@@ -216,6 +216,12 @@ export async function folderTree(kbId: string): Promise<Json> {
   return ok(await get(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/folders`))
 }
 
+export async function createFolder(kbId: string, path: string): Promise<string> {
+  const result = await post<{ path: string }>(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/folders`, { path })
+  if (typeof result.path !== 'string' || !result.path) throw new Error('Invalid folder response')
+  return result.path
+}
+
 export async function renameFolder(kbId: string, source: string, target: string): Promise<Json> {
   return ok(await put(`${knowledgePath()}/bases/${encodeURIComponent(kbId)}/folders`, { source, target }))
 }

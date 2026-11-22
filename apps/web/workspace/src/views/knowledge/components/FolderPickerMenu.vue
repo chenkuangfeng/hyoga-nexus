@@ -59,7 +59,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { folderOptionFromPath, joinFolderPath, normalizeFolderPath, sortFolderOptions } from '../folderTree'
+import { folderOptionFromPath, joinFolderPath, normalizeFolderPath, sortFolderOptions } from '@nexus-web/core/components/knowledge/documents/folderTree'
 
 export type FolderOption = { path: string; name: string; depth: number }
 

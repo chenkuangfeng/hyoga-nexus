@@ -9,7 +9,7 @@ import DocumentActionMenu from './DocumentActionMenu.vue';
 import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { shownStall } from '@/utils/knowledgeProcessingStall';
-import type { FolderEntry } from '../folderTree';
+import type { FolderEntry } from '@nexus-web/core/components/knowledge/documents/folderTree';
 
 interface KnowledgeCard {
   id: string;

@@ -30,11 +30,11 @@
           :class="['kb-upload-source-trigger', triggerClass]"
           :data-guide="dataGuide || undefined"
           :aria-label="tooltipText"
+          :disabled="disabled"
           size="small"
         >
           <template #icon>
-            <component v-if="triggerIconComponent" :is="triggerIconComponent" size="18px" :stroke-width="1.7" class="kb-source-icon" />
-            <t-icon v-else :name="triggerIcon" size="18px" />
+            <t-icon :name="triggerIcon" size="18px" class="kb-source-icon" />
           </template>
           <span v-if="triggerLabel">{{ triggerLabel }}</span>
         </t-button>
@@ -66,21 +66,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from 'vue'
+import { ref, computed, h, resolveComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import AddIcon from 'tdesign-icons-vue-next/esm/components/add.js';
-import FileAddIcon from 'tdesign-icons-vue-next/esm/components/file-add.js';
-import UploadIcon from 'tdesign-icons-vue-next/esm/components/upload.js';
-import FolderAddIcon from 'tdesign-icons-vue-next/esm/components/folder-add.js';
-import LinkIcon from 'tdesign-icons-vue-next/esm/components/link.js';
-import EditIcon from 'tdesign-icons-vue-next/esm/components/edit.js';
-import { filterUploadFiles } from '../utils/uploadSources'
+import { filterUploadFiles } from './uploadSources'
 
 const props = withDefaults(defineProps<{
   acceptFileTypes?: string
   supportedFileTypes?: string[]
   includeManual?: boolean
+  includeUrl?: boolean
+  disabled?: boolean
   triggerIcon?: string
   triggerLabel?: string
   triggerClass?: string
@@ -91,6 +87,7 @@ const props = withDefaults(defineProps<{
   acceptFileTypes: '',
   supportedFileTypes: () => [],
   includeManual: false,
+  includeUrl: true,
   triggerIcon: 'file-add',
   triggerClass: '',
   dataGuide: '',
@@ -113,43 +110,38 @@ const urlInputValue = ref('')
 
 const tooltipText = computed(() => props.tooltip || t('knowledgeBase.addDocument'))
 
-const triggerIconComponent = computed(() => ({
-  add: AddIcon,
-  'file-add': FileAddIcon,
-  upload: UploadIcon,
-}[props.triggerIcon]));
-
-const sourceIconProps = { size: '18px', strokeWidth: 1.7, class: 'kb-source-icon' };
+const icon = resolveComponent('t-icon')
+const optionIcon = (name: string) => () => h(icon, { name, size: '18px', class: 'kb-source-icon' })
 
 const dropdownOptions = computed(() => {
   const options = [
     {
       content: t('upload.uploadDocument'),
       value: 'upload',
-      prefixIcon: () => h(FileAddIcon, sourceIconProps),
+      prefixIcon: optionIcon('file-add'),
     },
     {
       content: t('upload.uploadFolder'),
       value: 'uploadFolder',
-      prefixIcon: () => h(FolderAddIcon, sourceIconProps),
-    },
-    {
-      content: t('knowledgeBase.importURL'),
-      value: 'importURL',
-      prefixIcon: () => h(LinkIcon, sourceIconProps),
+      prefixIcon: optionIcon('folder-add'),
     },
   ]
+  if (props.includeUrl) {
+    options.push({ content: t('knowledgeBase.importURL'), value: 'importURL',
+      prefixIcon: optionIcon('link') })
+  }
   if (props.includeManual) {
     options.push({
       content: t('upload.onlineEdit'),
       value: 'manualCreate',
-      prefixIcon: () => h(EditIcon, sourceIconProps),
+      prefixIcon: optionIcon('edit'),
     })
   }
   return options
 })
 
 const handleActionSelect = (data: { value: string }) => {
+  if (props.disabled) return
   switch (data.value) {
     case 'upload':
       fileInputRef.value?.click()

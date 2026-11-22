@@ -191,3 +191,46 @@ def test_workspace_cannot_create_but_assigned_maintainer_can_upload(api):
     uploaded = client.post(f'{path}/bases/{kb_id}/documents', files={'file': ('维护.md', '允许维护已有库'.encode())})
     assert uploaded.status_code == 201, uploaded.text
     assert client.post(path + '/bases', json={**payload, 'name': '仍然不可建库'}).status_code == 403
+
+
+def test_document_folders_and_targeted_upload_are_shared_by_both_routes(api):
+    client, path, identity, _ = api
+    admin = path.replace('/knowledge', '/admin/knowledge')
+    created = client.post(admin + '/bases', json={'visibility': 'tenant', 'name': '目录上传',
+                          'indexing_strategy': {'vector': False, 'keyword': True}})
+    assert created.status_code == 201, created.text
+    kb_id = created.json()['id']
+    workspace_base = f'{path}/bases/{kb_id}'
+    admin_base = f'{admin}/bases/{kb_id}'
+    folders = workspace_base + '/folders'
+
+    assert client.post(folders, json={'path': '资料/空目录'}).json() == {'path': '资料/空目录'}
+    assert client.post(admin_base + '/folders', json={'path': '资料/空目录'}).status_code == 201
+    empty = client.get(folders).json()['folders'][0]['children'][0]
+    assert empty == {'path': '资料/空目录', 'name': '空目录', 'document_count': 0, 'total_count': 0, 'children': []}
+
+    def upload(base, data, **fields):
+        result = client.post(base + '/documents', data=fields, files={'file': ('same.txt', data)})
+        assert result.status_code == 201, result.text
+        return result.json()
+
+    first = upload(workspace_base, b'indexed text', folder_path='资料/空目录')
+    second = upload(admin_base, b'indexed text', filename='资料/导入目录/子目录/same.txt')
+    assert first['document']['folder_path'] == '资料/空目录'
+    assert second['document']['folder_path'] == '资料/导入目录/子目录'
+    assert first['document']['id'] != second['document']['id']
+    assert upload(admin_base, b'indexed text', folder_path='资料/空目录')['deduplicated']
+    updated = upload(workspace_base, b'new version', folder_path='资料/空目录')['document']
+    assert updated['id'] == first['document']['id'] and updated['latest_version']['version'] == 2
+    rows = client.get(admin_base + '/documents', params={'folder_path': '资料/空目录', 'folder_recursive': False}).json()
+    assert [doc['id'] for doc in rows['items']] == [updated['id']]
+    assert client.get(folders).json()['folders'][0]['total_count'] == 2
+    assert client.put(folders, json={'source': '资料/导入目录', 'target': '资料/空目录'}).status_code == 200
+    assert client.put(folders, json={'source': '资料/空目录/子目录', 'target': '资料/空目录'}).status_code == 409
+    assert client.post(folders, json={'path': '资料/../错误'}).status_code == 422
+
+    identity[0] = MEMBER
+    assert client.get(folders).status_code == 200
+    assert client.post(folders, json={'path': '未经授权'}).status_code == 403
+    assert client.post(admin_base + '/documents', data={'folder_path': '资料'},
+                       files={'file': ('x.txt', b'x')}).status_code == 403

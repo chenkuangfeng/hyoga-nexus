@@ -121,12 +121,20 @@ class KnowledgeBaseMaintainerRecord(Base):
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class KnowledgeFolderRecord(Base):
+    """An explicit directory in a knowledge base, including empty directories."""
+
+    __tablename__ = 'knowledge_folders'
+    kb_id: Mapped[UUID] = mapped_column(ForeignKey('knowledge_bases.id', ondelete='CASCADE'), primary_key=True)
+    path: Mapped[str] = mapped_column(String(1024), primary_key=True)
+
+
 class KnowledgeDocumentRecord(Base):
     __tablename__ = 'knowledge_documents'
     __table_args__ = (
         CheckConstraint("status IN ('active','deleting')", name='ck_knowledge_documents_status'),
         Index('ix_knowledge_documents_kb', 'kb_id', 'status'),
-        Index('uq_knowledge_documents_name', 'kb_id', 'filename', unique=True,
+        Index('uq_knowledge_documents_name', 'kb_id', 'folder_path', 'filename', unique=True,
               sqlite_where=text("status = 'active'"), postgresql_where=text("status = 'active'")),
     )
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)

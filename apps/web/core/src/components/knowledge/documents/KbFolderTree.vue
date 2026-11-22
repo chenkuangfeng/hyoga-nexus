@@ -7,6 +7,11 @@
           :title="t('knowledgeBase.folderTree.totalDocuments', { count: tree.total_document_count })">
           {{ t('knowledgeBase.folderTree.totalDocuments', { count: tree.total_document_count }) }}
         </span>
+        <button v-if="canEdit && createFolder" type="button" class="kb-folder-tree__icon-btn"
+          :title="t('knowledgeBase.moveToFolder.newFolder')"
+          :aria-label="t('knowledgeBase.moveToFolder.newFolder')" @click="openCreate">
+          <t-icon name="folder-add" size="16px" />
+        </button>
         <t-tooltip :content="t('knowledgeBase.folderTree.collapse')" placement="top">
           <button
             type="button"
@@ -130,20 +135,33 @@
         </div>
       </template>
     </div>
+    <t-dialog v-if="createVisible" :visible="createVisible" :header="t('knowledgeBase.moveToFolder.newFolder')"
+      :confirm-btn="{ content: t('knowledgeBase.moveToFolder.newFolderCreate'), loading: creating, disabled: !newPath }"
+      :cancel-btn="{ content: t('common.cancel'), disabled: creating }"
+      :close-on-overlay-click="!creating" :close-on-esc-keydown="!creating"
+      width="min(420px, calc(100vw - 24px))" @confirm="submitCreate" @close="!creating && (createVisible = false)">
+      <p>{{ createParent ? t('knowledgeBase.moveToFolder.newFolderHintUnder', { folder: createParent })
+        : t('knowledgeBase.moveToFolder.newFolderHintRoot') }}</p>
+      <label>{{ t('knowledgeBase.folderTree.renamePlaceholder') }}
+        <t-input v-model="createName" :maxlength="128" autofocus :disabled="creating" @enter="submitCreate" />
+      </label>
+      <t-alert v-if="createFailed" class="kb-folder-create-error" theme="error"
+        :message="t('knowledgeEditor.wikiBrowser.createFolderFailed')" />
+    </t-dialog>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { KnowledgeFolderTree } from '@nexus-web/core/api/knowledge-base/index'
+import type { KnowledgeFolderTree } from '../../../api/knowledge-base/index'
 import {
   buildFolderRows,
   folderAncestorPaths,
   joinFolderPath,
   ROOT_FOLDER_PATH,
   type FolderRow,
-} from '../folderTree'
+} from './folderTree'
 
 const props = withDefaults(defineProps<{
   tree: KnowledgeFolderTree | null
@@ -153,6 +171,7 @@ const props = withDefaults(defineProps<{
   loading?: boolean
   collapsed?: boolean
   canEdit?: boolean
+  createFolder?: (path: string) => Promise<void>
 }>(), {
   loading: false,
   collapsed: false,
@@ -166,6 +185,34 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const createVisible = ref(false), creating = ref(false), createFailed = ref(false)
+const createName = ref(''), createParent = ref('')
+const newPath = computed(() => {
+  const name = createName.value.trim()
+  if (!name || name === '.' || name === '..' || /[/\\\x00-\x1f]/.test(name)) return ''
+  return createParent.value ? `${createParent.value}/${name}` : name
+})
+
+function openCreate() {
+  createParent.value = props.selectedPath
+  createName.value = ''
+  createFailed.value = false
+  createVisible.value = true
+}
+
+async function submitCreate() {
+  if (!props.canEdit || !props.createFolder || !newPath.value || creating.value) return
+  creating.value = true
+  createFailed.value = false
+  try {
+    await props.createFolder(newPath.value)
+    createVisible.value = false
+  } catch {
+    createFailed.value = true
+  } finally {
+    creating.value = false
+  }
+}
 
 // The root starts expanded so the uploaded structure is visible without a click.
 const expanded = ref(new Set<string>([ROOT_FOLDER_PATH]))
@@ -261,7 +308,7 @@ watch(
   min-height: 0;
   padding-right: 12px;
   margin-right: 16px;
-  border-right: 1px solid var(--td-component-stroke);
+  border-inline-end: 1px solid var(--td-component-stroke);
   box-sizing: border-box;
 
   &.is-collapsed {
@@ -321,6 +368,8 @@ watch(
     background: var(--td-bg-color-container-hover);
   }
 }
+
+.kb-folder-create-error { margin-top: 12px; }
 
 .kb-folder-tree__body {
   flex: 1;

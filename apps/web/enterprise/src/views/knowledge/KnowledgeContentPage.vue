@@ -5,11 +5,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
+import KbFolderTree from '@nexus-web/core/components/knowledge/documents/KbFolderTree.vue'
+import KbDocumentLayout from '@nexus-web/core/components/knowledge/documents/KbDocumentLayout.vue'
+import KbUploadSourceDropdown from '@nexus-web/core/components/knowledge/documents/KbUploadSourceDropdown.vue'
+import { buildUploadFileName, folderPathExists } from '@nexus-web/core/components/knowledge/documents/folderTree'
+import type { KnowledgeFolderTree } from '@nexus-web/core/api/knowledge-base/index'
 import { useEnterpriseContext } from '../../stores/context'
 import { listEnterpriseKnowledgeBases, type EnterpriseKnowledgeBase } from '@nexus-web/core/api/enterprise-knowledge'
 import {
   deleteEnterpriseFaqEntry, deleteEnterpriseKnowledgeDocument, deleteEnterpriseWikiPage, downloadEnterpriseKnowledgeDocument,
-  getEnterpriseWikiPage, listEnterpriseFaqEntries, listEnterpriseKnowledgeDocuments, listEnterpriseWikiPages,
+  getEnterpriseWikiPage, listEnterpriseFaqEntries, listEnterpriseKnowledgeDocuments, listEnterpriseKnowledgeFolders, listEnterpriseWikiPages,
+  createEnterpriseKnowledgeFolder, renameEnterpriseKnowledgeFolder,
   retryEnterpriseKnowledgeDocument, saveEnterpriseFaqEntry, saveEnterpriseWikiPage, uploadEnterpriseKnowledgeDocument,
   type EnterpriseFaqEntry, type EnterpriseKnowledgeDocument, type EnterpriseWikiPage, type FaqEntryInput, type WikiPageInput,
 } from '@nexus-web/core/api/enterprise-knowledge-content'
@@ -26,7 +32,12 @@ const knowledgeOptions = computed(() => knowledgeBases.value.map(row => ({
 const loading = ref(false), working = ref(false), error = ref(''), ready = ref(false)
 const keyword = ref(''), page = ref(1), pageSize = 20, total = ref(0)
 const documents = ref<EnterpriseKnowledgeDocument[]>([]), faqEntries = ref<EnterpriseFaqEntry[]>([]), wikiPages = ref<EnterpriseWikiPage[]>([])
-const uploadInput = ref<HTMLInputElement | null>(null), uploadLabel = ref(''), uploadPercent = ref(0)
+const uploadLabel = ref(''), uploadPercent = ref(0)
+const folderTree = ref<KnowledgeFolderTree | null>(null), folder = ref(''), folderLoading = ref(false)
+const folderCollapsed = ref(false), wikiTab = ref('pages')
+const documentMode = computed(() => knowledgeBase.value?.type === 'document'
+  || (knowledgeBase.value?.type === 'wiki' && wikiTab.value === 'documents'))
+let rowsRequest = 0, foldersRequest = 0
 const faqDialog = ref(false), faqSaving = ref(false), faqEditId = ref<string | null>(null)
 const faqForm = ref({ standardQuestion: '', answers: '', similarQuestions: '', negativeQuestions: '', category: '', tagId: null as string | null, strategy: 'all' as 'all' | 'first', enabled: true, recommended: false })
 const wikiDialog = ref(false), wikiLoading = ref(false), wikiSaving = ref(false), wikiEditSlug = ref<string | null>(null)
@@ -45,6 +56,7 @@ function reset() {
   epoch++; confirmation?.hide(); confirmation = undefined
   knowledgeBase.value = null; knowledgeBases.value = []; loading.value = false; working.value = false; error.value = ''; ready.value = false
   page.value = 1; total.value = 0; documents.value = []; faqEntries.value = []; wikiPages.value = []
+  folderTree.value = null; folder.value = ''; folderLoading.value = false; folderCollapsed.value = false; wikiTab.value = 'pages'
   uploadLabel.value = ''; uploadPercent.value = 0; faqDialog.value = false; faqSaving.value = false; faqEditId.value = null
   wikiDialog.value = false; wikiLoading.value = false; wikiSaving.value = false; wikiEditSlug.value = null
 }
@@ -53,24 +65,26 @@ function currentScope(current: number, scope: string, user: string, id: string) 
 }
 async function loadRows(current: number, scope: string, user: string, id: string) {
   if (!knowledgeBase.value) return
+  const request = ++rowsRequest
+  const active = () => request === rowsRequest && currentScope(current, scope, user, id)
   error.value = ''; loading.value = true
   try {
     const offset = (page.value - 1) * pageSize, query = keyword.value.trim()
     if (knowledgeBase.value.type === 'faq') {
       const result = await listEnterpriseFaqEntries(scope, id, query, offset, pageSize)
-      if (!currentScope(current, scope, user, id)) return
+      if (!active()) return
       faqEntries.value = result.items; total.value = result.total
-    } else if (knowledgeBase.value.type === 'wiki') {
+    } else if (knowledgeBase.value.type === 'wiki' && !documentMode.value) {
       const result = await listEnterpriseWikiPages(scope, id, query, page.value, pageSize)
-      if (!currentScope(current, scope, user, id)) return
+      if (!active()) return
       wikiPages.value = result.items; total.value = result.total
     } else {
-      const result = await listEnterpriseKnowledgeDocuments(scope, id, query, offset, pageSize)
-      if (!currentScope(current, scope, user, id)) return
+      const result = await listEnterpriseKnowledgeDocuments(scope, id, query, offset, pageSize, folder.value)
+      if (!active()) return
       documents.value = result.items; total.value = result.total
     }
-  } catch { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.loadFailed') }
-  finally { if (currentScope(current, scope, user, id)) loading.value = false }
+  } catch { if (active()) error.value = t('adminKnowledge.content.loadFailed') }
+  finally { if (active()) loading.value = false }
 }
 async function load() {
   reset()
@@ -84,17 +98,72 @@ async function load() {
     if (!selected) { error.value = t('adminKnowledge.content.denied'); return }
     knowledgeBases.value = rows.filter(row => row.tenant_id === scope && row.can_manage)
     knowledgeBase.value = selected; ready.value = true
-    await loadRows(current, scope, user, id)
+    await Promise.all([loadRows(current, scope, user, id), refreshFolders()])
   } catch { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.loadFailed') }
   finally { if (currentScope(current, scope, user, id)) loading.value = false }
 }
 function refreshSearch() { page.value = 1; const current = epoch; void loadRows(current, tenant.value, String(auth.user?.id || ''), kbId.value) }
 function goToPage(next: number) { if (next < 1 || next > pageCount.value || next === page.value) return; page.value = next; void loadRows(epoch, tenant.value, String(auth.user?.id || ''), kbId.value) }
-function openUpload() { if (knowledgeBase.value?.type !== 'faq') uploadInput.value?.click() }
-async function uploadFiles(event: Event) {
-  const input = event.target as HTMLInputElement, files = Array.from(input.files || []); input.value = ''
+async function refreshFolders() {
+  if (!documentMode.value) return
+  const request = ++foldersRequest
+  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = kbId.value
+  const active = () => request === foldersRequest && currentScope(current, scope, user, id)
+  folderLoading.value = true
+  try {
+    const tree = await listEnterpriseKnowledgeFolders(scope, id)
+    if (!active()) return
+    folderTree.value = tree
+    if (folder.value && !folderPathExists(tree.folders, folder.value)) selectFolder('')
+  } catch {
+    if (active()) folderTree.value = null
+  } finally {
+    if (active()) folderLoading.value = false
+  }
+}
+
+function selectFolder(path: string) {
+  if (working.value || folder.value === path) return
+  folder.value = path
+  refreshSearch()
+}
+
+async function createFolder(path: string) {
+  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = kbId.value
+  const created = await createEnterpriseKnowledgeFolder(scope, id, path)
+  if (!currentScope(current, scope, user, id)) return
+  await refreshFolders()
+  if (currentScope(current, scope, user, id)) selectFolder(created)
+}
+
+async function renameFolder({ from, to }: { from: string; to: string }) {
+  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = kbId.value
+  if (working.value) return
+  try {
+    await renameEnterpriseKnowledgeFolder(scope, id, from, to)
+    if (!currentScope(current, scope, user, id)) return
+    if (folder.value === from || folder.value.startsWith(from + '/')) {
+      folder.value = to + folder.value.slice(from.length)
+    }
+    await refreshFolders()
+    if (currentScope(current, scope, user, id)) refreshSearch()
+  } catch {
+    if (currentScope(current, scope, user, id)) error.value = t('knowledgeBase.folderTree.renameFailed')
+  }
+}
+
+function selectWikiTab(value: unknown) {
+  if (working.value || (value !== 'pages' && value !== 'documents')) return
+  wikiTab.value = value
+  keyword.value = ''
+  refreshSearch()
+  void refreshFolders()
+}
+
+async function uploadFiles(files: File[]) {
   if (!files.length || !knowledgeBase.value || working.value) return
   const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), id = knowledgeBase.value.id
+  const destination = folder.value, failed: string[] = []
   working.value = true; let uploaded = 0, deduplicated = 0
   for (const file of files) {
     if (!currentScope(current, scope, user, id)) break
@@ -102,15 +171,18 @@ async function uploadFiles(event: Event) {
     try {
       const result = await uploadEnterpriseKnowledgeDocument(scope, id, file, (loaded, totalBytes) => {
         if (currentScope(current, scope, user, id)) uploadPercent.value = Math.min(100, Math.floor(loaded / totalBytes * 100))
-      })
+      }, buildUploadFileName(file, destination))
       if (!currentScope(current, scope, user, id)) return
       uploaded++; if (result.deduplicated) deduplicated++
-    } catch { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.uploadFailed', { name: file.name }) }
+    } catch { failed.push(file.name) }
   }
   if (!currentScope(current, scope, user, id)) return
   working.value = false; uploadLabel.value = ''; page.value = 1
   if (uploaded) void MessagePlugin.success(t('adminKnowledge.content.uploaded', { count: uploaded, deduplicated }))
-  await loadRows(current, scope, user, id)
+  await Promise.all([loadRows(current, scope, user, id), refreshFolders()])
+  if (failed.length && currentScope(current, scope, user, id)) {
+    error.value = t('adminKnowledge.content.uploadFailed', { name: failed.join('、') })
+  }
 }
 function download(row: EnterpriseKnowledgeDocument) {
   if (working.value || !knowledgeBase.value) return
@@ -140,7 +212,7 @@ function confirmDelete(kind: 'document' | 'faq' | 'wiki', item: EnterpriseKnowle
         else await deleteEnterpriseWikiPage(scope, id, (item as EnterpriseWikiPage).slug)
         if (!currentScope(current, scope, user, id)) return
         void MessagePlugin.success(t('adminKnowledge.content.deleted'))
-        await loadRows(current, scope, user, id)
+        await Promise.all([loadRows(current, scope, user, id), refreshFolders()])
         if (page.value > pageCount.value) { page.value = pageCount.value; await loadRows(current, scope, user, id) }
       } catch { if (currentScope(current, scope, user, id)) error.value = t('adminKnowledge.content.deleteFailed') }
       finally { if (currentScope(current, scope, user, id)) working.value = false }
@@ -220,12 +292,27 @@ onBeforeUnmount(reset)
         </h2>
       </nav>
       <p v-if="knowledgeBase?.description" class="document-subtitle">{{ knowledgeBase.description }}</p>
-      <input ref="uploadInput" class="file-input" type="file" multiple @change="uploadFiles" />
     </header>
     <t-alert v-if="error" theme="error" :message="error" />
     <t-alert v-if="uploadLabel" theme="info" :message="t('adminKnowledge.content.uploading', { name: uploadLabel, percent: uploadPercent })" />
     <t-alert v-if="knowledgeBase?.type === 'wiki'" theme="info" :message="t('adminKnowledge.content.wikiSourceHint')" />
+    <t-tabs v-if="ready && knowledgeBase?.type === 'wiki'" :value="wikiTab" @change="selectWikiTab">
+      <t-tab-panel value="pages" :label="t('adminKnowledge.content.titleColumn')" />
+      <t-tab-panel value="documents" :label="t('knowledgeEditor.wikiBrowser.tabDocuments')" />
+    </t-tabs>
+    <KbDocumentLayout>
+      <template #folders>
+        <KbFolderTree v-if="ready && documentMode && !folderCollapsed" :tree="folderTree"
+          :root-label="knowledgeBase?.name" :selected-path="folder" :loading="folderLoading"
+          :can-edit="!working" :create-folder="createFolder" @select="selectFolder" @rename="renameFolder"
+          @update:collapsed="folderCollapsed = $event" />
+      </template>
     <div v-if="ready && knowledgeBase" class="content-toolbar">
+      <t-button v-if="documentMode && folderCollapsed" variant="text"
+        :aria-label="t('knowledgeBase.folderTree.expand')" @click="folderCollapsed = false">
+        <template #icon><t-icon name="view-list" /></template>
+      </t-button>
+      <span v-if="documentMode" class="active-folder" :title="folder">{{ folder || t('knowledgeBase.folderTree.rootRow') }}</span>
       <t-input v-model="keyword" class="content-search" clearable :placeholder="t('adminKnowledge.content.search')" :aria-label="t('adminKnowledge.content.search')" @enter="refreshSearch">
         <template #prefix-icon><t-icon name="search" size="16px" /></template>
       </t-input>
@@ -237,10 +324,10 @@ onBeforeUnmount(reset)
         <t-button v-if="knowledgeBase.type === 'faq'" theme="primary" :disabled="working" @click="blankFaq">
           <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addFaq') }}
         </t-button>
-        <t-button v-else theme="primary" :disabled="working" @click="openUpload">
-          <template #icon><t-icon name="upload" /></template>{{ t('adminKnowledge.content.upload') }}
-        </t-button>
-        <t-button v-if="knowledgeBase.type === 'wiki'" variant="outline" :disabled="working" @click="blankWiki">
+        <KbUploadSourceDropdown v-if="documentMode" :include-url="false" :disabled="working"
+          trigger-icon="upload" :trigger-label="t('knowledgeBase.addDocument')"
+          @files="uploadFiles" />
+        <t-button v-if="knowledgeBase.type === 'wiki' && !documentMode" variant="outline" :disabled="working" @click="blankWiki">
           <template #icon><t-icon name="add" /></template>{{ t('adminKnowledge.content.addWiki') }}
         </t-button>
       </div>
@@ -248,10 +335,11 @@ onBeforeUnmount(reset)
     <t-button v-else-if="error && canManage" class="content-retry" variant="outline" :loading="loading" @click="load">{{ t('connectionUi.refresh') }}</t-button>
     <t-loading :loading="loading">
       <div v-if="knowledgeBase?.type === 'faq'" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.question') }}</th><th>{{ t('adminKnowledge.content.answer') }}</th><th>{{ t('adminKnowledge.content.category') }}</th><th>{{ t('adminKnowledge.content.indexState') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in faqEntries" :key="row.id"><td>{{ row.standard_question }}</td><td>{{ row.answers.join(' / ') }}</td><td>{{ row.category || '—' }}</td><td><t-tag :theme="row.index_state === 'ready' ? 'success' : row.index_state === 'failed' ? 'danger' : 'warning'">{{ statusLabel(row.index_state) }}</t-tag></td><td class="row-actions"><t-button variant="text" :disabled="working" @click="editFaq(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working" @click="confirmDelete('faq', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!faqEntries.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noFaq') }}</td></tr></tbody></table></div>
-      <div v-else-if="knowledgeBase?.type === 'wiki'" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.titleColumn') }}</th><th>{{ t('adminKnowledge.content.slug') }}</th><th>{{ t('adminKnowledge.content.wikiType') }}</th><th>{{ t('adminKnowledge.content.status') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in wikiPages" :key="row.id"><td>{{ row.title }}</td><td><code>{{ row.slug }}</code></td><td>{{ row.page_type }}</td><td>{{ row.status }}</td><td class="row-actions"><t-button variant="text" :disabled="working || ['index','log'].includes(row.page_type)" @click="editWiki(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working || ['index','log'].includes(row.page_type)" @click="confirmDelete('wiki', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!wikiPages.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noWiki') }}</td></tr></tbody></table></div>
+      <div v-else-if="knowledgeBase?.type === 'wiki' && !documentMode" class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.titleColumn') }}</th><th>{{ t('adminKnowledge.content.slug') }}</th><th>{{ t('adminKnowledge.content.wikiType') }}</th><th>{{ t('adminKnowledge.content.status') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in wikiPages" :key="row.id"><td>{{ row.title }}</td><td><code>{{ row.slug }}</code></td><td>{{ row.page_type }}</td><td>{{ row.status }}</td><td class="row-actions"><t-button variant="text" :disabled="working || ['index','log'].includes(row.page_type)" @click="editWiki(row)">{{ t('adminKnowledge.content.edit') }}</t-button><t-button variant="text" theme="danger" :disabled="working || ['index','log'].includes(row.page_type)" @click="confirmDelete('wiki', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!wikiPages.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noWiki') }}</td></tr></tbody></table></div>
       <div v-else class="table-shell"><table><thead><tr><th>{{ t('adminKnowledge.content.filename') }}</th><th>{{ t('adminKnowledge.content.size') }}</th><th>{{ t('adminKnowledge.content.state') }}</th><th>{{ t('adminKnowledge.content.updated') }}</th><th>{{ t('adminKnowledge.content.actions') }}</th></tr></thead><tbody><tr v-for="row in documents" :key="row.id"><td><span class="filename">{{ row.filename }}</span><small v-if="row.latest_version?.error_message" class="row-error">{{ row.latest_version.error_message }}</small></td><td>{{ row.latest_version?.size ?? row.current_version?.size ?? 0 }} B</td><td><t-tag :theme="row.latest_version?.state === 'ready' ? 'success' : row.latest_version?.state === 'failed' ? 'danger' : 'warning'">{{ statusLabel(row.latest_version?.state || 'pending') }}</t-tag></td><td>{{ row.updated_at }}</td><td class="row-actions"><t-button variant="text" :disabled="working || !(row.latest_version || row.current_version)" @click="download(row)">{{ t('adminKnowledge.content.download') }}</t-button><t-button v-if="row.latest_version && ['failed','ready'].includes(row.latest_version.state)" variant="text" :disabled="working" @click="retryDocument(row)">{{ t(row.latest_version.state === 'failed' ? 'adminKnowledge.content.retry' : 'adminKnowledge.content.reindex') }}</t-button><t-button variant="text" theme="danger" :disabled="working" @click="confirmDelete('document', row)">{{ t('adminKnowledge.content.delete') }}</t-button></td></tr><tr v-if="!documents.length && !loading"><td colspan="5" class="empty">{{ t('adminKnowledge.content.noDocuments') }}</td></tr></tbody></table></div>
     </t-loading>
     <footer v-if="ready && total" class="pagination"><span>{{ t('adminKnowledge.content.total', { count: total }) }}</span><t-button variant="outline" :disabled="page <= 1 || loading || working" @click="goToPage(page - 1)">{{ t('adminKnowledge.content.previous') }}</t-button><span>{{ page }} / {{ pageCount }}</span><t-button variant="outline" :disabled="page >= pageCount || loading || working" @click="goToPage(page + 1)">{{ t('adminKnowledge.content.next') }}</t-button></footer>
+    </KbDocumentLayout>
     <t-dialog :visible="faqDialog" :header="t(faqEditId ? 'adminKnowledge.content.editFaq' : 'adminKnowledge.content.addFaq')" width="min(680px, calc(100vw - 24px))" :confirm-btn="{ content: t('adminKnowledge.content.save'), loading: faqSaving, disabled: faqSaving }" :cancel-btn="{ content: t('common.cancel'), disabled: faqSaving }" :close-btn="!faqSaving" :close-on-overlay-click="!faqSaving" @confirm="saveFaq" @close="!faqSaving && (faqDialog = false)">
       <div class="editor-form"><label>{{ t('adminKnowledge.content.question') }}<t-input v-model="faqForm.standardQuestion" maxlength="1000" /></label><label>{{ t('adminKnowledge.content.answers') }}<t-textarea v-model="faqForm.answers" :autosize="{ minRows: 3, maxRows: 8 }" :placeholder="t('adminKnowledge.content.answersHint')" /></label><label>{{ t('adminKnowledge.content.similarQuestions') }}<t-textarea v-model="faqForm.similarQuestions" :autosize="{ minRows: 2, maxRows: 5 }" /></label><label>{{ t('adminKnowledge.content.negativeQuestions') }}<t-textarea v-model="faqForm.negativeQuestions" :autosize="{ minRows: 2, maxRows: 5 }" /></label><label>{{ t('adminKnowledge.content.category') }}<t-input v-model="faqForm.category" maxlength="160" /></label><label>{{ t('adminKnowledge.content.answerStrategy') }}<t-select v-model="faqForm.strategy" :options="[{label:t('adminKnowledge.content.allAnswers'),value:'all'},{label:t('adminKnowledge.content.firstAnswer'),value:'first'}]" /></label><div class="checks"><t-checkbox v-model="faqForm.enabled">{{ t('adminKnowledge.content.enabled') }}</t-checkbox><t-checkbox v-model="faqForm.recommended">{{ t('adminKnowledge.content.recommended') }}</t-checkbox></div></div>
     </t-dialog>
@@ -271,7 +359,7 @@ onBeforeUnmount(reset)
 .breadcrumb-current span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumb-current :deep(.t-icon), .breadcrumb-separator { flex-shrink: 0; color: var(--td-text-color-placeholder); }
 .document-subtitle { margin: 4px 0 0; color: var(--td-text-color-secondary); overflow-wrap: anywhere; }
-.file-input { display: none; }
+.active-folder { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .content-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--td-component-stroke); }
 .content-search { width: 260px; max-width: 100%; }
 .content-actions { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

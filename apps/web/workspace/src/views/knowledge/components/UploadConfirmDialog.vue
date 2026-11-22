@@ -675,10 +675,10 @@ import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources'
 import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources'
 import { useUIStore } from '@/stores/ui'
 import { formatFileSize, getFileIcon } from '@/utils/files'
-import { getUploadFileKey } from '../utils/uploadSources'
+import { getUploadFileKey } from '@nexus-web/core/components/knowledge/documents/uploadSources'
 import { listKnowledgeTags, mergeImageActions, fetchImageAttrSchema, FALLBACK_IMAGE_ATTR_SCHEMA, type ImageActionsConfig, type ImageAttrSchema } from '@nexus-web/core/api/knowledge-base/index'
 import { imageAttrDisplay, imageAttrConditionDisplay } from '@nexus-web/core/utils/imageAttrDisplay'
-import KbUploadSourceDropdown from './KbUploadSourceDropdown.vue'
+import KbUploadSourceDropdown from '@nexus-web/core/components/knowledge/documents/KbUploadSourceDropdown.vue'
 import ImagePipelineSettings from '@nexus-web/core/components/knowledge-editor/ImagePipelineSettings.vue'
 import {
   buildPipelineFields,
@@ -688,7 +688,7 @@ import {
   IMAGE_PIPELINE_SMARTOCR,
 } from '@nexus-web/core/utils/imageProcessingConfig'
 import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue'
-import { folderOptionFromPath, sortFolderOptions } from '../folderTree'
+import { folderOptionFromPath, sortFolderOptions } from '@nexus-web/core/components/knowledge/documents/folderTree'
 import type { KnowledgeProcessOverrides } from '@nexus-web/core/types/knowledgeProcess'
 import type {
   UploadConfirmManualSource,

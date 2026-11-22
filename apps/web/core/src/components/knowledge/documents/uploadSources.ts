@@ -1,4 +1,4 @@
-import { kbFileTypeVerification } from '@nexus-web/core/utils/index'
+import { kbFileTypeVerification } from '../../../utils/index'
 
 export const UPLOAD_VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv', 'flv']
 

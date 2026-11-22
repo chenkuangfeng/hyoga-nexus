@@ -9,7 +9,7 @@ import { renderToString } from 'vue/server-renderer'
 import { createI18n } from 'vue-i18n'
 import en from '@nexus-web/core/i18n/locales/en-US'
 
-const tree = readFileSync(new URL('./KbFolderTree.vue', import.meta.url), 'utf8')
+const tree = readFileSync(new URL('../../../../../core/src/components/knowledge/documents/KbFolderTree.vue', import.meta.url), 'utf8')
 const batchBar = readFileSync(new URL('./DocumentBatchBar.vue', import.meta.url), 'utf8')
 const cardView = readFileSync(new URL('./DocumentCardView.vue', import.meta.url), 'utf8')
 const listView = readFileSync(new URL('./DocumentListView.vue', import.meta.url), 'utf8')
@@ -71,11 +71,14 @@ before(async () => {
     configFile: false,
     optimizeDeps: { noDiscovery: true, entries: [] },
     plugins: [vue()],
-    resolve: { alias: { '@': fileURLToPath(new URL('../../../', import.meta.url)) } },
+    resolve: { alias: {
+      '@': fileURLToPath(new URL('../../../', import.meta.url)),
+      '@nexus-web/core': fileURLToPath(new URL('../../../../../core/src', import.meta.url)),
+    } },
     server: { middlewareMode: true },
     appType: 'custom',
   })
-  KbFolderTree = (await server.ssrLoadModule('/src/views/knowledge/components/KbFolderTree.vue')).default
+  KbFolderTree = (await server.ssrLoadModule('@nexus-web/core/components/knowledge/documents/KbFolderTree.vue')).default
 })
 after(async () => { await server?.close() })
 

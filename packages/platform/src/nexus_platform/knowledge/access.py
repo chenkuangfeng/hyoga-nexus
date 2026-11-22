@@ -135,6 +135,14 @@ def maintainable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) 
     return _own_base(db, kb_id, tenant_id, user_id, can_maintain, 'You cannot maintain this knowledge base')
 
 
+def lock_maintainable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
+    """Authorize content maintenance and serialize changes to the directory and document names."""
+    maintainable_base(db, kb_id, tenant_id, user_id)
+    db.scalar(select(KnowledgeBaseRecord).where(KnowledgeBaseRecord.id == kb_id)
+              .with_for_update().execution_options(populate_existing=True))
+    return maintainable_base(db, kb_id, tenant_id, user_id)
+
+
 def governable_base(db: Session, kb_id: UUID, tenant_id: UUID, user_id: UUID) -> KnowledgeBaseRecord:
     """A base of the caller's current space that the caller may delete or convert."""
     return _own_base(db, kb_id, tenant_id, user_id, can_govern, 'You cannot delete this knowledge base')

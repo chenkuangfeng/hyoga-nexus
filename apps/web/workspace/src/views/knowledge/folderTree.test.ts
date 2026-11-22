@@ -20,7 +20,7 @@ import {
   normalizeFolderPath,
   ROOT_FOLDER_PATH,
   sortFolderOptions,
-} from './folderTree.ts'
+} from '@nexus-web/core/components/knowledge/documents/folderTree'
 
 const folders = [
   {

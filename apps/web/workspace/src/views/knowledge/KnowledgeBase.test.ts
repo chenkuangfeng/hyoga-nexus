@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import * as vue from 'vue'
 import * as stall from '../../utils/knowledgeProcessingStall.ts'
+import * as folders from '@nexus-web/core/components/knowledge/documents/folderTree'
 import { change, fixture, flush } from '@nexus-web/core/test-utils/vueFixture'
 
 async function setup(t: TestContext) {
@@ -39,6 +40,7 @@ async function setup(t: TestContext) {
     '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({}) },
 
     '@/utils/kbPermission': {}, '@/utils/knowledgeDeletion': { waitForKnowledgeDeletion }, '@/utils/knowledgeTrace': {},
+    '@nexus-web/core/components/knowledge/documents/folderTree': folders,
     '@/utils/knowledgeProcessingStall': stall, '@nexus-web/core/api/wiki/index': {}, '@nexus-web/core/api/knowledge-base/index': {},
     '@nexus-web/core/api/knowledge-base/index': {
       listKnowledgeFolders, listKnowledgeTags: async () => ({ data: { data: [], total: 0 } }),

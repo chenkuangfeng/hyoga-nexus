@@ -2,8 +2,7 @@
 
 - Tags belong to one base; a document has any number of them (`tag_ids`), a FAQ entry one (`tag_id`).
   Deleting a tag removes it from its documents and entries (documents are never deleted with it).
-- Folders are derived from `folder_path` (WeKnora: "folders are derived from the stored paths"): a path that does
-  not exist yet is created by moving a document into it; renaming a folder rewrites the paths below it.
+- Folders combine explicit directory records with document paths. A rename rewrites both sets of paths.
 - Custom metadata is a flat string map per document that searches can filter on.
 - Pinned bases are listed first.
 
@@ -17,17 +16,18 @@ from typing import Any, Mapping, Sequence
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import new_id, utc_now
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.persistence.models import (FaqEntryRecord, KnowledgeBaseRecord, KnowledgeDocumentRecord,
-                                               KnowledgeTagRecord)
+                                               KnowledgeFolderRecord, KnowledgeTagRecord)
 from . import access
 
 MAX_TAGS = 200
-MAX_DEPTH = 8
+MAX_DEPTH = 16
 MAX_METADATA_KEYS = 30
 
 
@@ -135,10 +135,10 @@ def delete_tag(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, tag_id:
 
 def clean_folder(path: str | None) -> str:
     parts = [p.strip() for p in (path or '').replace('\\', '/').split('/') if p.strip()]
-    if any(p in ('.', '..') for p in parts) or len(parts) > MAX_DEPTH:
+    if any(p in ('.', '..') or any(ord(c) < 32 for c in p) for p in parts) or len(parts) > MAX_DEPTH:
         raise ValueError(f'invalid folder path (no "." or "..", at most {MAX_DEPTH} levels)')
     folder = '/'.join(parts)
-    if len(folder) > 1024:
+    if len(folder.encode('utf-8')) > 1024:
         raise ValueError('folder path is too long')
     return folder
 
@@ -154,7 +154,8 @@ def clean_metadata(value: Mapping[str, Any] | None) -> dict[str, str]:
 def organize_documents(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, ids: Sequence[UUID],
                        changes: Mapping[str, Any]) -> int:
     """Set tags, folder and/or metadata on documents of the base. Only keys present in ``changes`` change."""
-    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
+    maintain = access.lock_maintainable_base if 'folder_path' in changes else access.maintainable_base
+    kb = maintain(db, kb_id, tenant_id, user_id)
     tags = None
     if 'tag_ids' in changes:
         wanted = [str(t) for t in changes['tag_ids'] or []]
@@ -176,6 +177,8 @@ def organize_documents(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID,
             doc.custom_metadata = metadata
         doc.updated_at = utc_now()
         count += 1
+    if folder is not None:
+        _flush_folder_changes(db)
     audit(db, tenant_id, user_id, 'knowledge_document.organized', 'knowledge_base', str(kb.id), {'count': count})
     return count
 
@@ -194,10 +197,26 @@ def add_tags(db: Session, tenant_id: UUID, user_id: UUID, updates: Mapping[str, 
     return count
 
 
+def register_folder(db: Session, kb_id: UUID, path: str) -> None:
+    """Persist a normalized non-root path under the caller's knowledge base lock."""
+    if path and db.get(KnowledgeFolderRecord, (kb_id, path)) is None:
+        db.add(KnowledgeFolderRecord(kb_id=kb_id, path=path))
+
+
+def create_folder(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, path: str) -> str:
+    """Create a durable folder. Retrying creation of the same path is safe."""
+    kb = access.lock_maintainable_base(db, kb_id, tenant_id, user_id)
+    path = clean_folder(path)
+    if not path or kb.kb_type == 'faq':
+        raise ValueError('folder creation requires a non-root document directory')
+    register_folder(db, kb.id, path)
+    return path
+
+
 def folder_tree(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> dict[str, Any]:
-    """Folders derived from document paths with direct and total counts (WeKnora ``KnowledgeFolderTree``)."""
+    """Merge explicit directories and document paths with direct and recursive counts."""
     kb = access.readable_base(db, kb_id, tenant_id, user_id)
-    direct: dict[str, int] = {}
+    direct = dict.fromkeys(db.scalars(select(KnowledgeFolderRecord.path).where(KnowledgeFolderRecord.kb_id == kb.id)), 0)
     total = 0
     for path in db.scalars(select(KnowledgeDocumentRecord.folder_path).where(
             KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.status == 'active')):
@@ -223,7 +242,7 @@ def folder_tree(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> dic
 
 def rename_folder(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, source: str, target: str) -> int:
     """Rename or move a folder with everything below it."""
-    kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
+    kb = access.lock_maintainable_base(db, kb_id, tenant_id, user_id)
     source, target = clean_folder(source), clean_folder(target)
     if not source:
         raise ValueError('the top level cannot be renamed')
@@ -237,7 +256,25 @@ def rename_folder(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, sour
             doc.folder_path = clean_folder(target + rest)
             doc.updated_at = utc_now()
             count += 1
+    renamed = list(db.scalars(select(KnowledgeFolderRecord).where(
+        KnowledgeFolderRecord.kb_id == kb.id, (KnowledgeFolderRecord.path == source)
+        | KnowledgeFolderRecord.path.startswith(source + '/', autoescape=True))))
+    previous = {folder.path for folder in renamed}
+    destinations = {clean_folder(target + path[len(source):]) for path in previous}
+    for folder in renamed:
+        if folder.path not in destinations:
+            db.delete(folder)
+    for path in destinations - previous:
+        register_folder(db, kb.id, path)
+    _flush_folder_changes(db)
     return count
+
+
+def _flush_folder_changes(db: Session) -> None:
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        raise Conflict('The destination folder already contains a document with that name') from exc
 
 
 def toggle_pin(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID) -> bool:

@@ -4,7 +4,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
 TABLES = {'knowledge_bases', 'knowledge_documents', 'knowledge_document_versions', 'knowledge_chunks',
-          'knowledge_jobs', 'vector_stores', 'storage_backends'}
+          'knowledge_jobs', 'knowledge_folders', 'vector_stores', 'storage_backends'}
 
 
 def test_knowledge_tables_round_trip_on_sqlite(tmp_path):
@@ -14,6 +14,9 @@ def test_knowledge_tables_round_trip_on_sqlite(tmp_path):
     command.upgrade(config, 'head')
     engine = create_engine(url)
     assert TABLES <= set(inspect(engine).get_table_names())
+    unique_names = next(index for index in inspect(engine).get_indexes('knowledge_documents')
+                        if index['name'] == 'uq_knowledge_documents_name')
+    assert unique_names['column_names'] == ['kb_id', 'folder_path', 'filename']
     command.downgrade(config, 'b7c6d5e4f3a2')
     assert not TABLES & set(inspect(engine).get_table_names())
     assert 'memory_fts' in set(inspect(engine).get_table_names())
@@ -90,3 +93,35 @@ def test_enrichment_columns_and_job_kind_round_trip_on_sqlite(tmp_path):
         sql = connection.execute(text("SELECT sql FROM sqlite_master WHERE name='knowledge_jobs'")).scalar()
     assert "'enrich'" not in sql
     command.upgrade(config, 'head')
+
+
+def test_folder_migration_preserves_existing_document_paths(tmp_path):
+    from sqlalchemy.orm import Session
+
+    from nexus_core.platform import Principal, new_id, utc_now
+    from nexus_platform.identity.service import resolve_user
+    from nexus_platform.persistence.models import KnowledgeBaseRecord, KnowledgeDocumentRecord
+    from nexus_platform.tenants.service import create_tenant
+
+    config = Config('alembic.ini')
+    url = 'sqlite:///' + str(tmp_path / 'existing-folders.db')
+    config.attributes['database_url'] = url
+    command.upgrade(config, 'a03b51d982ef')
+    engine = create_engine(url)
+    principal = Principal('migration-owner', 'test')
+    kb_id, doc_id, now = new_id(), new_id(), utc_now()
+    with Session(engine, expire_on_commit=False) as db:
+        tenant_id = create_tenant(db, principal, 'Existing folder data').id
+        with db.begin():
+            user_id = resolve_user(db, principal).id
+            db.add(KnowledgeBaseRecord(id=kb_id, tenant_id=tenant_id, name='Existing KB', created_by=user_id,
+                                       created_at=now, updated_at=now))
+            db.flush()
+            db.add(KnowledgeDocumentRecord(id=doc_id, tenant_id=tenant_id, kb_id=kb_id, filename='existing.txt',
+                                           folder_path='资料/既有目录', created_by=user_id, created_at=now, updated_at=now))
+    command.upgrade(config, 'head')
+    with Session(engine) as db:
+        assert db.get(KnowledgeDocumentRecord, doc_id).folder_path == '资料/既有目录'
+    command.downgrade(config, 'a03b51d982ef')
+    with Session(engine) as db:
+        assert db.get(KnowledgeDocumentRecord, doc_id).folder_path == '资料/既有目录'

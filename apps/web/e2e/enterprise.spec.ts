@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test, expect, expectResponsive } from './fixtures'
 
 test('管理应用登录入口独立且可在手机宽度使用', async ({ page }) => {
@@ -194,6 +196,7 @@ test('知识库、智能体与技能使用参考资源卡片，MCP注册独立�
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['enterprise_kbs:manage', 'enterprise_agents:manage', 'tools:manage'] } }
     if (path === '/api/v1/tenants/a/admin/knowledge/bases') return { body: { items: [knowledge, { ...knowledge, id: 'kb2', name: 'Archive reference', description: '', type: 'faq', knowledge_count: 0 }] } }
+    if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb1/folders') return { body: { folders: [], root_document_count: 0, total_document_count: 0 } }
     if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb1/documents') return { body: { items: [], total: 0 } }
     if (path === '/api/v1/tenants/a/admin/knowledge/bases/kb2/faq/entries') return { body: { items: [], total: 0 } }
     if (path === '/api/v1/tenants/a/admin/agents') return { body: [{ id: 'agent1', tenant_id: 'a', ownership: 'enterprise', can_maintain: true, name: 'Agent reference', description: 'Agent content', status: 'draft', runtime_type: 'native', instructions: '', published_version_id: null, model_profile_version_id: null, version_counter: 0, budgets: {}, resource_bindings: [], created_at: '2026-11-18', updated_at: '2026-11-18' }] }
@@ -661,5 +664,70 @@ test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page,
   await expect(page.locator('.sandbox-card')).toContainText('isolated')
   await page.getByRole('textbox', { name: '搜索' }).fill('not-matching')
   await expect(page.locator('.sandbox-card')).toHaveCount(0)
+  await expectResponsive(page)
+})
+
+test('企业知识库创建目录并上传本地文件夹到该目录', async ({ page, api }, testInfo) => {
+  page.setDefaultTimeout(15000)
+  await api.signIn()
+  const root = '/api/v1/tenants/a/admin/knowledge/bases', kb = root + '/kb'
+  const base = { id: 'kb', tenant_id: 'a', ownership: 'enterprise', shared: false, name: '目录测试',
+    description: '', type: 'document', visibility: 'tenant', knowledge_count: 0, can_manage: true }
+  const documents: Array<{ filename: string; folder_path: string } & Record<string, unknown>> = []
+  let created = ''
+  const node = (path: string, children: unknown[] = []) => ({
+    path, name: path.split('/').at(-1), document_count: documents.filter(doc => doc.folder_path === path).length,
+    total_count: documents.filter(doc => doc.folder_path === path || doc.folder_path.startsWith(path + '/')).length, children,
+  })
+  api.handle(request => {
+    const url = new URL(request.url())
+    if (url.pathname === root) return { body: { items: [base] } }
+    if (url.pathname === kb + '/folders') {
+      if (request.method() === 'POST') {
+        created = request.postDataJSON().path
+        return { status: 201, body: { path: created } }
+      }
+      const nested = created + '/local/nested'
+      return { body: { root_document_count: 0, total_document_count: documents.length,
+        folders: created ? [node(created, documents.some(doc => doc.folder_path === nested)
+          ? [node(created + '/local', [node(nested)])] : [])] : [] } }
+    }
+    if (url.pathname === kb + '/documents') {
+      if (request.method() === 'POST') {
+        const parts = request.postData()?.match(/name="filename"\r\n\r\n([^\r]+)\r\n/)
+        const name = parts?.[1] ?? ''
+        expect(['目标/plain.txt', '目标/local/nested/nested.txt']).toContain(name)
+        const cut = name.lastIndexOf('/')
+        const document = { id: String(documents.length + 1), kb_id: 'kb', filename: name.slice(cut + 1),
+          file_type: 'txt', status: 'active', parse_status: 'pending', folder_path: name.slice(0, cut),
+          summary: null, tag_ids: [], current_version: null, latest_version: null, created_at: '', updated_at: '' }
+        documents.push(document)
+        return { status: 201, body: { document, deduplicated: false } }
+      }
+      const items = documents.filter(doc => doc.folder_path === url.searchParams.get('folder_path'))
+      return { body: { items, total: items.length } }
+    }
+  })
+  await page.goto('knowledge/kb/content')
+  const tree = page.locator('.kb-folder-tree')
+  await tree.getByRole('button', { name: '新建子目录' }).click()
+  const dialog = page.locator('.t-dialog:visible')
+  await dialog.getByRole('textbox').fill('目标')
+  await dialog.getByRole('button', { name: '创建', exact: true }).click()
+  await expect(tree.locator('.kb-folder-row.active')).toContainText('目标')
+
+  await page.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
+    name: 'plain.txt', mimeType: 'text/plain', buffer: Buffer.from('plain'),
+  })
+  await expect(page.getByText('plain.txt', { exact: true })).toBeVisible()
+  const local = testInfo.outputPath('local')
+  mkdirSync(join(local, 'nested'), { recursive: true })
+  writeFileSync(join(local, 'nested', 'nested.txt'), 'nested')
+  await page.locator('input[webkitdirectory]').setInputFiles(local)
+  await expect.poll(() => documents.length).toBe(2)
+  await expect(tree.locator('.kb-folder-row').filter({ hasText: 'local' })).toBeVisible()
+  await tree.locator('.kb-folder-row').filter({ hasText: 'local' }).getByRole('button', { name: '展开该文件夹' }).click()
+  await tree.locator('.kb-folder-row').filter({ hasText: 'nested' }).click()
+  await expect(page.getByText('nested.txt', { exact: true })).toBeVisible()
   await expectResponsive(page)
 })

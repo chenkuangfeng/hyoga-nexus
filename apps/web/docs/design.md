@@ -306,3 +306,7 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 企业组织和用户管理共用管理端 `OrganizationTree.vue`。组织维护只读节点目录，依据直接子节点展示列表。删除是否允许仍由后端校验历史成员关联。用户管理复用已授权的成员目录作为分配候选，按节点成员接口过滤当前列表，权限或身份变化后清理筛选、编辑及待确认操作。表格和编辑交互参照 WeKnora e1f9a6166 的 `TenantMembers.vue` 与 `OrganizationSettingsModal.vue`，组织树采用 Nexus 的单根节点契约。
 
 员工设置使用 `Settings.vue` 的原有专用尺寸和内容留白。管理端系统设置按员工 `GeneralSettings.vue` 使用标题、说明、设置行和同宽控件，两端复用 `BrandColorPicker.vue`，窄屏按可用空间换行。
+
+## 知识库文档目录和上传
+
+员工工作台和企业管理端复用 `core/src/components/knowledge/documents/` 中的目录布局、树、新建目录弹窗和文件选择器。目录树及选择器沿用 WeKnora e1f9a6166 同名组件。选中目录后可上传文件或本地文件夹，传输保留文件夹名称及其中文件的相对路径。工作台继续使用已有的上传确认和解析任务队列，企业端展示当前批次进度。企业 Wiki 从「文档」标签进入源文件管理。手动创建目录可保存没有文件的目录，浏览器文件夹选择传入包含文件的路径。

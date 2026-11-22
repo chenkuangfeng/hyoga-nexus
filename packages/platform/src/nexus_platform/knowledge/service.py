@@ -5,7 +5,7 @@ with :mod:`.access`. Blob writes happen before the database rows are committed: 
 orphan file under an unused key (harmless, removed by cleanup), never a row pointing at a missing file.
 
 Lifecycle summary:
-- upload: SHA-256 of the bytes; the same hash already present in the base returns that document
+- upload: SHA-256 of the bytes; the same hash already present in the target folder returns that document
   (``deduplicated``). Otherwise the file is stored, a new document (or a new version of the document with
   the same filename) is created as ``pending`` and an ``index`` job is queued. The previous version stays
   current and searchable until the new one is ``ready``.
@@ -36,7 +36,7 @@ from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.identity.service import require_membership
 from nexus_platform.persistence.models import (KnowledgeBaseRecord, KnowledgeBaseShareRecord, KnowledgeChunkRecord, KnowledgeDocumentRecord,
                                                KnowledgeDocumentVersionRecord, KnowledgeJobRecord, UserRecord)
-from . import access, media, stores
+from . import access, media, organize, stores
 from nexus_knowledge.retrieval import synonyms as synonym_rules
 from .graph import config as graph_config
 from . import faq as faq_rules
@@ -421,7 +421,7 @@ def _queue(db: Session, kb: KnowledgeBaseRecord, *, kind: str, document_id: UUID
 
 
 def prepare_upload(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, filename: str, data: bytes,
-                   max_bytes: int) -> tuple[KnowledgeBaseRecord, str, KnowledgeDocumentRecord | None]:
+                   max_bytes: int, *, folder: str = '') -> tuple[KnowledgeBaseRecord, str, KnowledgeDocumentRecord | None]:
     """Validate an upload; returns ``(kb, sha256, duplicate_document_or_None)``. No rows are written."""
     kb = access.maintainable_base(db, kb_id, tenant_id, user_id)
     filename = (filename or '').strip().replace('\\', '/').rsplit('/', 1)[-1]
@@ -436,11 +436,17 @@ def prepare_upload(db: Session, tenant_id: UUID, user_id: UUID, kb_id: UUID, fil
     if len(data) > max_bytes:
         raise ValueError(f'file exceeds the {max_bytes // (1024 * 1024)} MB upload limit')
     digest = hashlib.sha256(data).hexdigest()
-    duplicate = db.scalar(select(KnowledgeDocumentRecord).join(
+    return kb, digest, find_upload_duplicate(db, kb.id, folder, digest)
+
+
+def find_upload_duplicate(db: Session, kb_id: UUID, folder: str, digest: str) -> KnowledgeDocumentRecord | None:
+    """Find an active upload with the same bytes in the selected directory."""
+    return db.scalar(select(KnowledgeDocumentRecord).join(
         KnowledgeDocumentVersionRecord, KnowledgeDocumentVersionRecord.document_id == KnowledgeDocumentRecord.id
-    ).where(KnowledgeDocumentVersionRecord.kb_id == kb.id, KnowledgeDocumentVersionRecord.content_hash == digest,
-            KnowledgeDocumentVersionRecord.state != 'superseded', KnowledgeDocumentRecord.status == 'active'))
-    return kb, digest, duplicate
+    ).where(KnowledgeDocumentVersionRecord.kb_id == kb_id, KnowledgeDocumentVersionRecord.content_hash == digest,
+            KnowledgeDocumentRecord.folder_path == folder,
+            KnowledgeDocumentVersionRecord.state != 'superseded', KnowledgeDocumentRecord.status == 'active')
+        .order_by(KnowledgeDocumentRecord.created_at, KnowledgeDocumentRecord.id).limit(1))
 
 
 def blob_key(kb: KnowledgeBaseRecord, document_id: UUID, version_id: UUID) -> str:
@@ -448,20 +454,21 @@ def blob_key(kb: KnowledgeBaseRecord, document_id: UUID, version_id: UUID) -> st
 
 
 def add_version(db: Session, kb: KnowledgeBaseRecord, user_id: UUID, filename: str, digest: str, size: int,
-                document_id: UUID, version_id: UUID) -> tuple[KnowledgeDocumentRecord, KnowledgeDocumentVersionRecord]:
+                document_id: UUID, version_id: UUID, *, folder: str = '') -> tuple[KnowledgeDocumentRecord, KnowledgeDocumentVersionRecord]:
     """Create the document (or reuse the active one with this filename) and a pending version with a job.
 
     ``document_id``/``version_id`` are chosen by the caller before the file is stored under their key; an
-    existing document with the same filename keeps its own id.
+    existing document with the same filename in the target folder keeps its own id.
     """
     filename = filename.strip().replace('\\', '/').rsplit('/', 1)[-1]
     now = utc_now()
     doc = db.scalar(select(KnowledgeDocumentRecord).where(
-        KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.filename == filename,
+        KnowledgeDocumentRecord.kb_id == kb.id, KnowledgeDocumentRecord.folder_path == folder,
+        KnowledgeDocumentRecord.filename == filename,
         KnowledgeDocumentRecord.status == 'active'))
     if doc is None:
         doc = KnowledgeDocumentRecord(id=document_id, tenant_id=kb.tenant_id, kb_id=kb.id, filename=filename,
-                                      status='active', created_by=user_id, created_at=now, updated_at=now)
+                                      folder_path=folder, status='active', created_by=user_id, created_at=now, updated_at=now)
         db.add(doc)
         db.flush()
     number = (db.scalar(select(func.max(KnowledgeDocumentVersionRecord.version)).where(
@@ -474,6 +481,7 @@ def add_version(db: Session, kb: KnowledgeBaseRecord, user_id: UUID, filename: s
     db.add(version)
     db.flush()
     doc.latest_version_id, doc.updated_at = version.id, now
+    organize.register_folder(db, kb.id, folder)
     _queue(db, kb, kind='index', document_id=doc.id, version_id=version.id)
     audit(db, kb.tenant_id, user_id, 'knowledge_document.uploaded', 'knowledge_document', str(doc.id),
           {'kb_id': str(kb.id), 'version': number, 'size': size})

@@ -586,6 +586,10 @@ export function listKnowledgeFolders(kbId: string) {
   return nexus.folderTree(kbId);
 }
 
+export function createKnowledgeFolder(kbId: string, path: string) {
+  return nexus.createFolder(kbId, path);
+}
+
 /**
  * Re-file documents under `folderPath` ('' = knowledge base top level). Folders
  * are derived from the stored paths, so a path that does not exist yet is

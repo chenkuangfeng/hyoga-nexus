@@ -262,3 +262,56 @@ test('会话产物在右侧折叠，失败可以重试，切换会话清除旧�
   await expectResponsive(page)
   await expect.poll(async () => (await page.locator('.platform-route-outlet').boundingBox())!.width >= 300).toBe(true)
 })
+
+test('员工知识库新建目录并将所选文件上传到当前目录', async ({ page, api }) => {
+  page.setDefaultTimeout(15000)
+  await api.signIn()
+  bootWorkspace(api)
+  const root = '/api/v1/tenants/a/knowledge', kb = root + '/bases/kb'
+  const base = { id: 'kb', tenant_id: 'a', name: '运行手册', type: 'document', can_edit: true,
+    created_by: 'u', storage_backend_id: 'local', indexing_strategy: { vector: false, keyword: true } }
+  let created = '', uploaded = false
+  const doc = { id: 'doc', kb_id: 'kb', filename: 'manual.txt', folder_path: '手册',
+    file_type: 'txt', latest_version: { state: 'ready' } }
+  api.handle(request => {
+    const url = new URL(request.url())
+    if (url.pathname === '/api/v1/system/info') return { body: { data: {} } }
+    if (url.pathname === kb) return { body: base }
+    if (url.pathname === root + '/bases') return { body: { items: [base] } }
+    if (url.pathname === kb + '/folders') {
+      if (request.method() === 'POST') {
+        created = request.postDataJSON().path
+        return { status: 201, body: { path: created } }
+      }
+      return { body: { root_document_count: 0, total_document_count: Number(uploaded),
+        folders: created ? [{ path: created, name: created, total_count: Number(uploaded),
+          document_count: Number(uploaded), children: [] }] : [] } }
+    }
+    if (url.pathname === kb + '/documents') {
+      if (request.method() === 'POST') {
+        expect(request.postData()).toContain('手册/manual.txt')
+        uploaded = true
+        return { status: 201, body: { document: doc, deduplicated: false } }
+      }
+      return { body: uploaded && url.searchParams.get('folder_path') === '手册' ? { items: [doc], total: 1 } : { items: [], total: 0 } }
+    }
+    if (url.pathname === kb + '/tags') return { body: { items: [], total: 0 } }
+    if (url.pathname === root + '/documents/doc') return { body: doc }
+    if (url.pathname === root + '/parser-engines') return { body: { data: [] } }
+  })
+  await page.goto('/platform/knowledge-bases/kb')
+  const tree = page.locator('.kb-folder-tree')
+  await tree.getByRole('button', { name: '新建子目录' }).click()
+  const dialog = page.locator('.t-dialog:visible')
+  await dialog.getByRole('textbox').fill('手册')
+  await dialog.getByRole('button', { name: '创建', exact: true }).click()
+  await expect(tree.locator('.kb-folder-row.active')).toContainText('手册')
+  await page.locator('.doc-filter-actions input[type="file"]:not([webkitdirectory])').setInputFiles({
+    name: 'manual.txt', mimeType: 'text/plain', buffer: Buffer.from('manual'),
+  })
+  const upload = page.locator('.upload-confirm-modal')
+  await expect(upload).toContainText('手册')
+  await upload.getByRole('button', { name: '确认上传并解析' }).click()
+  await expect.poll(() => uploaded).toBe(true)
+  await expect(page.locator('.doc-card-area').getByText('manual', { exact: true }).first()).toBeVisible()
+})
