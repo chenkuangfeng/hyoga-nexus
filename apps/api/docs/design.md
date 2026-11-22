@@ -20,6 +20,10 @@
 
 管理端 `POST /api/v1/tenants/{tenant_id}/admin/model-settings/providers/{id}/models/{profile_id}/copy` 复制当前企业共享模型并返回新档案和版本 ID。模型创建、编辑及目录响应使用 `name` 表示上游模型 ID，`display_name` 表示展示名。
 
+管理端 `PUT /api/v1/tenants/{tenant_id}/admin/model-settings/providers/{id}/models/{profile_id}/configuration` 提交模型字段和 `provider` 接入草稿，只为当前模型追加版本。修改地址要求新 Key。同一路径的 `DELETE` 检查当前引用，返回 `model_in_use` 和分类计数，未被引用的模型从目录移除。
+
+管理端对同一模型的 `POST .../debug` 使用当前保存版本运行对话、向量化或重排请求，与连接测试共享限流和出站策略。响应返回对话文本、向量维度和样例或重排分数。同一模型的 `POST .../debug-media` 接收 10 MiB 以内的图像或音频样例并返回描述或转写。审计仅记录元数据。
+
 Key 字段使用 SecretStr，仅写入加密服务；请求校验不回传原始输入。测试间隔每供应商至少 10 秒（事务锁），总超时 15 秒，无自动重试。对话测试限制输出 32 Token，向量化测试发送一条文本，重排测试发送单条候选。测试返回状态和安全文案；视觉和语音返回不支持。网络策略由 Runtime 共用 transport 执行。
 
 数据库依赖与就绪检查通过 platform 数据库工厂读取工作目录 `configs/nexus.toml`，不加载 `.env`；非法或缺失配置保持既有 503 语义，健康检查不依赖数据库。配置解析错误不包含秘密。

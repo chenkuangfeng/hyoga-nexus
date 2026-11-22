@@ -219,7 +219,7 @@ Node 默认堆为 768MB，Go 预打包器默认 GOMEMLIMIT=192MiB/GOMAXPROCS=2�
 
 导航数据位于 `enterprise/src/navigation.ts`。侧栏按 配置（模型、知识库、工具、智能体）、空间（企业空间、企业策略）、发布集成（MCP服务、IM 集成）、数据与扩展（向量引擎、解析引擎、存储引擎、沙箱引擎、知识图谱）、权限（企业组织、用户、角色）、系统（系统设置、运行状况、审计日志） 排列，复用本地 WeKnora `SettingsModalShell.vue` 的分组标题、直属链接和高亮样式。
 
-WeKnora e1f9a6166 `Toolbox.vue` 的技能与 MCP 注册职责拆分保留，MCP endpoint 属于发布集成。用量位于模型管理内，渠道位于智能体卡片菜单，投稿审核位于技能管理内，长期记忆位于企业空间。过滤后隐藏空菜单，业务写入仍由服务端授权。
+WeKnora e1f9a6166 `Toolbox.vue` 的技能与 MCP 注册职责拆分保留，MCP endpoint 属于发布集成。用量从系统设置进入，渠道位于智能体卡片菜单，投稿审核位于技能管理内，长期记忆位于企业空间。过滤后隐藏空菜单，业务写入仍由服务端授权。
 
 分组标题及菜单行的字重、间距和状态来自 components/SettingsModalShell.vue，外层继续使用已确认的工作台式折叠侧栏与底部账户区。折叠后分组显示分隔线，菜单保留可访问名称与悬停提示。菜单名称按业务明确企业空间与企业策略，企业微信保留产品名；页面说明明确真实作用域。
 
@@ -237,7 +237,7 @@ IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `cha
 
 企业知识库和智能体共用 WeKnora 的 `ResourceSortControl.vue`，按后台返回的创建时间、更新时间及名称组织列表。数据扩展的解析、向量和存储沿用各自 WeKnora 设置页，Nexus 图存储复用配置卡片和新增卡片形态。模型编辑器沿用 `ModelEditorDialog.vue` 的类型选择、接入分区及底部测试区。源码与许可见 [WeKnora 声明](weknora-license.txt)。
 
-当前企业管理页面覆盖 Nexus 已提供的服务端能力。与本地 WeKnora 的完整差异包括模型目录、调试器及本地和云模型来源，知识库和智能体目录的跨空间、收藏与最近访问，发布集成的网页嵌入、外部 API、CLI 和浏览器扩展，以及设置内的沙箱与搜索服务商管理。IM 目录可创建企业微信应用渠道或为当前用户的个人智能体扫码绑定微信，并处理企业审核。其他平台需各自的接入契约和身份能力。
+当前企业管理页面覆盖 Nexus 已提供的服务端能力。与本地 WeKnora 的完整差异包括可写全局模型目录及 Ollama、WeKnoraCloud 来源，知识库和智能体目录的跨空间、收藏与最近访问，发布集成的网页嵌入、外部 API、CLI 和浏览器扩展，以及设置内的沙箱与搜索服务商管理。IM 目录可创建企业微信应用渠道或为当前用户的个人智能体扫码绑定微信，并处理企业审核。其他平台需各自的接入契约和身份能力。
 
 ### 六组逐项核对
 
@@ -245,7 +245,7 @@ IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `cha
 
 | 入口 | 本地 WeKnora 来源 | Nexus 接入及差异 |
 | --- | --- | --- |
-| 模型 | `ModelSettings.vue`、`ModelEditorDialog.vue` | 类型、卡片、单表单新增、复制及探测使用企业模型接口。模型目录、本地及云来源和调试器待补。 |
+| 模型 | `ModelSettings.vue`、`ModelEditorDialog.vue` | 类型、卡片、单表单新增与编辑、复制、删除、探测和调试使用企业模型接口。可写全局模型目录和本地及云来源需要系统能力。 |
 | 知识库 | `KnowledgeBaseList.vue`、`KnowledgeBaseEditorModal.vue` | 企业目录、内容及维护使用知识库接口。原版跨空间、收藏与最近访问待补。 |
 | 工具 | `Toolbox.vue`、`SkillSettings.vue`、`McpSettings.vue` | 标签内的内置工具、技能和 MCP 注册已接入。浏览器连接入口未纳入侧栏。 |
 | 智能体 | `AgentList.vue`、`AgentEditorModal.vue` | 目录、排序、编辑发布和受众经企业智能体接口。原版跨空间、收藏与最近访问待补。 |
@@ -267,11 +267,11 @@ IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `cha
 
 ## 企业模型操作
 
-企业模型页参考 WeKnora e1f9a6166 的 `views/settings/ModelSettings.vue` 与 `components/ModelEditorDialog.vue`。卡片菜单的复制动作生成同服务商的独立档案。卡片、搜索和模型选择器使用展示名，编辑器同时显示上游模型 ID。添加模型使用一个表单，可选已有服务商、常用模板或自定义接入。选择已有服务商复用凭据。模板或自定义接入在同一表单填写地址和 Key，并在同一请求保存模型和服务商。切换接入选项、关闭或保存成功时清空临时 Key。
+企业模型首页参考 WeKnora e1f9a6166 的 `views/settings/ModelSettings.vue`。标题区提供模型测试与添加模型，类型标签显示模型数，搜索匹配展示名、上游模型名和厂商。卡片点击进入编辑，「更多」提供编辑与复制，删除由独立图标确认。删除前检查当前引用，冲突弹窗显示当前企业智能体、知识库和记忆引用计数。卡片弹层按内容宽度布局，支持依次聚焦及 Escape 返回触发按钮。
 
-模型表单可使用当前接入配置测试连接，已保存的模型可从卡片测试。支持对话、向量化和重排。更改测试参数、关闭编辑器或切换企业会使旧结果失效。
+`ModelEditorDialog.vue` 使用 WeKnora `components/ModelEditorDialog.vue` 的设置抽屉、类型选择、模型来源、接入配置和高级选项。厂商模板提供默认地址及模型候选，支持输入自定义上游模型名。地址和 Key 在同一表单编辑。已保存 Key 以掩码提示，地址变化要求新 Key。保存只为当前模型追加版本。底部连接测试使用当前草稿，对话、向量化和重排可用。修改草稿后原测试结果失效。
 
-模型卡片和服务商共用操作弹层，宽度根据操作标签和可用视口确定。常规操作标签保持单行，长服务商名称可以换行。键盘可依次聚焦操作，按 Escape 返回触发按钮。
+`ModelDebugDrawer.vue` 对照 WeKnora 同名组件。调试使用已保存版本。对话、向量化和重排分别展示文本、向量维度与样例、重排分数，视觉和语音支持上传样例文件。企业默认模型和用量报表从系统设置进入。Ollama 下载、WeKnoraCloud、系统内置模型和可写全局目录依赖对应服务端能力。厂商图标来自同版本的 `internal/models/providers/assets/`。
 
 ## 用量报表与限额状态边界
 
@@ -294,8 +294,9 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 | --- | --- | --- |
 | 企业智能体与知识库目录 | views/agent/AgentList.vue、views/knowledge/KnowledgeBaseList.vue、components/ResourceListToolbar.vue、components/css/resource-card.less | `ResourceManagementDirectory` 沿用标题同行操作、左侧目录范围与右侧搜索、20px/28px 内容留白、260px 最小卡宽及 10px 间距。名称排序在当前已加载目录执行，范围及数量来自企业接口。`ResourceDirectoryCard` 保留类型图标、右上更多操作与底部指标，企业管理动作沿用现有授权 |
 | 企业知识库内容 | views/knowledge/KnowledgeBase.vue | 使用面包屑、可管理知识库切换及内容工具栏。文档、问答和 Wiki 继续使用 Nexus 的内容表格、分页及编辑交互 |
-| ModelsPage | views/settings/ModelSettings.vue | 默认显示全部模型，类型标签带计数，搜索匹配模型或服务商名称。紧凑网格以添加卡片收尾，新增表单预填当前类型，并在同一处选择已有服务商或填写新接入。模型卡片可直接编辑，连接测试和停用使用现有企业接口。服务商操作在标题区，企业默认模型和用量各自使用独立标签页。 |
-| ModelProviderEditor | components/ModelEditorDialog.vue、components/settings/SettingDrawer.vue | 企业服务商沿用接入配置区、密码输入框和底部保存操作。常用模板只预填名称和可编辑的 API 地址，切换模板时清空密钥。自定义和编辑均使用企业服务商接口，修改已保存的地址要求重新填写密钥。 |
+| ModelsPage | views/settings/ModelSettings.vue | 同行标题操作、类型标签、搜索与紧凑卡片。卡片可编辑、复制和删除，连接测试位于编辑抽屉。 |
+| ModelEditorDialog | components/ModelEditorDialog.vue、components/settings/SettingDrawer.vue | 以模型为单位编辑接入，复用企业模型版本、加密凭据和草稿测试契约。 |
+| ModelDebugDrawer | components/ModelDebugDrawer.vue | 使用已保存版本执行文本、图像或音频调试。 |
 | SkillsPage | views/settings/SkillSettings.vue | 保留技能卡片、版本和安装入口；采用 Nexus 版本扫描/安装及企业投稿审核，不提供员工私有技能管理 |
 | NexusToolboxMcp | views/settings/McpSettings.vue | 保留服务卡片、搜索及编辑入口；现有逐工具授权、风险、审批与发现规则保持不变 |
 | EndpointsPage | views/integrations/McpServerIntegrationSettings.vue、components/css/channel-panel-list.less | 保留发布卡片及操作菜单；签发、轮换、撤销及一次性令牌使用 Nexus 契约 |

@@ -325,255 +325,219 @@ test('系统设置主题色即时应用，刷新后保留', async ({ page, api }
   await expectResponsive(page)
 })
 
-test('企业模型目录按类型和服务商筛选，并从卡片编辑与添加模型', async ({ page, api }) => {
+test('企业模型目录按 WeKnora 布局筛选、编辑、复制、删除和调试', async ({ page, api }) => {
   await api.signIn()
   await page.setViewportSize({ width: 1440, height: 900 })
   const root = '/api/v1/tenants/a/admin/model-settings'
   const chat = { id: 'chat', name: 'Example Chat', model_type: 'chat', version_id: 'chat-v1', version: 1, options: {} }
   const embedding = { id: 'embedding', name: 'Example Embed', model_type: 'embedding', version_id: 'embed-v1', version: 1, options: {} }
+  const vision = { id: 'vision', name: 'Example Vision', model_type: 'vision', version_id: 'vision-v1', version: 1, options: {} }
   const providers = [
-    { id: 'north', name: 'North API', scope: 'tenant', base_url: 'https://north.example.test', key_configured: true, key_mask: '****', models: [chat] },
+    { id: 'north', name: 'North API', scope: 'tenant', base_url: 'https://north.example.test', key_configured: true, key_mask: '****', models: [chat, vision] },
     { id: 'south', name: 'South API', scope: 'tenant', base_url: 'https://south.example.test', key_configured: true, key_mask: '****', models: [embedding] },
   ]
-  const writes: unknown[] = []
-  const draftTests: unknown[] = []
   api.handle(request => {
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
     if (path === root) return { body: { providers, defaults: { tenant: { chat: 'chat-v1' } }, can_manage_tenant: true } }
-    if (path === root + '/providers/north/models/chat/test') return { body: { ok: true, message: 'Connection verified' } }
-    if (path === root + '/test' && request.method() === 'POST') {
-      draftTests.push(request.postDataJSON())
-      return { body: { ok: true, message: 'Draft connection verified' } }
+    if (path === root + '/providers/north/models/chat/debug') {
+      expect(request.postDataJSON()).toMatchObject({ text: 'Reply OK', max_output_tokens: 512 })
+      return { body: { ok: true, result: { type: 'chat', text: 'Debug response' } } }
     }
-    if (path === root + '/providers/north/models/chat/copy' && request.method() === 'POST') {
+    if (path === root + '/providers/north/models/vision/debug-media') {
+      expect(request.headers()['content-type']).toContain('multipart/form-data')
+      return { body: { ok: true, result: { type: 'vision', text: 'Image description' } } }
+    }
+    if (path === root + '/providers/north/models/chat/copy') {
       const { suffix } = request.postDataJSON()
       const row = { ...chat, id: 'copied-chat', version_id: 'copied-chat-v1', display_name: `Example Chat ${suffix}` }
       providers[0].models.push(row)
       return { body: { id: row.id, version_id: row.version_id } }
     }
-    if (path === root + '/providers/south/models' && request.method() === 'POST') {
-      const input = request.postDataJSON()
-      writes.push(input)
-      const row = { ...embedding, ...input, id: 'new', version_id: 'new-v1' }
-      providers[1].models.push(row)
-      return { body: row }
+    if (path === root + '/providers/north/models/chat/configuration' && request.method() === 'DELETE') {
+      return { status: 409, body: { error: { code: 'model_in_use', details: { agents: 1, knowledge_bases: 0, memory: 0 } } } }
     }
-    if (path === root + '/providers/south/models/embedding' && request.method() === 'DELETE') {
-      providers[1].models = providers[1].models.filter(model => model.id !== 'embedding')
+    if (path === root + '/providers/south/models/embedding/configuration' && request.method() === 'DELETE') {
+      providers[1].models = []
       return { body: { status: 'disabled' } }
     }
   })
   await page.goto('models')
   const cards = page.locator('.model-grid article')
   const typeTabs = page.locator('.model-type-tabs')
-  await expect(cards).toHaveCount(2)
-  await expect(typeTabs.locator('.model-tab-count')).toHaveText(['2', '1', '1', '0', '0', '0'])
+  await expect(page.getByRole('heading', { name: '模型配置' })).toBeVisible()
+  await expect(cards).toHaveCount(3)
+  await expect(typeTabs.locator('.model-tab-count')).toHaveText(['3', '1', '1', '0', '1', '0'])
   await expect(page.locator('.model-grid > :last-child')).toHaveText('添加模型')
+  await expect(page.getByRole('button', { name: '服务商', exact: true })).toHaveCount(0)
 
   const search = page.locator('.model-search input')
   expect((await search.boundingBox())!.x).toBeGreaterThan((await typeTabs.boundingBox())!.x)
   expect((await cards.nth(0).boundingBox())!.y).toBe((await cards.nth(1).boundingBox())!.y)
   await search.fill('  north api  ')
-  await expect(cards).toHaveCount(1)
-  await expect(cards).toContainText('Example Chat')
+  await expect(cards).toHaveCount(2)
+  await expect(cards.first()).toContainText('Example Chat')
   await search.fill('没有这个模型')
   await expect(page.getByText('无结果', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '清空', exact: true }).click()
-  await expect(cards).toHaveCount(2)
 
-  const chatCard = cards.filter({ hasText: 'Example Chat' })
-  await chatCard.getByRole('button', { name: '测试连接' }).click()
-  await expect(chatCard.getByRole('status')).toHaveText('Connection verified')
+  const chatCard = cards.filter({ has: page.getByRole('button', { name: 'Example Chat', exact: true }) })
+  const drawer = page.locator('.setting-drawer:visible')
   await chatCard.getByRole('button', { name: 'Example Chat' }).press('Enter')
-  let dialog = page.locator('.t-dialog:visible')
-  await expect(dialog).toContainText('编辑模型并创建新版本')
-  await expect(dialog.locator('.t-select input').first()).toHaveValue('North API')
-  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(drawer).toContainText('编辑模型')
+  await expect(drawer).toContainText('模型来源')
+  await expect(drawer.getByLabel('Base URL')).toHaveValue('https://north.example.test')
+  await expect(drawer.getByLabel('API Key')).toHaveValue('')
+  await expect(drawer.getByText('接口协议', { exact: true })).toHaveCount(0)
+  await drawer.getByRole('button', { name: '高级选项' }).click()
+  await expect(drawer.getByText('接口协议', { exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: '取消', exact: true }).click()
 
-  const providerMenu = page.getByRole('button', { name: '服务商', exact: true })
-  await providerMenu.press('Enter')
-  await expect(providerMenu).toHaveAttribute('aria-expanded', 'true')
-  await page.keyboard.press('Tab')
-  await expect(page.getByRole('button', { name: 'North API · 编辑服务商' })).toBeFocused()
+  await page.getByRole('button', { name: '模型测试', exact: true }).click()
+  await drawer.locator('.t-select').first().click()
+  await page.locator('.t-select-option:visible').getByText('Example Chat', { exact: true }).click()
+  await drawer.getByLabel('输入内容').fill('Reply OK')
+  await drawer.getByRole('button', { name: '运行测试' }).click()
+  await expect(drawer.getByText('Debug response', { exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: '视觉', exact: true }).click()
+  await drawer.locator('.t-select').first().click()
+  await page.locator('.t-select-option:visible').getByText('Example Vision', { exact: true }).click()
+  await drawer.getByLabel('图片文件').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: Buffer.from('sample') })
+  await drawer.getByRole('button', { name: '运行测试' }).click()
+  await expect(drawer.getByText('Image description', { exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: '关闭', exact: true }).click()
+
+  const confirmDelete = async (card: typeof chatCard) => {
+    await card.getByRole('button', { name: '删除', exact: true }).click()
+    await page.locator('.t-popconfirm:visible').getByRole('button', { name: '删除', exact: true }).click()
+  }
+  await confirmDelete(chatCard)
+  const conflict = page.locator('.t-dialog:visible')
+  await expect(conflict).toContainText('模型无法删除')
+  await expect(conflict).toContainText('智能体（1）')
   await page.keyboard.press('Escape')
-  await expect(providerMenu).toBeFocused()
-  await providerMenu.click()
-  await page.getByRole('button', { name: 'South API · 编辑服务商' }).click()
-  dialog = page.locator('.t-dialog:visible')
-  await expect(dialog).toContainText('编辑企业模型服务商')
-  await expect(dialog.locator('input[type="password"]')).toHaveValue('')
-  await dialog.getByRole('button', { name: '取消', exact: true }).click()
 
-  await typeTabs.getByText('向量化', { exact: true }).click()
+  await typeTabs.getByText('Embedding', { exact: true }).click()
   await expect(cards).toHaveCount(1)
-  await page.locator('.model-card--add').click()
-  dialog = page.locator('.t-dialog:visible')
-  await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeDisabled()
-  await dialog.locator('.t-select').first().click()
-  await page.locator('.t-select-option:visible').filter({ hasText: 'South API' }).click()
-  await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embed')
-  await dialog.getByRole('button', { name: '测试连接', exact: true }).click()
-  await expect(dialog.getByRole('status')).toHaveText('Draft connection verified')
-  expect(draftTests).toEqual([{
-    scope: 'tenant', provider_id: 'south', base_url: 'https://south.example.test', model_name: 'New Embed',
-    model_type: 'embedding', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
-  }])
-  await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embedding')
-  await expect(dialog.getByRole('status')).toHaveCount(0)
-  await dialog.getByRole('textbox', { name: '服务商模型名称' }).fill('New Embed')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
-  await expect(cards).toHaveCount(2)
-  expect(writes).toEqual([{
-    name: 'New Embed', model_type: 'embedding', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
-  }])
-
-  await cards.filter({ hasText: 'Example Embed' }).getByRole('button', { name: '展开' }).click()
-  await page.getByText('停用', { exact: true }).click()
-  await expect(page.locator('.t-dialog:visible')).toContainText('Example Embed')
-  await page.locator('.t-dialog:visible .t-dialog__footer button').last().click()
-  await expect(cards).toHaveCount(1)
-  await expect(cards).toContainText('New Embed')
-  const sections = page.locator('.model-sections')
-  await sections.getByText('企业默认模型', { exact: true }).click()
-  await expect(page.locator('.defaults-panel .t-select input').first()).toHaveValue('North API · Example Chat')
-  await sections.getByText('模型管理', { exact: true }).click()
-  await expect(cards).toHaveCount(1)
+  await confirmDelete(cards.first())
+  await expect(cards).toHaveCount(0)
+  await typeTabs.getByText('全部', { exact: true }).click()
   await expectResponsive(page)
   expect((await search.boundingBox())!.y).toBeGreaterThan((await typeTabs.boundingBox())!.y)
-  await expect(page.locator('.model-card--add')).toBeInViewport()
 
-  await typeTabs.getByText('全部', { exact: true }).click()
-  const modelMenu = chatCard.getByRole('button', { name: '展开' })
-  await modelMenu.press('Enter')
-  const copyAction = page.getByRole('button', { name: '复制', exact: true })
-  await expect(copyAction).toBeInViewport({ ratio: 1 })
-  const panel = page.locator('.model-actions-panel:visible')
-  const labelLineCounts = await panel.getByRole('button').evaluateAll(buttons =>
+  const menu = chatCard.getByRole('button', { name: '展开' })
+  await menu.press('Enter')
+  const edit = page.getByRole('button', { name: '编辑', exact: true })
+  const copy = page.getByRole('button', { name: '复制', exact: true })
+  await expect(copy).toBeInViewport({ ratio: 1 })
+  const lineCounts = await page.locator('.model-actions-panel:visible').getByRole('button').evaluateAll(buttons =>
     buttons.map(button => {
       const range = document.createRange()
       range.selectNodeContents(button.querySelector('.t-button__text') ?? button)
       return new Set(Array.from(range.getClientRects(), rect => rect.y)).size
     }),
   )
-  expect(labelLineCounts).toEqual([1, 1, 1])
+  expect(lineCounts).toEqual([1, 1])
   await page.keyboard.press('Tab')
-  await expect(copyAction).toBeFocused()
+  await expect(edit).toBeFocused()
   await page.keyboard.press('Escape')
-  await expect(modelMenu).toBeFocused()
-  await modelMenu.click()
-  await copyAction.click()
-  const copied = cards.filter({ hasText: 'Example Chat 副本' })
-  await expect(copied).toHaveCount(1)
-  await copied.getByRole('button', { name: 'Example Chat 副本' }).click()
-  dialog = page.locator('.t-dialog:visible')
-  await expect(dialog.getByRole('textbox', { name: '服务商模型名称' })).toHaveValue('Example Chat')
-  await expect(dialog.getByRole('textbox', { name: '显示名称（可选）' })).toHaveValue('Example Chat 副本')
+  await expect(menu).toBeFocused()
+  await menu.click()
+  await copy.click()
+  const copied = cards.getByRole('button', { name: 'Example Chat 副本' })
+  await expect(copied).toBeVisible()
+  await copied.click()
+  await expect(drawer.getByLabel('模型名称', { exact: true })).toHaveValue('Example Chat')
+  await expect(drawer.getByLabel('显示名称（可选）')).toHaveValue('Example Chat 副本')
+  await drawer.getByRole('button', { name: '取消', exact: true }).click()
+
+  await page.goto('models/defaults')
+  await expect(page.locator('.defaults-panel .t-select input').first()).toHaveValue('North API · Example Chat')
 })
 
-test('企业从同一表单添加模型和服务商，失败后可直接重试', async ({ page, api }) => {
+test('企业模型用同一抽屉新增与修改接入，测试当前草稿并可重试保存', async ({ page, api }) => {
   await api.signIn()
   const root = '/api/v1/tenants/a/admin/model-settings'
-  let provider: { id: string; name: string; base_url: string; scope: string; key_configured: boolean; key_mask: string; models: unknown[] } | undefined
   const writes: unknown[] = [], draftTests: unknown[] = []
+  let provider: { id: string; name: string; base_url: string; scope: string; key_configured: boolean; key_mask: string; models: unknown[] } | undefined
   api.handle(request => {
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/me/permissions') return { body: { apis: ['models:manage'] } }
     if (path === root) return { body: { providers: provider ? [provider] : [], defaults: {}, can_manage_tenant: true } }
-    if (path === root + '/test' && request.method() === 'POST') {
+    if (path === root + '/test') {
       draftTests.push(request.postDataJSON())
       return { body: { ok: true, message: 'Draft connection verified' } }
     }
     if (path === root + '/models' && request.method() === 'POST') {
-      const { provider: input, ...model } = request.postDataJSON()
-      writes.push({ ...model, provider: input })
-      if (writes.length === 1) return { status: 422, body: { error: 'Model rejected' } }
-      const row = { ...model, id: 'model', version_id: 'model-v1', version: 1 }
-      provider = { id: 'new', name: input.name, base_url: input.base_url, scope: 'tenant', key_configured: true, key_mask: '****', models: [row] }
-      return { body: { id: row.id, version_id: row.version_id } }
-    }
-    if (path === root + '/providers/new' && request.method() === 'PUT' && provider) {
       const input = request.postDataJSON()
       writes.push(input)
-      provider = { ...provider, name: input.name, base_url: input.base_url }
-      return { body: provider }
+      if (writes.length === 1) return { status: 422, body: { error: 'Model rejected' } }
+      const { provider: connection, ...model } = input
+      const row = { ...model, id: 'model', version_id: 'model-v1', version: 1 }
+      provider = { id: 'new', name: connection.name, base_url: connection.base_url, scope: 'tenant', key_configured: true, key_mask: '****', models: [row] }
+      return { body: { id: row.id, version_id: row.version_id } }
+    }
+    if (path === root + '/providers/new/models/model/configuration' && request.method() === 'PUT' && provider) {
+      const input = request.postDataJSON()
+      writes.push(input)
+      const { provider: connection, ...model } = input
+      provider = { ...provider, base_url: connection.base_url, models: [{ ...model, id: 'model', version_id: 'model-v2', version: 2 }] }
+      return { body: { id: 'model', version_id: 'model-v2' } }
     }
   })
 
   await page.setViewportSize({ width: 375, height: 900 })
   await page.goto('models')
-  await expect(page.getByRole('button', { name: '添加服务商', exact: true })).toHaveCount(0)
   await page.locator('.model-card--add').click()
-  const editor = page.locator('.t-dialog:visible')
-  const save = editor.getByRole('button', { name: '保存', exact: true })
+  const editor = page.locator('.setting-drawer:visible')
+  const save = editor.getByRole('button', { name: '保存并关闭', exact: true })
   const service = editor.locator('.t-select').first()
-  const name = editor.getByLabel('服务商名称')
-  const modelName = editor.getByLabel('服务商模型名称')
-  const address = editor.getByLabel('API 地址')
+  const address = editor.getByLabel('Base URL')
   const key = editor.getByLabel('API Key')
   await expect(save).toBeInViewport()
   await save.click()
-  await expect(editor).toContainText('请输入服务商名称。')
-  await name.fill('Custom Gateway')
-  await save.click()
-  await expect(editor).toContainText('请输入有效的 HTTP 或 HTTPS API 地址。')
-  expect(writes).toHaveLength(0)
+  await expect(editor.getByRole('alert')).toBeVisible()
 
   const choose = async (label: string) => {
     await service.click()
-    await page.locator('.t-select-option:visible').filter({ hasText: label }).click()
+    await page.locator('.t-select-option:visible').getByText(label, { exact: true }).click()
   }
-  await choose('OpenAI ·')
-  await expect(name).toHaveValue('OpenAI')
+  await choose('OpenAI')
   await expect(address).toHaveValue('https://api.openai.com/v1')
   await key.fill('example-key-for-openai')
   await choose('DeepSeek')
   await expect(address).toHaveValue('https://api.deepseek.com')
   await expect(key).toHaveValue('')
-  await choose('自定义')
-  await expect(name).toHaveValue('')
-  await expect(address).toHaveValue('')
-
-  await choose('DeepSeek')
-  await name.fill('Enterprise Gateway')
-  await modelName.fill('example-chat')
+  await editor.locator('.t-select').nth(1).click()
+  await page.locator('.t-select-option:visible').getByText('deepseek-flash', { exact: true }).click()
   await address.fill('https://gateway.example.test/v1')
   await key.fill('example-gateway-key')
   await editor.getByRole('button', { name: '测试连接', exact: true }).click()
   await expect(editor.getByRole('status')).toHaveText('Draft connection verified')
   expect(draftTests).toEqual([{
     scope: 'tenant', base_url: 'https://gateway.example.test/v1', api_key: 'example-gateway-key',
-    model_name: 'example-chat', model_type: 'chat', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
+    model_name: 'deepseek-flash', model_type: 'chat', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
   }])
   await save.click()
-  await expect(editor).toContainText('模型配置保存失败')
-  await expect(modelName).toHaveValue('example-chat')
+  await expect(editor.getByRole('alert')).toContainText('模型配置保存失败')
   await expect(key).toHaveValue('example-gateway-key')
   await save.click()
   await expect(editor).toHaveCount(0)
-  await expect(page.locator('.model-grid article')).toContainText('example-chat')
-  const expected = {
-    name: 'example-chat', model_type: 'chat', options: { protocol: 'openai_chat_completions', reasoning_effort: '' },
-    provider: { name: 'Enterprise Gateway', base_url: 'https://gateway.example.test/v1', api_key: 'example-gateway-key' },
-  }
-  expect(writes).toEqual([expected, expected])
-
-  await page.getByRole('button', { name: '服务商', exact: true }).click()
-  await page.getByRole('button', { name: 'Enterprise Gateway · 编辑服务商' }).click()
-  await expect(editor).toContainText('编辑企业模型服务商')
-  await expect(name).toHaveValue('Enterprise Gateway')
+  const card = page.locator('.model-grid article').getByRole('button', { name: 'deepseek-flash' })
+  await card.click()
+  await expect(editor).toContainText('编辑模型')
   await expect(address).toHaveValue('https://gateway.example.test/v1')
   await expect(key).toHaveValue('')
   await address.fill('https://another.example.test/v1')
-  const saveProvider = editor.getByRole('button', { name: '保存并关闭' })
-  await saveProvider.click()
-  await expect(editor).toContainText('修改 API 地址需要重新填写 API Key。')
+  await save.click()
+  await expect(editor.getByRole('alert')).toContainText('修改 API 地址需要重新填写 API Key。')
   expect(writes).toHaveLength(2)
   await key.fill('example-new-key')
-  await saveProvider.click()
+  await save.click()
   await expect(editor).toHaveCount(0)
-  expect(writes[2]).toEqual({
-    name: 'Enterprise Gateway', base_url: 'https://another.example.test/v1', api_key: 'example-new-key', scope: 'tenant',
+  expect(writes[2]).toMatchObject({
+    name: 'deepseek-flash', model_type: 'chat',
+    provider: { name: 'DeepSeek', base_url: 'https://another.example.test/v1', api_key: 'example-new-key', scope: 'tenant' },
   })
 })
 

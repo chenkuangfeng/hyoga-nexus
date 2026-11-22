@@ -34,17 +34,13 @@
 .model-hints {
   width: min(320px, calc(100vw - 64px));
   padding: 4px;
+  margin: 0;
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-sm);
   line-height: 1.5;
 
   p { margin: 0; }
   p + p { margin-top: 8px; }
-}
-
-.model-sections {
-  margin-bottom: 8px;
-  :deep(.t-tabs__content) { display: none; }
 }
 
 .model-tabbar {
@@ -131,7 +127,8 @@
 .model-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 12px;
+  gap: 10px;
+  align-items: stretch;
 }
 
 .model-card {
@@ -142,8 +139,13 @@
   gap: 10px;
   border-radius: var(--app-radius-md);
 
-  &:has(.model-card__edit:enabled):hover {
-    border-color: var(--td-brand-color-3);
+  &:has(.model-card__edit:enabled) {
+    .provider-card-interactive();
+  }
+
+  &:has(.model-card__edit:focus-visible) {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: 2px;
   }
 
   &--add {
@@ -174,54 +176,57 @@
 .model-card--speech .model-card__badge { .provider-card-badge-color(#118053); }
 
 .model-card__body { .provider-card-body(); }
-.model-card__title { .provider-card-title(); overflow: visible; }
+.model-card__header { .provider-card-header(); }
+.model-card__title { .provider-card-title(); }
 
 .model-card__edit {
   display: block;
-  max-width: 100%;
+  width: 100%;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: none;
   color: inherit;
   font: inherit;
   text-align: start;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: inherit;
 
-  // 扩展原生按钮的点击范围，独立操作按钮保持在点击范围上方。
-  &:enabled::after { content: ''; position: absolute; inset: 0; border-radius: inherit; cursor: pointer; }
-  &:focus-visible::after { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+  &:enabled::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
 }
 
 .model-card__subtitle {
   .provider-card-subtitle();
+  flex-wrap: nowrap;
   margin: 0;
-  overflow-wrap: anywhere;
 }
 
-.model-card__vendor {
-  max-width: 100%;
+.model-card__vendor > span, .model-card__upstream {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
 
-  &::after { content: ' ·'; }
+.model-card__vendor {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+
+  > img { width: 14px; height: 14px; flex-shrink: 0; object-fit: contain; }
 }
 
 .model-card__actions {
   position: relative;
-  align-self: flex-start;
   flex-shrink: 0;
   display: flex;
   gap: 2px;
-}
-
-.connection-result {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--td-error-color);
-
-  &.is-success { color: var(--td-success-color); }
 }
 
 .empty-state {

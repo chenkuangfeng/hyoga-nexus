@@ -173,7 +173,7 @@ export default {
   },
   adminModels: {
     title: '企业模型',
-    description: '管理当前企业共享的模型服务商、模型版本和各类型默认模型。',
+    description: '管理当前企业共享的对话、向量化、重排、视觉和语音模型。',
     scopeHint: '仅显示当前企业共享模型，不读取或修改成员个人模型。模型 Key 只在提交时发送，页面不会回显完整密钥。',
     loadFailed: '企业模型读取失败，请重试。',
     saveFailed: '模型配置保存失败，请检查字段后重试。',

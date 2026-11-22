@@ -14,7 +14,7 @@ from sqlalchemy import select
 from test_platform import database
 from nexus_api.main import app
 from nexus_api.dependencies.platform import get_database_session, get_principal
-from nexus_core.platform import Principal, utc_now, CredentialRef
+from nexus_core.platform import Principal, utc_now, CredentialRef, new_id
 from nexus_core.runtime import RuntimeFault
 from nexus_platform.tenants.service import create_tenant
 from nexus_platform.identity.service import resolve_user
@@ -437,3 +437,136 @@ def test_draft_test_requires_a_key_for_new_providers_and_scope_permission(settin
     denied = client.post(path + '/test', json={'base_url': 'https://model.example/v1', 'model_name': 'm', 'scope': 'tenant', 'api_key': 'k'})
     assert denied.status_code == 403
     assert 'k' not in denied.text
+
+
+def test_enterprise_model_connection_edit_changes_only_selected_profile(settings_client, database):
+    client, path, _, _, _, tenant_id = settings_client
+    provider = add_provider(client, path, scope='tenant')
+    model = add_model(client, path, provider)
+    sibling = add_model(client, path, provider, 'sibling')
+    admin = path.replace('/model-settings', '/admin/model-settings')
+    route = f'{admin}/providers/{provider["id"]}/models/{model["id"]}/configuration'
+    payload = {'name': 'new-upstream', 'model_type': 'chat', 'provider': {
+        'name': 'Replacement', 'base_url': 'https://new.example/v1', 'scope': 'tenant',
+    }}
+    assert client.put(route, json=payload).status_code == 422
+    payload['provider']['api_key'] = 'replacement-key'
+    response = client.put(route, json=payload)
+    assert response.status_code == 200, response.text
+    assert response.json()['id'] == model['id']
+    assert 'replacement-key' not in response.text
+    groups = client.get(admin).json()['providers']
+    by_name = {group['name']: group for group in groups}
+    assert [row['id'] for row in by_name['Provider']['models']] == [sibling['id']]
+    assert [row['id'] for row in by_name['Replacement']['models']] == [model['id']]
+    with database() as db:
+        old = db.get(ModelProfileVersionRecord, UUID(model['version_id']))
+        other = db.get(ModelProfileVersionRecord, UUID(sibling['version_id']))
+        new = db.get(ModelProfileVersionRecord, UUID(response.json()['version_id']))
+        assert old.tenant_id == new.tenant_id == tenant_id
+        assert old.options['base_url'] == 'https://model.example/v1'
+        assert new.options['base_url'] == 'https://new.example/v1'
+        assert old.credential_reference_id == other.credential_reference_id != new.credential_reference_id
+        assert decrypt(db.get(ProviderCredentialRecord, old.credential_reference_id)) == 'test-private-key'
+        assert decrypt(db.get(ProviderCredentialRecord, new.credential_reference_id)) == 'replacement-key'
+
+
+def test_enterprise_model_delete_reports_active_references(settings_client, database):
+    from nexus_platform.persistence.models import KnowledgeBaseRecord
+
+    client, path, _, owner, _, tenant_id = settings_client
+    provider = add_provider(client, path, scope='tenant')
+    model = add_model(client, path, provider)
+    assert client.put(path + '/default', json={'scope': 'tenant', 'version_id': model['version_id']}).status_code == 200
+    agent = client.post(path + '/agents', json={'name': 'Private agent'})
+    assert agent.status_code == 201, agent.text
+    with database() as db, db.begin():
+        user = resolve_user(db, owner)
+        now = utc_now()
+        db.add(KnowledgeBaseRecord(id=new_id(), tenant_id=tenant_id, name='Private knowledge base', created_by=user.id,
+                                   settings={'summary_model_id': model['version_id']}, created_at=now, updated_at=now))
+    admin = path.replace('/model-settings', '/admin/model-settings')
+    route = f'{admin}/providers/{provider["id"]}/models/{model["id"]}/configuration'
+    response = client.delete(route)
+    assert response.status_code == 409
+    issue = response.json()['error']
+    assert issue['code'] == 'model_in_use'
+    assert issue['details'] == {'agents': 1, 'knowledge_bases': 1, 'memory': 0}
+    assert 'Private agent' not in response.text
+    assert 'Private knowledge base' not in response.text
+
+
+def test_enterprise_model_debug_uses_current_model_and_redacts_credential(settings_client, monkeypatch):
+    from nexus_api.http import model_settings
+    from nexus_core.runtime import ModelChunk
+
+    class DebugAdapter:
+        closed = False
+
+        async def stream(self, request):
+            assert request.messages[-1].content == 'debug prompt'
+            assert request.max_output_tokens == 256
+            yield ModelChunk('text', text='result test-private-key')
+            yield ModelChunk('done', finish_reason='stop')
+
+        async def close(self):
+            self.closed = True
+
+    adapter = DebugAdapter()
+
+    def factory(**arguments):
+        assert arguments['model'] == 'test-model'
+        assert arguments['api_key'] == 'test-private-key'
+        assert arguments['options']['temperature'] == 0
+        return adapter
+
+    monkeypatch.setattr(model_settings, 'create_model', factory)
+    client, path, *_ = settings_client
+    provider = add_provider(client, path, scope='tenant')
+    model = add_model(client, path, provider)
+    admin = path.replace('/model-settings', '/admin/model-settings')
+    route = f'{admin}/providers/{provider["id"]}/models/{model["id"]}/debug'
+    payload = {'text': 'debug prompt', 'max_output_tokens': 256, 'temperature': 0}
+    response = client.post(route, json=payload)
+    assert response.status_code == 200, response.text
+    assert response.json() == {'ok': True, 'result': {'type': 'chat', 'text': 'result [redacted]'}}
+    assert adapter.closed
+    assert client.post(route, json=payload).status_code == 409
+
+
+@pytest.mark.parametrize('model_type,filename,expected', [
+    ('vision', 'sample.png', 'image/png'),
+    ('speech', 'sample.wav', 'sample.wav'),
+])
+def test_enterprise_media_debug_uses_saved_model_without_storing_upload(
+    settings_client, monkeypatch, model_type, filename, expected,
+):
+    from nexus_api.http import model_settings
+
+    class Adapter:
+        closed = False
+
+        async def describe(self, data, mime, system, prompt, max_tokens):
+            assert (data, mime, prompt) == (b'test media', expected, 'Describe the sample')
+            return 'media response'
+
+        async def transcribe(self, data, name):
+            assert (data, name) == (b'test media', expected)
+            return 'media response'
+
+        async def close(self):
+            self.closed = True
+
+    adapter = Adapter()
+    factory = 'create_vision' if model_type == 'vision' else 'create_transcriber'
+    monkeypatch.setattr(model_settings, factory, lambda **_: adapter)
+    client, path, *_ = settings_client
+    provider = add_provider(client, path, scope='tenant')
+    model = client.post(f'{path}/providers/{provider["id"]}/models',
+                        json={'name': 'test-media', 'model_type': model_type}).json()
+    admin = path.replace('/model-settings', '/admin/model-settings')
+    route = f'{admin}/providers/{provider["id"]}/models/{model["id"]}/debug-media'
+    response = client.post(route, files={'file': (filename, b'test media')}, data={'text': 'Describe the sample'})
+    assert response.status_code == 200, response.text
+    assert response.json() == {'ok': True, 'result': {'type': model_type, 'text': 'media response'}}
+    assert adapter.closed

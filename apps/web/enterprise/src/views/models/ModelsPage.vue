@@ -1,307 +1,123 @@
 <script setup lang="ts">
-import UsagePage from '../usage/UsagePage.vue'
-import ModelActions from './ModelActions.vue'
-import ModelProviderEditor from './ModelProviderEditor.vue'
-import { isApiAddress, providerPresets } from './providerConfig'
-import SettingDrawer from '@nexus-web/core/components/settings/SettingDrawer.vue'
-/** 企业模型目录：只管理当前企业共享 Provider、模型版本和租户默认值。 */
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+/** 企业模型卡片和操作按 WeKnora ModelSettings 组织。 */
+import { computed, onBeforeUnmount, provide, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { ADMIN_EDITOR_MODE, type EditorMode } from '@nexus-web/core/composables/useEditorPresentation'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
-  copyEnterpriseModel, createEnterpriseModelWithProvider, disableEnterpriseModel, disableEnterpriseModelProvider,
-  listEnterpriseModelSettings, saveEnterpriseModel,
-  saveEnterpriseModelProvider, setEnterpriseModelDefault, testEnterpriseModel,
-  testEnterpriseModelDraft,
-  enterpriseModelProtocol, type EnterpriseModelConnectionResult, type EnterpriseModelInput,
-  type EnterpriseModelProvider, type EnterpriseModelProfile, type EnterpriseModelProtocol, type EnterpriseModelSettings,
-  type EnterpriseModelType, type EnterpriseProviderInput, type NewEnterpriseProvider,
+  copyEnterpriseModel, deleteEnterpriseModel, listEnterpriseModelSettings,
+  type EnterpriseModelSettings, type EnterpriseModelType, type ModelUsageCounts,
 } from '@nexus-web/core/api/enterprise-models'
 import { useEnterpriseContext } from '../../stores/context'
+import ModelActions from './ModelActions.vue'
+import ModelEditorDialog from './ModelEditorDialog.vue'
+import ModelDebugDrawer from './ModelDebugDrawer.vue'
+import { providerPresets } from './providerConfig'
+import { modelLabel, modelTypeIcons, modelTypes, type ModelCard } from './modelTypes'
+
+// 模型新增、编辑与调试沿用 WeKnora 的右侧抽屉。
+provide(ADMIN_EDITOR_MODE, ref<EditorMode>('drawer'))
 
 const auth = useAuthStore(), context = useEnterpriseContext(), { t } = useI18n()
 const tenant = computed(() => String(auth.effectiveTenantId || ''))
 const canManage = computed(() => context.can('models:manage'))
-const settings = ref<EnterpriseModelSettings | null>(null), loading = ref(false), busy = ref(false), error = ref(''), ready = ref(false)
-const activeTab = ref('models'), activeType = ref<EnterpriseModelType | 'all'>('all'), modelQuery = ref('')
-const types: EnterpriseModelType[] = ['chat', 'embedding', 'rerank', 'vision', 'speech']
-const typeIcons: Record<EnterpriseModelType | 'all', string> = {
-  all: 'view-module', chat: 'chat', embedding: 'chart-bubble', rerank: 'filter-sort', vision: 'image', speech: 'sound',
-}
-const defaultsDraft = ref<Partial<Record<EnterpriseModelType, string>>>({})
-const providerDialog = ref(false), providerError = ref('')
-const editingProvider = ref<EnterpriseModelProvider | null>(null)
-const modelDialog = ref(false), modelProviderId = ref<string | null>(null), modelEditId = ref<string | null>(null)
-const providerDraft = reactive({ name: '', baseUrl: '', apiKey: '' })
-const rerankApis = [
-  { value: 'cohere', label: 'Cohere' },
-  { value: 'tei', label: 'Text Embeddings Inference (TEI)' },
-  { value: 'dashscope', label: 'DashScope' },
-]
-function emptyModelForm(type: EnterpriseModelType = 'chat') {
-  return { name: '', displayName: '', type, protocol: 'openai_chat_completions' as EnterpriseModelProtocol,
-    temperature: null as number | null, reasoningEffort: '', rerankApi: 'cohere' }
-}
-const modelForm = ref(emptyModelForm())
-watch(() => modelForm.value.type, type => {
-  if (type === 'embedding' && modelForm.value.protocol === 'anthropic_messages' && !modelEditId.value) {
-    modelForm.value.protocol = 'openai_chat_completions'
-  }
-})
-const draftConnection = ref<EnterpriseModelConnectionResult | null>(null), testingDraft = ref(false)
-const connections = ref<Record<string, EnterpriseModelConnectionResult>>({}), testingId = ref('')
-let epoch = 0, read = 0, draftRequest = 0, confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
-const typeOptions = computed(() => types.map(value => ({ value, label: t(`adminModels.types.${value}`) })))
-const providers = computed(() => settings.value?.providers || [])
-const selectedProvider = computed(() => providers.value.find(row => row.id === modelProviderId.value))
-const providerOptions = computed(() => [
-  ...providers.value.map(provider => ({ value: provider.id, label: provider.name })),
-  ...(!modelEditId.value ? [
-    ...providerPresets.map(preset => ({ value: preset.value, label: `${preset.label} · ${t('adminModels.providerTemplate')}` })),
-    { value: 'custom', label: t('modelSettings.source.custom') },
-  ] : []),
-])
-const addingProvider = computed(() => !modelEditId.value && (modelProviderId.value === 'custom'
-  || providerPresets.some(preset => preset.value === modelProviderId.value)))
-const newProviderInput = computed<NewEnterpriseProvider | null>(() => addingProvider.value ? {
-  name: providerDraft.name.trim(), base_url: providerDraft.baseUrl.trim(), api_key: providerDraft.apiKey,
-} : null)
-const providerInputError = computed(() => {
-  const provider = newProviderInput.value
-  if (!provider) return ''
-  if (!provider.name) return t('adminModels.providerNameRequired')
-  if (!isApiAddress(provider.base_url)) return t('adminModels.providerAddressInvalid')
-  return provider.api_key.trim() ? '' : t('adminModels.keyRequired')
-})
-watch(modelProviderId, value => {
-  const preset = providerPresets.find(row => row.value === value)
-  providerDraft.name = preset?.label ?? ''
-  providerDraft.baseUrl = preset?.baseUrl ?? ''
-  providerDraft.apiKey = ''
-}, { flush: 'sync' })
-const providerActions = computed(() => providers.value.flatMap(provider => [
-  { label: `${provider.name} · ${t('adminModels.editProvider')}`, key: `edit-${provider.id}`, run: () => openProvider(provider) },
-  { label: `${provider.name} · ${t('adminModels.disable')}`, key: `disable-${provider.id}`, danger: true, run: () => confirmDisable('provider', provider) },
-]))
-const models = computed(() => providers.value.flatMap(provider => provider.models.map(model => ({ provider, model }))))
+const settings = ref<EnterpriseModelSettings | null>(null)
+const loading = ref(false), busy = ref(false), loadFailed = ref(false), error = ref('')
+const activeType = ref<EnterpriseModelType | 'all'>('all'), modelQuery = ref('')
+const editor = ref<{ type: EnterpriseModelType; editing?: ModelCard } | null>(null)
+const debug = ref(false)
+const usageConflict = ref<{ name: string; counts: ModelUsageCounts } | null>(null)
+let epoch = 0
+
+const models = computed(() => settings.value?.providers.flatMap(provider => provider.models.map(model => ({ provider, model }))) ?? [])
+const typeLabels = { chat: 'chat', embedding: 'embedding', rerank: 'rerank', vision: 'vllm', speech: 'asr' } as const
 const typeTabs = computed(() => {
   const counts = { all: models.value.length, chat: 0, embedding: 0, rerank: 0, vision: 0, speech: 0 }
   for (const { model } of models.value) counts[model.model_type]++
-  return [{ value: 'all' as const, label: t('common.all') }, ...typeOptions.value]
-    .map(tab => ({ ...tab, icon: typeIcons[tab.value], count: counts[tab.value] }))
+  return [
+    { value: 'all', label: t('common.all'), icon: 'view-module', count: counts.all },
+    ...modelTypes.map(value => ({ value, label: t('modelSettings.typeShort.' + typeLabels[value]), icon: modelTypeIcons[value], count: counts[value] })),
+  ]
 })
+const vendorIcons = new Map(providerPresets.map(preset => [preset.label, preset.icon]))
 const query = computed(() => modelQuery.value.trim().toLowerCase())
 const filteredModels = computed(() => models.value.filter(({ model, provider }) =>
   (activeType.value === 'all' || model.model_type === activeType.value)
   && [model.name, modelLabel(model), provider.name].some(name => name.toLowerCase().includes(query.value)),
 ))
-const defaultOptions = computed(() => Object.fromEntries(types.map(type => [type, models.value
-  .filter(({ model }) => model.model_type === type)
-  .map(({ provider, model }) => ({ value: model.version_id, label: `${provider.name} · ${modelLabel(model)}` }))])))
-function modelLabel(model: EnterpriseModelProfile) {
-  return model.display_name || model.name
-}
-function currentScope(current: number, scope: string, user: string) {
-  return current === epoch && scope === tenant.value && user === String(auth.user?.id || '') && canManage.value
-}
-function clearForms() {
-  closeProvider()
-  closeModel()
-  connections.value = {}; testingId.value = ''
-}
+const available = computed(() => settings.value !== null && !loading.value && !busy.value)
+
 function invalidate() {
-  epoch++; read++; confirmation?.hide(); confirmation = undefined
-  settings.value = null; loading.value = false; busy.value = false; error.value = ''; ready.value = false
-  defaultsDraft.value = {}; clearForms()
-  activeType.value = 'all'; modelQuery.value = ''
-}
-async function load(refreshAfterWrite = false) {
-  if (!canManage.value || !tenant.value || (busy.value && !refreshAfterWrite)) return
-  const current = epoch, request = ++read, scope = tenant.value, user = String(auth.user?.id || '')
-  loading.value = true; ready.value = false; error.value = ''
-  try {
-    const result = await listEnterpriseModelSettings(scope)
-    if (!currentScope(current, scope, user) || request !== read) return
-    settings.value = result; defaultsDraft.value = { ...result.defaults }; ready.value = true
-  } catch { if (currentScope(current, scope, user) && request === read) error.value = t('adminModels.loadFailed') }
-  finally { if (currentScope(current, scope, user) && request === read) loading.value = false }
-}
-function openProvider(row: EnterpriseModelProvider) {
-  if (!canManage.value || !ready.value || busy.value) return
-  editingProvider.value = row
-  providerError.value = ''
-  providerDialog.value = true
+  epoch++
+  editor.value = null
+  debug.value = false
+  usageConflict.value = null
+  settings.value = null
+  loading.value = busy.value = loadFailed.value = false
   error.value = ''
-}
-function closeProvider() {
-  providerDialog.value = false
-  editingProvider.value = null
-  providerError.value = ''
-}
-async function saveProvider(input: Omit<EnterpriseProviderInput, 'scope'>) {
-  const id = editingProvider.value?.id
-  if (!tenant.value || !canManage.value || !ready.value || !providerDialog.value || !id || busy.value) return
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
-  busy.value = true
-  providerError.value = ''
-  try {
-    await saveEnterpriseModelProvider(scope, { ...input, scope: 'tenant' }, id)
-    if (!currentScope(current, scope, user)) return
-    clearForms(); void MessagePlugin.success(t('adminModels.providerSaved'))
-    await load(true)
-  } catch { if (currentScope(current, scope, user)) providerError.value = t('adminModels.saveFailed') }
-  finally { if (currentScope(current, scope, user)) busy.value = false }
-}
-function closeModel() {
-  modelDialog.value = false; modelProviderId.value = null; modelEditId.value = null
-  providerDraft.apiKey = ''
-  modelForm.value = emptyModelForm()
-  error.value = ''
+  activeType.value = 'all'
+  modelQuery.value = ''
 }
 
-/** 在模型表单选择已配置服务商、模板或自定义接入。 */
-function openModel(provider?: EnterpriseModelProvider, row?: EnterpriseModelProfile) {
-  if (!canManage.value || !ready.value || busy.value) return
-  modelProviderId.value = provider?.id ?? (providers.value.length ? (providers.value.length === 1 ? providers.value[0].id : null) : 'custom')
-  modelEditId.value = row?.id || null
-  const options = row?.options || {}
-  modelForm.value = {
-    ...emptyModelForm(row?.model_type ?? (activeType.value === 'all' ? 'chat' : activeType.value)),
-    name: row?.name || '',
-    displayName: row && modelLabel(row) !== row.name ? modelLabel(row) : '',
-    protocol: enterpriseModelProtocol(options.protocol),
-    temperature: typeof options.temperature === 'number' ? options.temperature : null,
-    reasoningEffort: typeof options.reasoning_effort === 'string' ? options.reasoning_effort : '',
-    rerankApi: rerankApis.find(api => api.value === options.rerank_api)?.value ?? 'cohere',
-  }
-  modelDialog.value = true; error.value = ''
-}
-const modelInput = computed<EnterpriseModelInput>(() => {
-  const form = modelForm.value
-  const existing = selectedProvider.value?.models.find(row => row.id === modelEditId.value)
-  const options: Record<string, unknown> = { protocol: form.protocol, reasoning_effort: form.reasoningEffort }
-  const temperature = form.temperature ?? existing?.options.temperature
-  if (typeof temperature === 'number') options.temperature = temperature
-  if (form.type === 'rerank') options.rerank_api = form.rerankApi
-  const displayName = form.displayName.trim()
-  return { name: form.name.trim(), model_type: form.type, options,
-    ...(displayName || modelEditId.value ? { display_name: displayName } : {}) }
-})
-const draftTestInput = computed(() => {
-  const { name, model_type, options } = modelInput.value
-  return JSON.stringify([modelDialog.value, modelProviderId.value, name, model_type, options])
-})
-watch([draftTestInput, () => providerDraft.baseUrl, () => providerDraft.apiKey], () => {
-  draftRequest++
-  testingDraft.value = false
-  draftConnection.value = null
-}, { flush: 'sync' })
-
-async function testModelDraft() {
-  const provider = selectedProvider.value ?? newProviderInput.value, input = modelInput.value
-  if (!modelDialog.value || !provider || providerInputError.value || !input.name || !tenant.value || !canManage.value || testingDraft.value || busy.value) return
-  const current = epoch, request = ++draftRequest, scope = tenant.value, user = String(auth.user?.id || '')
-  testingDraft.value = true
-  draftConnection.value = null
+async function load() {
+  if (!tenant.value || !canManage.value || loading.value) return
+  const scope = epoch
+  loading.value = true
+  loadFailed.value = false
   try {
-    const result = await testEnterpriseModelDraft(scope, provider, input)
-    if (request === draftRequest && currentScope(current, scope, user)) draftConnection.value = result
+    const result = await listEnterpriseModelSettings(tenant.value)
+    if (scope === epoch) settings.value = result
   } catch {
-    if (request === draftRequest && currentScope(current, scope, user)) {
-      draftConnection.value = { ok: false, message: t('adminModels.testFailed') }
+    if (scope === epoch) {
+      settings.value = null
+      loadFailed.value = true
     }
   } finally {
-    if (request === draftRequest && currentScope(current, scope, user)) testingDraft.value = false
+    if (scope === epoch) loading.value = false
   }
 }
 
-async function saveModel() {
-  const providerId = selectedProvider.value?.id, provider = newProviderInput.value, input = modelInput.value
-  if (!tenant.value || !canManage.value || !ready.value || !modelDialog.value || (!providerId && !provider) || busy.value) return
-  if (providerInputError.value) { error.value = providerInputError.value; return }
-  if (!input.name) { error.value = t('adminModels.modelRequired'); return }
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || ''), profileId = modelEditId.value
-  busy.value = true; error.value = ''
-  try {
-    if (provider) await createEnterpriseModelWithProvider(scope, provider, input)
-    else if (providerId) await saveEnterpriseModel(scope, providerId, input, profileId || undefined)
-    if (!currentScope(current, scope, user)) return
-    if (!profileId) {
-      if (activeType.value !== 'all') activeType.value = input.model_type
-      modelQuery.value = ''
-    }
-    clearForms(); void MessagePlugin.success(t(profileId ? 'adminModels.modelVersionSaved' : 'adminModels.modelSaved'))
-    await load(true)
-  } catch { if (currentScope(current, scope, user)) error.value = t('adminModels.saveFailed') }
-  finally { if (currentScope(current, scope, user)) busy.value = false }
+function openModel(editing?: ModelCard) {
+  if (available.value) editor.value = { editing, type: activeType.value === 'all' ? 'chat' : activeType.value }
 }
-async function copyModel(provider: EnterpriseModelProvider, model: EnterpriseModelProfile) {
-  if (!tenant.value || !canManage.value || !ready.value || busy.value) return
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
-  busy.value = true; error.value = ''
-  try {
-    await copyEnterpriseModel(scope, provider.id, model.id, t('modelSettings.copySuffix').trim())
-    if (!currentScope(current, scope, user)) return
+
+function modelSaved(type: EnterpriseModelType, editing: boolean) {
+  editor.value = null
+  if (!editing) {
+    if (activeType.value !== 'all') activeType.value = type
     modelQuery.value = ''
-    void MessagePlugin.success(t('modelSettings.toasts.copied'))
-    await load(true)
-  } catch { if (currentScope(current, scope, user)) error.value = t('modelSettings.toasts.copyFailed') }
-  finally { if (currentScope(current, scope, user)) busy.value = false }
+  }
+  void MessagePlugin.success(t(editing ? 'adminModels.modelVersionSaved' : 'adminModels.modelSaved'))
+  void load()
 }
-async function saveDefault(type: EnterpriseModelType, value: unknown) {
-  if (!tenant.value || busy.value) return
-  const next = typeof value === 'string' && value ? value : null
-  const previous = settings.value?.defaults[type]
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
-  busy.value = true; error.value = ''
+
+async function changeModel(card: ModelCard, action: 'copy' | 'delete') {
+  if (!available.value) return
+  const scope = epoch, tenantId = tenant.value
+  busy.value = true
+  error.value = ''
   try {
-    await setEnterpriseModelDefault(scope, type, next)
-    if (!currentScope(current, scope, user)) return
-    defaultsDraft.value = { ...defaultsDraft.value, [type]: next || undefined }
-    if (settings.value) settings.value.defaults = { ...settings.value.defaults, [type]: next || undefined }
-    void MessagePlugin.success(t('adminModels.defaultSaved'))
-  } catch {
-    if (currentScope(current, scope, user)) {
-      defaultsDraft.value = { ...defaultsDraft.value, [type]: previous }
-      error.value = t('adminModels.defaultFailed')
+    if (action === 'copy') {
+      await copyEnterpriseModel(tenantId, card.provider.id, card.model.id, t('modelSettings.copySuffix').trim())
+    } else {
+      const counts = await deleteEnterpriseModel(tenantId, card.provider.id, card.model.id)
+      if (counts) {
+        if (scope === epoch) usageConflict.value = { name: modelLabel(card.model), counts }
+        return
+      }
     }
-  } finally { if (currentScope(current, scope, user)) busy.value = false }
+    if (scope !== epoch) return
+    if (action === 'copy') modelQuery.value = ''
+    void MessagePlugin.success(t(action === 'copy' ? 'modelSettings.toasts.copied' : 'modelSettings.toasts.deleted'))
+    await load()
+  } catch {
+    if (scope === epoch) error.value = t(action === 'copy' ? 'modelSettings.toasts.copyFailed' : 'modelSettings.toasts.deleteFailed')
+  } finally {
+    if (scope === epoch) busy.value = false
+  }
 }
-function confirmDisable(kind: 'provider' | 'model', provider: EnterpriseModelProvider, model?: EnterpriseModelProfile) {
-  if (!canManage.value || !ready.value || busy.value || confirmation) return
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
-  const name = kind === 'provider' ? provider.name : model ? modelLabel(model) : ''
-  const dialog = DialogPlugin.confirm({ header: t(kind === 'provider' ? 'adminModels.deleteProviderTitle' : 'adminModels.deleteModelTitle'),
-    body: t(kind === 'provider' ? 'adminModels.deleteProviderConfirm' : 'adminModels.deleteModelConfirm', { name }), theme: 'danger',
-    onConfirm: async () => {
-      if (confirmation !== dialog) return
-      dialog.hide(); confirmation = undefined
-      if (!currentScope(current, scope, user) || busy.value) return
-      busy.value = true; error.value = ''
-      try {
-        if (kind === 'provider') await disableEnterpriseModelProvider(scope, provider.id)
-        else if (model) await disableEnterpriseModel(scope, provider.id, model.id)
-        if (!currentScope(current, scope, user)) return
-        void MessagePlugin.success(t(kind === 'provider' ? 'adminModels.providerDisabled' : 'adminModels.modelDisabled', { name }))
-        await load(true)
-      } catch { if (currentScope(current, scope, user)) error.value = t('adminModels.deleteFailed') }
-      finally { if (currentScope(current, scope, user)) busy.value = false }
-    }, onClose: () => { dialog.hide(); if (confirmation === dialog) confirmation = undefined },
-  })
-  confirmation = dialog
-}
-async function testModel(provider: EnterpriseModelProvider, model: EnterpriseModelProfile) {
-  if (!tenant.value || busy.value || testingId.value) return
-  const current = epoch, scope = tenant.value, user = String(auth.user?.id || '')
-  testingId.value = model.id; error.value = ''
-  try {
-    const result = await testEnterpriseModel(scope, provider.id, model.id)
-    if (!currentScope(current, scope, user)) return
-    connections.value = { ...connections.value, [model.id]: result }
-  } catch { if (currentScope(current, scope, user)) error.value = t('adminModels.testFailed') }
-  finally { if (currentScope(current, scope, user)) testingId.value = '' }
-}
+
 watch([tenant, () => auth.user?.id, () => context.revision, canManage], () => { invalidate(); void load() }, { immediate: true, flush: 'sync' })
 onBeforeUnmount(invalidate)
 </script>
@@ -311,30 +127,23 @@ onBeforeUnmount(invalidate)
     <header class="model-section-header">
       <div class="model-section-header__top">
         <div class="model-title">
-          <h2>{{ t('consoleLayout.modelManagement') }}</h2>
+          <h2>{{ t('modelSettings.title') }}</h2>
           <t-popup v-if="canManage" trigger="click" placement="bottom-left" show-arrow>
-            <button type="button" class="model-title-help" :aria-label="t('adminModels.description')">
+            <button type="button" class="model-title-help" :aria-label="t('adminModels.scopeHint')">
               <t-icon name="help-circle" size="16px" aria-hidden="true" />
             </button>
-            <template #content>
-              <div class="model-hints">
-                <p>{{ t('adminModels.scopeHint') }}</p>
-                <p>{{ t('adminModels.testHint') }}</p>
-              </div>
-            </template>
+            <template #content><p class="model-hints">{{ t('adminModels.scopeHint') }}</p></template>
           </t-popup>
         </div>
-        <div v-if="canManage && activeTab !== 'usage'" class="model-header-actions">
-          <t-button variant="outline" size="small" :loading="loading" :disabled="busy" @click="load()">
-            {{ t('connectionUi.refresh') }}
+        <div v-if="canManage" class="model-header-actions">
+          <t-button variant="text" size="small" :disabled="!available || !models.length" @click="debug = true">
+            <template #icon><t-icon name="play-circle" aria-hidden="true" /></template>
+            {{ t('modelSettings.actions.debugModel') }}
           </t-button>
-          <template v-if="activeTab === 'models'">
-            <ModelActions v-if="providers.length" :label="t('model.editor.providerLabel')" :disabled="!ready || busy" :actions="providerActions" />
-            <t-button theme="primary" size="small" :disabled="!ready || busy" @click="openModel()">
-              <template #icon><t-icon name="add" aria-hidden="true" /></template>
-              {{ t('adminModels.addModel') }}
-            </t-button>
-          </template>
+          <t-button variant="text" size="small" :disabled="!available" @click="openModel()">
+            <template #icon><t-icon name="add" aria-hidden="true" /></template>
+            {{ t('modelSettings.actions.addModel') }}
+          </t-button>
         </div>
       </div>
       <p class="section-description">{{ t('adminModels.description') }}</p>
@@ -342,181 +151,91 @@ onBeforeUnmount(invalidate)
 
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
-      <t-alert v-if="error && !providerDialog && !modelDialog && activeTab !== 'usage'" theme="error" :message="error" />
-      <t-tabs v-model="activeTab" class="model-sections">
-        <t-tab-panel value="models" :label="t('consoleLayout.modelManagement')" />
-        <t-tab-panel value="defaults" :label="t('adminModels.defaultsTitle')" />
-        <t-tab-panel value="usage" :label="t('adminUsage.title')" />
-      </t-tabs>
-      <UsagePage v-if="activeTab === 'usage'" />
-      <section v-else-if="activeTab === 'defaults'" class="defaults-panel">
-        <h3>{{ t('adminModels.defaultsTitle') }}</h3>
-        <p>{{ t('adminModels.defaultsHint') }}</p>
-        <div class="defaults-grid">
-          <label v-for="type in types" :key="type">
-            {{ t('adminModels.types.' + type) }}
-            <t-select :value="defaultsDraft[type] || ''" :options="defaultOptions[type] || []"
-              :placeholder="t('adminModels.noDefault')" clearable filterable
-              :disabled="busy || !ready || !(defaultOptions[type]?.length)"
-              @change="(value: unknown) => saveDefault(type, value)" />
-          </label>
-        </div>
-      </section>
-      <template v-else>
-        <div class="model-tabbar">
-          <t-tabs v-model="activeType" class="model-type-tabs">
-            <t-tab-panel v-for="tab in typeTabs" :key="tab.value" :value="tab.value">
-              <template #label>
-                <span class="model-type-tab">
-                  <t-icon :name="tab.icon" size="16px" aria-hidden="true" />
-                  <span>{{ tab.label }}</span>
-                  <span class="model-tab-count">{{ tab.count }}</span>
-                </span>
-              </template>
-            </t-tab-panel>
-          </t-tabs>
-          <t-input v-model="modelQuery" class="model-search" clearable
-            :placeholder="t('menu.search')" :aria-label="t('menu.search')">
-            <template #prefix-icon><t-icon name="search" aria-hidden="true" /></template>
-          </t-input>
-        </div>
-
-        <t-loading :loading="loading" size="small" class="model-list">
-          <template v-if="ready">
-            <div v-if="query && !filteredModels.length" class="empty-state">
-              <t-empty :description="t('common.noResult')" />
-              <t-button variant="outline" @click="modelQuery = ''">{{ t('common.clear') }}</t-button>
-            </div>
-            <template v-else>
-              <div class="model-grid">
-                <article v-for="{ provider, model } in filteredModels" :key="model.id" class="model-card"
-                  :class="'model-card--' + model.model_type">
-                  <div class="model-card__badge" aria-hidden="true">
-                    <t-icon :name="typeIcons[model.model_type]" size="16px" />
-                  </div>
-                  <div class="model-card__body">
-                    <h3 class="model-card__title">
-                      <button type="button" class="model-card__edit" :title="modelLabel(model)" :disabled="busy"
-                        @click="openModel(provider, model)">{{ modelLabel(model) }}</button>
-                    </h3>
-                    <p class="model-card__subtitle">
-                      <span class="model-card__vendor" :title="provider.name">{{ provider.name }}</span>
-                      <span>{{ t('adminModels.types.' + model.model_type) }} · {{ t('adminModels.modelVersion', { version: model.version }) }}</span>
-                    </p>
-                    <p v-if="connections[model.id]" class="connection-result" role="status"
-                      :class="{ 'is-success': connections[model.id].ok }">{{ connections[model.id].message }}</p>
-                  </div>
-                  <div class="model-card__actions">
-                    <t-button variant="text" shape="square" size="small" :loading="testingId === model.id"
-                      :disabled="busy || !!testingId" :aria-label="t('adminModels.test')"
-                      :aria-description="t('adminModels.testHint')" :title="t('adminModels.testHint')" @click="testModel(provider, model)">
-                      <template #icon><t-icon name="play-circle" aria-hidden="true" /></template>
-                    </t-button>
-                    <ModelActions :label="t('common.expand')" :disabled="busy" icon-only :actions="[
-                      { label: t('common.copy'), key: 'copy', run: () => copyModel(provider, model) },
-                      { label: t('adminModels.editProvider'), key: 'edit', run: () => openProvider(provider) },
-                      { label: t('adminModels.disable'), key: 'disable', danger: true, run: () => confirmDisable('model', provider, model) },
-                    ]" />
-                  </div>
-                </article>
-                <button type="button" class="model-card model-card--add" :disabled="busy" @click="openModel()">
-                  <span class="model-card--add__icon" aria-hidden="true"><t-icon name="add" /></span>
-                  <span>{{ t('adminModels.addModel') }}</span>
-                </button>
-              </div>
+      <t-alert v-if="error || loadFailed" theme="error" :message="error || t('adminModels.loadFailed')" />
+      <t-button v-if="loadFailed" variant="text" @click="load">{{ t('connectionUi.refresh') }}</t-button>
+      <div class="model-tabbar">
+        <t-tabs v-model="activeType" class="model-type-tabs">
+          <t-tab-panel v-for="tab in typeTabs" :key="tab.value" :value="tab.value">
+            <template #label>
+              <span class="model-type-tab">
+                <t-icon :name="tab.icon" size="16px" aria-hidden="true" />
+                <span>{{ tab.label }}</span>
+                <span class="model-tab-count">{{ tab.count }}</span>
+              </span>
             </template>
-          </template>
-        </t-loading>
-      </template>
-    </template>
-    <ModelProviderEditor v-if="editingProvider" :visible="providerDialog" :provider="editingProvider" :busy="busy" :error="providerError"
-      @save="saveProvider" @close="closeProvider" />
-    <SettingDrawer :visible="modelDialog" class="model-editor-drawer" placement="center" width="560px" :resizable="false"
-      :title="t(modelEditId ? 'adminModels.editModelTitle' : 'adminModels.addModelTitle')" :icon="typeIcons[modelForm.type]"
-      :confirm-text="t('adminModels.save')" :confirm-loading="busy" :confirm-disabled="busy || !modelProviderId"
-      :cancel-disabled="busy" :close-btn="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy"
-      @confirm="saveModel" @update:visible="(value: boolean) => { if (!value && !busy) closeModel() }">
-      <template v-if="['chat', 'embedding', 'rerank'].includes(modelForm.type)" #footer-left>
-        <t-button variant="outline" :loading="testingDraft" :disabled="busy || testingDraft || (!selectedProvider && !newProviderInput) || !!providerInputError || !modelInput.name"
-          :aria-description="t('adminModels.testHint')" @click="testModelDraft">{{ t('adminModels.test') }}</t-button>
-      </template>
-      <template #footer-extra>
-        <t-alert v-if="error" theme="error" :message="error" />
-        <p v-if="draftConnection" class="connection-result" :class="{ 'is-success': draftConnection.ok }"
-          role="status">{{ draftConnection.message }}</p>
-      </template>
-      <div class="editor-form" :inert="busy || undefined">
-        <section v-if="!modelEditId" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ t('adminModels.modelType') }}</h4>
-          <div class="model-type-options" role="group" :aria-label="t('adminModels.modelType')">
-            <button v-for="type in typeOptions" :key="type.value" type="button" class="model-type-option"
-              :class="{ 'is-active': modelForm.type === type.value }" :aria-pressed="modelForm.type === type.value"
-              @click="modelForm.type = type.value">
-              <t-icon :name="typeIcons[type.value]" class="model-type-option__icon" aria-hidden="true" />
-              <span class="model-type-option__label">{{ type.label }}</span>
-            </button>
-          </div>
-        </section>
-        <section class="setting-drawer__section editor-fields">
-          <h4 class="setting-drawer__section-title">{{ t('model.editor.sectionProvider') }}</h4>
-        <label for="enterprise-model-provider">{{ t('model.editor.providerLabel') }}
-          <t-select v-model="modelProviderId" :input-props="{ id: 'enterprise-model-provider' }"
-            :options="providerOptions" :placeholder="t('model.editor.providerPlaceholder')" :disabled="!!modelEditId || busy" filterable />
-        </label>
-        <label v-if="addingProvider">{{ t('adminModels.providerName') }}
-          <t-input v-model="providerDraft.name" :maxlength="160" :disabled="busy" />
-        </label>
-        <label>{{ t('adminModels.modelName') }}<t-input v-model="modelForm.name" maxlength="160" /></label>
-        <label>{{ t('model.editor.displayNameLabel') }}<t-input v-model="modelForm.displayName" maxlength="160" :placeholder="modelForm.name" /></label>
-        <template v-if="addingProvider">
-          <label>{{ t('adminModels.baseUrl') }}
-            <t-input v-model="providerDraft.baseUrl" :maxlength="512" :disabled="busy" autocomplete="off" :spell-check="false" />
-          </label>
-          <label>{{ t('adminModels.apiKey') }}
-            <t-input v-model="providerDraft.apiKey" type="password" :disabled="busy" autocomplete="new-password" :spell-check="false">
-              <template #prefix-icon><t-icon name="lock-on" aria-hidden="true" /></template>
-            </t-input>
-          </label>
-        </template>
-        </section>
-        <section class="setting-drawer__section editor-fields">
-          <h4 class="setting-drawer__section-title">{{ t('model.editor.sectionAdvanced') }}</h4>
-        <label v-if="modelForm.type === 'chat' || modelForm.type === 'embedding'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.protocol" :options="[{value:'openai_chat_completions',label:t('adminModels.protocols.openai_chat_completions')},{value:'openai_responses',label:t('adminModels.protocols.openai_responses')},...(modelForm.type === 'chat' ? [{value:'anthropic_messages',label:t('adminModels.protocols.anthropic_messages')}] : [])]" /></label>
-        <label v-if="modelForm.type === 'rerank'">{{ t('adminModels.protocol') }}<t-select v-model="modelForm.rerankApi" :options="rerankApis" /></label>
-        <template v-if="modelForm.type === 'chat'">
-          <label>{{ t('adminModels.temperature') }}<t-input-number v-model="modelForm.temperature" :min="0" :max="2" :step="0.1" :decimal-places="1" /></label>
-          <label>{{ t('adminModels.reasoningEffort') }}<t-select v-model="modelForm.reasoningEffort" clearable :options="['none','minimal','low','medium','high','xhigh','max'].map(value => ({value,label:value}))" /></label>
-        </template>
-        <p class="field-hint">{{ t(modelEditId ? 'adminModels.versionHint' : 'adminModels.modelOptionsHint') }}</p>
-        </section>
+          </t-tab-panel>
+        </t-tabs>
+        <t-input v-model="modelQuery" class="model-search" clearable
+          :placeholder="t('menu.search')" :aria-label="t('menu.search')">
+          <template #prefix-icon><t-icon name="search" size="16px" aria-hidden="true" /></template>
+        </t-input>
       </div>
-    </SettingDrawer>
+
+      <t-loading :loading="loading" size="small" class="model-list">
+        <div v-if="settings && query && !filteredModels.length" class="empty-state">
+          <t-empty :description="t('common.noResult')" />
+          <t-button variant="outline" @click="modelQuery = ''">{{ t('common.clear') }}</t-button>
+        </div>
+        <div v-else-if="settings" class="model-grid">
+          <article v-for="card in filteredModels" :key="card.model.id" class="model-card" :class="'model-card--' + card.model.model_type">
+            <div class="model-card__badge"><t-icon :name="modelTypeIcons[card.model.model_type]" size="16px" aria-hidden="true" /></div>
+            <div class="model-card__body">
+              <div class="model-card__header">
+                <h3 class="model-card__title">
+                  <button type="button" class="model-card__edit" :title="modelLabel(card.model)" :disabled="!available"
+                    @click="openModel(card)">{{ modelLabel(card.model) }}</button>
+                </h3>
+                <div class="model-card__actions">
+                  <ModelActions :label="t('common.expand')" :disabled="!available" :actions="[
+                    { label: t('common.edit'), key: 'edit', run: () => openModel(card) },
+                    { label: t('common.copy'), key: 'copy', run: () => changeModel(card, 'copy') },
+                  ]" />
+                  <t-popconfirm :content="t('modelSettings.confirmDelete', { name: modelLabel(card.model) })"
+                    :confirm-btn="{ content: t('common.delete'), theme: 'danger' }"
+                    :cancel-btn="{ content: t('common.cancel') }" placement="bottom-right"
+                    @confirm="changeModel(card, 'delete')">
+                    <t-button theme="danger" variant="text" shape="square" size="small" :disabled="!available"
+                      :aria-label="t('common.delete')" :title="t('common.delete')">
+                      <template #icon><t-icon name="delete" aria-hidden="true" /></template>
+                    </t-button>
+                  </t-popconfirm>
+                </div>
+              </div>
+              <p class="model-card__subtitle">
+                <span class="model-card__vendor" :title="card.provider.name">
+                  <img v-if="vendorIcons.has(card.provider.name)" :src="vendorIcons.get(card.provider.name)" alt="" />
+                  <span>{{ card.provider.name }}</span>
+                </span>
+                <span v-if="card.model.display_name && card.model.display_name !== card.model.name" class="model-card__upstream"
+                  :title="card.model.name">· {{ card.model.name }}</span>
+              </p>
+            </div>
+          </article>
+          <button type="button" class="model-card model-card--add" :disabled="!available" @click="openModel()">
+            <span class="model-card--add__icon" aria-hidden="true"><t-icon name="add" /></span>
+            <span class="model-card--add__label">{{ t('modelSettings.actions.addModel') }}</span>
+          </button>
+        </div>
+      </t-loading>
+    </template>
+
+    <ModelEditorDialog v-if="editor" :tenant="tenant" :initial-type="editor.type" :editing="editor.editing"
+      @close="editor = null" @saved="modelSaved" />
+    <ModelDebugDrawer v-if="debug" :tenant="tenant" :models="models" @close="debug = false" />
+    <t-dialog :visible="!!usageConflict" :header="t('modelSettings.usage.title')" :footer="false"
+      @update:visible="(value: boolean) => { if (!value) usageConflict = null }">
+      <template v-if="usageConflict">
+        <p>{{ t('modelSettings.usage.description', { name: usageConflict.name }) }}</p>
+        <ul>
+          <li v-if="usageConflict.counts.agents">{{ t('modelSettings.usage.agents', { count: usageConflict.counts.agents }) }}</li>
+          <li v-if="usageConflict.counts.knowledge_bases">{{ t('modelSettings.usage.knowledgeBases', { count: usageConflict.counts.knowledge_bases }) }}</li>
+          <li v-if="usageConflict.counts.memory">{{ t('modelSettings.usage.longTermMemory') }}（{{ usageConflict.counts.memory }}）</li>
+        </ul>
+      </template>
+    </t-dialog>
   </section>
 </template>
 
 <style scoped lang="less">
 @import './ModelsPage.reference.less';
-@import './ModelEditor.reference.less';
-
-.defaults-panel {
-  margin-top: 20px;
-  padding: 20px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-lg);
-}
-.defaults-panel h3 { margin: 0; font-size: var(--app-text-lg); }
-.defaults-panel p, .field-hint { color: var(--td-text-color-secondary); }
-.defaults-panel p { margin: 6px 0 0; }
-.defaults-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 16px;
-  margin-top: 16px;
-}
-.defaults-grid label, .editor-form label { display: grid; min-width: 0; gap: 8px; }
-.editor-fields { display: grid; gap: 16px; }
-.field-hint { margin: 0; line-height: 1.5; }
-:global(.model-editor-drawer.setting-drawer--center:not(.editor-dialog-route) .t-dialog__body) {
-  max-height: min(60dvh, max(80px, calc(100dvh - 240px)));
-}
 </style>

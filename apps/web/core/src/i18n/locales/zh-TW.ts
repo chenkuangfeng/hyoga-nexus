@@ -173,7 +173,7 @@ export default {
   },
   adminModels: {
     title: 'Enterprise models',
-    description: 'Manage shared providers, model versions and defaults for this enterprise.',
+    description: 'Manage shared chat, embedding, rerank, vision and speech models for this enterprise.',
     scopeHint: 'Only shared enterprise models are shown. Member personal models are not read or changed. API keys are sent only when submitted and are never displayed in full.',
     loadFailed: 'Could not load enterprise models. Try again.', saveFailed: 'Could not save the model configuration. Check the fields and retry.', deleteFailed: 'Could not disable the model configuration. Try again.',
     addProvider: 'Add provider', editProvider: 'Edit provider', addProviderTitle: 'Add enterprise model provider', editProviderTitle: 'Edit enterprise model provider',

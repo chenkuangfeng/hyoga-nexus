@@ -6,7 +6,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import Principal, CredentialRef
 
@@ -21,7 +21,8 @@ from nexus_platform.persistence.models import (
     ModelProviderRecord as Provider, ProviderModelRecord as Link, ModelDefaultRecord as Default,
     CredentialReferenceRecord as Credential, ModelProfileRecord as Profile,
     ModelProfileVersionRecord as Version, RunRecord, ProviderCredentialRecord as StoredKey,
-    UserRecord, MembershipRecord, MemoryCaptureSettingsRecord,
+    UserRecord, MembershipRecord, MemoryCaptureSettingsRecord, MemorySpaceSettingsRecord,
+    AgentRecord, AgentVersionRecord, KnowledgeBaseRecord,
 )
 from nexus_platform.tenants.service import ADMIN_ROLES
 from nexus_platform.authz.audit import audit
@@ -356,7 +357,37 @@ def create_enterprise_model_with_provider(
         return _save_version(db, provider, profile, user.id, model_name, options)
 
 
-def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str, profile_id: UUID | None = None, model_options: dict | None = None, model_type: str = 'chat', *, display_name: str | None = None) -> dict[str, str]:
+@dataclass(frozen=True)
+class ModelConnectionEdit:
+    """Replacement connection for one enterprise model. Its Key is write-only."""
+
+    name: str
+    base_url: str
+    api_key: str | None
+
+
+def _edit_model_connection(db: Session, user_id: UUID, provider: Provider, link: Link,
+                           connection: ModelConnectionEdit) -> Provider:
+    """Bind the current profile to a separate credential while retaining version history."""
+    if provider.owner_user_id is not None:
+        raise NotFound('Provider unavailable')
+    if connection.base_url != provider.base_url and connection.api_key is None:
+        raise ValueError('Changing API address requires a replacement Key')
+    if (connection.name, connection.base_url) == (provider.name, provider.base_url) and connection.api_key is None:
+        return provider
+    key = connection.api_key
+    if key is None:
+        key = decrypt(db.get(StoredKey, provider.credential_id))
+    updated = _create_provider(db, provider.tenant_id, None, name=connection.name,
+                               base_url=connection.base_url, api_key=key)
+    link.provider_id = updated.id
+    audit(db, provider.tenant_id, user_id, 'provider.saved', 'model_provider', str(updated.id))
+    return updated
+
+
+def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, model_name: str,
+               profile_id: UUID | None = None, model_options: dict | None = None, model_type: str = 'chat',
+               *, display_name: str | None = None, connection: ModelConnectionEdit | None = None) -> dict[str, str]:
     """Create a provider-bound profile or append its next version after management authorization.
 
     Unknown, disabled or differently owned profiles raise NotFound; versions are never rewritten.
@@ -373,6 +404,8 @@ def save_model(db: Session, principal: Principal, tenant_id: UUID, provider_id: 
             profile = db.get(Profile, profile_id)
             if profile.model_type != model_type:
                 raise Conflict('Model type cannot be changed; add a new model instead')
+            if connection is not None:
+                provider = _edit_model_connection(db, user.id, provider, link, connection)
         else:
             profile = _new_profile(db, provider, user.id, model_type)
         return _save_version(db, provider, profile, user.id, model_name, model_options)
@@ -416,7 +449,52 @@ def copy_enterprise_model(db: Session, principal: Principal, tenant_id: UUID, pr
         return {'id': str(profile.id), 'version_id': str(copied.id)}
 
 
-def disable(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, profile_id: UUID | None = None) -> None:
+class ModelInUse(Conflict):
+    """A shared model still has active configuration references."""
+
+    code = 'model_in_use'
+
+    def __init__(self, counts: dict[str, int]):
+        super().__init__('Model is in use')
+        self.details = counts
+
+
+def _require_unused_model(db: Session, tenant_id: UUID, profile_id: UUID) -> None:
+    """Count active uses across versions without exposing private resource names."""
+    versions = select(Version.id).where(Version.tenant_id == tenant_id, Version.profile_id == profile_id)
+    # SQLite stores UUIDs without dashes, while configuration JSON uses canonical UUID strings.
+    version_keys = select(func.replace(cast(Version.id, String), '-', '')).where(
+        Version.tenant_id == tenant_id, Version.profile_id == profile_id,
+    )
+    published = select(AgentVersionRecord.id).where(AgentVersionRecord.model_profile_version_id.in_(versions))
+    agents = db.scalar(select(func.count()).select_from(AgentRecord).where(
+        AgentRecord.tenant_id == tenant_id, AgentRecord.status != 'archived',
+        or_(AgentRecord.draft_model_profile_version_id.in_(versions), AgentRecord.published_version_id.in_(published)),
+    ))
+    settings = KnowledgeBaseRecord.settings
+    knowledge_model_ids = [settings['summary_model_id'].as_string(), settings['wiki_config']['synthesis_model_id'].as_string()]
+    knowledge_model_ids.extend(settings[key]['model_id'].as_string() for key in (
+        'graph_config', 'rerank_config', 'vlm_config', 'asr_config', 'question_generation_config',
+        'auto_tag_config', 'profile_config',
+    ))
+    knowledge_bases = db.scalar(select(func.count()).select_from(KnowledgeBaseRecord).where(
+        KnowledgeBaseRecord.tenant_id == tenant_id, KnowledgeBaseRecord.status == 'active',
+        or_(KnowledgeBaseRecord.embedding_model_version_id.in_(versions),
+            *(func.replace(func.lower(value), '-', '').in_(version_keys) for value in knowledge_model_ids)),
+    ))
+    captures = db.scalar(select(func.count()).select_from(MemoryCaptureSettingsRecord).where(
+        MemoryCaptureSettingsRecord.tenant_id == tenant_id, MemoryCaptureSettingsRecord.model_profile_version_id.in_(versions),
+    ))
+    recall = db.scalar(select(func.count()).select_from(MemorySpaceSettingsRecord).where(
+        MemorySpaceSettingsRecord.tenant_id == tenant_id, MemorySpaceSettingsRecord.embedding_model_version_id.in_(versions),
+    ))
+    counts = {'agents': agents, 'knowledge_bases': knowledge_bases, 'memory': captures + recall}
+    if any(counts.values()):
+        raise ModelInUse(counts)
+
+
+def disable(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, profile_id: UUID | None = None,
+            *, protect_references: bool = False) -> None:
     """Soft-disable a provider or model and clear every affected default atomically.
 
     Historical versions remain traceable. Provider disablement revokes all its credential
@@ -429,6 +507,10 @@ def disable(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUI
             links = [link for link in links if link.profile_id == profile_id]
             if not links:
                 raise NotFound('Model unavailable')
+            if protect_references:
+                if provider.owner_user_id is not None or not links[0].active:
+                    raise NotFound('Model unavailable')
+                _require_unused_model(db, tenant_id, profile_id)
         else:
             provider.active = False
             for secret in db.scalars(select(StoredKey).where(StoredKey.provider_id == provider.id)):

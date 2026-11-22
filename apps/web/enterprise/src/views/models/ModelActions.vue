@@ -1,12 +1,11 @@
 <script setup lang="ts">
-/** 模型和服务商共用操作弹层，按钮可顺序聚焦并通过 Esc 返回触发按钮。 */
+/** 模型卡片操作弹层，按钮可顺序聚焦并通过 Esc 返回触发按钮。 */
 import { ref, useId } from 'vue'
 
 defineProps<{
   label: string
   disabled: boolean
-  iconOnly?: boolean
-  actions: { key: string; label: string; run: () => void; danger?: boolean }[]
+  actions: { key: string; label: string; run: () => void }[]
 }>()
 
 const menuId = useId()
@@ -31,16 +30,14 @@ function onEscape(event: KeyboardEvent) {
   <div ref="root" @keydown.esc="onEscape">
     <t-popup v-model:visible="visible" :attach="attach" trigger="click"
       placement="bottom-right" :disabled="disabled" destroy-on-close>
-      <t-button :variant="iconOnly ? 'text' : 'outline'" :shape="iconOnly ? 'square' : 'rectangle'" size="small"
+      <t-button variant="text" shape="square" size="small"
         :disabled="disabled" :aria-label="label" :aria-expanded="visible" :aria-controls="visible ? menuId : undefined">
-        <template #icon><t-icon v-if="iconOnly" name="ellipsis" aria-hidden="true" /></template>
-        <span v-if="!iconOnly">{{ label }}</span>
-        <t-icon v-if="!iconOnly" name="chevron-down" aria-hidden="true" />
+        <template #icon><t-icon name="ellipsis" aria-hidden="true" /></template>
       </t-button>
       <template #content>
         <div :id="menuId" class="model-actions-panel">
-          <t-button v-for="action in actions" :key="action.key" :theme="action.danger ? 'danger' : 'default'"
-            variant="text" @click="close(); action.run()">{{ action.label }}</t-button>
+          <t-button v-for="action in actions" :key="action.key" variant="text"
+            @click="close(); action.run()">{{ action.label }}</t-button>
         </div>
       </template>
     </t-popup>
@@ -52,6 +49,7 @@ function onEscape(event: KeyboardEvent) {
   display: grid;
   /* The popup is attached to the trigger wrapper to keep the tab order. */
   width: max-content;
+  min-width: 96px;
   max-width: min(280px, calc(100vw - 64px));
   max-height: 280px;
   overflow: auto;

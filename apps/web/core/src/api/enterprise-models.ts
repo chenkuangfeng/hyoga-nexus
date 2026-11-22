@@ -1,5 +1,5 @@
 /** 企业模型管理客户端：显式企业路径、租户 Provider 过滤和真实 DTO 校验。 */
-import { del, get, post, put } from '../utils/request'
+import { del, get, post, postUpload, put } from '../utils/request'
 
 export type EnterpriseModelType = 'chat' | 'embedding' | 'rerank' | 'vision' | 'speech'
 export type EnterpriseModelProtocol = 'openai_chat_completions' | 'openai_responses' | 'anthropic_messages'
@@ -22,6 +22,17 @@ export interface EnterpriseProviderInput { name: string; base_url: string; scope
 export type NewEnterpriseProvider = Pick<EnterpriseProviderInput, 'name' | 'base_url'> & { api_key: string }
 export interface EnterpriseModelInput { name: string; display_name?: string; model_type: EnterpriseModelType; options: Record<string, unknown> }
 export interface EnterpriseModelConnectionResult { ok: boolean; message: string; code?: string }
+export interface EnterpriseModelDebugInput {
+  text: string
+  documents?: string[]
+  system_prompt?: string
+  max_output_tokens?: number
+  temperature?: number
+}
+export type EnterpriseModelDebugResult =
+  | { type: 'chat' | 'vision' | 'speech'; text: string }
+  | { type: 'embedding'; dimension: number; preview: number[] }
+  | { type: 'rerank'; scores: { index: number; score: number }[] }
 
 const types: EnterpriseModelType[] = ['chat', 'embedding', 'rerank', 'vision', 'speech']
 const protocols: EnterpriseModelProtocol[] = ['openai_chat_completions', 'openai_responses', 'anthropic_messages']
@@ -30,6 +41,7 @@ function object(value: unknown): Record<string, unknown> { if (!value || typeof 
 function array(value: unknown): unknown[] { if (!Array.isArray(value)) throw invalid(); return value }
 function string(value: unknown): string { if (typeof value !== 'string') throw invalid(); return value }
 function positiveInt(value: unknown): number { if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw invalid(); return value }
+function finite(value: unknown): number { if (typeof value !== 'number' || !Number.isFinite(value)) throw invalid(); return value }
 function modelType(value: unknown): EnterpriseModelType { if (typeof value !== 'string' || !types.includes(value as EnterpriseModelType)) throw invalid(); return value as EnterpriseModelType }
 function modelFromResponse(value: unknown): EnterpriseModelProfile {
   const row = object(value)
@@ -63,21 +75,12 @@ export async function listEnterpriseModelSettings(tenant: string): Promise<Enter
   return { providers: tenantProviders, defaults, can_manage_tenant: row.can_manage_tenant }
 }
 
-/** Create or update a shared provider; API keys are write-only and never returned. */
-export async function saveEnterpriseModelProvider(tenant: string, input: EnterpriseProviderInput, id?: string): Promise<void> {
-  const url = id ? `${root(tenant)}/providers/${encodeURIComponent(id)}` : `${root(tenant)}/providers`
-  const result = object(id ? await put(url, input) : await post(url, input))
-  const provider = providerFromResponse(result)
-  if (provider.scope !== 'tenant' || (id && provider.id !== id)) throw invalid()
-}
-
-/** Add a model or append an immutable version to an existing model profile. */
-export async function saveEnterpriseModel(tenant: string, providerId: string, input: EnterpriseModelInput, profileId?: string): Promise<void> {
-  const url = profileId
-    ? `${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}`
-    : `${root(tenant)}/providers/${encodeURIComponent(providerId)}/models`
-  const result = object(profileId ? await put(url, input) : await post(url, input)), id = string(result.id)
-  if (!id || (profileId && id !== profileId) || !string(result.version_id)) throw invalid()
+/** Append a version while editing the selected model's connection. */
+export async function saveEnterpriseModel(tenant: string, providerId: string, profileId: string,
+  input: EnterpriseModelInput, provider: EnterpriseProviderInput): Promise<void> {
+  const url = `${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/configuration`
+  const result = object(await put(url, { ...input, provider }))
+  if (string(result.id) !== profileId || !string(result.version_id)) throw invalid()
 }
 
 /** Save the model and a new shared provider together. */
@@ -93,16 +96,21 @@ export async function copyEnterpriseModel(tenant: string, providerId: string, pr
   if (!copyId || copyId === profileId || !string(result.version_id)) throw invalid()
 }
 
-/** Disable a tenant provider and revoke its credentials; history remains on the server. */
-export async function disableEnterpriseModelProvider(tenant: string, providerId: string): Promise<void> {
-  const result = object(await del(`${root(tenant)}/providers/${encodeURIComponent(providerId)}`))
-  if (string(result.status) !== 'disabled') throw invalid()
-}
-
 /** Disable a model profile and clear defaults without deleting historical versions. */
-export async function disableEnterpriseModel(tenant: string, providerId: string, profileId: string): Promise<void> {
-  const result = object(await del(`${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}`))
-  if (string(result.status) !== 'disabled') throw invalid()
+export interface ModelUsageCounts { agents: number; knowledge_bases: number; memory: number }
+export async function deleteEnterpriseModel(tenant: string, providerId: string, profileId: string): Promise<ModelUsageCounts | null> {
+  const url = `${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/configuration`
+  try {
+    const result = object(await del(url))
+    if (string(result.status) !== 'disabled') throw invalid()
+    return null
+  } catch (error) {
+    if (!error || typeof error !== 'object' || !('error' in error) || error.error == null) throw error
+    const issue = object(error.error)
+    if (issue.code !== 'model_in_use') throw error
+    const details = object(issue.details)
+    return { agents: finite(details.agents), knowledge_bases: finite(details.knowledge_bases), memory: finite(details.memory) }
+  }
 }
 
 /** Set or clear one enterprise default; the backend checks type and current-version ownership. */
@@ -111,16 +119,44 @@ export async function setEnterpriseModelDefault(tenant: string, modelTypeValue: 
   if (string(result.status) !== 'saved') throw invalid()
 }
 
-/** Run the backend's bounded, sanitized connection check for one saved model. */
-export async function testEnterpriseModel(tenant: string, providerId: string, profileId: string): Promise<EnterpriseModelConnectionResult> {
-  return connectionResult(await post(`${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/test`, {}))
+/** Send user-entered sample data using the current saved version. */
+export async function debugEnterpriseModel(tenant: string, providerId: string, profileId: string,
+  input: EnterpriseModelDebugInput, file?: File): Promise<{ ok: true; result: EnterpriseModelDebugResult } | { ok: false; message: string }> {
+  const url = `${root(tenant)}/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(profileId)}/debug`
+  let response: unknown
+  if (file) {
+    const form = new FormData()
+    form.set('file', file)
+    form.set('text', input.text)
+    response = await postUpload(`${url}-media`, form, undefined, { timeout: 45000 })
+  } else {
+    response = await post(url, input)
+  }
+  const reply = object(response)
+  if (reply.ok === false) return { ok: false, message: string(reply.message) }
+  if (reply.ok !== true) throw invalid()
+  const result = object(reply.result)
+  if (result.type === 'chat' || result.type === 'vision' || result.type === 'speech') {
+    return { ok: true, result: { type: result.type, text: string(result.text) } }
+  }
+  if (result.type === 'embedding') return {
+    ok: true, result: { type: 'embedding', dimension: positiveInt(result.dimension), preview: array(result.preview).map(finite) },
+  }
+  if (result.type === 'rerank') return { ok: true, result: { type: 'rerank', scores: array(result.scores).map(value => {
+    const score = object(value), index = finite(score.index)
+    if (index < 0 || !Number.isSafeInteger(index)) throw invalid()
+    return { index, score: finite(score.score) }
+  }) } }
+  throw invalid()
 }
 
 /** Test current form values using the shared provider's saved credential. */
-export async function testEnterpriseModelDraft(tenant: string, provider: EnterpriseModelProvider | NewEnterpriseProvider, input: EnterpriseModelInput): Promise<EnterpriseModelConnectionResult> {
+export async function testEnterpriseModelDraft(tenant: string, provider: EnterpriseProviderInput, input: EnterpriseModelInput,
+  providerId?: string): Promise<EnterpriseModelConnectionResult> {
   return connectionResult(await post(`${root(tenant)}/test`, {
     scope: 'tenant', base_url: provider.base_url,
-    ...('id' in provider ? { provider_id: provider.id } : { api_key: provider.api_key }),
+    ...(providerId ? { provider_id: providerId } : {}),
+    ...(provider.api_key ? { api_key: provider.api_key } : {}),
     model_name: input.name, model_type: input.model_type, options: input.options,
   }))
 }

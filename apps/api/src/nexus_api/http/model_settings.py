@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import math
+from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
+from pathlib import PurePath
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,8 @@ from nexus_platform.identity.service import require_membership
 from nexus_runtimes.native.models.network import validate_url, provider_client
 from nexus_runtimes.native.models.openai_compatible import OpenAICompatibleModel
 from nexus_runtimes.native.models.embeddings import create_embedder
+from nexus_runtimes.native.models.factory import create_model
+from nexus_runtimes.native.models.media import create_transcriber, create_vision
 from nexus_runtimes.native.models.rerank import create_reranker
 
 router = APIRouter(prefix='/api/v1/tenants/{tenant_id}', tags=['Model settings'])
@@ -65,6 +69,12 @@ class ModelWithProviderInput(ModelInput):
     provider: SharedProviderInput
 
 
+class EnterpriseModelEditInput(ModelInput):
+    """Append a model version and optionally replace that profile's connection."""
+
+    provider: ProviderInput
+
+
 class DefaultInput(BaseModel):
     """Scoped default preference for one model type; a null version clears that preference."""
 
@@ -92,6 +102,16 @@ class CopyModelInput(BaseModel):
     """Localized suffix for the new display name, allocated by the service."""
 
     suffix: str = Field(default='Copy', min_length=1, max_length=32)
+
+
+class ModelDebugInput(BaseModel):
+    """Bounded text-only debug input for the current version of a saved model."""
+
+    text: str = Field(min_length=1, max_length=8000)
+    system_prompt: str = Field(default='', max_length=4000)
+    documents: list[str] = Field(default_factory=list, max_length=16)
+    max_output_tokens: int = Field(default=512, ge=1, le=2048)
+    temperature: float | None = Field(default=None, ge=0, le=2)
 
 
 class AgentInput(BaseModel):
@@ -174,6 +194,19 @@ def edit_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: Model
                                model_options=body.options, model_type=body.model_type, display_name=body.display_name)
 
 
+@router.put('/admin/model-settings/providers/{provider_id}/models/{profile_id}/configuration')
+def edit_model_with_provider(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: EnterpriseModelEditInput,
+                             principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Save a model and its per-profile connection within a single transaction."""
+    provider = provider_values(body.provider)
+    if provider['scope'] != 'tenant':
+        raise ValueError('Enterprise models require a shared scope')
+    connection = settings.ModelConnectionEdit(provider['name'], provider['base_url'], provider['api_key'])
+    return settings.save_model(db, principal, tenant_id, provider_id, model_name(body.name), profile_id,
+                               model_options=body.options, model_type=body.model_type,
+                               display_name=body.display_name, connection=connection)
+
+
 @router.post('/admin/model-settings/providers/{provider_id}/models/{profile_id}/copy', status_code=201)
 def copy_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: CopyModelInput,
                principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
@@ -188,6 +221,14 @@ def copy_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: CopyM
 def delete_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Disable this model and clear its defaults without deleting historical runs."""
     settings.disable(db, principal, tenant_id, provider_id, profile_id)
+    return {'status': 'disabled'}
+
+
+@router.delete('/admin/model-settings/providers/{provider_id}/models/{profile_id}/configuration')
+def delete_model_configuration(tenant_id: UUID, provider_id: UUID, profile_id: UUID,
+                               principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Remove a model from the enterprise catalog after checking active references."""
+    settings.disable(db, principal, tenant_id, provider_id, profile_id, protect_references=True)
     return {'status': 'disabled'}
 
 
@@ -283,7 +324,6 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
             model = OpenAICompatibleModel(model=model_name, api_key=key, base_url=base_url,
                                          timeout=12, http_client=provider_client(base_url, timeout=12), options=options)
         else:
-            from nexus_runtimes.native.models.factory import create_model
             model = create_model(model=model_name, api_key=key, options=options, timeout=12)
         async with asyncio.timeout(15):
             async for _ in model.stream(ModelRequest((ModelMessage('user', 'Reply OK.'),), (), 32)):
@@ -300,28 +340,144 @@ async def check_connection(*, key: str, base_url: str, model_name: str, options:
             await model.close()
 
 
-@tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}/test', methods=['POST'])
-async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
-    """Test an authorized saved model with a bounded minimal request.
-
-    The supplier may charge for the request. Per-provider tests are limited to one start
-    every ten seconds and a fifteen-second total deadline. Responses omit generated content
-    and raw supplier errors; the client is closed even on timeout or request cancellation."""
+def saved_probe(db: Session, principal: Principal, tenant_id: UUID, provider_id: UUID, profile_id: UUID,
+                *, debug_types: tuple[str, ...] = ()) -> tuple[str, str, dict, str]:
+    """Snapshot the authorized current model and reserve a per-provider probe slot."""
     with db.begin():
         user, _ = settings.context(db, principal, tenant_id)
         provider = settings.provider_access(db, tenant_id, user.id, provider_id, manage=True)
+        if debug_types and provider.owner_user_id is not None:
+            raise NotFound('Provider unavailable')
         link = db.get(settings.Link, profile_id)
         if not link or link.provider_id != provider.id or not link.active:
             raise NotFound('Model unavailable')
+        profile = db.get(ModelProfileRecord, profile_id)
+        if debug_types and profile.model_type not in debug_types:
+            raise ValueError(UNSUPPORTED_TYPE_MESSAGE)
         if provider.last_test_at and provider.last_test_at.replace(tzinfo=timezone.utc) > utc_now() - DRAFT_TEST_COOLDOWN:
             raise Conflict('Please wait 10 seconds before testing again')
         provider.last_test_at = utc_now()
-        profile = db.get(ModelProfileRecord, profile_id)
         version = db.get(ModelProfileVersionRecord, profile.current_version_id)
         key = settings.decrypt(db.get(settings.StoredKey, version.credential_reference_id))
-        base_url, name = version.options['base_url'], version.model_name
-        audit(db, tenant_id, user.id, 'provider.connection_test', 'model_provider', str(provider.id))
-    return await check_connection(key=key, base_url=base_url, model_name=name, options=dict(version.options), model_type=profile.model_type)
+        audit(db, tenant_id, user.id, 'provider.model_debug' if debug_types else 'provider.connection_test',
+              'model_provider', str(provider.id))
+        return key, version.model_name, dict(version.options), profile.model_type
+
+
+@tenant_admin_route(router, '/model-settings/providers/{provider_id}/models/{profile_id}/test', methods=['POST'])
+async def test_connection(tenant_id: UUID, provider_id: UUID, profile_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Test an authorized saved model with a bounded minimal request."""
+    key, name, options, model_type = saved_probe(db, principal, tenant_id, provider_id, profile_id)
+    return await check_connection(key=key, base_url=options['base_url'], model_name=name, options=options, model_type=model_type)
+
+
+async def run_model_debug(key: str, name: str, options: dict, model_type: str, body: ModelDebugInput) -> dict[str, object]:
+    """Execute a text-only debug request and return a bounded, typed result."""
+    arguments = {'model': name, 'api_key': key, 'options': options, 'timeout': 12}
+    if model_type == 'embedding':
+        adapter = create_embedder(**arguments)
+    elif model_type == 'rerank':
+        adapter = create_reranker(**arguments)
+    else:
+        if body.temperature is not None:
+            options['temperature'] = body.temperature
+        options.pop('text_tools', None)
+        adapter = create_model(**arguments)
+    try:
+        async with asyncio.timeout(15):
+            if model_type == 'embedding':
+                vectors = await adapter.embed([body.text])
+                if len(vectors) != 1 or not vectors[0] or not all(math.isfinite(value) for value in vectors[0]):
+                    raise RuntimeFault('model_stream_invalid')
+                return {'type': 'embedding', 'dimension': len(vectors[0]), 'preview': vectors[0][:16]}
+            if model_type == 'rerank':
+                scores = await adapter.rerank(body.text, body.documents)
+                if (sorted(index for index, _ in scores) != list(range(len(body.documents)))
+                        or not all(math.isfinite(score) for _, score in scores)):
+                    raise RuntimeFault('model_stream_invalid')
+                return {'type': 'rerank', 'scores': [
+                    {'index': index, 'score': score} for index, score in sorted(scores, key=lambda item: -item[1])
+                ]}
+            messages = []
+            if body.system_prompt:
+                messages.append(ModelMessage('system', body.system_prompt))
+            messages.append(ModelMessage('user', body.text))
+            request = ModelRequest(tuple(messages), (), body.max_output_tokens)
+            chunks = []
+            async for chunk in adapter.stream(request):
+                if chunk.kind == 'text':
+                    chunks.append(chunk.text)
+                elif chunk.kind == 'done' and chunk.finish_reason == 'content_filter':
+                    raise RuntimeFault('model_response_failed')
+            return {'type': 'chat', 'text': ''.join(chunks).replace(key, '[redacted]')}
+    finally:
+        await adapter.close()
+
+
+@router.post('/admin/model-settings/providers/{provider_id}/models/{profile_id}/debug')
+async def debug_model(tenant_id: UUID, provider_id: UUID, profile_id: UUID, body: ModelDebugInput,
+                      principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Debug a shared model using its saved credentials without logging input or output."""
+    if any(not document.strip() or len(document) > 2000 for document in body.documents) or not body.text.strip():
+        raise ValueError('Invalid model debug input')
+    key, name, options, model_type = saved_probe(db, principal, tenant_id, provider_id, profile_id,
+                                               debug_types=('chat', 'embedding', 'rerank'))
+    if model_type == 'rerank' and not body.documents:
+        raise ValueError('At least one candidate document is required')
+    return await debug_reply(run_model_debug(key, name, options, model_type, body))
+
+
+async def debug_reply(operation: Awaitable[dict[str, object]]) -> dict[str, object]:
+    """Translate provider failures without exposing their response bodies."""
+    try:
+        return {'ok': True, 'result': await operation}
+    except RuntimeFault as exc:
+        return {'ok': False, 'message': CONNECTION_FAILURE_MESSAGES.get(exc.code, DEFAULT_FAILURE_MESSAGE)}
+    except TimeoutError:
+        return {'ok': False, 'message': CONNECTION_FAILURE_MESSAGES['model_timeout']}
+    except Exception:
+        return {'ok': False, 'message': DEFAULT_FAILURE_MESSAGE}
+
+
+DEBUG_MEDIA_LIMIT = 10 * 1024 * 1024
+DEBUG_IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'}
+DEBUG_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.m4a', '.flac', '.ogg', '.webm'}
+
+
+async def run_media_debug(key: str, name: str, options: dict, model_type: str, data: bytes,
+                          extension: str, prompt: str) -> dict[str, object]:
+    """Feed the selected file to the existing vision or transcription adapter."""
+    arguments = {'model': name, 'api_key': key, 'options': options, 'timeout': 25}
+    if model_type == 'vision':
+        adapter = create_vision(**arguments)
+    else:
+        adapter = create_transcriber(**arguments)
+    try:
+        async with asyncio.timeout(30):
+            if model_type == 'vision':
+                text = await adapter.describe(data, DEBUG_IMAGE_TYPES[extension], '', prompt, max_tokens=512)
+            else:
+                text = await adapter.transcribe(data, 'sample' + extension)
+            return {'type': model_type, 'text': text.replace(key, '[redacted]')[:16384]}
+    finally:
+        await adapter.close()
+
+
+@router.post('/admin/model-settings/providers/{provider_id}/models/{profile_id}/debug-media')
+async def debug_model_media(tenant_id: UUID, provider_id: UUID, profile_id: UUID, file: UploadFile = File(...),
+                            text: str = Form(default='', max_length=8000), principal: Principal = Depends(get_principal),
+                            db: Session = Depends(get_database_session)):
+    """Run one bounded image or audio sample without retaining the upload."""
+    data = await file.read(DEBUG_MEDIA_LIMIT + 1)
+    if not data or len(data) > DEBUG_MEDIA_LIMIT:
+        raise ValueError('Debug file must be between 1 byte and 10 MiB')
+    extension = PurePath(file.filename or '').suffix.lower()
+    key, name, options, model_type = saved_probe(db, principal, tenant_id, provider_id, profile_id,
+                                               debug_types=('vision', 'speech'))
+    extensions = DEBUG_IMAGE_TYPES if model_type == 'vision' else DEBUG_AUDIO_EXTENSIONS
+    if extension not in extensions:
+        raise ValueError('Unsupported model debug file type')
+    return await debug_reply(run_media_debug(key, name, options, model_type, data, extension, text))
 
 
 @tenant_admin_route(router, '/model-settings/test', methods=['POST'])
