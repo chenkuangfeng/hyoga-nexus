@@ -36,10 +36,10 @@ export async function updateEnterpriseAgent(tenant: string, id: string, body: Ag
   if (row.id !== id) throw invalid()
   return row
 }
-/** 发布结果必须指向本次草稿；发布失败保留草稿，由编辑器更新重试。 */
+/** 发布返回 AgentVersionView，id 是版本 ID，agent_id 指向发布目标。 */
 export async function publishEnterpriseAgent(tenant: string, id: string): Promise<void> {
   const row = object(await post(`${base(tenant)}/admin/agents/${encodeURIComponent(id)}/publish`, {}))
-  if (row.id !== id || !Number.isInteger(row.version) || Number(row.version) < 1) throw invalid()
+  if (row.agent_id !== id || !string(row.id) || !Number.isInteger(row.version) || Number(row.version) < 1) throw invalid()
 }
 export async function archiveEnterpriseAgent(tenant: string, id: string): Promise<void> { await del(`${base(tenant)}/admin/agents/${encodeURIComponent(id)}`) }
 

@@ -22,6 +22,26 @@ test('企业创建使用 admin 接口，个人记录过滤且跨企业列表整�
  await assert.rejects(setup(t,[{...row,tenant_id:'x'}]).api.listEnterpriseAgents('t'),/agents_response_invalid/)
  await assert.rejects(setup(t,{...row,id:'other'}).api.getEnterpriseAgent('t','a'),/agents_response_invalid/)
 })
+
+test('企业发布接受独立版本 ID，并按 agent_id 校验发布目标', async t => {
+  const version = { id: 'v1', agent_id: 'a', version: 1 }
+  const { api, calls } = setup(t, version)
+  await api.publishEnterpriseAgent('t', 'a')
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].slice(0, 2), ['post', '/api/v1/tenants/t/admin/agents/a/publish'])
+
+  for (const response of [
+    { ...version, id: 'a', agent_id: 'other' },
+    { id: 'a', version: 1 },
+    { ...version, id: null },
+    { ...version, id: '' },
+    { ...version, version: 0 },
+    { ...version, version: '1' },
+  ]) {
+    await assert.rejects(setup(t, response).api.publishEnterpriseAgent('t', 'a'), /agents_response_invalid/)
+  }
+})
+
 test('知识库候选保留共享来源，企业编辑器排除个人库且拒绝错误结构',async t=>{
  const kb={id:'k',tenant_id:'other',name:'Shared',description:'',shared:true,knowledge_count:3,ownership:'enterprise'}
  const s=setup(t,{items:[kb,{...kb,id:'p',ownership:'personal'}]})
