@@ -72,10 +72,14 @@ def profile_facts(db, config, settings, web_enabled: bool = False) -> GateFacts:
     from nexus_sandbox.settings import sandbox_local_allowed
     if settings is None:
         return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_profile_unknown', web_enabled=web_enabled)
+    if settings.paused:
+        return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_profile_paused', web_enabled=web_enabled)
     if settings.backend == 'local':
         allowed = sandbox_local_allowed(settings, development_mode=auth_settings().mode == 'development')
         return GateFacts(sandbox_enabled=True, sandbox_accepted=allowed,
                          sandbox_reason='' if allowed else 'sandbox_local_not_allowed', web_enabled=web_enabled)
+    if settings.backend == 'ssh' and not settings.trusted_ssh:
+        return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_ssh_not_allowed', web_enabled=web_enabled)
     from nexus_platform.runs.sandbox_acceptance import DbReportStore
     return GateFacts(sandbox_enabled=True, sandbox_accepted=acceptance.passed(settings, DbReportStore(db)),
                      web_enabled=web_enabled)

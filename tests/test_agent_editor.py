@@ -182,3 +182,38 @@ def test_copy_creates_unpublished_draft_with_bindings(api, database):
     assert named.status_code == 201 and named.json()["name"] == "Second"
     api.as_(STRANGER)
     assert api.post(f"/api/v1/tenants/{tid}/agents/{agent.id}/copy", json={}).status_code == 404
+
+
+def test_sandbox_policy_requires_platform_admin_and_hides_credentials(api, database, tmp_path, monkeypatch):
+    from nexus_platform.identity.service import resolve_user
+
+    tenant_id, _, _, _, _ = _stack(database)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs').mkdir()
+    (tmp_path / 'configs' / 'nexus.toml').write_text(f'''
+[sandbox]
+enabled = true
+workspace_root = "{tmp_path / 'shared'}"
+[sandbox.profiles.remote]
+type = "managed"
+endpoint = "https://sandbox.example.test"
+token_file = "/run/secrets/hidden"
+remote_profile = "node"
+''')
+    url = f'/api/v1/tenants/{tenant_id}/admin/sandboxes/remote'
+    policy = {'paused': True, 'exec_timeout_max_seconds': 60, 'skill_timeout_seconds': 30,
+              'skill_timeout_max_seconds': 90}
+    detail = api.get(url)
+    assert detail.status_code == 200
+    assert not detail.json()['editable']
+    assert 'sandbox.example.test' not in detail.text and '/run/secrets/hidden' not in detail.text
+    assert api.put(f'{url}/policy', json=policy).status_code == 403
+    api.as_(MEMBER)
+    assert api.get(url).status_code == 403
+    api.as_(OWNER)
+    with database() as db, db.begin():
+        resolve_user(db, OWNER).is_platform_admin = True
+    result = api.put(f'{url}/policy', json=policy)
+    assert result.status_code == 200 and result.json()['policy'] == policy
+    assert result.json()['reason'] == 'sandbox_profile_paused'
+    assert api.get(url).json()['policy'] == policy

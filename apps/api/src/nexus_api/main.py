@@ -127,6 +127,8 @@ app.include_router(shared_spaces_router)
 app.include_router(agent_shares_router)
 from nexus_api.http.agent_editor import router as agent_editor_router
 app.include_router(agent_editor_router)
+from nexus_api.http.sandboxes import router as sandboxes_router
+app.include_router(sandboxes_router)
 from nexus_api.http.model_settings import router as model_settings_router
 app.include_router(model_settings_router)
 from nexus_api.http.native import router as native_router

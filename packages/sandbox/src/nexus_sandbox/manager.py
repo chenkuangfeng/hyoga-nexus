@@ -14,6 +14,7 @@ from pathlib import Path
 from .backends.docker import DockerBackend, DockerExecutor, container_name
 from .backends.bwrap import BwrapBackend, BwrapExecutor
 from .backends.local import LocalExecutor
+from .backends.remote import RemoteExecutor
 from .files import HostFileStore
 from .session import SandboxSession
 from .settings import SandboxSettings
@@ -60,7 +61,8 @@ class SandboxManager:
         base = self.settings.root.resolve() / str(tenant_id) / str(session_id)
         return base / 'workspace', base / 'outputs'
 
-    def session(self, tenant_id: str, session_id: str, *, default_timeout: float = 30, output_limit: int = 20_000) -> SandboxSession:
+    def session(self, tenant_id: str, session_id: str, *, default_timeout: float = 30, output_limit: int = 20_000,
+                execution_id: str | None = None) -> SandboxSession:
         """The session for this (tenant, session), creating directories on first use. No container starts here."""
         workspace, outputs = self._directories(tenant_id, session_id)
         skills = workspace.parent / 'skills'
@@ -70,11 +72,14 @@ class SandboxManager:
         files = HostFileStore(workspace, outputs, quota_bytes=self.settings.workspace_quota_mb * 1024 * 1024)
         key = f'{tenant_id}/{session_id}'
         if self.settings.backend == 'docker':
-            executor = DockerExecutor(self.docker, container_name(str(tenant_id), str(session_id), self.settings.profile), workspace, outputs, skills, envs)
+            container_session = str(session_id) if execution_id is None else f'{session_id}-{execution_id}'
+            executor = DockerExecutor(self.docker, container_name(str(tenant_id), container_session, self.settings.profile), workspace, outputs, skills, envs)
         elif self.settings.backend == 'bwrap':
             executor = BwrapExecutor(self.bwrap, workspace, outputs, skills, envs)
-        else:
+        elif self.settings.backend == 'local':
             executor = LocalExecutor(files.roots, self.settings.env_passthrough, skills, envs)
+        else:
+            executor = RemoteExecutor(self.settings, str(tenant_id), str(session_id))
         self._last_used[key] = time.monotonic()
         self._executors[key] = executor
         executor = _TouchingExecutor(executor, lambda: self._last_used.__setitem__(key, time.monotonic()))
@@ -90,7 +95,7 @@ class SandboxManager:
         if executor is not None:
             await executor.close()
 
-    async def reap(self, *, now: float | None = None) -> list[str]:
+    async def reap(self, *, now: float | None = None, only_names: set[str] | None = None) -> list[str]:
         """Remove idle containers and containers this process does not know. Returns the removed names."""
         if self.docker is None:
             return []
@@ -99,7 +104,7 @@ class SandboxManager:
                 if now - used < self.settings.idle_seconds}
         removed = []
         for name in await self.docker.list_managed():
-            if name not in live:
+            if name not in live and (only_names is None or name in only_names):
                 await self.docker.remove(name)
                 removed.append(name)
         for key in [k for k, used in self._last_used.items() if now - used >= self.settings.idle_seconds]:

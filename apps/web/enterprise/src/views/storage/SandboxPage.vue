@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import { getAgentToolCatalog, type AgentSandboxProfile } from '@nexus-web/core/api/nexus-agents'
+import SandboxProfileDrawer from './SandboxProfileDrawer.vue'
 import { useEnterpriseContext } from '../../stores/context'
 
 const { t } = useI18n()
@@ -15,13 +16,15 @@ const loading = ref(false)
 const error = ref(false)
 const activeType = ref('all')
 const query = ref('')
+const selected = ref('')
 const reasons: Record<string, string> = {
   sandbox_disabled: 'reasonSandboxDisabled',
   sandbox_not_accepted: 'reasonNotAccepted',
   sandbox_local_not_allowed: 'reasonLocalNotAllowed',
-  sandbox_profile_unknown: 'reasonUnknown',
+  sandbox_profile_unknown: 'reasonUnknown', sandbox_profile_paused: 'reasonPaused',
+  sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
 }
-const typeNames = computed(() => ({ docker: 'Docker', bwrap: 'Bubblewrap', local: t('nexusAgent.sandboxProfile.typeLocal') }))
+const typeNames = computed(() => ({ docker: 'Docker', bwrap: 'Bubblewrap', ssh: 'SSH', managed: t('nexusAgent.sandboxProfile.typeManaged'), local: t('nexusAgent.sandboxProfile.typeLocal') }))
 const types = computed(() => [...new Set(profiles.value.map(profile => profile.type))])
 const filtered = computed(() => profiles.value.filter(profile =>
   (activeType.value === 'all' || activeType.value === profile.type)
@@ -52,7 +55,10 @@ async function load() {
     if (current === request) loading.value = false
   }
 }
-watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.revision, canRead], load, { immediate: true, flush: 'sync' })
+watch([() => auth.effectiveTenantId, () => auth.user?.id, () => context.revision, canRead], () => {
+  selected.value = ''
+  void load()
+}, { immediate: true, flush: 'sync' })
 onBeforeUnmount(() => { request++ })
 </script>
 
@@ -88,11 +94,16 @@ onBeforeUnmount(() => { request++ })
                   : t(`nexusAgent.sandboxProfile.${reasons[profile.reason] || 'reasonUnavailable'}`) }}
               </t-tag>
             </div>
+            <t-button class="sandbox-card__action" variant="text" @click="selected = profile.name">
+              {{ t('sandboxSettings.details') }}
+            </t-button>
           </article>
         </div>
         <t-empty v-if="!loading && !filtered.length" :description="t(profiles.length ? 'common.noResult' : 'enterpriseNav.sandboxEmpty')" />
       </t-loading>
     </template>
+    <SandboxProfileDrawer v-if="selected && auth.effectiveTenantId"
+      :tenant="String(auth.effectiveTenantId)" :name="selected" @close="selected = ''" @saved="load" />
   </section>
 </template>
 
@@ -105,6 +116,7 @@ onBeforeUnmount(() => { request++ })
 .sandbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
 .sandbox-card { .provider-card(); padding: 12px; gap: 12px; }
 .sandbox-card__badge { .provider-card-badge(); background: var(--td-bg-color-secondarycontainer); }
+.sandbox-card__action { margin-inline-start: auto; align-self: flex-start; }
 .sandbox-card__body { min-width: 0; overflow-wrap: anywhere; }
 .sandbox-card__body h3, .sandbox-card__body p { margin: 0 0 4px; }
 .sandbox-card__body :deep(.t-tag) { margin: 0 4px 4px 0; max-width: 100%; }

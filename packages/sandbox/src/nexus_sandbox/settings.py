@@ -26,15 +26,21 @@ The ``local`` type is not an isolation boundary. Whether it may be used is decid
 """
 from __future__ import annotations
 
+import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from nexus_core.deployment import DeploymentConfigError, section
 
-BACKENDS = ('docker', 'bwrap', 'local')
+REMOTE_BACKENDS = ('ssh', 'managed')
+BACKENDS = ('docker', 'bwrap', 'local', *REMOTE_BACKENDS)
 NETWORKS = ('none', 'bridge')
 PROFILE_NAME = re.compile(r'^[a-z][a-z0-9_-]{0,31}$')
+PROFILE_POLICY_FIELDS = ('paused', 'exec_timeout_max_seconds', 'skill_timeout_seconds', 'skill_timeout_max_seconds')
 _ENV_NAME = re.compile(r'^[A-Z_][A-Z0-9_]{0,63}$')
 #: Host variables that must not be forwarded: anything that looks like a credential, and names the sandbox sets itself.
 _SENSITIVE_ENV = re.compile(r'KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH|COOKIE', re.IGNORECASE)
@@ -52,6 +58,10 @@ _TYPE_KEYS = {
     'docker': _COMMON_KEYS | {'image', 'cpus', 'memory_mb', 'pids', 'network', 'install_network', 'tmpfs_mb', 'idle_seconds'},
     'bwrap': _COMMON_KEYS | {'memory_mb', 'network', 'install_network'},
     'local': _COMMON_KEYS,
+    'ssh': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb'})
+    | {'ssh_host', 'ssh_user', 'ssh_port', 'ssh_identity_file', 'ssh_known_hosts', 'remote_profile', 'trusted_ssh'},
+    'managed': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb'})
+    | {'endpoint', 'token_file', 'remote_profile', 'cpus', 'memory_mb', 'pids'},
 }
 
 
@@ -85,6 +95,16 @@ class SandboxSettings:
     allow_local_scripts: bool = False
     #: The profile's name; ``default`` for the flat legacy layout.
     profile: str = 'default'
+    remote_profile: str = ''
+    ssh_host: str = ''
+    ssh_user: str = ''
+    ssh_port: int = 22
+    ssh_identity_file: str = ''
+    ssh_known_hosts: str = ''
+    trusted_ssh: bool = False
+    endpoint: str = ''
+    token_file: str = ''
+    paused: bool = False
 
     @property
     def root(self) -> Path:
@@ -148,6 +168,21 @@ def _profile(values: dict, where: str, name: str, top: dict, kind: str) -> Sandb
     timeout_max = _pick(values, where, 'skill_timeout_max_seconds', int, defaults.skill_timeout_max_seconds, lambda v: 1 <= v <= 3600)
     if timeout > timeout_max:
         raise _invalid(where, 'skill_timeout_seconds')
+    remote = {}
+    if kind in REMOTE_BACKENDS:
+        remote['remote_profile'] = _pick(values, where, 'remote_profile', str, '', PROFILE_NAME.fullmatch)
+    if kind == 'ssh':
+        remote.update(
+            ssh_host=_pick(values, where, 'ssh_host', str, '', lambda v: re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:-]{0,252}', v)),
+            ssh_user=_pick(values, where, 'ssh_user', str, '', lambda v: re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_-]{0,31}', v)),
+            ssh_port=_pick(values, where, 'ssh_port', int, 22, lambda v: 1 <= v <= 65535),
+            ssh_identity_file=_pick(values, where, 'ssh_identity_file', str, '', _absolute_path),
+            ssh_known_hosts=_pick(values, where, 'ssh_known_hosts', str, '', _absolute_path),
+            trusted_ssh=_pick(values, where, 'trusted_ssh', bool, False),
+        )
+    if kind == 'managed':
+        remote.update(endpoint=_pick(values, where, 'endpoint', str, '', _https_endpoint).rstrip('/'),
+                      token_file=_pick(values, where, 'token_file', str, '', _absolute_path))
     return SandboxSettings(
         enabled=top['enabled'], backend=kind,
         image=_pick(values, where, 'image', str, defaults.image, lambda v: bool(v.strip()) and ' ' not in v.strip()),
@@ -166,10 +201,75 @@ def _profile(values: dict, where: str, name: str, top: dict, kind: str) -> Sandb
                                     lambda v: 10 <= v <= 7200),
         env_max_mb=_pick(values, where, 'env_max_mb', int, defaults.env_max_mb, lambda v: 16 <= v <= 20480),
         workspace_root=top['workspace_root'], env_passthrough=_env_names(values, where),
-        allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'], profile=name)
+        allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'], profile=name, **remote)
 
 
-def load_config(path: Path | None = None) -> SandboxConfig:
+def _absolute_path(value: str) -> bool:
+    return bool(value) and not any(char.isspace() or char == '\x00' for char in value) and Path(value).is_absolute()
+
+
+def _https_endpoint(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        return (not any(char.isspace() or ord(char) < 32 for char in value) and '\\' not in value
+                and parsed.scheme == 'https' and bool(parsed.hostname) and parsed.username is None
+                and parsed.password is None and not parsed.query and not parsed.fragment
+                and (parsed.port is None or 1 <= parsed.port <= 65535))
+    except ValueError:
+        return False
+
+
+def _policy_path(settings: SandboxSettings) -> Path:
+    return settings.root / '_profile_policies' / f'{settings.profile}.json'
+
+
+def _policy_values(settings: SandboxSettings, values: dict) -> dict:
+    where = f'sandbox.profiles.{settings.profile}'
+    if values.keys() - set(PROFILE_POLICY_FIELDS):
+        raise _invalid(where, 'policy')
+    result = {key: _pick(values, where, key, int, getattr(settings, key), lambda v: 1 <= v <= 3600)
+              for key in PROFILE_POLICY_FIELDS if key != 'paused'}
+    result['paused'] = _pick(values, where, 'paused', bool, False)
+    if result['skill_timeout_seconds'] > result['skill_timeout_max_seconds']:
+        raise _invalid(where, 'skill_timeout_seconds')
+    return result
+
+
+def save_profile_policy(settings: SandboxSettings, values: dict) -> dict:
+    """Atomically persist non-credential policy fields on the shared workspace volume."""
+    policy = _policy_values(settings, values)
+    target = _policy_path(settings)
+    target.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+    stream = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=target.parent, delete=False)
+    temporary = Path(stream.name)
+    try:
+        with stream:
+            json.dump(policy, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o640)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return policy
+
+
+def apply_profile_policy(settings: SandboxSettings) -> SandboxSettings:
+    """Read the live policy for one operator-provisioned profile."""
+    target = _policy_path(settings)
+    try:
+        with target.open(encoding='utf-8') as stream:
+            values = json.loads(stream.read(8193))
+    except FileNotFoundError:
+        return settings
+    except (OSError, ValueError):
+        raise _invalid(f'sandbox.profiles.{settings.profile}', 'policy') from None
+    if not isinstance(values, dict):
+        raise _invalid(f'sandbox.profiles.{settings.profile}', 'policy')
+    return replace(settings, **_policy_values(settings, values))
+
+
+def load_config(path: Path | None = None, *, include_policies: bool = True) -> SandboxConfig:
     """Read ``[sandbox]`` into a :class:`SandboxConfig`. Raises DeploymentConfigError naming the key, never a value."""
     values = section('sandbox', path)
     top = {
@@ -195,7 +295,7 @@ def load_config(path: Path | None = None) -> SandboxConfig:
             if not isinstance(name, str) or not PROFILE_NAME.match(name) or not isinstance(table, dict):
                 raise _invalid('sandbox', 'profiles')
             kind = table.get('type')
-            if kind not in BACKENDS:
+            if not isinstance(kind, str) or kind not in BACKENDS:
                 raise _invalid(where, 'type')
             extra = set(table) - _TYPE_KEYS[kind]
             if extra:
@@ -203,7 +303,7 @@ def load_config(path: Path | None = None) -> SandboxConfig:
             profiles[name] = _profile(table, where, name, top, kind)
         default_profile = _pick(values, 'sandbox', 'default_profile', str, 'local' if 'local' in profiles else next(iter(profiles)))
     elif legacy:
-        kind = _pick(values, 'sandbox', 'backend', str, 'docker', lambda v: v in BACKENDS)
+        kind = _pick(values, 'sandbox', 'backend', str, 'docker', lambda v: v in ('docker', 'local', 'bwrap'))
         profiles['default'] = _profile(values, 'sandbox', 'default', top, kind)
         default_profile = _pick(values, 'sandbox', 'default_profile', str, 'default')
     else:
@@ -211,8 +311,11 @@ def load_config(path: Path | None = None) -> SandboxConfig:
         default_profile = _pick(values, 'sandbox', 'default_profile', str, 'local')
     if default_profile not in profiles:
         raise _invalid('sandbox', 'default_profile')
+    if include_policies:
+        profiles = {name: apply_profile_policy(settings) for name, settings in profiles.items()}
     return SandboxConfig(enabled=top['enabled'], default_profile=default_profile, workspace_root=top['workspace_root'],
-                         allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'], profiles=profiles)
+                         allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'],
+                         profiles=profiles)
 
 
 def load_settings(path: Path | None = None, profile: str | None = None) -> SandboxSettings:

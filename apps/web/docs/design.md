@@ -237,7 +237,7 @@ IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `cha
 
 企业知识库和智能体共用 WeKnora 的 `ResourceSortControl.vue`，按后台返回的创建时间、更新时间及名称组织列表。数据扩展的解析、向量和存储沿用各自 WeKnora 设置页，Nexus 图存储复用配置卡片和新增卡片形态。模型编辑器沿用 `ModelEditorDialog.vue` 的类型选择、接入分区及底部测试区。源码与许可见 [WeKnora 声明](weknora-license.txt)。
 
-当前企业管理页面覆盖 Nexus 已提供的服务端能力。与本地 WeKnora 的完整差异包括可写全局模型目录及 Ollama、WeKnoraCloud 来源，知识库和智能体目录的跨空间、收藏与最近访问，发布集成的网页嵌入、外部 API、CLI 和浏览器扩展，以及设置内的沙箱与搜索服务商管理。IM 目录可创建企业微信应用渠道或为当前用户的个人智能体扫码绑定微信，并处理企业审核。其他平台需各自的接入契约和身份能力。
+当前企业管理页面覆盖 Nexus 已提供的服务端能力。与本地 WeKnora 的完整差异包括可写全局模型目录及 Ollama、WeKnoraCloud 来源，知识库和智能体目录的跨空间、收藏与最近访问，发布集成的网页嵌入、外部 API、CLI 和浏览器扩展，以及设置内的沙箱基础设施注册与搜索服务商管理。IM 目录可创建企业微信应用渠道或为当前用户的个人智能体扫码绑定微信，并处理企业审核。其他平台需各自的接入契约和身份能力。
 
 ### 六组逐项核对
 
@@ -256,7 +256,7 @@ IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `cha
 | 向量引擎 | `VectorStoreSettings.vue` | 核验引擎选择、配置抽屉、测试与已连通的向量存储接口。 |
 | 解析引擎 | `ParserEngineSettings.vue` | 核验配置卡片、授权、保存确认及密钥保留。 |
 | 存储引擎 | `StorageBackendSettings.vue` | 核验新增卡片、配置抽屉及现有后端接口。原版额外存储后端依赖 Nexus 扩展。 |
-| 沙箱引擎 | `SandboxSettings.vue` | 类型标签、搜索及档位卡片读取 `agent-tools` 的可用性结果。原版在线注册、执行开关和集群管理待接入。 |
+| 沙箱引擎 | `SandboxSettings.vue`、`SandboxConfigEditorDrawer.vue` | 类型标签、搜索和档位卡片读取 `agent-tools`。配置抽屉展示执行能力、运行策略和验收，平台管理员可暂停档位或调整超时。Docker daemon、SSH 主机和托管凭据由部署配置管理。 |
 | 知识图谱 | `VectorStoreSettings.vue` 的后端卡片 | 本地 WeKnora 无独立图存储后台对应页，接入 Nexus 图存储接口。 |
 | 企业组织 | `OrganizationSettingsModal.vue`、`TenantMembers.vue` | 企业组织树、子组织和同步来源由 Nexus 组织接口定义。 |
 | 用户 | `TenantMembers.vue`、`UserManagement.vue` | Nexus 企业成员、邀请和组织归属使用企业权限和成员接口。 |

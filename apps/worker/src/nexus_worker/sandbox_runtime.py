@@ -12,7 +12,7 @@ from functools import lru_cache
 
 from nexus_core.deployment import DeploymentConfigError
 from nexus_sandbox.manager import SandboxManager
-from nexus_sandbox.settings import load_config
+from nexus_sandbox.settings import apply_profile_policy, load_config
 
 logger = logging.getLogger("nexus_worker.sandbox")
 
@@ -21,7 +21,7 @@ logger = logging.getLogger("nexus_worker.sandbox")
 def _config():
     """The parsed `[sandbox]` section, or None when it is off or invalid (logged once)."""
     try:
-        config = load_config()
+        config = load_config(include_policies=False)
     except DeploymentConfigError:
         logger.error("Invalid [sandbox] configuration; the sandbox stays off")
         return None
@@ -38,8 +38,17 @@ def manager(profile: str | None = None) -> SandboxManager | None:
     settings = config.get(profile) if config is not None else None
     if settings is None:
         return None
+    try:
+        settings = apply_profile_policy(settings)
+    except DeploymentConfigError:
+        logger.error("Invalid sandbox profile policy")
+        return None
+    if settings.paused:
+        return None
     if settings.profile not in _managers:
         _managers[settings.profile] = SandboxManager(settings)
+    else:
+        _managers[settings.profile].settings = settings
     return _managers[settings.profile]
 
 

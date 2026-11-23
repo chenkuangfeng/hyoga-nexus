@@ -51,6 +51,7 @@ const REASON_KEYS: Record<string, string> = {
   sandbox_not_accepted: 'reasonNotAccepted',
   sandbox_local_not_allowed: 'reasonLocalNotAllowed',
   sandbox_profile_unknown: 'reasonUnknown',
+  sandbox_profile_paused: 'reasonPaused', sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
   sandbox_required: 'reasonSandboxRequired',
   web_disabled: 'reasonWebDisabled',
   wiki_base_not_bound: 'reasonWikiNotBound',

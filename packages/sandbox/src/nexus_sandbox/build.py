@@ -174,6 +174,8 @@ async def build_environment(settings: SandboxSettings, staging: Path, files: dic
     manifests = {name for name in (PYTHON_MANIFEST, *NODE_MANIFESTS) if name in files}
     if not has_manifest(manifests):
         return BuildResult(True)
+    if settings.backend not in ('local', 'docker', 'bwrap'):
+        return BuildResult(False, 'sandbox_build_unsupported', 'build the dependencies in the execution image')
     inputs, env_dir = staging / 'in', staging / 'env'
     inputs.mkdir(parents=True, exist_ok=True)
     env_dir.mkdir(parents=True, exist_ok=True)

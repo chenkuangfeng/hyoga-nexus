@@ -40,6 +40,13 @@ def fingerprint(settings: SandboxSettings) -> str:
     """Hash of everything that changes what the sandbox can do; a report is valid only for its fingerprint."""
     material = [settings.backend, settings.image, settings.cpus, settings.memory_mb, settings.pids, settings.network,
                 settings.workspace_quota_mb, settings.tmpfs_mb, list(settings.env_passthrough)]
+    if settings.backend == 'docker':
+        material.append('docker-cpu-v1')
+    if settings.backend in ('ssh', 'managed'):
+        material.extend(['remote-v1', settings.remote_profile, settings.ssh_host, settings.ssh_port,
+                         settings.ssh_user, settings.ssh_known_hosts, settings.ssh_identity_file,
+                         settings.trusted_ssh, settings.endpoint, settings.token_file,
+                         settings.exec_timeout_max_seconds, settings.skill_timeout_max_seconds])
     return hashlib.sha256(json.dumps(material).encode()).hexdigest()[:32]
 
 
@@ -130,8 +137,10 @@ async def _guard(name: str, probe) -> Item:
 async def run(settings: SandboxSettings, *, manager: SandboxManager | None = None,
               store: ReportStore | None = None) -> dict:
     """Run every probe and store the report (in `store` when given, and always as a file copy for operators). Raises `sandbox_acceptance_requires_isolating_backend` for `local`."""
-    if settings.backend not in ('docker', 'bwrap'):
+    if settings.backend not in ('docker', 'bwrap', 'ssh', 'managed'):
         raise SandboxError('sandbox_acceptance_requires_isolating_backend')
+    if settings.backend == 'ssh' and not settings.trusted_ssh:
+        raise SandboxError('sandbox_ssh_not_allowed')
     manager = manager or SandboxManager(settings)
     tag = uuid.uuid4().hex[:12]
     a = manager.session(f'accept-{tag}-a', 'probe', default_timeout=10, output_limit=2000)
@@ -147,13 +156,15 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         await a.write_file('/workspace/probe.txt', 'ping', append=False)
         read = await a.read_file('/workspace/probe.txt', start_line=1, max_lines=5)
         seen = await sh(a, 'cat /workspace/probe.txt')
-        await sh(a, 'rm /workspace/probe.txt')
-        return read.text == 'ping' and seen.stdout.strip() == 'ping', 'write, read, command and delete'
+        deleted = await sh(a, 'rm /workspace/probe.txt && python3 -c "print(1234)"')
+        return (read.text == 'ping' and seen.exit_code == 0 and seen.stdout.strip() == 'ping'
+                and deleted.exit_code == 0 and deleted.stdout.strip() == '1234'), 'write, read, command and delete'
 
     async def user():
         result = await sh(a, 'id -u; touch /etc/nexus-probe; echo $?')
         lines = result.stdout.split()
-        return bool(lines) and lines[0] != '0' and lines[-1] != '0', 'runs as a non-root user and cannot write the root file system'
+        return (len(lines) == 2 and all(line.isdigit() for line in lines) and lines[0] != '0'
+                and lines[1] != '0'), 'runs as a non-root user and cannot write the root file system'
 
     async def network():
         if settings.network != 'none':
@@ -177,7 +188,7 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         return result.exit_code not in (0, None) and str(size) not in result.stdout, 'allocating twice the limit is refused or killed'
 
     async def process_limit():
-        if manager.docker is None:
+        if settings.backend == 'bwrap':
             return await processes_bounded_by_teardown()
         code = ('import os,time\\nn=0\\nfor _ in range(%d):\\n try:\\n  if os.fork()==0:\\n   time.sleep(8);os._exit(0)\\n  n+=1\\n'
                 ' except OSError:\\n  break\\nprint(n)') % (settings.pids * 2)
@@ -187,6 +198,15 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         except (ValueError, IndexError):
             return False, f'no count reported: {result.stderr[:100]}'
         return forked < settings.pids, f'{forked} processes created, limit {settings.pids}'
+
+    async def cpu_limit():
+        result = await sh(a, 'cat /sys/fs/cgroup/cpu.max 2>/dev/null || '
+                          '(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us; cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)')
+        try:
+            quota, period = map(int, result.stdout.split())
+            return result.exit_code == 0 and period > 0 and abs(quota / period - settings.cpus) < .01, 'CPU quota'
+        except ValueError:
+            return False, 'kernel CPU quota not readable'
 
     async def tenant_isolation():
         await a.write_file('/workspace/secret.txt', 'tenant-a', append=False)
@@ -211,9 +231,23 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
 
     async def environment():
         result = await sh(a, 'env')
-        return marker not in result.stdout and 'server-secret' not in result.stdout, 'the server environment is not inherited'
+        return (result.exit_code == 0 and marker not in result.stdout
+                and 'server-secret' not in result.stdout), 'the server environment is not inherited'
 
     async def cancellation():
+        if settings.backend == 'managed':
+            await a.write_file('/workspace/cancel-state', 'waiting\n', append=False)
+            task = asyncio.create_task(sh(a, 'echo started > cancel-state; sleep 20; echo finished > cancel-state', 22))
+            try:
+                for _ in range(180):
+                    started = (await a.read_file('/workspace/cancel-state', start_line=1, max_lines=1)).text == 'started'
+                    if started or task.done():
+                        break
+                    await asyncio.sleep(.1)
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            return started and a.executor.last_cancel_confirmed, 'gateway confirmed cancellation and teardown'
         if manager.docker is None:
             return await cancelled_jail_is_gone()
         task = asyncio.ensure_future(sh(a, 'echo $$ > /workspace/.pid; sleep 60', 60))
@@ -231,11 +265,12 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         await manager.release(f'accept-{tag}-a', 'probe')
         names = await docker.list_managed()
         from .backends.docker import container_name
-        gone = container_name(f'accept-{tag}-a', 'probe') not in names
+        gone = container_name(f'accept-{tag}-a', 'probe', settings.profile) not in names
         # A container whose lease this process forgot (the crash case) must be found and removed by `reap`.
         manager._last_used.pop(f'accept-{tag}-b/probe', None)
-        removed = await manager.reap()
-        leftover = container_name(f'accept-{tag}-b', 'probe') in await docker.list_managed()
+        orphan = container_name(f'accept-{tag}-b', 'probe', settings.profile)
+        removed = await manager.reap(only_names={orphan})
+        leftover = orphan in await docker.list_managed()
         return gone and not leftover, f'released container removed; {len(removed)} orphan(s) reclaimed'
 
     async def jail_leaves_nothing():
@@ -279,10 +314,16 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
 
     items = []
     try:
-        for name, probe in (('connectivity', connectivity), ('user', user), ('network', network), ('time_limit', time_limit),
-                            ('output_limit', output_limit), ('memory_limit', memory_limit), ('process_limit', process_limit),
-                            ('tenant_isolation', tenant_isolation), ('path_escape', path_escape),
-                            ('environment', environment), ('cancellation', cancellation), ('cleanup_and_residue', cleanup_and_residue)):
+        probes = [('connectivity', connectivity), ('user', user), ('network', network), ('time_limit', time_limit),
+                  ('output_limit', output_limit), ('memory_limit', memory_limit),
+                  ('tenant_isolation', tenant_isolation), ('path_escape', path_escape), ('environment', environment)]
+        if settings.backend != 'ssh':
+            probes.extend([('process_limit', process_limit), ('cancellation', cancellation)])
+        if settings.backend in ('docker', 'managed'):
+            probes.append(('cpu_limit', cpu_limit))
+        if settings.backend in ('docker', 'bwrap'):
+            probes.append(('cleanup_and_residue', cleanup_and_residue))
+        for name, probe in probes:
             items.append(await _guard(name, probe))
     finally:
         os.environ.pop(marker, None)

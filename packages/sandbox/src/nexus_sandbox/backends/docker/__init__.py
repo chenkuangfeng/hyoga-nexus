@@ -45,9 +45,15 @@ async def run_cli(binary: str, *args: str, timeout: float = 60) -> tuple[int, st
         binary, *args, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
         out, err = await asyncio.wait_for(process.communicate(), timeout)
-    except asyncio.TimeoutError:
-        process.kill()
+    except (asyncio.TimeoutError, asyncio.CancelledError) as error:
+        if process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
         await process.wait()
+        if isinstance(error, asyncio.CancelledError):
+            raise
         raise SandboxError('sandbox_backend_timeout') from None
     return process.returncode, out.decode('utf-8', 'replace'), err.decode('utf-8', 'replace')
 
@@ -55,8 +61,9 @@ async def run_cli(binary: str, *args: str, timeout: float = 60) -> tuple[int, st
 class DockerBackend:
     """Creates and drives session containers. One instance serves the whole process."""
 
-    def __init__(self, settings: SandboxSettings, *, binary: str = 'docker'):
+    def __init__(self, settings: SandboxSettings, *, binary: str = 'docker', lifetime: int | None = None):
         self.settings, self.binary = settings, binary
+        self.lifetime = lifetime
         self._locks: dict[str, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------ lifecycle
@@ -69,6 +76,7 @@ class DockerBackend:
         gid = os.getgid() if os.getuid() != 0 else 65534
         passthrough = [flag for key in s.env_passthrough if key in os.environ for flag in ('-e', f'{key}={os.environ[key]}')]
         return ['run', '-d', '--name', name, '--label', f'{LABEL}=1', '--label', f'{PROFILE_LABEL}={s.profile}',
+                *(['--rm'] if self.lifetime is not None else []),
                 '--pull', 'never', '--init',
                 '--network', s.network, '--read-only', '--tmpfs', f'/tmp:rw,size={s.tmpfs_mb}m',
                 '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -78,7 +86,7 @@ class DockerBackend:
                 *(['-v', f'{skills.resolve()}:/skills:ro'] if skills is not None else []),
                 *(['-v', f'{envs.resolve()}:/skill_envs:ro'] if envs is not None else []),
                 '-e', 'HOME=/workspace', '-e', 'LANG=C.UTF-8', *passthrough, '-w', '/workspace',
-                s.image, 'sleep', '2147483647']
+                s.image, 'sleep', str(self.lifetime or 2147483647)]
 
     async def ensure(self, name: str, workspace: Path, outputs: Path, skills: Path | None = None,
                      envs: Path | None = None) -> None:
@@ -98,7 +106,9 @@ class DockerBackend:
                 raise SandboxError('sandbox_backend_unavailable', err.strip()[:300])
 
     async def remove(self, name: str) -> None:
-        await run_cli(self.binary, 'rm', '-f', name)
+        code, _, error = await run_cli(self.binary, 'rm', '-f', name)
+        if self.lifetime is not None and code != 0 and 'No such container' not in error:
+            raise SandboxError('sandbox_remote_cleanup_unconfirmed')
 
     async def list_managed(self) -> list[str]:
         """Names of the containers this profile created (label match), for idle and orphan reclamation."""

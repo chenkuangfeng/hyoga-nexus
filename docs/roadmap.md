@@ -21,7 +21,7 @@
 | 5 | Claude Code 适配器 | 未开始 | 4 | Claude Agent SDK 文档核对与版本锁定 |
 | 6 | 知识库 | 进行中 | 3 | 外部向量库与 Neo4j 的真实环境验收 |
 | 7 | 技能与 MCP | 未开始 | 3、6 | — |
-| 8 | 沙箱后端 | 未开始 | 7 | 沙箱隔离验收 |
+| 8 | 沙箱后端 | 进行中 | 7 | 沙箱隔离验收 |
 | 9 | 渠道与治理 | 未开始 | 3 | 各渠道接入条件 |
 | 10 | 股票研究 | 未开始 | 6–9 | 观澜数据源逐接口验证 |
 | 11 | 企业化（SaaS 多租户） | 进行中 | 2、6、9 | PostgreSQL 目标环境（2.9）；企微自建应用真实环境 |
@@ -169,9 +169,10 @@
 - **目标**：评估候选后端，选择通过隔离验收的实现。
 - **参考项目**：DeerFlow（`sandbox/`）；Hermes Agent（`tools/environments/`）；DeepSeek Harness（接缝设计）；FastGPT（`agent-sandbox`，仅参考）；Octop（`infra/backend/` 可插拔工作区后端：本地、Docker、PostgreSQL、对象存储，`resolver.py` 组合路由，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。
 - **子计划**：
-  - [ ] 8.1 `CommandExecutorPort` 与 `FileStorePort` 的实现（候选：docker、ssh）。
+  - [x] 8.1 命令与文件后端：local、bwrap、Docker、SSH 和 HTTPS 托管档位。兼容网关使用独立 Docker 执行节点。
   - [ ] 8.2 租约、虚拟路径映射、原子写入、产物收集。
     - 执行类工具约束（提案 2026-11-06-tool-call-hardening 决定 3，见 `docs/architecture.md` 2.9）：按参数判断能否并行、同路径写入串行化、shell 类工具经过参数守卫。
+  - [x] 企业管理端沙箱档位卡片、详情抽屉、可用性和验收报告。平台管理员可暂停档位和调整超时。
   - [ ] 8.3 隔离验收：CPU、内存、时间、输出限制；网络隔离；用户隔离；清理；崩溃后残留检查。
 - **验收**：隔离验收全部通过后，才注册任意代码与文件写入工具；未通过则工具不可见。
 - **依赖**：7。

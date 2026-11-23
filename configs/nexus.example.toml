@@ -128,12 +128,12 @@ index_concurrency = 1
 # Sandbox for the file and command tools and for skill scripts (openspec 2026-11-07-tool-expansion, 2026-11-07-skill-evolution).
 # Off by default. The operator defines named profiles; an agent picks one by name (its `sandbox_profile` setting) and can
 # never create or change one. Enabling is not enough: run `uv run python -m nexus_worker --sandbox-check` (every
-# docker and bwrap profile, or --profile NAME) and have it pass, then switch the "sandbox" tool group on per agent.
+# docker, bwrap, ssh and managed profile, or --profile NAME) and have it pass, then switch the "sandbox" tool group on per agent.
 # A report is stored per profile under workspace_root and is valid only for the profile's type, image and limits.
 enabled = false
 # Profile used by agents that name none. "local" is for development only: it runs commands as the server user with NO
-# isolation and is usable only with allow_local = true AND the development auth mode. In production, point this at a
-# docker or bwrap profile (or name one per agent).
+# isolation and is usable only with allow_local = true AND the development auth mode. In production, point this at an
+# isolation profile (or name one per agent).
 default_profile = "local"
 workspace_root = "data/sandbox"
 allow_local = false
@@ -170,7 +170,31 @@ type = "local"
 # exec_timeout_max_seconds = 120
 #                                  # no background commands (sandbox_exec_async is refused)
 #
+# [sandbox.profiles.ssh]
+# type = "ssh"
+# ssh_host = "sandbox-node.example.org"
+# ssh_user = "nexus-exec"
+# ssh_port = 22
+# ssh_identity_file = "/run/secrets/sandbox_ssh_key"
+# ssh_known_hosts = "/etc/nexus/sandbox_known_hosts"
+# remote_profile = "bwrap"        # name of the enabled, network-isolated bwrap profile on the remote node
+# trusted_ssh = true               # opt in only on deployments with trusted users and scripts
+
+# [sandbox.profiles.managed]
+# type = "managed"
+# endpoint = "https://sandbox.example.org"
+# token_file = "/run/secrets/sandbox_token"
+# remote_profile = "node-docker"  # gateway's Docker profile; CPU, memory and PID settings must match
+# cpus = 1.0
+# memory_mb = 512
+# pids = 128
+
 # The older flat layout (backend, image, cpus ... directly under [sandbox]) still works: it defines one profile named "default".
+
+# For the standalone gateway instance only. Use the same shared workspace volume, plus a Docker profile above.
+# [sandbox_gateway]
+# token_file = "/run/secrets/sandbox_token"
+# profiles = ["node-docker"]
 
 [skills]
 # Folder whose skill sub-folders become builtin skills (assignable in every space). Imported by a platform administrator

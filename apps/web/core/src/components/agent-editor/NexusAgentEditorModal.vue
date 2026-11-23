@@ -676,7 +676,7 @@ const chosenSandboxProfile = computed(() => form.sandbox_profile
   : sandboxProfiles.value.find(profile => profile.default))
 
 function sandboxTypeLabel(type: string): string {
-  const key = type === 'local' ? 'typeLocal' : type === 'docker' ? 'typeDocker' : type === 'bwrap' ? 'typeBwrap' : ''
+  const key = type === 'local' ? 'typeLocal' : type === 'docker' ? 'typeDocker' : type === 'bwrap' ? 'typeBwrap' : type === 'managed' ? 'typeManaged' : ''
   return key ? t(`nexusAgent.sandboxProfile.${key}`) : type
 }
 
@@ -684,6 +684,7 @@ function sandboxReasonLabel(reason: string): string {
   const key = ({
     sandbox_disabled: 'reasonSandboxDisabled', sandbox_not_accepted: 'reasonNotAccepted',
     sandbox_local_not_allowed: 'reasonLocalNotAllowed', sandbox_profile_unknown: 'reasonUnknown',
+    sandbox_profile_paused: 'reasonPaused', sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
     sandbox_unavailable: 'reasonUnavailable', local_not_allowed: 'reasonSkillLocal',
     skill_execution_not_permitted: 'reasonSkillLocal',
   } as Record<string, string>)[reason] || 'reasonOther'

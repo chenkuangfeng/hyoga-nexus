@@ -225,3 +225,11 @@ class ConcurrencyHint(NamedTuple):
 ## 10. 测试
 
 `tests/test_tool_groups.py`（分组、两层门控、一致性）、`tests/test_sandbox_*.py`（路径、租约、工具；容器相关测试在无 Docker 时跳过并标明）、`tests/test_tool_scheduling.py`、`tests/test_tool_search.py`、`tests/test_schema_sanitize.py`、`tests/test_web_tools.py`；沙箱验收报告作为文件留存。
+
+## 沙箱配置与远程执行
+
+参考 WeKnora `SandboxSettings.vue` 和 `SandboxConfigEditorDrawer.vue`，企业管理端提供按后端筛选的档位卡片和详情抽屉，展示参数、能力及验收结果。部署档位和凭据由运维定义，企业管理员可查询当前部署的档位及报告。配置使用部署文件，避免企业管理员修改全平台执行节点和凭据。智能体继续选择已有命名档位。
+
+SSH 使用固定命令调用安装在 Linux 节点上的 Nexus 执行入口，OpenSSH 严格校验主机密钥。执行节点使用自己的已配置 bwrap 档位。HTTPS 托管接口使用受信的运维配置和带版本的请求协议，网关负责隔离、资源限制与请求终止。两种远程后端通过运维预先挂载的同一工作区交换文件，发送租户和会话标识与虚拟路径，不发送宿主路径。远程后台作业和技能构建标为不支持，脚本仍可通过共享只读技能投射执行。
+
+托管网关承诺并报告自身隔离能力。远程验收验证实际工作区读写、会话文件隔离、网络、运行限制和请求清理。SSH 的 bwrap 执行环境仅在显式允许可信执行的部署启用。连接验证与隔离验收分开，报告与连接配置及后端策略版本绑定。

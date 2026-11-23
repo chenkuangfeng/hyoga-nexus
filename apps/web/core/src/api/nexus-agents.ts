@@ -85,12 +85,12 @@ export interface AgentToolGroupInfo {
 
 /** Why a sandbox profile cannot be used right now (stable codes of the platform's tool gates). */
 export type SandboxProfileReason =
-  'sandbox_disabled' | 'sandbox_not_accepted' | 'sandbox_local_not_allowed' | 'sandbox_profile_unknown' | ''
+  'sandbox_disabled' | 'sandbox_not_accepted' | 'sandbox_local_not_allowed' | 'sandbox_profile_unknown' | 'sandbox_ssh_not_allowed' | 'sandbox_profile_paused' | ''
 
 /** One sandbox profile the operator defined (`sandbox_profiles` of `GET /agent-tools`); an agent picks one by name. */
 export interface AgentSandboxProfile {
   name: string
-  type: 'local' | 'docker' | 'bwrap'
+  type: 'local' | 'docker' | 'bwrap' | 'ssh' | 'managed'
   default: boolean
   available: boolean
   reason: SandboxProfileReason | string

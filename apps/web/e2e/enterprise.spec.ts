@@ -649,17 +649,40 @@ test('IM 微信渠道按企业策略接入并生成绑定二维码', async ({ pa
 
 test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page, api }) => {
   await api.signIn()
+  const policy = { paused: false, exec_timeout_max_seconds: 120, skill_timeout_seconds: 120, skill_timeout_max_seconds: 600 }
+  const managed = { name: 'remote', type: 'managed', default: false, available: true, reason: '' }
+  const detail = { ...managed, editable: true, policy, network: 'none', image: null, remote_profile: 'node',
+    workspace_quota_mb: 512, limits: { cpus: 1, pids: 128 }, background: false, build: false,
+    acceptance: { checked_at: '2026-11-23T00:00:00Z', passed: true, items: [{ name: 'cpu_limit', ok: true }] } }
+  let updated: typeof policy | undefined
   api.handle(request => {
-    if (new URL(request.url()).pathname !== '/api/v1/tenants/a/agent-tools') return
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/admin/sandboxes/remote') return { body: detail }
+    if (path === '/api/v1/tenants/a/admin/sandboxes/remote/policy' && request.method() === 'PUT') {
+      updated = request.postDataJSON()
+      return { body: { ...detail, policy: updated } }
+    }
+    if (path !== '/api/v1/tenants/a/agent-tools') return
     return { body: { tools: [], groups: [], default_tools: [], can_enable_tools: true, sandbox_profiles: [
       { name: 'isolated', type: 'docker', default: true, available: true, reason: '' },
       { name: 'pending', type: 'bwrap', default: false, available: false, reason: 'sandbox_not_accepted' },
+      managed,
     ] } }
   })
   await page.goto('settings')
   await page.locator('#enterprise-navigation').getByRole('link', { name: '沙箱引擎' }).click()
-  await expect(page.locator('.sandbox-card')).toHaveCount(2)
+  await expect(page.locator('.sandbox-card')).toHaveCount(3)
   await expect(page.locator('.sandbox-card').filter({ hasText: 'pending' })).toContainText('尚未通过隔离验收')
+  await page.locator('.sandbox-type-tabs').getByText('托管网关 1', { exact: true }).click()
+  await page.locator('.sandbox-card').getByRole('button', { name: '配置详情' }).click()
+  const drawer = page.locator('.t-drawer')
+  await expect(drawer.getByText('CPU 配额', { exact: true })).toBeVisible()
+  await drawer.getByRole('switch', { name: '暂停档位' }).click()
+  await drawer.getByRole('button', { name: '保存策略' }).click()
+  await expect(drawer.getByText('沙箱策略已保存。')).toBeVisible()
+  expect(updated).toEqual({ ...policy, paused: true })
+  await page.keyboard.press('Escape')
+  await expect(drawer).toHaveCount(0)
   await page.locator('.sandbox-type-tabs').getByText('Docker 1', { exact: true }).click()
   await expect(page.locator('.sandbox-card')).toContainText('isolated')
   await page.getByRole('textbox', { name: '搜索' }).fill('not-matching')

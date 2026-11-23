@@ -454,7 +454,7 @@ def _sandbox_check(profile: str | None = None) -> int:
     else:
         chosen = [item for item in config.profiles.values() if item.backend != "local"]
     if not chosen:
-        print("sandbox check not run: no docker or bwrap profile is defined")
+        print("sandbox check not run: no isolating profile is defined")
         return 2
     exit_code = 0
     for settings in chosen:
