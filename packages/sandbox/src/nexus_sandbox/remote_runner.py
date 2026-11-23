@@ -37,6 +37,7 @@ class Execution:
     stdin: str | None
     network: str
     limits: dict[str, float] | None
+    policy_digest: str = ''
 
 
 def parse_execution(raw: bytes) -> Execution:

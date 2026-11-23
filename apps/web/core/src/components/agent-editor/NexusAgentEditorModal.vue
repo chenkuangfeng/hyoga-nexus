@@ -684,7 +684,7 @@ function sandboxReasonLabel(reason: string): string {
   const key = ({
     sandbox_disabled: 'reasonSandboxDisabled', sandbox_not_accepted: 'reasonNotAccepted',
     sandbox_local_not_allowed: 'reasonLocalNotAllowed', sandbox_profile_unknown: 'reasonUnknown',
-    sandbox_profile_paused: 'reasonPaused', sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
+    sandbox_connection_required: 'reasonConnection', sandbox_profile_paused: 'reasonPaused', sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
     sandbox_unavailable: 'reasonUnavailable', local_not_allowed: 'reasonSkillLocal',
     skill_execution_not_permitted: 'reasonSkillLocal',
   } as Record<string, string>)[reason] || 'reasonOther'

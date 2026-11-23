@@ -21,7 +21,7 @@ const reasons: Record<string, string> = {
   sandbox_disabled: 'reasonSandboxDisabled',
   sandbox_not_accepted: 'reasonNotAccepted',
   sandbox_local_not_allowed: 'reasonLocalNotAllowed',
-  sandbox_profile_unknown: 'reasonUnknown', sandbox_profile_paused: 'reasonPaused',
+  sandbox_profile_unknown: 'reasonUnknown', sandbox_connection_required: 'reasonConnection', sandbox_profile_paused: 'reasonPaused',
   sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
 }
 const typeNames = computed(() => ({ docker: 'Docker', bwrap: 'Bubblewrap', ssh: 'SSH', managed: t('nexusAgent.sandboxProfile.typeManaged'), local: t('nexusAgent.sandboxProfile.typeLocal') }))

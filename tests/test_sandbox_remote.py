@@ -20,6 +20,7 @@ def _body(**changes):
         'command': 'printf ok', 'cwd': '/workspace', 'timeout_seconds': 10, 'output_limit': 100,
         'env': None, 'stdin': None, 'network': 'none',
         'limits': {'cpus': 1, 'memory_mb': 512, 'pids': 128},
+        'policy_digest': '1' * 64,
     } | changes
 
 
@@ -58,7 +59,7 @@ def test_managed_client_and_gateway_round_trip(tmp_path, monkeypatch):
     token_path.write_text('t' * 32)
     settings = _settings(tmp_path)
     monkeypatch.setattr(sandbox_gateway, 'section', lambda _: {
-        'token_file': str(token_path), 'profiles': [settings.profile],
+        'token_file': str(token_path), 'profiles': [settings.profile], 'state_root': str(tmp_path / 'state'),
     })
     from nexus_sandbox.settings import SandboxConfig
     monkeypatch.setattr(sandbox_gateway, 'load_config', lambda: SandboxConfig(
@@ -72,6 +73,14 @@ def test_managed_client_and_gateway_round_trip(tmp_path, monkeypatch):
         return ExecResult(0, False, 'ok', '', False, False, 5)
 
     monkeypatch.setattr(sandbox_gateway, 'execute', run_command)
+    from nexus_sandbox.gateway_state import GatewayState
+    from nexus_sandbox.backends.docker import DockerBackend
+    async def capabilities(*args):
+        return {'policy_digest': '1' * 64}
+    async def remove(*args):
+        pass
+    monkeypatch.setattr(GatewayState, 'capabilities', capabilities)
+    monkeypatch.setattr(DockerBackend, 'remove', remove)
     client_constructor = httpx.AsyncClient
     with TestClient(sandbox_gateway.app) as client:
         assert client.post('/v1/executions', json=_body()).status_code == 401
@@ -83,7 +92,7 @@ def test_managed_client_and_gateway_round_trip(tmp_path, monkeypatch):
             transport=httpx.ASGITransport(app=sandbox_gateway.app), **kwargs,
         ))
         target = replace(settings, backend='managed', remote_profile=settings.profile,
-                         endpoint='https://sandbox.example.test', token_file=str(token_path))
+                         endpoint='https://sandbox.example.test', token_file=str(token_path), remote_policy_digest='1' * 64)
         result = asyncio.run(RemoteExecutor(target, 'tenant', 'session').run(
             'printf ok', cwd='/workspace', timeout_seconds=10, output_limit=100,
         ))
@@ -135,39 +144,59 @@ type = "bwrap"
     assert path.read_text() == 'ok'
 
 
-def test_e2b_provider_verifies_mount_and_destroys_instance(tmp_path, monkeypatch):
+def test_e2b_provider_transfers_only_session_and_destroys_instance(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from nexus_sandbox import providers
+    from nexus_sandbox.transfer import pack
 
     key = tmp_path / 'key'
     key.write_text('provider-key')
     settings = _settings(tmp_path)
     request = parse_execution(json.dumps(_body()).encode())
-    killed = []
+    killed, writes = [], []
+    cloud = tmp_path / 'cloud'
+    for root in ('workspace', 'outputs'):
+        (cloud / root).mkdir(parents=True)
+    (cloud / 'outputs' / 'result.txt').write_text('artifact')
 
     class Files:
-        async def read(self, path, **kwargs):
-            return (tmp_path / path.removeprefix('/nexus/')).read_text()
-
-        async def write(self, *args, **kwargs):
-            pass
+        async def write(self, path, data, **kwargs):
+            writes.append(path)
 
     class Commands:
         async def run(self, command, **kwargs):
-            return SimpleNamespace(exit_code=0, stdout='ok', stderr='')
+            if kwargs.get('background'):
+                async def wait():
+                    pass
+                return SimpleNamespace(wait=wait)
+            return SimpleNamespace(exit_code=0, stdout='', stderr='')
 
     class Sandbox:
+        sandbox_id = 'cloud-instance'
         files = Files()
         commands = Commands()
 
-        async def kill(self):
+        async def get_info(self, **kwargs):
+            return SimpleNamespace(cpu_count=1, memory_mb=512)
+
+        async def kill(self, **kwargs):
             killed.append(True)
 
     async def create(**kwargs):
         assert kwargs['allow_internet_access'] is False and kwargs['secure'] is True
         return Sandbox()
 
+    async def download(sandbox, remote, destination, limit):
+        if remote.endswith('result.json'):
+            destination.write_text(json.dumps(dict(exit_code=0, timed_out=False, stdout='ok', stderr='',
+                stdout_truncated=False, stderr_truncated=False, duration_ms=3)))
+        else:
+            pack({root: cloud / root for root in ('workspace', 'outputs')}, destination)
+
     monkeypatch.setattr(providers.AsyncSandbox, 'create', create)
-    config = {'type': 'e2b', 'template': 'shared-volume', 'domain': 'e2b.app', 'api_key_file': str(key)}
+    monkeypatch.setattr(providers, 'download', download)
+    config = {'type': 'e2b', 'template': 'base', 'revision': 'v1', 'domain': 'e2b.app', 'api_key_file': str(key)}
     result = asyncio.run(providers.execute_provider(request, settings, config))
     assert result.stdout == 'ok' and killed == [True]
+    assert any(path.endswith('input.tar') for path in writes)
+    assert (tmp_path / 'tenant' / 'session' / 'outputs' / 'result.txt').read_text() == 'artifact'

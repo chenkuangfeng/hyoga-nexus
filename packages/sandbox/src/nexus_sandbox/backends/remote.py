@@ -58,6 +58,7 @@ class RemoteExecutor:
         self.settings = settings
         self.tenant_id, self.session_id = tenant_id, session_id
         self.last_cancel_confirmed = False
+        self.active_request_id = None
 
     def ssh_arguments(self) -> list[str]:
         """Use only the deployment-specified credentials and strictly pinned host keys."""
@@ -141,9 +142,11 @@ class RemoteExecutor:
             'network': settings.network,
             'limits': {'cpus': settings.cpus, 'memory_mb': settings.memory_mb, 'pids': settings.pids}
             if settings.backend == 'managed' else None,
+            'policy_digest': settings.remote_policy_digest,
         })
         if len(payload.encode()) > MAX_REQUEST:
             raise SandboxError('sandbox_remote_request_too_large')
+        self.active_request_id = request_id
         try:
             if settings.backend == 'ssh':
                 raw = await self._ssh(payload, timeout_seconds + 15)
@@ -151,7 +154,24 @@ class RemoteExecutor:
                 raw = await self._managed(payload, timeout_seconds + 30, request_id)
         except (TimeoutError, httpx.HTTPError):
             raise SandboxError('sandbox_backend_unavailable') from None
+        finally:
+            self.active_request_id = None
         return decode_result(raw, limit)
 
     async def close(self) -> None:
         """Each remote request owns its execution lifetime."""
+
+    async def status(self, request_id: str) -> str:
+        """Read only a gateway request state, without replaying execution."""
+        async with httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=10) as client:
+            async with client.stream(
+                'GET', f'{self.settings.endpoint}/v1/executions/{request_id}',
+                headers={'Authorization': f'Bearer {self._token()}'},
+            ) as response:
+                response.raise_for_status()
+                body = bytearray()
+                async for chunk in response.aiter_bytes(4096):
+                    body.extend(chunk)
+                    if len(body) > 4096:
+                        raise SandboxError('sandbox_remote_response_invalid')
+                return json.loads(body)['state']

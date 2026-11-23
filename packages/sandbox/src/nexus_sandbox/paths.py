@@ -58,3 +58,24 @@ def virtual_of(host: Path, roots: dict[str, Path]) -> str:
             continue
         return name + ('/' + relative.as_posix() if relative.parts else '')
     raise SandboxError('sandbox_path_invalid')
+
+
+def open_regular(host: Path, roots: dict[str, Path] | None = None) -> int:
+    """Open a regular file through stable directory handles, refusing a replaced link or special file.
+
+    Existing links within a virtual root retain their read semantics. The resolved target is re-anchored
+    before opening. Callers own and must close the returned descriptor.
+    """
+    import stat
+    from .transfer import directory
+    target = Path(os.path.realpath(host)) if roots is not None else host.absolute()
+    if roots is not None and not any(
+        target != base.resolve() and base.resolve() in target.parents for base in roots.values()
+    ):
+        raise SandboxError('sandbox_path_invalid')
+    with directory(target.parent) as parent:
+        descriptor = os.open(target.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        os.close(descriptor)
+        raise SandboxError('sandbox_path_invalid')
+    return descriptor

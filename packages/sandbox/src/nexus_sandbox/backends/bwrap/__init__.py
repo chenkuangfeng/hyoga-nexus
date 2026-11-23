@@ -123,7 +123,22 @@ class BwrapExecutor:
         if find_binary(self.backend.binary) is None:
             raise SandboxError('sandbox_backend_unavailable', 'bwrap is not installed')
         argv = self.backend.limited(self.backend.jail_arguments(self.workspace, self.outputs, cwd, command, env, self.skills, self.envs))
+        from ...disk_quota import ensure
+        await asyncio.to_thread(ensure, self.backend.settings, self.workspace.parent)
+        from ...cgroups import CommandCgroup
+        group = CommandCgroup(self.backend.settings)
+        if group.path is not None:
+            offset = argv.index('--remount-ro')
+            argv[offset:offset] = ['--ro-bind', str(group.path), '/sys/fs/cgroup']
+        argv = group.wrap(argv)
         started = time.monotonic()
+        try:
+            return await self._capture(argv, timeout_seconds, output_limit, stdin, started)
+        finally:
+            from ...lifecycle import drain
+            await drain(group.close())
+
+    async def _capture(self, argv, timeout_seconds, output_limit, stdin, started):
         process = await asyncio.create_subprocess_exec(
             *argv, stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env={'PATH': _PATH}, start_new_session=True)

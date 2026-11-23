@@ -16,6 +16,7 @@ from .backends.bwrap import BwrapBackend, BwrapExecutor
 from .backends.local import LocalExecutor
 from .backends.remote import RemoteExecutor
 from .files import HostFileStore
+from . import leases
 from .session import SandboxSession
 from .settings import SandboxSettings
 from nexus_core.sandbox import SandboxError
@@ -31,12 +32,18 @@ class _TouchingExecutor:
     Other attributes (mount paths, `close`, `supports_background`) pass through unchanged.
     """
 
-    def __init__(self, inner, touch):
-        self._inner, self._touch = inner, touch
+    def __init__(self, inner, touch, settings=None):
+        self._inner, self._touch, self._settings = inner, touch, settings
 
     async def run(self, *args, **kwargs):
         self._touch()
         try:
+            if self._settings is not None:
+                async with leases.hold(self._settings.root, self._inner.name):
+                    from .disk_quota import ensure
+                    import asyncio
+                    await asyncio.to_thread(ensure, self._settings, self._inner.workspace.parent)
+                    return await self._inner.run(*args, **kwargs)
             return await self._inner.run(*args, **kwargs)
         finally:
             self._touch()
@@ -69,7 +76,8 @@ class SandboxManager:
         skills.mkdir(parents=True, exist_ok=True)  # the mount source must exist before a container starts
         envs = self.settings.envs_root
         envs.mkdir(parents=True, exist_ok=True)
-        files = HostFileStore(workspace, outputs, quota_bytes=self.settings.workspace_quota_mb * 1024 * 1024)
+        files = HostFileStore(workspace, outputs, quota_bytes=self.settings.workspace_quota_mb * 1024 * 1024,
+                              mutation_lock=(self.settings.root, leases.session_name(tenant_id, session_id)))
         key = f'{tenant_id}/{session_id}'
         if self.settings.backend == 'docker':
             container_session = str(session_id) if execution_id is None else f'{session_id}-{execution_id}'
@@ -82,7 +90,8 @@ class SandboxManager:
             executor = RemoteExecutor(self.settings, str(tenant_id), str(session_id))
         self._last_used[key] = time.monotonic()
         self._executors[key] = executor
-        executor = _TouchingExecutor(executor, lambda: self._last_used.__setitem__(key, time.monotonic()))
+        executor = _TouchingExecutor(executor, lambda: self._last_used.__setitem__(key, time.monotonic()),
+                                     self.settings if self.docker else None)
         return SandboxSession(files, executor, default_timeout=default_timeout,
                               max_timeout=self.settings.exec_timeout_max_seconds, output_limit=output_limit, skills_dir=skills,
                               envs_dir=envs)
@@ -93,7 +102,11 @@ class SandboxManager:
         executor = self._executors.pop(key, None)
         self._last_used.pop(key, None)
         if executor is not None:
-            await executor.close()
+            if self.docker is not None:
+                async with leases.hold(self.settings.root, executor.name):
+                    await executor.close()
+            else:
+                await executor.close()
 
     async def reap(self, *, now: float | None = None, only_names: set[str] | None = None) -> list[str]:
         """Remove idle containers and containers this process does not know. Returns the removed names."""
@@ -105,8 +118,13 @@ class SandboxManager:
         removed = []
         for name in await self.docker.list_managed():
             if name not in live and (only_names is None or name in only_names):
-                await self.docker.remove(name)
-                removed.append(name)
+                lock = leases.try_reap(self.settings.root, name, 0 if only_names else self.settings.idle_seconds)
+                if lock is not None:
+                    try:
+                        await self.docker.remove(name)
+                        removed.append(name)
+                    finally:
+                        lock.close()
         for key in [k for k, used in self._last_used.items() if now - used >= self.settings.idle_seconds]:
             self._last_used.pop(key, None)
             self._executors.pop(key, None)

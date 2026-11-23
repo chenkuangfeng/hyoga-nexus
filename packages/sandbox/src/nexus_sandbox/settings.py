@@ -52,15 +52,18 @@ _TOP_KEYS = frozenset({'enabled', 'default_profile', 'workspace_root', 'allow_lo
 _LEGACY_KEYS = frozenset({'backend', 'image', 'cpus', 'memory_mb', 'pids', 'network', 'idle_seconds',
                           'workspace_quota_mb', 'exec_timeout_max_seconds'})
 _COMMON_KEYS = frozenset({'type', 'workspace_quota_mb', 'exec_timeout_max_seconds', 'skill_timeout_seconds',
-                          'skill_timeout_max_seconds', 'env_passthrough', 'build_timeout_seconds', 'env_max_mb'})
+                          'skill_timeout_max_seconds', 'env_passthrough', 'build_timeout_seconds', 'env_max_mb',
+                          'quota_mount', 'quota_project_start', 'quota_inodes'})
 #: Keys each profile type accepts. A key that cannot take effect on a type is an error, not a silent no-op.
 _TYPE_KEYS = {
     'docker': _COMMON_KEYS | {'image', 'cpus', 'memory_mb', 'pids', 'network', 'install_network', 'tmpfs_mb', 'idle_seconds'},
-    'bwrap': _COMMON_KEYS | {'memory_mb', 'network', 'install_network'},
-    'local': _COMMON_KEYS,
-    'ssh': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb'})
+    'bwrap': _COMMON_KEYS | {'memory_mb', 'network', 'install_network', 'cgroup_root', 'cpus', 'pids'},
+    'local': _COMMON_KEYS - {'quota_mount', 'quota_project_start', 'quota_inodes'},
+    'ssh': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb',
+                            'quota_mount', 'quota_project_start', 'quota_inodes'})
     | {'ssh_host', 'ssh_user', 'ssh_port', 'ssh_identity_file', 'ssh_known_hosts', 'remote_profile', 'trusted_ssh'},
-    'managed': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb'})
+    'managed': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb',
+                                'quota_mount', 'quota_project_start', 'quota_inodes'})
     | {'endpoint', 'token_file', 'remote_profile', 'cpus', 'memory_mb', 'pids'},
 }
 
@@ -104,7 +107,13 @@ class SandboxSettings:
     trusted_ssh: bool = False
     endpoint: str = ''
     token_file: str = ''
+    quota_mount: str = ''
+    quota_project_start: int = 100000
+    quota_inodes: int = 10000
+    cgroup_root: str = ''
     paused: bool = False
+    remote_policy_digest: str = ''
+    remote_capabilities: dict = field(default_factory=dict)
 
     @property
     def root(self) -> Path:
@@ -169,6 +178,20 @@ def _profile(values: dict, where: str, name: str, top: dict, kind: str) -> Sandb
     if timeout > timeout_max:
         raise _invalid(where, 'skill_timeout_seconds')
     remote = {}
+    if values.get('quota_mount') and 'quota_project_start' not in values:
+        raise _invalid(where, 'quota_project_start')
+    remote.update(
+        quota_mount=_pick(values, where, 'quota_mount', str, '',
+                          lambda v: v == '' or _absolute_path(v)),
+        quota_project_start=_pick(values, where, 'quota_project_start', int, 100000,
+                                  lambda v: 1 <= v <= 4000000000),
+        quota_inodes=_pick(values, where, 'quota_inodes', int, 10000, lambda v: 100 <= v <= 1000000),
+    )
+    if kind == 'bwrap':
+        group = _pick(values, where, 'cgroup_root', str, '', lambda v: v == '' or _absolute_path(v))
+        if not group and ('cpus' in values or 'pids' in values):
+            raise _invalid(where, 'cgroup_root')
+        remote['cgroup_root'] = group
     if kind in REMOTE_BACKENDS:
         remote['remote_profile'] = _pick(values, where, 'remote_profile', str, '', PROFILE_NAME.fullmatch)
     if kind == 'ssh':
@@ -225,11 +248,19 @@ def _policy_path(settings: SandboxSettings) -> Path:
 
 def _policy_values(settings: SandboxSettings, values: dict) -> dict:
     where = f'sandbox.profiles.{settings.profile}'
-    if values.keys() - set(PROFILE_POLICY_FIELDS):
+    if values.keys() - set(PROFILE_POLICY_FIELDS) - {'remote_policy_digest', 'remote_capabilities'}:
         raise _invalid(where, 'policy')
     result = {key: _pick(values, where, key, int, getattr(settings, key), lambda v: 1 <= v <= 3600)
               for key in PROFILE_POLICY_FIELDS if key != 'paused'}
     result['paused'] = _pick(values, where, 'paused', bool, False)
+    result['remote_policy_digest'] = _pick(
+        values, where, 'remote_policy_digest', str, settings.remote_policy_digest,
+        lambda value: value == '' or re.fullmatch(r'[a-f0-9]{64}', value),
+    )
+    capabilities = values.get('remote_capabilities', settings.remote_capabilities)
+    if not isinstance(capabilities, dict) or len(json.dumps(capabilities)) > 4096:
+        raise _invalid(where, 'remote_capabilities')
+    result['remote_capabilities'] = capabilities
     if result['skill_timeout_seconds'] > result['skill_timeout_max_seconds']:
         raise _invalid(where, 'skill_timeout_seconds')
     return result

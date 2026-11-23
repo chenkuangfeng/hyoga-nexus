@@ -217,3 +217,57 @@ remote_profile = "node"
     assert result.status_code == 200 and result.json()['policy'] == policy
     assert result.json()['reason'] == 'sandbox_profile_paused'
     assert api.get(url).json()['policy'] == policy
+
+
+def test_gateway_connection_and_provider_changes_invalidate_old_acceptance(api, database, tmp_path, monkeypatch):
+    import httpx
+    from nexus_platform.identity.service import resolve_user
+    from nexus_sandbox.settings import load_config
+
+    tenant_id, _, _, _, _ = _stack(database)
+    with database() as db, db.begin():
+        resolve_user(db, OWNER).is_platform_admin = True
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs').mkdir()
+    key = tmp_path / 'gateway-key'
+    key.write_text('gateway-access-token')
+    (tmp_path / 'configs' / 'nexus.toml').write_text(f'''
+[sandbox]
+enabled = true
+workspace_root = "{tmp_path / 'shared'}"
+[sandbox.profiles.remote]
+type = "managed"
+endpoint = "https://sandbox.example.test"
+token_file = "{key}"
+remote_profile = "node"
+''')
+    capabilities = {
+        'policy_digest': 'a' * 64, 'provider': 'e2b', 'file_transfer': 'snapshot',
+        'network': 'none', 'output_capture': 'bounded', 'cleanup': 'persistent',
+        'background': False, 'build': False, 'template_revision': 'v1',
+    }
+    writes = []
+    def transport(request):
+        assert request.headers['authorization'] == 'Bearer gateway-access-token'
+        if request.url.path.endswith('/capabilities'):
+            return httpx.Response(200, json=capabilities)
+        if request.url.path.endswith('/provider'):
+            if request.method == 'PUT':
+                writes.append(request.content)
+            return httpx.Response(200, json={
+                'type': 'e2b', 'template': 'base', 'domain': 'e2b.app', 'revision': 'v2', 'has_api_key': True,
+            })
+        return httpx.Response(404)
+    original = httpx.Client
+    monkeypatch.setattr(httpx, 'Client', lambda **kwargs: original(transport=httpx.MockTransport(transport), **kwargs))
+    url = f'/api/v1/tenants/{tenant_id}/admin/sandboxes/remote'
+    connected = api.post(f'{url}/connect')
+    assert connected.status_code == 200
+    assert connected.json()['connection']['policy_digest'] == 'a' * 64
+    assert load_config().get('remote').remote_policy_digest == 'a' * 64
+    response = api.put(f'{url}/provider', json={
+        'type': 'e2b', 'template': 'base', 'domain': 'e2b.app', 'revision': 'v2', 'api_key': 'supplier-secret',
+    })
+    assert response.status_code == 200 and 'supplier-secret' not in response.text and writes
+    assert load_config().get('remote').remote_policy_digest == ''
+    assert api.get(url).json()['reason'] == 'sandbox_connection_required'

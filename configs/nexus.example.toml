@@ -160,10 +160,16 @@ type = "local"
 # skill_timeout_seconds = 120      # default and ceiling of one exec_skill call
 # skill_timeout_max_seconds = 600
 # env_passthrough = []             # host variable names to forward; names that look like credentials are refused
+# quota_mount = "/srv/nexus"       # optional XFS mount with project quota enabled
+# quota_project_start = 100000    # operator-reserved range of 100000 project IDs
+# quota_inodes = 10000            # hard session inode quota; bytes follow workspace_quota_mb
 
 # [sandbox.profiles.bwrap]
 # type = "bwrap"                   # bubblewrap (Linux): a namespace jail per command, the host's /usr mounted read-only
-# memory_mb = 512                  # address-space limit; there is no process-count limit and no CPU quota
+# memory_mb = 512                  # address-space limit; cgroup_root additionally enables tree-wide limits
+# cgroup_root = "/sys/fs/cgroup/nexus" # operator-delegated cgroup v2 parent with cpu,memory,pids enabled
+# cpus = 1.0                      # requires cgroup_root
+# pids = 128                      # requires cgroup_root
 # network = "none"                 # none | bridge
 # install_network = "bridge"
 # workspace_quota_mb = 512
@@ -195,6 +201,7 @@ type = "local"
 # [sandbox_gateway]
 # token_file = "/run/secrets/sandbox_token"
 # profiles = ["node-docker"]
+# state_root = "/srv/nexus/gateway-state" # persistent, private, single-process ownership
 
 [skills]
 # Folder whose skill sub-folders become builtin skills (assignable in every space). Imported by a platform administrator

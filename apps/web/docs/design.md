@@ -256,7 +256,7 @@ IM 集成由发布集成导航进入，按 WeKnora `IMChannelPanel.vue` 和 `cha
 | 向量引擎 | `VectorStoreSettings.vue` | 核验引擎选择、配置抽屉、测试与已连通的向量存储接口。 |
 | 解析引擎 | `ParserEngineSettings.vue` | 核验配置卡片、授权、保存确认及密钥保留。 |
 | 存储引擎 | `StorageBackendSettings.vue` | 核验新增卡片、配置抽屉及现有后端接口。原版额外存储后端依赖 Nexus 扩展。 |
-| 沙箱引擎 | `SandboxSettings.vue`、`SandboxConfigEditorDrawer.vue` | 类型标签、搜索和档位卡片读取 `agent-tools`。配置抽屉展示执行能力、运行策略和验收，平台管理员可暂停档位或调整超时。Docker daemon、SSH 主机和托管凭据由部署配置管理。 |
+| 沙箱引擎 | `SandboxSettings.vue`、`SandboxConfigEditorDrawer.vue` | 类型标签、搜索和档位卡片读取 `agent-tools`。配置抽屉展示执行能力、运行策略和验收，平台管理员可暂停档位或调整超时。Docker daemon 和 SSH 主机身份由部署配置管理；平台管理员在抽屉维护供应商模板、域名、版本与加密密钥，验证网关能力和策略摘要，并查看实例和重试回收。连接验证与隔离验收分别展示。 |
 | 知识图谱 | `VectorStoreSettings.vue` 的后端卡片 | 本地 WeKnora 无独立图存储后台对应页，接入 Nexus 图存储接口。 |
 | 企业组织 | `OrganizationSettingsModal.vue`、`TenantMembers.vue` | 企业组织树、子组织和同步来源由 Nexus 组织接口定义。 |
 | 用户 | `TenantMembers.vue`、`UserManagement.vue` | Nexus 企业成员、邀请和组织归属使用企业权限和成员接口。 |

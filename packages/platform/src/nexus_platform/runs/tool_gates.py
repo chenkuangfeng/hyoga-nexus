@@ -74,6 +74,8 @@ def profile_facts(db, config, settings, web_enabled: bool = False) -> GateFacts:
         return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_profile_unknown', web_enabled=web_enabled)
     if settings.paused:
         return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_profile_paused', web_enabled=web_enabled)
+    if settings.backend == 'managed' and not settings.remote_policy_digest:
+        return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_connection_required', web_enabled=web_enabled)
     if settings.backend == 'local':
         allowed = sandbox_local_allowed(settings, development_mode=auth_settings().mode == 'development')
         return GateFacts(sandbox_enabled=True, sandbox_accepted=allowed,

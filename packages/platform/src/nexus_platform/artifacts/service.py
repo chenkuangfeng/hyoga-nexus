@@ -65,8 +65,12 @@ def _view(row: ArtifactRecord, *, session_title: str | None = None, version_coun
 def _copy(source: Path, destination: Path) -> tuple[str, int]:
     """Copy a regular file without following symlinks and return (sha256, size). Raises ValueError when the file is
     not a regular file or grows past :data:`MAX_FILE_BYTES` while being read."""
-    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
-    descriptor = os.open(source, flags)
+    from nexus_sandbox.paths import open_regular
+    from nexus_core.sandbox import SandboxError
+    try:
+        descriptor = open_regular(source)
+    except SandboxError:
+        raise ValueError('not_regular') from None
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise ValueError('not_regular')

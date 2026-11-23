@@ -2,8 +2,9 @@
 /** Profile details, policy editing and worker-side acceptance in the same drawer. */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import SandboxGatewaySettings from './SandboxGatewaySettings.vue'
 import {
-  getSandboxDetails, updateSandboxPolicy, type SandboxDetails, type SandboxPolicy,
+  connectSandbox, getSandboxDetails, updateSandboxPolicy, type SandboxDetails, type SandboxPolicy,
 } from '@nexus-web/core/api/nexus-sandboxes'
 
 const props = defineProps<{ tenant: string; name: string }>()
@@ -16,6 +17,9 @@ const saving = ref(false)
 const failed = ref(false)
 const saveFailed = ref(false)
 const saved = ref(false)
+const connecting = ref(false)
+const connectionFailed = ref(false)
+const gatewayOpen = ref(false)
 const timeoutFields = ['exec_timeout_max_seconds', 'skill_timeout_seconds', 'skill_timeout_max_seconds'] as const
 const validPolicy = computed(() => policy.value
   && timeoutFields.every(field => Number.isInteger(policy.value?.[field])
@@ -60,6 +64,31 @@ async function save() {
   }
 }
 
+async function connect() {
+  if (connecting.value || saving.value || !details.value?.editable) return
+  connecting.value = true
+  connectionFailed.value = false
+  try {
+    const result = await connectSandbox(props.tenant, props.name)
+    if (disposed) return
+    details.value = result
+    emit('saved')
+  } catch {
+    if (!disposed) connectionFailed.value = true
+  } finally {
+    if (!disposed) connecting.value = false
+  }
+}
+
+async function refreshConnection() {
+  try {
+    const result = await getSandboxDetails(props.tenant, props.name)
+    if (!disposed) { details.value = result; emit('saved') }
+  } catch {
+    if (!disposed) connectionFailed.value = true
+  }
+}
+
 function togglePause() {
   if (details.value?.editable && policy.value && !saving.value) {
     policy.value.paused = !policy.value.paused
@@ -91,6 +120,26 @@ onBeforeUnmount(() => { disposed = true })
             <dt>{{ t('sandboxSettings.build') }}</dt><dd>{{ t(details.build ? 'sandboxSettings.supported' : 'sandboxSettings.unsupported') }}</dd>
           </dl>
         </section>
+        <section v-if="details.type === 'managed'">
+          <h3>{{ t('sandboxSettings.connection') }}</h3>
+          <p>{{ t('sandboxSettings.connectionHint') }}</p>
+          <t-button v-if="details.editable" variant="outline" :loading="connecting" :disabled="saving" @click="connect">
+            {{ t('sandboxSettings.connect') }}
+          </t-button>
+          <t-button v-if="details.editable" variant="text" @click="gatewayOpen = !gatewayOpen">
+            {{ t('sandboxSettings.configureGateway') }}
+          </t-button>
+          <SandboxGatewaySettings v-if="gatewayOpen" :tenant="tenant" :name="name" @changed="refreshConnection" />
+          <t-alert v-if="connectionFailed" theme="error" :message="t('sandboxSettings.connectionFailed')" />
+          <dl v-if="details.connection">
+            <dt>{{ t('sandboxSettings.provider') }}</dt><dd>{{ details.connection.provider }}</dd>
+            <dt>{{ t('sandboxSettings.fileTransfer') }}</dt>
+            <dd>{{ t(`sandboxSettings.${details.connection.file_transfer}`) }}</dd>
+            <dt>{{ t('sandboxSettings.connectedAt') }}</dt><dd>{{ details.connection.connected_at }}</dd>
+            <dt>{{ t('sandboxSettings.revision') }}</dt><dd>{{ details.connection.template_revision }}</dd>
+            <dt>{{ t('sandboxSettings.digest') }}</dt><dd><code>{{ details.connection.policy_digest }}</code></dd>
+          </dl>
+        </section>
         <section>
           <h3>{{ t('sandboxSettings.policy') }}</h3>
           <t-form label-align="top" @submit="save">
@@ -107,7 +156,7 @@ onBeforeUnmount(() => { disposed = true })
             <t-alert v-if="!validPolicy" theme="warning" :message="t('sandboxSettings.invalidTimeout')" />
             <t-alert v-if="saveFailed" theme="error" :message="t('sandboxSettings.saveFailed')" />
             <t-alert v-if="saved" theme="success" :message="t('sandboxSettings.saved')" />
-            <t-button v-if="details.editable" type="submit" :loading="saving" :disabled="!validPolicy">
+            <t-button v-if="details.editable" type="submit" :loading="saving" :disabled="!validPolicy || connecting">
               {{ t('sandboxSettings.save') }}
             </t-button>
           </t-form>

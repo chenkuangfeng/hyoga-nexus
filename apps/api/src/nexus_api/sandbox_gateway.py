@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import time
+from contextlib import suppress
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -17,7 +18,9 @@ from nexus_core.deployment import section
 from nexus_core.sandbox import SandboxError
 from nexus_sandbox.backends.remote import MAX_REQUEST
 from nexus_sandbox.remote_runner import REQUEST_ID, execute, parse_execution
-from nexus_sandbox.settings import load_config
+from nexus_sandbox.settings import apply_profile_policy, load_config
+from nexus_sandbox.gateway_state import GatewayState
+from nexus_sandbox.lifecycle import drain
 
 
 @asynccontextmanager
@@ -45,18 +48,30 @@ async def lifespan(app: FastAPI):
         for name, value in providers.items()
     ):
         raise RuntimeError('invalid sandbox gateway providers')
+    root = Path(config.get('state_root', str(deployment.workspace_root) + '/_gateway_state'))
+    from nexus_api.gateway_provider_config import load_providers
+    providers = load_providers(root, selected, providers)
+    state = GatewayState(root, selected, providers)
+    await state.recover(set())
+    app.state.runtime = state
     app.state.providers = providers
     app.state.token = token.encode()
     app.state.profiles = selected
     app.state.active = {}
     app.state.cancelled = {}
+    reaper = asyncio.create_task(state.reaper(app.state.active))
     try:
         yield
     finally:
         tasks = list(app.state.active.values())
         for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        if tasks:
+            await drain(asyncio.gather(*tasks, return_exceptions=True))
+        reaper.cancel()
+        with suppress(asyncio.CancelledError):
+            await reaper
+        state.journal.close()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -85,16 +100,23 @@ async def run_command(request: Request) -> dict:
     settings = state.profiles.get(execution.profile)
     if settings is None:
         raise HTTPException(404)
+    settings = apply_profile_policy(settings)
+    capabilities = await state.runtime.capabilities(execution.profile, settings)
+    if execution.policy_digest != capabilities['policy_digest']:
+        raise HTTPException(409, 'sandbox_remote_policy_mismatch')
     if execution.id in state.active or state.cancelled.get(execution.id, 0) > time.monotonic():
         raise HTTPException(409)
     if len(state.active) >= 32:
         raise HTTPException(429)
+    try:
+        state.runtime.reserve(execution)
+    except SandboxError:
+        raise HTTPException(409) from None
     provider = state.providers.get(execution.profile)
     if provider is None:
-        task = asyncio.create_task(execute(execution, settings, backend='docker'))
+        task = asyncio.create_task(state.runtime.execute_docker(execution, settings, execute))
     else:
-        from nexus_sandbox.providers import execute_provider
-        task = asyncio.create_task(execute_provider(execution, settings, provider))
+        task = asyncio.create_task(state.runtime.execute_provider(execution, settings, provider))
     state.active[execution.id] = task
     try:
         return asdict(await task)
@@ -126,3 +148,92 @@ async def cancel_command(request_id: str, request: Request) -> Response:
         if isinstance(result, Exception):
             raise HTTPException(502)
     return Response(status_code=204)
+
+
+@app.get('/v1/profiles/{name}/capabilities')
+async def capabilities(name: str, request: Request) -> dict:
+    """Authenticate and report actual execution identity without starting user code."""
+    _authorize(request)
+    state = request.app.state
+    settings = state.profiles.get(name)
+    if settings is None:
+        raise HTTPException(404)
+    try:
+        result = await state.runtime.capabilities(name, apply_profile_policy(settings))
+    except SandboxError:
+        raise HTTPException(503) from None
+    return result
+
+
+@app.get('/v1/executions/{request_id}')
+async def execution_status(request_id: str, request: Request) -> dict:
+    """Expose only lifecycle state, allowing cancellation and crash recovery to be verified."""
+    _authorize(request)
+    if not REQUEST_ID.fullmatch(request_id):
+        raise HTTPException(404)
+    record = request.app.state.runtime.journal.get(request_id)
+    if record is None:
+        raise HTTPException(404)
+    return {'id': request_id, 'state': record['state']}
+
+
+@app.get('/v1/profiles/{name}/executions')
+async def profile_executions(name: str, request: Request) -> dict:
+    """List unfinished cleanup records without exposing commands, users or filesystem paths."""
+    _authorize(request)
+    runtime = request.app.state.runtime
+    if name not in runtime.profiles:
+        raise HTTPException(404)
+    return {'items': [
+        {key: record.get(key) for key in ('id', 'state', 'created_at', 'updated_at')}
+        for record in runtime.journal.pending() if record['profile'] == name
+    ][:100]}
+
+
+@app.post('/v1/profiles/{name}/executions/{request_id}/cleanup')
+async def retry_cleanup(name: str, request_id: str, request: Request) -> dict:
+    """Retry a failed cleanup only after the original request has left the active registry."""
+    _authorize(request)
+    state = request.app.state
+    record = state.runtime.journal.get(request_id) if REQUEST_ID.fullmatch(request_id) else None
+    if record is None or record['profile'] != name:
+        raise HTTPException(404)
+    if request_id in state.active:
+        raise HTTPException(409)
+    await state.runtime.recover(set(state.active))
+    record = state.runtime.journal.get(request_id)
+    return {'id': request_id, 'state': record['state']}
+
+
+@app.get('/v1/profiles/{name}/provider')
+async def read_provider(name: str, request: Request) -> dict:
+    """Return provider settings with credential presence only."""
+    from nexus_api.gateway_provider_config import public_provider
+    _authorize(request)
+    if name not in request.app.state.profiles:
+        raise HTTPException(404)
+    return public_provider(request.app.state.providers.get(name))
+
+
+@app.put('/v1/profiles/{name}/provider')
+async def update_provider(name: str, request: Request) -> dict:
+    """Update encrypted provider settings after all outstanding instances have been reclaimed."""
+    from nexus_api.gateway_provider_config import public_provider, save_provider
+    _authorize(request)
+    state = request.app.state
+    if name not in state.profiles:
+        raise HTTPException(404)
+    if any(record['profile'] == name for record in state.runtime.journal.pending()):
+        raise HTTPException(409, 'sandbox_instances_pending')
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 16384:
+            raise HTTPException(413)
+    try:
+        import json
+        config = save_provider(state.runtime.journal.root, name, json.loads(body), state.providers.get(name))
+    except (SandboxError, ValueError):
+        raise HTTPException(422, 'sandbox_provider_configuration_invalid') from None
+    state.providers[name] = config
+    return public_provider(config)

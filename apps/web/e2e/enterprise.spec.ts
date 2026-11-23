@@ -655,9 +655,28 @@ test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page,
     workspace_quota_mb: 512, limits: { cpus: 1, pids: 128 }, background: false, build: false,
     acceptance: { checked_at: '2026-11-23T00:00:00Z', passed: true, items: [{ name: 'cpu_limit', ok: true }] } }
   let updated: typeof policy | undefined
+  let providerWrite: Record<string, unknown> | undefined
+  let pending = true
+  const gatewayConnection = { policy_digest: 'f'.repeat(64), provider: 'e2b', file_transfer: 'snapshot',
+    output_capture: 'bounded', cleanup: 'persistent', connected_at: '2026-11-23', template_revision: 'v1' }
   api.handle(request => {
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/tenants/a/admin/sandboxes/remote') return { body: detail }
+    if (path === '/api/v1/tenants/a/admin/sandboxes/remote/connect') {
+      return { body: { ...detail, connection: gatewayConnection } }
+    }
+    if (path === '/api/v1/tenants/a/admin/sandboxes/remote/provider') {
+      if (request.method() === 'PUT') providerWrite = request.postDataJSON()
+      return { body: { type: 'e2b', template: 'base', domain: 'e2b.app', revision: 'v1', has_api_key: true } }
+    }
+    if (path === '/api/v1/tenants/a/admin/sandboxes/remote/executions') {
+      return { body: { items: pending ? [{ id: 'a'.repeat(32), state: 'cleanup_pending',
+        created_at: 1, updated_at: 2 }] : [] } }
+    }
+    if (path.endsWith('/executions/' + 'a'.repeat(32) + '/cleanup')) {
+      pending = false
+      return { body: { id: 'a'.repeat(32), state: 'finished' } }
+    }
     if (path === '/api/v1/tenants/a/admin/sandboxes/remote/policy' && request.method() === 'PUT') {
       updated = request.postDataJSON()
       return { body: { ...detail, policy: updated } }
@@ -677,6 +696,19 @@ test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page,
   await page.locator('.sandbox-card').getByRole('button', { name: '配置详情' }).click()
   const drawer = page.locator('.t-drawer')
   await expect(drawer.getByText('CPU 配额', { exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: '验证连接', exact: true }).click()
+  await expect(drawer.getByText('会话文件同步', { exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: '供应商与实例管理', exact: true }).click()
+  await expect(drawer.getByRole('button', { name: '保存供应商配置', exact: true })).toBeDisabled()
+  await drawer.getByRole('button', { name: '重试回收', exact: true }).click()
+  await expect(drawer.getByText('没有运行中或待回收的实例。', { exact: true })).toBeVisible()
+  await drawer.locator('input[type="password"]').fill('test-gateway-key')
+  await drawer.getByRole('button', { name: '保存供应商配置', exact: true }).click()
+  await expect(drawer.getByText('供应商配置已保存，请重新验证连接并运行隔离验收。')).toBeVisible()
+  expect(providerWrite).toMatchObject({ type: 'e2b', api_key: 'test-gateway-key' })
+  await expect(drawer.locator('input[type="password"]')).toHaveValue('')
+  await drawer.getByRole('button', { name: '供应商与实例管理', exact: true }).click()
+
   await drawer.getByRole('switch', { name: '暂停档位' }).click()
   await drawer.getByRole('button', { name: '保存策略' }).click()
   await expect(drawer.getByText('沙箱策略已保存。')).toBeVisible()

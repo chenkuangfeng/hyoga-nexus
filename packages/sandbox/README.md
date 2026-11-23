@@ -25,14 +25,39 @@
 
 ## E2B 与 CubeSandbox 适配器
 
-兼容网关支持 E2B 协议的供应商模板。网关配置增加以下表，名称与已有的网关 Docker 策略档位相同，策略字段用于匹配 worker 的资源要求。实际执行将交给供应商模板。
+平台管理员可在「沙箱引擎 → 配置详情 → 供应商与实例管理」选择 E2B 或 CubeSandbox，填写模板、域名、环境版本和 API Key。密钥使用部署凭据加密主密钥加密保存到网关状态目录；网关需配置与平台相容的主密钥。界面仅返回已配置状态。运行中或待回收实例存在时拒绝更换配置。
+
+也可在独立网关的部署文件中定义初始供应商配置：
 
 ```toml
 [sandbox_gateway.providers.node-docker]
 type = "e2b" # 或 cubesandbox
-template = "your-template"
-domain = "e2b.app" # CubeSandbox 使用自己的域名
+template = "your-template-id"
+domain = "e2b.app"
+revision = "immutable-template-build-version"
 api_key_file = "/run/secrets/provider_key"
 ```
 
-域名需支持 SDK 标准的控制面 `https://api.<domain>` 和数据面域名路由，自建 CubeSandbox 应配置对应 HTTPS 反向代理。模板需预设匹配的 CPU、内存与 PID 限制，提供 Python、Shell、mount 及无 sudo、无提权权限的非特权 user 账号，并将与 worker 相同的共享工作区挂到 `/nexus`。适配器通过随机文件验证挂载，映射当前会话的 `/workspace`、`/outputs` 和只读 `/skills`，命令完成后销毁实例。普通 E2B Cloud 模板没有该挂载，需要先准备可访问共享文件系统的自定义模板。真实供应商验收通过后才能开放给智能体。
+域名需支持 SDK 的 `https://api.<domain>` 和数据面路由。模板需提供 Python 3.11+、Shell、root 文件准备能力和无 sudo/提权权限的 `user` 账号。CPU 与内存必须匹配资源档位，实例创建后还会查询供应商实际分配值。PID 由实例内核的 UID 进程数限制控制，每个请求使用独立 VM。环境版本应对应供应商的不可变模板构建，更新模板时同步更新版本并重新验收。
+
+实例通过供应商文件 API 接收当前会话及技能，工作目录为 `/workspace`，交付目录为 `/outputs`。技能文件由 root 持有且对执行账号只读。每个快照最多 4096 个条目，单文件 50 MiB，总计不超过档位配额和 200 MiB 中的较小值。链接、特殊文件与扩展归档头被拒绝。会话快照下载后经过完整校验才提交，包含文件删除。实例无需挂载 worker 的共享卷；worker 与网关继续共享会话文件目录。
+
+## 连接、验收与恢复
+
+1. 在管理端点击「验证连接」，绑定网关节点、镜像或供应商模板版本、资源策略及适配器代码摘要。
+2. 在实际 worker 节点运行 `uv run python -m nexus_worker --sandbox-check --profile NAME`。连接验证本身不开放执行工具。
+3. 网关会拒绝策略摘要不匹配的请求。更换节点、模板版本、资源限制或适配器代码后，重新验证连接并验收。
+4. 网关状态目录默认为 `<workspace_root>/_gateway_state`，也可用 `[sandbox_gateway].state_root` 指定。保留该目录才能进行重启恢复；同一目录只允许一个网关进程。
+5. 网关启动和每 30 秒重试回收未结束实例。创建响应未知时通过请求元数据查找实例，保留记录直到实例硬 TTL 过去。原命令不会重放。管理端可查看待回收状态并重试回收。
+
+实例内 runner 在读流时保留输出头尾，SDK 只接收控制结果。有界文件下载使用携带访问令牌请求头的流式 HTTP，避免 SDK 的文件读取缓冲。命令超时会结束进程组并保存已生成的文件；取消时尽量导出部分文件，然后销毁实例。
+
+## Linux 资源限额
+
+bwrap 可配置 `cgroup_root`，指向已由运维委派并启用 `cpu memory pids` 控制器的 cgroup v2 子树，同时配置 `cpus`、`memory_mb` 和 `pids`。Nexus 为每条命令创建子 cgroup，设置 CPU、内存、swap 和 PID 限额，结束后杀净进程并回收子组。未配置时保留已有的地址空间限制与进程回收语义；配置失效时执行被拒绝。
+
+Docker 和 bwrap 可配置 `quota_mount`、`quota_project_start` 和 `quota_inodes` 启用 XFS project quota。目录需位于已启用项目配额的 XFS 挂载下；运维需为本部署预留从 `quota_project_start` 开始的 100000 个项目 ID，并提供执行 `xfs_quota` 的权限。字节硬限额沿用 `workspace_quota_mb`。这会约束 Shell 直接写入和 inode 消耗。配额配置错误时执行被拒绝；未配置时仅有文件工具与快照配额。原子文件更新和快照发布需要额外临时空间。
+
+Docker 命令、文件工具写入和供应商同步使用共享卷上的跨进程锁。回收器获取独占锁并检查空闲时间后才删除容器。分布式部署的文件系统必须提供可靠的 POSIX 锁语义。
+
+参见 [部署样例](../../configs/nexus.example.toml) 与 [网关协议](docs/design.md#托管网关协议-v1)。

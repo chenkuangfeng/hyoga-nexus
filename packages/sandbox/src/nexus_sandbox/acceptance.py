@@ -39,14 +39,17 @@ class Item:
 def fingerprint(settings: SandboxSettings) -> str:
     """Hash of everything that changes what the sandbox can do; a report is valid only for its fingerprint."""
     material = [settings.backend, settings.image, settings.cpus, settings.memory_mb, settings.pids, settings.network,
-                settings.workspace_quota_mb, settings.tmpfs_mb, list(settings.env_passthrough)]
+                settings.workspace_quota_mb, settings.tmpfs_mb, list(settings.env_passthrough),
+                settings.cgroup_root, settings.quota_mount, settings.quota_project_start,
+                settings.quota_inodes, 'runtime-hardening-v3']
     if settings.backend == 'docker':
         material.append('docker-cpu-v1')
     if settings.backend in ('ssh', 'managed'):
         material.extend(['remote-v1', settings.remote_profile, settings.ssh_host, settings.ssh_port,
                          settings.ssh_user, settings.ssh_known_hosts, settings.ssh_identity_file,
                          settings.trusted_ssh, settings.endpoint, settings.token_file,
-                         settings.exec_timeout_max_seconds, settings.skill_timeout_max_seconds])
+                         settings.exec_timeout_max_seconds, settings.skill_timeout_max_seconds,
+                         settings.remote_policy_digest])
     return hashlib.sha256(json.dumps(material).encode()).hexdigest()[:32]
 
 
@@ -188,7 +191,7 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         return result.exit_code not in (0, None) and str(size) not in result.stdout, 'allocating twice the limit is refused or killed'
 
     async def process_limit():
-        if settings.backend == 'bwrap':
+        if settings.backend == 'bwrap' and not settings.cgroup_root:
             return await processes_bounded_by_teardown()
         code = ('import os,time\\nn=0\\nfor _ in range(%d):\\n try:\\n  if os.fork()==0:\\n   time.sleep(8);os._exit(0)\\n  n+=1\\n'
                 ' except OSError:\\n  break\\nprint(n)') % (settings.pids * 2)
@@ -206,6 +209,10 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
             quota, period = map(int, result.stdout.split())
             return result.exit_code == 0 and period > 0 and abs(quota / period - settings.cpus) < .01, 'CPU quota'
         except ValueError:
+            if settings.backend == 'managed':
+                result = await sh(a, 'python3 -c "import os;print(os.cpu_count())"')
+                return (result.exit_code == 0 and result.stdout.strip() == str(int(settings.cpus))
+                        and settings.cpus == int(settings.cpus)), 'dedicated VM virtual CPU count'
             return False, 'kernel CPU quota not readable'
 
     async def tenant_isolation():
@@ -219,7 +226,11 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         return 'tenant-a' not in other.stdout, 'a second tenant cannot see the first one\'s files'
 
     async def path_escape():
-        await sh(a, 'ln -s /etc/passwd /workspace/link')
+        try:
+            await sh(a, 'ln -s /etc/passwd /workspace/link')
+        except SandboxError as error:
+            if settings.backend != 'managed' or error.code != 'sandbox_backend_unavailable':
+                raise
         for path in ('/workspace/../etc/passwd', '/etc/passwd', '/workspace/link'):
             try:
                 await a.read_file(path, start_line=1, max_lines=5)
@@ -236,11 +247,16 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
 
     async def cancellation():
         if settings.backend == 'managed':
-            await a.write_file('/workspace/cancel-state', 'waiting\n', append=False)
-            task = asyncio.create_task(sh(a, 'echo started > cancel-state; sleep 20; echo finished > cancel-state', 22))
+            started = False
+            task = asyncio.create_task(sh(a, 'sleep 60', 60))
             try:
-                for _ in range(180):
-                    started = (await a.read_file('/workspace/cancel-state', start_line=1, max_lines=1)).text == 'started'
+                for _ in range(300):
+                    request_id = a.executor.active_request_id
+                    if request_id:
+                        try:
+                            started = await a.executor.status(request_id) == 'running'
+                        except Exception:
+                            started = False
                     if started or task.done():
                         break
                     await asyncio.sleep(.1)
@@ -319,7 +335,7 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
                   ('tenant_isolation', tenant_isolation), ('path_escape', path_escape), ('environment', environment)]
         if settings.backend != 'ssh':
             probes.extend([('process_limit', process_limit), ('cancellation', cancellation)])
-        if settings.backend in ('docker', 'managed'):
+        if settings.backend in ('docker', 'managed') or settings.cgroup_root:
             probes.append(('cpu_limit', cpu_limit))
         if settings.backend in ('docker', 'bwrap'):
             probes.append(('cleanup_and_residue', cleanup_and_residue))

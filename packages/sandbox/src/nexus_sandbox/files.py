@@ -10,7 +10,9 @@ import asyncio
 import fnmatch
 import os
 import re
-import tempfile
+import uuid
+from contextlib import nullcontext
+from functools import wraps
 from pathlib import Path
 
 from nexus_core.sandbox import FileChunk, FileEntry, SandboxError, SearchHit
@@ -29,14 +31,25 @@ SEARCH_MAX_FILE_BYTES = 1_000_000
 HIT_CHARS = 300
 
 
+def _mutation(method):
+    @wraps(method)
+    def apply(self, *args, **kwargs):
+        from .leases import mutation
+        lock = mutation(*self.mutation_lock) if self.mutation_lock else nullcontext()
+        with lock:
+            return method(self, *args, **kwargs)
+    return apply
+
+
 class HostFileStore:
     """`FileStorePort` over two host directories."""
 
-    def __init__(self, workspace: Path, outputs: Path, *, quota_bytes: int):
+    def __init__(self, workspace: Path, outputs: Path, *, quota_bytes: int, mutation_lock: tuple[Path, str] | None = None):
         self.roots = {'/workspace': workspace, '/outputs': outputs}
         for root in self.roots.values():
             root.mkdir(parents=True, exist_ok=True)
         self.quota_bytes = quota_bytes
+        self.mutation_lock = mutation_lock
         #: Bumped by every completed mutation, so a reader that cached content can tell it went stale.
         self.mutation_epoch = 0
 
@@ -55,15 +68,31 @@ class HostFileStore:
 
     def _replace(self, host: Path, payload: bytes) -> None:
         """Atomic write: a temporary file in the same directory, then replace; the mutation counter moves after."""
-        handle, temporary = tempfile.mkstemp(dir=host.parent, prefix='.write-')
-        try:
-            with os.fdopen(handle, 'wb') as stream:
-                stream.write(payload)
-            os.replace(temporary, host)
-        except BaseException:
-            Path(temporary).unlink(missing_ok=True)
-            raise
+        from .transfer import directory
+        parent = Path(os.path.realpath(host.parent))
+        if not any(parent == root.resolve() or root.resolve() in parent.parents for root in self.roots.values()):
+            raise SandboxError('sandbox_path_invalid')
+        with directory(parent) as descriptor:
+            temporary = '.write-' + uuid.uuid4().hex
+            handle = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
+                             dir_fd=descriptor)
+            try:
+                with os.fdopen(handle, 'wb') as stream:
+                    stream.write(payload)
+                os.replace(temporary, host.name, src_dir_fd=descriptor, dst_dir_fd=descriptor)
+            finally:
+                try:
+                    os.unlink(temporary, dir_fd=descriptor)
+                except FileNotFoundError:
+                    pass
         self.mutation_epoch += 1
+
+    def _bytes(self, host: Path, limit: int) -> bytes:
+        with os.fdopen(paths.open_regular(host, self.roots), 'rb') as stream:
+            data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise SandboxError('sandbox_file_too_large')
+        return data
 
     def _entry(self, host: Path) -> FileEntry:
         info = host.lstat()
@@ -94,7 +123,7 @@ class HostFileStore:
         size = host.stat().st_size
         if size > MAX_READ_BYTES:
             raise SandboxError('sandbox_file_too_large', 'use sandbox_search_files, or read a part with a command')
-        data = host.read_bytes()
+        data = self._bytes(host, MAX_READ_BYTES)
         if b'\x00' in data[:8192]:
             raise SandboxError('sandbox_binary_file')
         lines = data.decode('utf-8', 'replace').splitlines()
@@ -113,11 +142,12 @@ class HostFileStore:
             raise SandboxError('sandbox_not_an_image', 'supported: png, jpg, jpeg, webp, gif')
         if host.stat().st_size > MAX_IMAGE_BYTES:
             raise SandboxError('sandbox_file_too_large')
-        return host.read_bytes(), mime
+        return self._bytes(host, MAX_IMAGE_BYTES), mime
 
     async def write_file(self, path: str, content: str, *, append: bool) -> int:
         return await asyncio.to_thread(self._write, path, content, append)
 
+    @_mutation
     def _write(self, path: str, content: str, append: bool) -> int:
         payload = content.encode('utf-8')
         if len(payload) > MAX_WRITE_BYTES:
@@ -128,20 +158,21 @@ class HostFileStore:
         if self._used_bytes() + len(payload) > self.quota_bytes:
             raise SandboxError('sandbox_quota_exceeded')
         host.parent.mkdir(parents=True, exist_ok=True)
-        previous = host.read_bytes() if append and host.exists() else b''
+        previous = self._bytes(host, self.quota_bytes) if append and host.exists() else b''
         self._replace(host, previous + payload)
         return len(payload)
 
     async def edit_file(self, path: str, old: str, new: str) -> int:
         return await asyncio.to_thread(self._edit, path, old, new)
 
+    @_mutation
     def _edit(self, path: str, old: str, new: str) -> int:
         if not old:
             raise SandboxError('sandbox_edit_empty_match')
         host = paths.resolve(path, self.roots, must_exist=True)
         if host.is_dir() or host.stat().st_size > MAX_READ_BYTES:
             raise SandboxError('sandbox_file_too_large' if not host.is_dir() else 'sandbox_is_a_directory')
-        text = host.read_bytes().decode('utf-8')
+        text = self._bytes(host, MAX_READ_BYTES).decode('utf-8')
         count = text.count(old)
         if count != 1:
             # Zero or several matches: the model must add context or fix the text; report how many there were.
@@ -174,8 +205,8 @@ class HostFileStore:
             try:
                 if host.stat().st_size > SEARCH_MAX_FILE_BYTES:
                     continue
-                data = host.read_bytes()
-            except OSError:
+                data = self._bytes(host, SEARCH_MAX_FILE_BYTES)
+            except (OSError, SandboxError):
                 continue
             if b'\x00' in data[:8192]:
                 continue

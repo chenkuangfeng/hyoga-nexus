@@ -25,13 +25,13 @@
 
 ## bwrap 后端
 
-`--unshare-all --cap-drop ALL --die-with-parent --new-session --remount-ro /`，环境只含显式 `--setenv` 的变量（启动 bwrap 时父进程环境已只剩 `PATH`；不用 `--clearenv`，bwrap 0.4.0 不认识它），网络仅在 `network = "bridge"` 时 `--share-net`；服务进程为 root 时以 65534 运行。资源限制用外层 shell 的 `ulimit`（`-v` 地址空间按 `memory_mb`、`-f` 单文件按配额、`-c 0`、`-n 1024`）。与 docker 后端的差异：没有进程数限制（`RLIMIT_NPROC` 按宿主用户统计，不可用，需要 cgroup）、没有 CPU 配额、`image`/`cpus`/`pids` 不生效、不支持后台命令（隔离环境随启动它的 shell 结束，`exec_async` 返回 `sandbox_background_unsupported`）、解释器与库就是宿主的。进程回收验收只验证命令结束后的清理。
+`--unshare-all --cap-drop ALL --die-with-parent --new-session --remount-ro /`，环境只含显式 `--setenv` 的变量（启动 bwrap 时父进程环境已只剩 `PATH`；不用 `--clearenv`，bwrap 0.4.0 不认识它），网络仅在 `network = "bridge"` 时 `--share-net`；服务进程为 root 时以 65534 运行。资源限制用外层 shell 的 `ulimit`（`-v` 地址空间按 `memory_mb`、`-f` 单文件按配额、`-c 0`、`-n 1024`）。与 docker 后端的差异：默认没有进程数与 CPU 配额；配置 `cgroup_root` 后启用整棵命令树的 CPU、PID 和内存硬限额、`image`/`cpus`/`pids` 不生效、不支持后台命令（隔离环境随启动它的 shell 结束，`exec_async` 返回 `sandbox_background_unsupported`）、解释器与库就是宿主的。进程回收验收只验证命令结束后的清理。
 
 ## 档位
 
 `[sandbox.profiles.<名字>]` 定义命名档位，类型为 `local`、`docker`、`bwrap`、`ssh`、`managed`；`default_profile` 缺省为 `local`；档位只能由运维在部署配置里定义，智能体设置 `sandbox_profile` 只能选名字，已发布的智能体版本固定其档位。每个档位解析为一个 `SandboxSettings`，后端、管理器和验收都按档位工作：每个档位有自己的 `SandboxManager`，docker 容器名在非 `default` 档位时带档位名，容器带 `nexus.sandbox.profile` 标签，空闲与孤儿回收只处理本档位；验收报告为 `acceptance.json`（旧的 `default` 档位）或 `acceptance-<档位>.json`，指纹含档位的类型、镜像与限制。`--sandbox-check` 默认检查全部隔离档位，`--profile` 只检查一个。
 
-不适用于某类型的键直接报错（例如 bwrap 档位里的 `pids`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时只有隐式的 `local` 档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
+不适用于某类型的键直接报错（bwrap 的 `pids` 和 `cpus` 需要同时配置 `cgroup_root`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时只有隐式的 `local` 档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
 
 ## 技能与标准输入
 
@@ -45,7 +45,7 @@ connectivity、user、network、time_limit、output_limit、memory_limit、proce
 
 ## 已知限制
 
-- 路径检查与打开之间存在符号链接替换的竞态；边界由容器提供，不由路径检查提供。
+- Linux 文件内容读取和写入通过目录描述符锚定路径，拒绝链接竞态与特殊文件。
 - 验收报告按档位保存在平台数据库表 `sandbox_acceptance`（每档位一行，重新验收时覆盖），API 与各 worker 共读，所以分机部署也一致；有效条件是行的 `fingerprint`（后端、镜像、限制的哈希）等于当前配置。`nexus_sandbox` 只依赖存储端口 `ReportStore`，数据库实现在平台包（`nexus_platform/runs/sandbox_acceptance.py`）。每次验收仍在 `workspace_root` 下写一份 `acceptance[-<档位>].json` 副本供运维查看；表里没有该档位的行时（升级前做过的验收）退回读这份文件，有行则以行为准。数据库读取失败按未验收处理。
 - 配额以目录总大小估算，每次写入遍历一次工作区。
 
@@ -65,19 +65,26 @@ connectivity、user、network、time_limit、output_limit、memory_limit、proce
 
 ## 远程工作区与管理端
 
-SSH 和 HTTPS 托管档位复用现有会话文件、技能只读投射和产物登记。API、worker 和执行节点挂载同一份工作区卷。各节点可用不同的本地挂载点，必须对同一个租户与会话解析到同一份文件数据。节点需要相容的 UID/GID 和文件权限。环境依赖放入远端运行环境，远程档位当前不构建技能依赖，也不提供后台作业。
+SSH 和 HTTPS 档位复用文件工具、技能投射与产物登记。SSH 节点通过共享卷访问当前会话；HTTPS 网关与 worker 共用会话目录，供应商实例通过文件 API 同步当前会话的有界快照。Linux 文件与产物复制通过逐级目录句柄和不跟随链接的打开方式约束访问范围，文件内容从同一描述符读取。
 
-- **SSH** 使用部署指定的私钥和固定的 known_hosts，调用远端 Python 模块 `nexus_sandbox.remote_runner`。远端选一个启用的断网 bwrap 档位。SSH 档位仅供信任租户与脚本的部署启用，需设置 `trusted_ssh = true` 并通过连通性及隔离检查。其报告不声明 CPU、PID 和远端取消验收。
-- **HTTPS** 使用运维配置的可信 HTTPS 端点与 bearer 凭据文件。Nexus 兼容网关按请求启动并回收独立 Docker 容器，限制每次任务的 CPU、内存、PID、时间与输出。取消等待容器清理，容器保留额外的存活期限以处理网关异常退出。
-- **管理端** 参考 WeKnora 沙箱卡片与抽屉。企业 owner/admin 可查看配置和验收，平台管理员可暂停档位或调整命令及技能超时。轻量策略原子保存于共享卷的 `_profile_policies`，不得挂入沙箱。API 需要写权限，worker 需要读权限，同一套部署使用相容的运行账号。暂停拦截新 Run，已启动 Run 的工作区仍可完成产物登记。
-- **验收** 在实际 worker 节点执行 `--sandbox-check --profile NAME`。远程档位验证共享卷的读写、租户文件隔离、网络和超时。托管档位还验证 CPU、PID 和取消响应。报告继续采用档位指纹与数据库门禁，运维变更远端镜像或执行策略后应从目标 worker 重新验收。
+- **SSH** 使用部署指定私钥和固定 known_hosts，调用远端 `nexus_sandbox.remote_runner`。远端使用已启用的断网 bwrap 档位。部署需显式设置 `trusted_ssh`，SSH 验收不声明远端 CPU、PID 和取消能力。
+- **HTTPS** 按请求使用独立 Docker 容器或 E2B 兼容 VM。供应商模板执行前验证实际 CPU/内存分配，文件根独立，技能只读。供应商后台任务和技能依赖构建尚未提供。
+- **持久生命周期** 网关私有目录保存请求 ID、实例 ID、状态、创建时间与策略摘要。命令和文件内容不进入日志。已登记请求不能重复执行，实例创建结果未知时按元数据发现并回收。回收任务抵御重复取消，失败记录保留到下一次重试。
+- **文件传输** `transfer.py` 的归档只允许普通文件和目录，限制文件数、深度、单文件和总字节数。实例仅接收当前会话与技能，不接收宿主目录结构。快照完整校验后替换工作区，发布失败回滚。同步期间对同一会话的文件工具写入与其他同步串行。
+- **输出采集** `provider_runner.py` 与本地执行器共用 `Sink`，在实例内读取时保留头尾。SDK 命令结果只包含控制输出，返回文件经带访问令牌请求头的文件 API 流式获取。
+- **界面** 参考 WeKnora 的 `SandboxSettings.vue` 与 `SandboxConfigEditorDrawer.vue`。企业管理员查看档位和验收；平台管理员维护运行策略、供应商模板和加密凭据、验证连接及重试实例回收。
+- **配置边界** 执行节点地址、SSH 主机身份、共享卷、cgroup 委派和 XFS 挂载由部署运维提供。供应商配置可在界面编辑，密钥加密保存在网关控制目录。网关凭据与加密主密钥不得挂入沙箱。
+- **验收绑定** managed 档位先连接网关并保存节点/模板/代码/资源策略摘要，再在 worker 节点验收。执行时必须匹配当前摘要。Docker 网关将实际镜像 ID 纳入摘要；供应商使用模板 ID 和运维声明的不可变版本。修改模板构建时必须更新版本。
 
 ### 托管网关协议 v1
 
-运维可单独运行 `uv run uvicorn nexus_api.sandbox_gateway:app --workers 1`，前方使用 HTTPS。网关读取 `[sandbox_gateway]` 的凭据文件和允许的 Docker 档位。访问凭据只发给可信 worker，工作区根及连接配置不接受来自智能体的输入。每个网关进程服务一个明确的执行节点，取消请求必须送到接收原执行请求的进程。
+运维运行 `uv run uvicorn nexus_api.sandbox_gateway:app --workers 1` 并配置 HTTPS。网关读取 `[sandbox_gateway]` 的凭据和允许档位。每个状态目录由一个进程独占，重启恢复使用原目录。API 与网关通过部署配置的受信连接通信，不接受模型提供的端点。
 
-- `POST /v1/executions`，bearer 鉴权，JSON 请求上限 1 MiB。字段为 `id`（32 位小写十六进制）、`profile`、`tenant_id`、`session_id`、`command`、`cwd`、`timeout_seconds`、`output_limit`、`env`、`stdin`、`network` 和 `limits`。`network` 固定为 `none`，`limits` 包含 `cpus`、`memory_mb` 与 `pids`，需要与节点真实策略匹配。
-- 成功返回 `ExecResult` JSON，包含独立标准输出/错误、退出码、超时和截断状态。脚本非零退出是命令结果。连接、鉴权和策略不匹配返回 HTTP 错误。
-- `DELETE /v1/executions/{id}`，使用同一 bearer 凭据。返回 204 时正在运行的任务已终止，或请求已结束。未收到原请求时短期记录取消，防止交错到达后开始执行。
+- `GET /v1/profiles/{name}/capabilities` 返回策略摘要、供应商、文件传输方式与执行能力。
+- `POST /v1/executions` 接受最多 1 MiB 的 JSON，包含请求 ID、远端档位、租户/会话标识、命令、虚拟工作目录、超时、输出上限、环境与标准输入、断网策略、资源限制和 `policy_digest`。摘要不匹配返回 409，重复 ID 返回 409。命令结果使用 `ExecResult`。
+- `DELETE /v1/executions/{id}` 取消并等待实例回收。回收不能确认时返回错误。
+- `GET /v1/executions/{id}` 返回生命周期状态。
+- `GET /v1/profiles/{name}/executions` 列出未完成实例。`POST /v1/profiles/{name}/executions/{id}/cleanup` 重试已退出活动注册表的实例回收。
+- `GET/PUT /v1/profiles/{name}/provider` 查询和更新供应商配置。响应只包含凭据存在标志；配置变更要求所有实例已回收。文件以部署 Fernet 密钥加密并绑定档位名。
 
-第三方网关可实现相同协议及共享卷语义。CubeSandbox/E2B 的原生 API 需要单独的协议适配和文件传输层。
+上述网关接口均需 bearer 身份验证。平台 API 再按企业成员身份与平台管理员权限限制管理操作。真实服务验收、cgroup v2 及 XFS quota 验收需要具备相应凭据和权限的目标节点。

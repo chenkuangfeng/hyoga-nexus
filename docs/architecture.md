@@ -285,12 +285,12 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）；Octop `infra/backend/`（工作区后端可插拔：本地、Docker、PostgreSQL、对象存储，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。
 
-- **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端包括 `local`（开发）、`bwrap`、`docker`、`ssh`（可信部署）与 `managed`（HTTPS 托管接口）。远程后端共用文件卷，隔离由执行节点提供。
+- **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端包括 `local`（开发）、`bwrap`、`docker`、`ssh`（可信部署）与 `managed`（HTTPS 托管接口）。SSH 节点共用文件卷；HTTPS 网关与 worker 共用会话目录，云实例通过有界文件 API 同步当前会话，隔离由执行节点提供。
 - **租约**：执行方持有租约，到期或任务结束后回收；超时与取消释放租约。
 - **虚拟路径**：模型看到 `/workspace`、`/outputs` 等虚拟路径，宿主路径由后端映射，不泄露宿主结构。
 - **文件写入**：临时文件加原子替换；不对并发写入做仲裁。
 - **产物**：Run 结束时（不论成功、失败或取消）worker 把 `/outputs` 下的普通文件复制到 `<[sandbox].workspace_root>/_artifacts/<tenant>/<artifact>` 并写入 `artifacts` 表（关联会话、Run 与发起人，记 `sha256`、大小、类型）；符号链接跳过，同会话同路径内容未变不重复登记，单文件 50 MB、每 Run 50 个且 200 MB、每空间 2 GB，超出的跳过并写入 `artifacts.registered` 事件的 `skipped`。接口 `/api/v1/tenants/{id}/artifacts`（列表、详情、下载、删除）：会话所有者看自己会话的，空间 owner / admin 看全空间的，其他人一律不存在；下载以附件、`application/octet-stream` 与 `nosniff` 返回并写审计，登记、下载、删除均有审计。列表支持 `q`（名称）、`extensions`、`latest`（每个文件只取最新版本并带 `version_count`）、`session_id`、`run_id` 并返回 `total`；`DELETE ?all_versions=true` 连同同会话同路径的所有版本一起删。前端 `/platform/artifacts` 复用 WeKnora 的产物库页面，经 `nexusArtifactAdapter` 适配：按产物 id 下载与预览，删除即删全部版本。聊天页在打开会话和每次 Run 结束后读取该会话的产物，按 `run_id` 在对应回复下显示「本次生成的文件」卡片（可预览的类型在抽屉里预览，其余仅下载，超过 4 个折叠）。API 与 worker 需共享该目录（单机或共享卷部署）。
-- **实现状态**（提案 `2026-11-07-tool-expansion`，进行中）：`docker` 后端、文件存储、租约、验收与六个 `sandbox_*` 工具已实现，单元测试覆盖；**真实 Docker 守护进程上的验收尚未运行**，对应 Docker 档位在验收之前不可用。企业管理端可查看档位验收，平台管理员可暂停档位及调整超时。SSH 与 HTTPS 网关共用工作区并支持前台任务，远程后台作业和跨 Run 结果回投未实现；产物登记、下载接口与产物库页面已实现（页面未在浏览器验证）。
+- **实现状态**（提案 `2026-11-07-tool-expansion`，进行中）：`docker` 后端、文件存储、租约、验收与六个 `sandbox_*` 工具已实现，单元测试覆盖；**真实 Docker 守护进程上的验收尚未运行**，对应 Docker 档位在验收之前不可用。企业管理端可查看档位验收，平台管理员可暂停档位及调整超时。SSH 与 HTTPS 网关支持前台任务，供应商实例使用独立文件根和有界输出采集，网关持久记录实例并恢复回收。平台管理员可配置加密供应商凭据、绑定连接策略并重试回收。bwrap 可选 cgroup v2 限额，Docker/bwrap 可选 XFS 项目配额。远程后台作业和跨 Run 结果回投未实现；产物登记、下载接口与产物库页面已实现（页面未在浏览器验证）。
 - **门禁**：只有通过隔离验收的后端才能注册任意代码、shell、文件写入工具。验收项：CPU、内存、时间、输出大小限制；网络隔离；用户隔离；清理；崩溃后残留检查。未通过时工具不出现在工具列表中，而不是返回错误。
 - **部署环境**：远程档位需要已配置的 Linux 执行节点和共享工作区，具体入口见 [沙箱使用说明](../packages/sandbox/README.md)。
 - **执行类工具约束**（提案 `2026-11-06-tool-call-hardening` 决定 3，随第 8 步实现）：工具可按参数声明能否并行（deepseek `isConcurrencySafe`）；同一路径的写入串行化（WeKnora `file_mutation_queue.go`）；shell 类工具必须经过参数守卫。

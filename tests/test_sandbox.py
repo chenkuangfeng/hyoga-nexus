@@ -4,6 +4,7 @@ The docker backend is exercised against a recording stand-in for the `docker` CL
 locally). The real daemon is covered by the isolation acceptance (`python -m nexus_worker --sandbox-check`).
 """
 import asyncio
+import time
 import json
 import os
 import stat
@@ -325,6 +326,8 @@ def test_reap_removes_idle_and_unknown_containers_only(tmp_path, fake_docker):
     run(manager.session('t1', 's1').exec('true', cwd='/workspace', timeout_seconds=5))
     run(manager.session('t2', 's2').exec('true', cwd='/workspace', timeout_seconds=5))
     manager._last_used['t2/s2'] -= 100  # idle
+    lease_file = settings.root / '_execution_locks' / container_name('t2', 's2')
+    os.utime(lease_file, (time.time() - 100, time.time() - 100))
     orphan = container_name('ghost', 'x')
     run(manager.docker.ensure(orphan, tmp_path / 'g1', tmp_path / 'g2'))  # a container no lease knows
     removed = run(manager.reap())

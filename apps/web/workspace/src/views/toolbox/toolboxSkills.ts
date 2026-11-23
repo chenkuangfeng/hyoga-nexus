@@ -38,7 +38,7 @@ export function bundleFileName(name: string, version?: number): string {
 const REASON_KEYS: Record<string, string> = {
   sandbox_disabled: 'reasonSandboxDisabled', sandbox_not_accepted: 'reasonNotAccepted',
   sandbox_local_not_allowed: 'reasonLocalNotAllowed', sandbox_profile_unknown: 'reasonUnknown',
-  sandbox_profile_paused: 'reasonPaused', sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
+  sandbox_connection_required: 'reasonConnection', sandbox_profile_paused: 'reasonPaused', sandbox_ssh_not_allowed: 'reasonSshNotAllowed',
   sandbox_unavailable: 'reasonUnavailable', local_not_allowed: 'reasonSkillLocal',
   skill_execution_not_permitted: 'reasonSkillLocal',
 }
