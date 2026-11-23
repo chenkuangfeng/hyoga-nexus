@@ -133,3 +133,41 @@ type = "bwrap"
     assert decode_result(result.stdout, 100).stdout == 'ok'
     path = tmp_path / 'shared' / 'tenant' / 'session' / 'outputs' / 'result.txt'
     assert path.read_text() == 'ok'
+
+
+def test_e2b_provider_verifies_mount_and_destroys_instance(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from nexus_sandbox import providers
+
+    key = tmp_path / 'key'
+    key.write_text('provider-key')
+    settings = _settings(tmp_path)
+    request = parse_execution(json.dumps(_body()).encode())
+    killed = []
+
+    class Files:
+        async def read(self, path, **kwargs):
+            return (tmp_path / path.removeprefix('/nexus/')).read_text()
+
+        async def write(self, *args, **kwargs):
+            pass
+
+    class Commands:
+        async def run(self, command, **kwargs):
+            return SimpleNamespace(exit_code=0, stdout='ok', stderr='')
+
+    class Sandbox:
+        files = Files()
+        commands = Commands()
+
+        async def kill(self):
+            killed.append(True)
+
+    async def create(**kwargs):
+        assert kwargs['allow_internet_access'] is False and kwargs['secure'] is True
+        return Sandbox()
+
+    monkeypatch.setattr(providers.AsyncSandbox, 'create', create)
+    config = {'type': 'e2b', 'template': 'shared-volume', 'domain': 'e2b.app', 'api_key_file': str(key)}
+    result = asyncio.run(providers.execute_provider(request, settings, config))
+    assert result.stdout == 'ok' and killed == [True]

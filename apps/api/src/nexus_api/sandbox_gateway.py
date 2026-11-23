@@ -39,6 +39,13 @@ async def lifespan(app: FastAPI):
         value is None or value.backend != 'docker' or value.network != 'none' for value in selected.values()
     ):
         raise RuntimeError('sandbox gateway profiles must be enabled, network-isolated Docker profiles')
+    providers = config.get('providers', {})
+    if not isinstance(providers, dict) or any(
+        name not in selected or not isinstance(value, dict) or value.get('type') not in ('e2b', 'cubesandbox')
+        for name, value in providers.items()
+    ):
+        raise RuntimeError('invalid sandbox gateway providers')
+    app.state.providers = providers
     app.state.token = token.encode()
     app.state.profiles = selected
     app.state.active = {}
@@ -82,7 +89,12 @@ async def run_command(request: Request) -> dict:
         raise HTTPException(409)
     if len(state.active) >= 32:
         raise HTTPException(429)
-    task = asyncio.create_task(execute(execution, settings, backend='docker'))
+    provider = state.providers.get(execution.profile)
+    if provider is None:
+        task = asyncio.create_task(execute(execution, settings, backend='docker'))
+    else:
+        from nexus_sandbox.providers import execute_provider
+        task = asyncio.create_task(execute_provider(execution, settings, provider))
     state.active[execution.id] = task
     try:
         return asdict(await task)
