@@ -6,7 +6,7 @@
  * group's `default_enabled`). The agent stores only the switches the user changed away from the default, so a group
  * added later keeps its own default for agents saved before it existed. Pure functions, no request helpers.
  */
-import type { AgentToolGroupInfo } from '@nexus-web/core/api/nexus-agents'
+import type { AgentToolEntry, AgentToolGroupInfo } from '@nexus-web/core/api/nexus-agents'
 
 /** Explicit per-group choices of one agent: group id -> on / off. */
 export type GroupSwitches = Record<string, boolean>
@@ -36,6 +36,14 @@ export function withGroupSwitch(switches: GroupSwitches, info: AgentToolGroupInf
   if (value === info.default_enabled) delete next[info.id]
   else next[info.id] = value
   return next
+}
+
+/** Bulk-select only tools assignable in this space; preserve bindings belonging to other groups. */
+export function withGroupTools(selected: readonly string[], tools: readonly AgentToolEntry[], enabled: boolean): string[] {
+  const names = new Set(tools.map(tool => tool.name))
+  const next = selected.filter(name => !names.has(name))
+  if (enabled) next.push(...tools.filter(tool => tool.enabled_in_tenant).map(tool => tool.name))
+  return [...new Set(next)]
 }
 
 /** How to present a group. A group still waiting for its tools (`planned` and no tools) is not switchable. */

@@ -915,3 +915,89 @@ test('企业管理员可新增编辑删除沙箱引擎配置', async ({ page, ap
   await page.getByRole('button', { name: '删除沙箱', exact: true }).click()
   await expect(page.locator('.sandbox-card')).toHaveCount(0)
 })
+
+test('工具管理中文展示与分组子开关联动', async ({ page, api }, testInfo) => {
+  await api.signIn()
+  const root='/api/v1/tenants/a', disabled=new Set<string>()
+  const tools=['sandbox_exec','sandbox_read_file'].map(name=>({name,description:'English tool description',group:'sandbox',
+    builtin:true,read_only:false,requires_approval:false,side_effects:true,risk_level:'medium',enabled_in_tenant:true,disabled:false}))
+  api.handle(request=>{
+    const path=new URL(request.url()).pathname
+    if(path===root+'/me/permissions') return {body:{apis:['tools:manage']}}
+    if(path===root+'/admin/agent-tools') return {body:{tools:tools.map(tool=>({...tool,disabled:disabled.has(tool.name),enabled_in_tenant:!disabled.has(tool.name)})),groups:['sandbox'],default_tools:[],can_enable_tools:true}}
+    if(path.startsWith(root+'/admin/builtin-disabled/tool/')) {
+      const name=path.split('/').at(-1)!
+      if(request.method()==='PUT') disabled.add(name);else disabled.delete(name)
+      return {status:204,body:null}
+    }
+  })
+  await page.goto('tools')
+  const master=page.getByRole('switch',{name:'沙箱 · 分组总开关',exact:true})
+  const command=page.getByRole('switch',{name:'执行沙箱命令',exact:true})
+  const read=page.getByRole('switch',{name:'读取沙箱文件',exact:true})
+  await expect(page.locator('.tool-row').first()).toContainText('在沙箱工作区执行命令')
+  await expect(page.locator('.tool-row')).not.toContainText(['English tool description'])
+  await master.click()
+  await page.locator('.t-dialog:visible').getByRole('button',{name:/^(确认|确定)$/}).click()
+  await expect(command).toHaveAttribute('aria-checked','false')
+  await expect(read).toHaveAttribute('aria-checked','false')
+  await master.click()
+  await expect(command).toHaveAttribute('aria-checked','true')
+  await expect(read).toHaveAttribute('aria-checked','true')
+  await read.click()
+  await page.locator('.t-dialog:visible').getByRole('button',{name:/^(确认|确定)$/}).click()
+  await expect(page.getByText('部分启用',{exact:true})).toBeVisible()
+  await expect(command).toHaveAttribute('aria-checked','true')
+  await expect(read).toHaveAttribute('aria-checked','false')
+  await expectResponsive(page)
+  await page.screenshot({path:testInfo.outputPath('tool-group-switches.png')})
+})
+
+test('智能体工具配置中文父子开关并保存组状态和工具绑定', async ({ page, api }, testInfo) => {
+  await api.signIn()
+  const root='/api/v1/tenants/a'
+  const writes:Record<string,unknown>[]=[]
+  const row:Record<string,unknown>={id:'agent-tools',tenant_id:'a',ownership:'enterprise',can_maintain:true,name:'工具联动测试',description:'',
+    status:'draft',runtime_type:'native',instructions:'测试工具配置',model_profile_version_id:'model-v1',published_version_id:null,
+    version_counter:0,budgets:{},resource_bindings:[],created_at:'',updated_at:''}
+  const tools=['sandbox_exec','sandbox_read_file'].map(name=>({name,description:'English tool description',group:'sandbox',
+    builtin:true,read_only:false,requires_approval:false,side_effects:true,risk_level:'medium',enabled_in_tenant:true,disabled:false}))
+  api.handle(request=>{
+    const path=new URL(request.url()).pathname
+    if(path===root+'/me/permissions') return {body:{apis:['enterprise_agents:manage','tools:manage']}}
+    if(path===root+'/admin/agents') return {body:[row]}
+    if(path===root+'/admin/agents/agent-tools') {
+      if(request.method()==='PUT') {const body=request.postDataJSON();writes.push(body);Object.assign(row,body)}
+      return {body:row}
+    }
+    if(path===root+'/admin/agents/agent-tools/publish') return {body:{id:'version2',agent_id:'agent-tools',version:2}}
+    if(path===root+'/admin/model-settings') return {body:{providers:[],defaults:{},can_manage_tenant:true}}
+    if(path===root+'/admin/agent-tools') return {body:{tools,groups:['sandbox'],default_tools:[],can_enable_tools:true,
+      group_info:[{id:'sandbox',label:'Sandbox',default_enabled:false,locked:false,tool_count:2,planned:'',available:true,reason:''}]}}
+    if(path===root+'/admin/knowledge/bases') return {body:{items:[]}}
+    if(path===root+'/skills') return {body:[]}
+  })
+  await page.goto('agents')
+  await page.locator('.resource-directory-card').filter({hasText:'工具联动测试'}).click()
+  const editor=page.locator('.agent-editor-shell')
+  await editor.locator('.settings-nav').getByRole('button',{name:/工具配置/}).click()
+  const master=editor.getByRole('switch',{name:'沙箱 · 分组总开关',exact:true})
+  const command=editor.getByRole('switch',{name:'执行沙箱命令',exact:true})
+  const read=editor.getByRole('switch',{name:'读取沙箱文件',exact:true})
+  await expect(command).toHaveAttribute('aria-checked','false')
+  await master.click()
+  await expect(command).toHaveAttribute('aria-checked','true')
+  await expect(read).toHaveAttribute('aria-checked','true')
+  await master.click()
+  await expect(command).toHaveAttribute('aria-checked','false')
+  await expect(read).toHaveAttribute('aria-checked','false')
+  await command.focus();await page.keyboard.press('Space')
+  await expect(master).toHaveAttribute('aria-checked','true')
+  await expect(read).toHaveAttribute('aria-checked','false')
+  await expect(editor.getByText('部分启用',{exact:true})).toBeVisible()
+  await page.screenshot({path:testInfo.outputPath('agent-tool-switches.png')})
+  await editor.getByRole('button',{name:'保存并关闭',exact:true}).click()
+  await expect(editor).toHaveCount(0)
+  expect(writes).toHaveLength(1)
+  expect(writes[0]).toMatchObject({budgets:{behavior:{tool_groups_enabled:{sandbox:true}}},resource_bindings:[{kind:'tool',resource_id:'sandbox_exec'}]})
+})

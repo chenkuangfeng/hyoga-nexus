@@ -23,16 +23,16 @@ import ruRU from './locales/ru-RU.ts'
 import zhCN from './locales/zh-CN.ts'
 import zhTW from './locales/zh-TW.ts'
 
-export const LOCALE_BUNDLES = {
+export type LocaleName = 'en-US' | 'zh-CN' | 'zh-TW' | 'ko-KR' | 'ja-JP' | 'ru-RU'
+
+export const LOCALE_BUNDLES: Readonly<Record<LocaleName, typeof enUS>> = {
   'en-US': enUS,
   'zh-CN': zhCN,
   'zh-TW': zhTW,
   'ko-KR': koKR,
   'ja-JP': jaJP,
   'ru-RU': ruRU,
-} as const
-
-export type LocaleName = keyof typeof LOCALE_BUNDLES
+}
 
 const SOURCE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE_EXTENSIONS = /\.(vue|ts|js|mjs)$/
@@ -68,6 +68,9 @@ const TM_KEY_PATTERNS = [
 ] as const
 
 const EXTRA_PREFIXES = [
+  // Tool identifiers arrive from the catalog and are resolved by the shared presentation helper.
+  'toolUi.tools.',
+  'nexusAgent.tools.',
   // Permission labels mirror the backend permission catalog (authz/catalog.py); the
   // catalog test checks them directly, so pruning must keep the whole group.
   'permissionCatalog.',

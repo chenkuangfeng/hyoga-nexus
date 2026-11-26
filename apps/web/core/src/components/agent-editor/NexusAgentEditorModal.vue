@@ -366,55 +366,43 @@
             </div>
           </div>
 
-          <!-- Tool groups (openspec 2026-11-07-tool-expansion R1): a group reaches a Run only when the deployment makes
-               it available and this agent has it on; the switches only narrow what binding and approval allow. -->
-          <div v-if="groupRows.length" class="setting-row setting-row-vertical">
-            <div class="setting-info">
-              <label>{{ $t('nexusAgent.toolGroupSwitch.label') }}</label>
-              <p class="desc">{{ $t('nexusAgent.toolGroupSwitch.desc') }}</p>
-            </div>
-            <div class="setting-control setting-control-full">
-              <ul class="group-switch-list">
-                <li v-for="row in groupRows" :key="row.id" class="group-switch-row">
-                  <div class="group-switch-main">
-                    <span class="group-switch-name">{{ row.label }}</span>
-                    <span class="group-switch-count">{{ $t('nexusAgent.toolGroupSwitch.toolCount', { count: row.toolCount }) }}</span>
-                    <span v-if="row.status === 'locked'" class="tool-card-badge tool-card-badge--muted">{{ $t('nexusAgent.toolGroupSwitch.locked') }}</span>
-                    <span v-else-if="row.status === 'planned'" class="tool-card-badge tool-card-badge--muted">
-                      {{ $t('nexusAgent.toolGroupSwitch.planned', { phase: row.planned }) }}
-                    </span>
-                  </div>
-                  <t-switch :value="row.enabled" size="small" :disabled="row.status === 'locked' || row.status === 'planned'"
-                    :aria-label="row.label" @change="(value: boolean) => onGroupSwitch(row.id, value)" />
-                  <p v-if="row.status === 'unavailable'" class="sandbox-note" role="status">
-                    <t-icon name="error-circle" />
-                    {{ $t('nexusAgent.toolGroupSwitch.unavailable', { reason: $t(`nexusAgent.groupReason.${row.reasonKey}`) }) }}
-                  </p>
-                </li>
-              </ul>
-            </div>
-          </div>
-
           <div class="setting-row setting-row-vertical">
             <div class="setting-info">
               <label>{{ $t('agent.editor.allowedTools') }}</label>
-              <p class="desc">{{ $t('nexusAgent.toolsDesc') }}</p>
+              <p class="desc">{{ $t('toolUi.description') }}</p>
             </div>
             <div class="setting-control setting-control-full">
-              <t-checkbox-group v-model="form.allowed_tools" class="tool-groups">
+              <div class="tool-groups">
                 <section v-for="group in toolGroups" :key="group.key" :class="['tool-group', `tool-group--${group.key}`]">
                   <header class="tool-group-header">
                     <span class="tool-group-bar" />
                     <span class="tool-group-title">{{ group.label }}</span>
-                    <span class="tool-group-count">{{ group.tools.length }}</span>
+                    <span class="tool-group-count">{{ $t('toolUi.selected', { selected: group.selectedCount, count: group.tools.length }) }}</span>
+                    <t-tag v-if="group.partial" size="small" theme="warning">{{ $t('toolUi.partial') }}</t-tag>
+                    <t-switch :value="group.selectedCount > 0" :disabled="saving || !group.tools.length"
+                      role="switch" :aria-checked="group.selectedCount > 0" :tabindex="saving || !group.tools.length ? -1 : 0"
+                      :aria-label="`${group.label} · ${$t('toolUi.master')}`" class="tool-master-switch"
+                      @keydown.space.prevent="onGroupSwitch(group.key, group.selectedCount === 0)"
+                      @keydown.enter.prevent="onGroupSwitch(group.key, group.selectedCount === 0)"
+                      @change="(value: boolean) => onGroupSwitch(group.key, value)" />
                   </header>
+                  <p v-if="group.info?.locked" class="sandbox-note">{{ $t('toolUi.baseHint') }}</p>
+                  <p v-if="group.info && !group.info.available" class="sandbox-note" role="status">
+                    {{ $t('nexusAgent.toolGroupSwitch.unavailable', { reason: $t(`nexusAgent.groupReason.${groupReasonKey(group.info.reason)}`) }) }}
+                  </p>
+                  <p v-if="group.info?.planned && !group.tools.length" class="sandbox-note">
+                    {{ $t('nexusAgent.toolGroupSwitch.planned', { phase: group.info.planned }) }}
+                  </p>
                   <div class="tool-grid">
-                    <t-checkbox v-for="tool in group.tools" :key="tool.name" :value="tool.name"
-                      :disabled="!tool.enabled_in_tenant && !form.allowed_tools.includes(tool.name)"
-                      :class="['tool-card', { 'tool-card--disabled': !tool.enabled_in_tenant, 'tool-card--danger': tool.risk_level === 'high' }]">
+                    <article v-for="tool in group.tools" :key="tool.name"
+                      :class="['tool-card', { 'tool-card--disabled': !tool.enabled_in_tenant, 'tool-card--danger': tool.risk_level === 'high', 't-is-checked': toolSelected(tool) }]">
                       <div class="tool-card-body">
                         <div class="tool-card-head">
                           <span class="tool-card-name">{{ toolLabel(tool.name) }}</span>
+                          <t-switch :value="toolSelected(tool)" :disabled="saving || (!tool.enabled_in_tenant && !toolSelected(tool))"
+                            role="switch" :aria-checked="toolSelected(tool)" :tabindex="saving || (!tool.enabled_in_tenant && !toolSelected(tool)) ? -1 : 0"
+                            @keydown.space.prevent="onToolSwitch(tool, !toolSelected(tool))" @keydown.enter.prevent="onToolSwitch(tool, !toolSelected(tool))"
+                            :aria-label="toolLabel(tool.name)" @change="(value: boolean) => onToolSwitch(tool, value)" />
                           <span v-if="tool.side_effects || tool.risk_level === 'high'" class="tool-card-badge">
                             {{ $t('agentEditor.tools.dangerTag') }}
                           </span>
@@ -445,10 +433,10 @@
                           </t-popconfirm>
                         </span>
                       </div>
-                    </t-checkbox>
+                    </article>
                   </div>
                 </section>
-              </t-checkbox-group>
+              </div>
             </div>
           </div>
 
@@ -508,7 +496,8 @@ import { levelDescriptionKey, levelLabelKey } from '@nexus-web/core/utils/reason
 import NexusSkillInstallDialog from './NexusSkillInstallDialog.vue'
 import NexusMySkillsDialog from './NexusMySkillsDialog.vue'
 import { usageText } from './mySkills'
-import { groupEnabled, groupReasonKey, groupStatus, withGroupSwitch } from './nexusToolGroups'
+import { groupEnabled, groupReasonKey, withGroupSwitch, withGroupTools } from './nexusToolGroups'
+import { toolDisplayName, toolDisplayDescription } from '@nexus-web/core/utils/toolPresentation'
 import NexusSkillReviewDialog from './NexusSkillReviewDialog.vue'
 import {
   createNexusAgent, disableBuiltinResource, enableTenantTool, getAgentToolCatalog, getNativeDefaults, getNexusAgent,
@@ -692,22 +681,35 @@ function sandboxReasonLabel(reason: string): string {
 }
 
 // ---- Tool group switches: explicit choices live in `form.tool_groups_enabled`, defaults come from the catalog.
-const groupRows = computed(() => (catalog.value?.group_info || []).map(info => {
-  const status = groupStatus(info, form.tool_groups_enabled)
-  return {
-    id: info.id,
-    label: te(`nexusAgent.toolGroups.${info.id}`) ? t(`nexusAgent.toolGroups.${info.id}`) : info.label,
-    toolCount: info.tool_count,
-    planned: info.planned,
-    status,
-    enabled: groupEnabled(info, form.tool_groups_enabled),
-    reasonKey: groupReasonKey(info.reason),
-  }
-}))
-
 function onGroupSwitch(id: string, value: boolean) {
+  if (saving.value) return
+  const tools = (catalog.value?.tools || []).filter(tool => tool.group === id)
+  if (!tools.length) return
   const info = (catalog.value?.group_info || []).find(item => item.id === id)
-  if (info) form.tool_groups_enabled = withGroupSwitch(form.tool_groups_enabled, info, value)
+  if (info && !info.locked) form.tool_groups_enabled = withGroupSwitch(form.tool_groups_enabled, info, value)
+  form.allowed_tools = withGroupTools(form.allowed_tools, tools, value)
+}
+
+function toolSelected(tool: AgentToolEntry): boolean {
+  const info = catalog.value?.group_info?.find(item => item.id === tool.group)
+  return (!info || groupEnabled(info, form.tool_groups_enabled)) && form.allowed_tools.includes(tool.name)
+}
+
+function onToolSwitch(tool: AgentToolEntry, enabled: boolean) {
+  if (saving.value || (enabled && !tool.enabled_in_tenant)) return
+  const info = catalog.value?.group_info?.find(item => item.id === tool.group)
+  // Old drafts can retain bindings under a closed gate. Turning on one child must not revive its siblings.
+  const initial = enabled && info && !groupEnabled(info, form.tool_groups_enabled)
+    ? withGroupTools(form.allowed_tools, (catalog.value?.tools || []).filter(item => item.group === tool.group), false)
+    : form.allowed_tools
+  const chosen = new Set(initial)
+  if (enabled) chosen.add(tool.name)
+  else chosen.delete(tool.name)
+  form.allowed_tools = [...chosen]
+  if (info && !info.locked) {
+    const anySelected = (catalog.value?.tools || []).some(item => item.group === tool.group && chosen.has(item.name))
+    form.tool_groups_enabled = withGroupSwitch(form.tool_groups_enabled, info, anySelected)
+  }
 }
 
 // Knowledge bases the agent may bind: the space's own and those shared into it.
@@ -755,12 +757,16 @@ const timeoutInput = computed<number | undefined>({
 
 const toolGroups = computed(() => {
   const tools = catalog.value?.tools || []
-  const order = catalog.value?.groups || ['base']
-  return order.map(key => ({
-    key,
-    label: te(`nexusAgent.toolGroups.${key}`) ? t(`nexusAgent.toolGroups.${key}`) : key,
-    tools: tools.filter(tool => tool.group === key),
-  })).filter(group => group.tools.length > 0)
+  const infos = catalog.value?.group_info || []
+  const order = [...new Set([...(catalog.value?.groups || []), ...infos.map(info => info.id), ...tools.map(tool => tool.group)])]
+  return order.map(key => {
+    const members = tools.filter(tool => tool.group === key)
+    const info = infos.find(item => item.id === key)
+    const selectedCount = members.filter(toolSelected).length
+    return { key, info, selectedCount, partial: selectedCount > 0 && selectedCount < members.length,
+      label: te(`nexusAgent.toolGroups.${key}`) ? t(`nexusAgent.toolGroups.${key}`) : info?.label || key,
+      tools: members }
+  }).filter(group => group.tools.length > 0 || group.info?.planned)
 })
 
 /** Selected tools the space has not enabled; the server rejects them at publish. */
@@ -770,11 +776,11 @@ const inactiveSelected = computed(() => {
 })
 
 function toolLabel(name: string): string {
-  return te(`nexusAgent.tools.${name}.label`) ? t(`nexusAgent.tools.${name}.label`) : name
+  return toolDisplayName(name, t, te)
 }
 
 function toolDescription(tool: AgentToolEntry): string {
-  return te(`nexusAgent.tools.${tool.name}.desc`) ? t(`nexusAgent.tools.${tool.name}.desc`) : tool.description
+  return toolDisplayDescription(tool, t, te)
 }
 
 function errorMessage(error: unknown): string {
@@ -1341,12 +1347,6 @@ async function save() {
 .sandbox-control { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .sandbox-note { margin: 0; font-size: var(--app-text-xs); line-height: 1.5; color: var(--td-warning-color); }
 .sandbox-note--ok { color: var(--td-text-color-secondary); }
-.group-switch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.group-switch-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 8px 12px; border: 1px solid var(--td-component-stroke); border-radius: 6px; }
-.group-switch-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.group-switch-name { font-weight: 500; }
-.group-switch-count { color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); }
-.group-switch-row .sandbox-note { flex-basis: 100%; margin: 0; }
 .tools-overview {
   display: flex;
   flex-direction: column;
@@ -1504,6 +1504,8 @@ async function save() {
 }
 
 // 统一两列网格；小屏退化单列
+.tool-master-switch { margin-left: auto; flex-shrink: 0; }
+
 .tool-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1515,7 +1517,7 @@ async function save() {
   }
 }
 
-// ===== 工具卡片（基于 t-checkbox 的 label 结构） =====
+// ===== 工具子项卡片与独立开关 =====
 .tool-card {
   margin: 0; // 清掉 TDesign checkbox 默认外边距
   padding: 12px 14px;
@@ -1523,7 +1525,6 @@ async function save() {
   border-radius: var(--app-radius-md);
   border: 1px solid var(--td-component-stroke);
   transition: border-color var(--app-motion-base), background var(--app-motion-base);
-  cursor: pointer;
   overflow: hidden;
 
   &:hover:not(.tool-card--disabled) {
@@ -1579,6 +1580,7 @@ async function save() {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 

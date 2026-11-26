@@ -8,7 +8,8 @@ import zhTW from './locales/zh-TW.ts'
 import { BUILT_IN_DEFAULT, resolveDefaultLocale } from './resolveDefaultLocale.ts'
 import { pluralRules } from './pluralizationRules.ts'
 
-const messages = {
+// Keep one shared schema reference instead of serializing six enormous inferred locale trees.
+const messages: Record<string, typeof enUS> = {
   'zh-CN': zhCN,
   'zh-TW': zhTW,
   'en-US': enUS,

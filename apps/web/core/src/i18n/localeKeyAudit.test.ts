@@ -261,3 +261,14 @@ test('DingTalk configuration and sync failures remain localized after pruning', 
     }
   }
 })
+
+test('工具中文名称和说明完整，并在动态目录文案裁剪时保留', () => {
+  const tools = LOCALE_BUNDLES['zh-CN'].toolUi.tools
+  assert.ok(Object.keys(tools).length >= 38)
+  for (const [name, text] of Object.entries(tools)) {
+    assert.match(text.label, /[\u3400-\u9fff]/, `${name}: label must be Chinese`)
+    assert.match(text.desc, /[\u3400-\u9fff]/, `${name}: description must be Chinese`)
+    assert.ok(referencedKeys.has(`toolUi.tools.${name}.label`), name)
+    assert.ok(referencedKeys.has(`toolUi.tools.${name}.desc`), name)
+  }
+})
