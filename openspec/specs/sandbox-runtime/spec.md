@@ -13,17 +13,17 @@
 
 #### Scenario: 档位暂停
 
-- **WHEN** 平台管理员暂停档位
+- **WHEN** 企业 owner/admin 暂停档位
 - **THEN** 新 Run 不获得依赖此档位的执行工具
 
 ### Requirement: 企业管理端展示配置和验收
 
-企业管理端 SHALL 按后端和名称筛选已配置档位。企业管理员 SHALL 能查看运行策略、可用性与最近的验收项目。平台管理员 SHALL 能调整超时和暂停状态。返回的详情 SHALL 排除连接凭据。
+企业管理端 SHALL 按后端和名称筛选已配置档位。企业管理员 SHALL 能查看运行策略、可用性与最近的验收项目。企业 owner/admin SHALL 能调整超时和暂停状态。返回的详情 SHALL 排除连接凭据。
 
 #### Scenario: 企业空间管理员打开配置
 
 - **WHEN** 当前空间的 owner 或 admin 打开已配置档位
-- **THEN** 系统展示后端能力与最近报告，平台管理员可以保存策略
+- **THEN** 系统展示后端能力与最近报告，企业 owner/admin 与平台管理员可以保存策略
 
 ### Requirement: 供应商执行的文件与输出有界
 
@@ -39,22 +39,22 @@
 
 #### Scenario: 实例遗留
 - **WHEN** 网关重启时发现未结束请求
-- **THEN** 系统恢复实例回收，平台管理员可以查看状态并重试回收
+- **THEN** 系统恢复实例回收，企业 owner/admin 与平台管理员可以查看状态并重试回收
 
 ### Requirement: 供应商配置与主机资源
 
-平台管理员 SHALL 能编辑托管网关的供应商模板和密钥，密钥加密保存，接口只返回存在标志。存在未回收实例时 SHALL 拒绝更换供应商。Linux bwrap SHALL 可接入已委派的 cgroup v2 CPU/内存/PID 限额，Docker/bwrap SHALL 可接入 XFS 字节和 inode 项目硬配额。已配置控制器不可用时 SHALL 拒绝执行。
+企业 owner/admin SHALL 能编辑托管网关的供应商模板和密钥，密钥加密保存，接口只返回存在标志。存在未回收实例时 SHALL 拒绝更换供应商。Linux bwrap SHALL 可接入已委派的 cgroup v2 CPU/内存/PID 限额，Docker/bwrap SHALL 可接入 XFS 字节和 inode 项目硬配额。已配置控制器不可用时 SHALL 拒绝执行。
 
 #### Scenario: 管理员更换模板
-- **WHEN** 全部实例已回收且平台管理员保存新供应商配置
+- **WHEN** 全部实例已回收且企业 owner/admin 保存新供应商配置
 - **THEN** 密钥加密保存，已有连接摘要失效，后续执行需要重新验证连接和隔离验收
 
 ### Requirement: 可视化沙箱引擎配置
 
-平台 MUST 提供按 WeKnora 布局组织的类型筛选、搜索卡片与分区编辑器，支持平台管理员新增、编辑、删除五类共享档位。企业管理员 MUST 只能读取。写入 MUST 校验配置修订与部署参数，默认档位及被智能体引用的档位 MUST 禁止删除。凭据 MUST 使用节点文件引用或现有网关加密配置流程。
+平台 MUST 提供按 WeKnora 布局组织的类型筛选、搜索卡片与分区编辑器，支持企业 owner/admin 与平台管理员新增、编辑、删除五类共享档位。普通成员与非成员 MUST 拒绝访问。写入 MUST 校验配置修订与部署参数，默认档位及被智能体引用的档位 MUST 禁止删除。凭据 MUST 使用节点文件引用或现有网关加密配置流程。
 
 #### Scenario: 保存并加载配置
-- **WHEN** 平台管理员保存合法配置
+- **WHEN** 企业 owner/admin 保存合法配置
 - **THEN** 配置持久化至共享注册文件，API 与 worker 自动读取，新调用使用更新参数，运行参数变化使旧连接证明和验收失效，展示信息变化保持运行版本。
 
 #### Scenario: 过期提交与引用保护
@@ -64,3 +64,11 @@
 #### Scenario: 部署默认档位引用控制台配置
 - **WHEN** 部署的默认档位标识指向控制台创建的档位
 - **THEN** 系统合并共享注册后解析默认档位，引用缺失时拒绝加载而不切换执行环境。
+
+### Requirement: 缺省本地引擎
+
+没有显式沙箱配置时，系统 SHALL 启用沙箱和本地执行许可，预置 docker/local 并默认选择 docker。显式关闭、档位覆盖和删除标记 SHALL 优先，Docker SHALL 继续要求验收，Local SHALL 继续要求开发认证，智能体工具组 SHALL 继续按原有授权开启。
+
+#### Scenario: 首次部署
+- **WHEN** 部署尚未配置沙箱
+- **THEN** 企业管理员看到 Docker 与 Local 配置，Docker 等待验收，Local 在开发认证下可用

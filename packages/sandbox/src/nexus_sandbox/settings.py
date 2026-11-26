@@ -136,13 +136,16 @@ class SandboxSettings:
 @dataclass(frozen=True)
 class SandboxConfig:
     """The whole ``[sandbox]`` section: top-level switches plus every profile."""
-    enabled: bool = False
-    default_profile: str = 'local'
+    enabled: bool = True
+    default_profile: str = 'docker'
     registry_revision: int = 0
     workspace_root: str = 'data/sandbox'
-    allow_local: bool = False
+    allow_local: bool = True
     allow_local_scripts: bool = False
-    profiles: dict[str, SandboxSettings] = field(default_factory=lambda: {'local': SandboxSettings(backend='local', profile='local')})
+    profiles: dict[str, SandboxSettings] = field(default_factory=lambda: {
+        name: SandboxSettings(enabled=True, backend=name, profile=name, allow_local=True)
+        for name in ('docker', 'local')
+    })
 
     def get(self, name: str | None = None) -> SandboxSettings | None:
         """The named profile, the default one for an empty name, or None when there is no such profile."""
@@ -313,9 +316,9 @@ def load_config(path: Path | None = None, *, include_policies: bool = True) -> S
     """Read ``[sandbox]`` into a :class:`SandboxConfig`. Raises DeploymentConfigError naming the key, never a value."""
     values = section('sandbox', path)
     top = {
-        'enabled': _pick(values, 'sandbox', 'enabled', bool, False),
+        'enabled': _pick(values, 'sandbox', 'enabled', bool, True),
         'workspace_root': _pick(values, 'sandbox', 'workspace_root', str, 'data/sandbox', lambda v: bool(v.strip())),
-        'allow_local': _pick(values, 'sandbox', 'allow_local', bool, False),
+        'allow_local': _pick(values, 'sandbox', 'allow_local', bool, True),
         'allow_local_scripts': _pick(values, 'sandbox', 'allow_local_scripts', bool, False),
     }
     raw_profiles = values.get('profiles')
@@ -347,8 +350,8 @@ def load_config(path: Path | None = None, *, include_policies: bool = True) -> S
         profiles['default'] = _profile(values, 'sandbox', 'default', top, kind)
         default_profile = _pick(values, 'sandbox', 'default_profile', str, 'default')
     else:
-        profiles['local'] = _profile({}, 'sandbox', 'local', top, 'local')
-        default_profile = _pick(values, 'sandbox', 'default_profile', str, 'local')
+        profiles = {name: _profile({}, 'sandbox', name, top, name) for name in ('docker', 'local')}
+        default_profile = _pick(values, 'sandbox', 'default_profile', str, 'docker')
     config = SandboxConfig(enabled=top['enabled'], default_profile=default_profile, workspace_root=top['workspace_root'],
                            allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'], profiles=profiles)
     from .registry import merge

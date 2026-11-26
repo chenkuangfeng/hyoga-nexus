@@ -84,3 +84,16 @@
 #### Scenario: 部署选择控制台默认档位
 - **WHEN** 部署通过稳定标识引用控制台创建的默认档位
 - **THEN** 合并共享注册后校验默认档位，缺失时拒绝加载，不自动改选其他执行环境
+
+### MODIFIED Requirements
+
+### Requirement: 企业管理员维护与默认本地引擎
+企业 owner/admin SHALL 能维护现有共享沙箱配置、策略、连接、供应商及回收；普通成员和非成员 SHALL 被拒绝。无显式配置时 SHALL 默认启用 docker/local、允许开发模式 Local，默认选择 Docker。显式禁用、自定义档位、删除标记、Docker 隔离验收和智能体工具开关 SHALL 继续生效。
+
+#### Scenario: 企业管理员维护
+- **WHEN** 非平台管理员的企业 owner/admin 提交合法配置
+- **THEN** 系统保存配置并记录审计，无须额外的平台管理员身份
+
+#### Scenario: 未配置沙箱
+- **WHEN** 部署没有显式定义沙箱
+- **THEN** 默认注册 docker/local 并启用，Docker 等待验收，Local 仅开发认证可执行

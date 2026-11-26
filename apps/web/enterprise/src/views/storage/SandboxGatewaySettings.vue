@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Provider provisioning and pending-instance recovery, restricted by the server to platform administrators. */
+/** Provider provisioning and pending-instance recovery, restricted by the server to enterprise administrators. */
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {

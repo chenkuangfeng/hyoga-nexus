@@ -75,8 +75,8 @@ def _detail(db: Session, user: UserRecord, config: SandboxConfig, settings: Sand
     return {
         'name': settings.profile, 'display_name': settings.display_name or settings.profile,
         'description': settings.description, 'type': settings.backend, 'default': settings.profile == config.default_profile,
-        'available': not reason, 'reason': reason, 'editable': user.is_platform_admin,
-        'configuration': _configuration(settings) if user.is_platform_admin else None,
+        'available': not reason, 'reason': reason, 'editable': True,
+        'configuration': _configuration(settings),
         'revision': _revision(config),
         'policy': {key: getattr(settings, key) for key in PROFILE_POLICY_FIELDS},
         'network': settings.network if settings.backend != 'local' else None,
@@ -105,11 +105,9 @@ def profile_detail(db: Session, principal: Principal, tenant_id: UUID, name: str
 
 
 def update_policy(db: Session, principal: Principal, tenant_id: UUID, name: str, policy: dict) -> dict:
-    """Update deployment-wide settings only for platform administrators and audit the policy change."""
+    """Update deployment-wide settings for enterprise administrators and audit the policy change."""
     with db.begin():
         user, config, settings = _settings(db, principal, tenant_id, name)
-        if not user.is_platform_admin:
-            raise Forbidden('sandbox_platform_admin_required')
         try:
             policy = save_profile_policy(settings, policy)
         except DeploymentConfigError:
@@ -130,8 +128,6 @@ def connect_profile(db: Session, principal: Principal, tenant_id: UUID, name: st
 
     with db.begin():
         user, config, settings = _settings(db, principal, tenant_id, name)
-        if not user.is_platform_admin:
-            raise Forbidden('sandbox_platform_admin_required')
         if settings.backend != 'managed':
             raise InvalidConfiguration('sandbox_connection_not_supported')
     try:
@@ -174,7 +170,7 @@ def connect_profile(db: Session, principal: Principal, tenant_id: UUID, name: st
 
 def gateway_operations(db: Session, principal: Principal, tenant_id: UUID, name: str,
                        request_id: str | None = None) -> dict:
-    """Read node lifecycle status or retry cleanup; restrict global node operations to platform admins."""
+    """Read node lifecycle status or retry cleanup; require enterprise administration for shared node operations."""
     import httpx
     import json
     import re
@@ -183,8 +179,6 @@ def gateway_operations(db: Session, principal: Principal, tenant_id: UUID, name:
 
     with db.begin():
         user, config, settings = _settings(db, principal, tenant_id, name)
-        if not user.is_platform_admin:
-            raise Forbidden('sandbox_platform_admin_required')
         if settings.backend != 'managed':
             raise InvalidConfiguration('sandbox_connection_not_supported')
     path = f'{settings.endpoint}/v1/profiles/{quote(settings.remote_profile)}/executions'
@@ -217,7 +211,7 @@ def gateway_operations(db: Session, principal: Principal, tenant_id: UUID, name:
 
 def provider_settings(db: Session, principal: Principal, tenant_id: UUID, name: str,
                       values: dict | None = None) -> dict:
-    """Manage encrypted gateway provider credentials through a platform-admin-only endpoint."""
+    """Manage encrypted gateway provider credentials through an enterprise-admin-only endpoint."""
     import httpx
     import json
     from urllib.parse import quote
@@ -225,8 +219,6 @@ def provider_settings(db: Session, principal: Principal, tenant_id: UUID, name: 
 
     with db.begin():
         user, config, settings = _settings(db, principal, tenant_id, name)
-        if not user.is_platform_admin:
-            raise Forbidden('sandbox_platform_admin_required')
         if settings.backend != 'managed':
             raise InvalidConfiguration('sandbox_connection_not_supported')
     try:
@@ -266,10 +258,9 @@ def list_profiles(db: Session, principal: Principal, tenant_id: UUID) -> dict:
         user, config = _context(db, principal, tenant_id)
         return {
             'items': [_detail(db, user, config, settings) for settings in config.profiles.values()],
-            'can_manage': user.is_platform_admin, 'enabled': config.enabled,
+            'can_manage': True, 'enabled': config.enabled,
             'revision': _revision(config),
-            'defaults': {kind: _configuration(SandboxSettings(backend=kind)) for kind in BACKENDS}
-            if user.is_platform_admin else {},
+            'defaults': {kind: _configuration(SandboxSettings(backend=kind)) for kind in BACKENDS},
         }
 
 
@@ -294,8 +285,6 @@ def save_configuration(db: Session, principal: Principal, tenant_id: UUID, name:
     from nexus_sandbox.registry import RegistryConflict, configuration, validate, write
     with db.begin():
         user, config = _context(db, principal, tenant_id)
-        if not user.is_platform_admin:
-            raise Forbidden('sandbox_platform_admin_required')
         creating = name is None
         name = name or 'sandbox_' + uuid4().hex[:16]
         if not creating and name not in config.profiles:
@@ -321,8 +310,6 @@ def delete_configuration(db: Session, principal: Principal, tenant_id: UUID, nam
     from nexus_sandbox.registry import RegistryConflict, write
     with db.begin():
         user, config, settings = _settings(db, principal, tenant_id, name)
-        if not user.is_platform_admin:
-            raise Forbidden('sandbox_platform_admin_required')
         if _referenced(db, name) or name == config.default_profile:
             raise Conflict('sandbox_profile_in_use')
         try:

@@ -848,7 +848,7 @@ test('企业知识库确认上传、切换目标目录并保留本地文件夹�
 })
 
 
-test('沙箱引擎支持新增编辑删除配置', async ({ page, api }) => {
+test('企业管理员可新增编辑删除沙箱引擎配置', async ({ page, api }) => {
   await api.signIn()
   const root = '/api/v1/tenants/a/admin/sandboxes'
   const defaults = { type: 'docker', image: 'python:3.11-slim', memory_mb: 512, cpus: 1, pids: 128,
@@ -857,6 +857,11 @@ test('沙箱引擎支持新增编辑删除配置', async ({ page, api }) => {
   let record: Record<string, unknown> | undefined
   api.handle(request => {
     const path = new URL(request.url()).pathname
+    if (path === '/api/v1/auth/me') return { body: { success: true, data: {
+      user: { id: 'u', username: 'Admin', email: 'admin@example.test', tenant_id: 'a', is_platform_admin: false },
+      tenant: { id: 'a', name: 'Acme' },
+      memberships: [{ tenant_id: 'a', tenant_name: 'Acme', role: 'admin', entries: ['workspace', 'enterprise'] }],
+    } } }
     if (path === root && request.method() === 'GET') return { body: { items: record ? [record] : [],
       can_manage: true, enabled: true, revision, defaults: { docker: defaults } } }
     if (path === root && request.method() === 'POST' || path === root + '/new/configuration') {

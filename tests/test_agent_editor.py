@@ -184,9 +184,7 @@ def test_copy_creates_unpublished_draft_with_bindings(api, database):
     assert api.post(f"/api/v1/tenants/{tid}/agents/{agent.id}/copy", json={}).status_code == 404
 
 
-def test_sandbox_policy_requires_platform_admin_and_hides_credentials(api, database, tmp_path, monkeypatch):
-    from nexus_platform.identity.service import resolve_user
-
+def test_sandbox_policy_allows_enterprise_owner_and_denies_members(api, database, tmp_path, monkeypatch):
     tenant_id, _, _, _, _ = _stack(database)
     monkeypatch.chdir(tmp_path)
     (tmp_path / 'configs').mkdir()
@@ -205,14 +203,22 @@ remote_profile = "node"
               'skill_timeout_max_seconds': 90}
     detail = api.get(url)
     assert detail.status_code == 200
-    assert not detail.json()['editable']
-    assert 'sandbox.example.test' not in detail.text and '/run/secrets/hidden' not in detail.text
-    assert api.put(f'{url}/policy', json=policy).status_code == 403
+    assert detail.json()['editable']
+    assert detail.json()['configuration']['token_file'] == '/run/secrets/hidden'
+    assert api.put(f'{url}/policy', json=policy).status_code == 200
     api.as_(MEMBER)
     assert api.get(url).status_code == 403
+    assert api.put(f'{url}/policy', json=policy).status_code == 403
+    assert api.post(f'{url}/connect').status_code == 403
+    assert api.get(f'{url}/provider').status_code == 403
+    assert api.put(f'{url}/provider', json={
+        'type': 'e2b', 'template': 'base', 'domain': 'e2b.app', 'revision': 'v1',
+    }).status_code == 403
+    assert api.get(f'{url}/executions').status_code == 403
+    assert api.post(f'{url}/executions/{"a" * 32}/cleanup').status_code == 403
+    api.as_(STRANGER)
+    assert api.get(url).status_code in (403, 404)
     api.as_(OWNER)
-    with database() as db, db.begin():
-        resolve_user(db, OWNER).is_platform_admin = True
     result = api.put(f'{url}/policy', json=policy)
     assert result.status_code == 200 and result.json()['policy'] == policy
     assert result.json()['reason'] == 'sandbox_profile_paused'
@@ -221,12 +227,9 @@ remote_profile = "node"
 
 def test_gateway_connection_and_provider_changes_invalidate_old_acceptance(api, database, tmp_path, monkeypatch):
     import httpx
-    from nexus_platform.identity.service import resolve_user
     from nexus_sandbox.settings import load_config
 
     tenant_id, _, _, _, _ = _stack(database)
-    with database() as db, db.begin():
-        resolve_user(db, OWNER).is_platform_admin = True
     monkeypatch.chdir(tmp_path)
     (tmp_path / 'configs').mkdir()
     key = tmp_path / 'gateway-key'
@@ -273,8 +276,8 @@ remote_profile = "node"
     assert api.get(url).json()['reason'] == 'sandbox_connection_required'
 
 
-def test_sandbox_configuration_crud_permissions_revision_and_live_catalog(api, database, tmp_path, monkeypatch):
-    from nexus_platform.identity.service import resolve_user
+@pytest.mark.parametrize("role", [TenantRole.OWNER, TenantRole.ADMIN])
+def test_sandbox_configuration_crud_permissions_revision_and_live_catalog(api, database, tmp_path, monkeypatch, role):
     from nexus_sandbox.settings import load_config
 
     tenant_id, _, _, _, _ = _stack(database)
@@ -289,11 +292,20 @@ type = "local"
 ''')
     root = f'/api/v1/tenants/{tenant_id}/admin/sandboxes'
     listing = api.get(root)
-    assert listing.status_code == 200 and not listing.json()['can_manage']
+    assert listing.status_code == 200 and listing.json()['can_manage']
     values = {'type': 'docker', 'display_name': '研发隔离环境', 'image': 'python:3.12-slim'}
+    api.as_(MEMBER)
     assert api.post(root, json={'revision': 0, 'values': values}).status_code == 403
-    with database() as db, db.begin():
-        resolve_user(db, OWNER).is_platform_admin = True
+    assert api.get(root).status_code == 403
+    assert api.put(f'{root}/local/configuration', json={'revision': 0, 'values': {'type': 'local'}}).status_code == 403
+    assert api.delete(f'{root}/local?revision=0').status_code == 403
+    if role == TenantRole.ADMIN:
+        administrator = Principal(id='sandbox-admin', issuer='test')
+        with database() as db:
+            add_member(db, OWNER, tenant_id, administrator, role)
+        api.as_(administrator)
+    else:
+        api.as_(OWNER)
     created = api.post(root, json={'revision': 0, 'values': values})
     assert created.status_code == 201, created.text
     name = created.json()['name']

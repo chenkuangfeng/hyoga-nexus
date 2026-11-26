@@ -196,9 +196,9 @@ def test_a_local_profile_is_unavailable_outside_development_mode(db, monkeypatch
     assert 'sandbox' in hidden_groups(facts, {'sandbox': True})
 
 
-def test_the_default_local_profile_is_unavailable_in_production_without_failing(db, monkeypatch, tmp_path):
+def test_local_profile_is_unavailable_in_production_without_failing(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = true', mode='production')
-    assert unavailable_groups(tool_gates.deployment_gate_facts(db))['sandbox'] == 'sandbox_local_not_allowed'
+    assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'local'))['sandbox'] == 'sandbox_local_not_allowed'
 
 
 def test_a_disabled_or_broken_section_leaves_the_sandbox_off(db, monkeypatch, tmp_path):
@@ -394,3 +394,26 @@ def test_deployment_default_can_select_console_profile(tmp_path):
     write(load_config(path), 'production', None, 1)
     with pytest.raises(DeploymentConfigError):
         load_config(path)
+
+
+def test_missing_configuration_enables_docker_and_local_but_preserves_explicit_choices(tmp_path):
+    """Defaults create no containers and never overwrite operator choices or tombstones."""
+    from nexus_sandbox.registry import write
+    from nexus_sandbox.settings import SandboxConfig
+    path = tmp_path / 'nexus.toml'
+    root = tmp_path / 'shared'
+    path.write_text(f'[sandbox]\nworkspace_root = "{root}"\n')
+    config = load_config(path)
+    assert config.enabled and config.allow_local
+    assert config.default_profile == 'docker' and set(config.profiles) == {'docker', 'local'}
+    assert all(settings.enabled and settings.allow_local for settings in config.profiles.values())
+    assert SandboxConfig().default_profile == config.default_profile
+    assert set(SandboxConfig().profiles) == set(config.profiles)
+    write(config, 'local', None, 0)
+    assert set(load_config(path).profiles) == {'docker'}
+    path.write_text(f'[sandbox]\nenabled = false\nallow_local = false\nworkspace_root = "{root}"\n')
+    disabled = load_config(path)
+    assert not disabled.enabled and not disabled.allow_local
+    path.write_text(f'[sandbox]\nworkspace_root = "{root}"\n[sandbox.profiles.custom]\ntype = "docker"\n')
+    custom = load_config(path)
+    assert set(custom.profiles) == {'custom'} and custom.default_profile == 'custom'

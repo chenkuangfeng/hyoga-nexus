@@ -29,9 +29,9 @@
 
 ## 档位
 
-`[sandbox.profiles.<名字>]` 定义命名档位，类型为 `local`、`docker`、`bwrap`、`ssh`、`managed`；`default_profile` 缺省为 `local`；档位只能由运维在部署配置里定义，智能体设置 `sandbox_profile` 只能选名字，已发布的智能体版本固定其档位。每个档位解析为一个 `SandboxSettings`，后端、管理器和验收都按档位工作：每个档位有自己的 `SandboxManager`，docker 容器名在非 `default` 档位时带档位名，容器带 `nexus.sandbox.profile` 标签，空闲与孤儿回收只处理本档位；验收报告为 `acceptance.json`（旧的 `default` 档位）或 `acceptance-<档位>.json`，指纹含档位的类型、镜像与限制。`--sandbox-check` 默认检查全部隔离档位，`--profile` 只检查一个。
+`[sandbox.profiles.<名字>]` 定义命名档位，类型为 `local`、`docker`、`bwrap`、`ssh`、`managed`；`default_profile` 在未声明档位时缺省为 `docker`；档位只能由运维在部署配置里定义，智能体设置 `sandbox_profile` 只能选名字，已发布的智能体版本固定其档位。每个档位解析为一个 `SandboxSettings`，后端、管理器和验收都按档位工作：每个档位有自己的 `SandboxManager`，docker 容器名在非 `default` 档位时带档位名，容器带 `nexus.sandbox.profile` 标签，空闲与孤儿回收只处理本档位；验收报告为 `acceptance.json`（旧的 `default` 档位）或 `acceptance-<档位>.json`，指纹含档位的类型、镜像与限制。`--sandbox-check` 默认检查全部隔离档位，`--profile` 只检查一个。
 
-不适用于某类型的键直接报错（bwrap 的 `pids` 和 `cpus` 需要同时配置 `cgroup_root`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时只有隐式的 `local` 档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
+不适用于某类型的键直接报错（bwrap 的 `pids` 和 `cpus` 需要同时配置 `cgroup_root`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时默认启用 `docker` 与 `local` 两个档位，总开关与 `allow_local` 缺省为 `true`；Docker 仍需验收，Local 仍需开发认证。显式自定义档位不补入缺省档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
 
 ## 技能与标准输入
 
@@ -72,7 +72,7 @@ SSH 和 HTTPS 档位复用文件工具、技能投射与产物登记。SSH 节�
 - **持久生命周期** 网关私有目录保存请求 ID、实例 ID、状态、创建时间与策略摘要。命令和文件内容不进入日志。已登记请求不能重复执行，实例创建结果未知时按元数据发现并回收。回收任务抵御重复取消，失败记录保留到下一次重试。
 - **文件传输** `transfer.py` 的归档只允许普通文件和目录，限制文件数、深度、单文件和总字节数。实例仅接收当前会话与技能，不接收宿主目录结构。快照完整校验后替换工作区，发布失败回滚。同步期间对同一会话的文件工具写入与其他同步串行。
 - **输出采集** `provider_runner.py` 与本地执行器共用 `Sink`，在实例内读取时保留头尾。SDK 命令结果只包含控制输出，返回文件经带访问令牌请求头的文件 API 流式获取。
-- **界面** 参考 WeKnora 的 `SandboxSettings.vue` 与 `SandboxConfigEditorDrawer.vue`。企业管理员查看档位和验收；平台管理员维护运行策略、供应商模板和加密凭据、验证连接及重试实例回收。
+- **界面** 参考 WeKnora 的 `SandboxSettings.vue` 与 `SandboxConfigEditorDrawer.vue`。企业 owner/admin 查看档位和验收，并维护运行策略、供应商模板和加密凭据、验证连接及重试实例回收。
 - **配置边界** 执行节点地址、SSH 主机身份、共享卷、cgroup 委派和 XFS 挂载由部署运维提供。供应商配置可在界面编辑，密钥加密保存在网关控制目录。网关凭据与加密主密钥不得挂入沙箱。
 - **验收绑定** managed 档位先连接网关并保存节点/模板/代码/资源策略摘要，再在 worker 节点验收。执行时必须匹配当前摘要。Docker 网关将实际镜像 ID 纳入摘要；供应商使用模板 ID 和运维声明的不可变版本。修改模板构建时必须更新版本。
 
@@ -87,11 +87,11 @@ SSH 和 HTTPS 档位复用文件工具、技能投射与产物登记。SSH 节�
 - `GET /v1/profiles/{name}/executions` 列出未完成实例。`POST /v1/profiles/{name}/executions/{id}/cleanup` 重试已退出活动注册表的实例回收。
 - `GET/PUT /v1/profiles/{name}/provider` 查询和更新供应商配置。响应只包含凭据存在标志；配置变更要求所有实例已回收。文件以部署 Fernet 密钥加密并绑定档位名。
 
-上述网关接口均需 bearer 身份验证。平台 API 再按企业成员身份与平台管理员权限限制管理操作。真实服务验收、cgroup v2 及 XFS quota 验收需要具备相应凭据和权限的目标节点。
+上述网关接口均需 bearer 身份验证。平台 API 再按企业成员身份与 owner/admin 角色限制管理操作。真实服务验收、cgroup v2 及 XFS quota 验收需要具备相应凭据和权限的目标节点。
 
 ### 控制台配置注册
 
-企业管理端的“沙箱引擎”沿用 WeKnora 的类型筛选、搜索卡片和分区编辑器，支持新增、编辑、删除 Local、SSH、Bubblewrap、Docker 和 HTTPS 托管档位。稳定标识与展示名称分离，智能体仍绑定稳定标识。平台管理员且具有当前企业管理角色才可修改共享档位，企业管理员只读。部署总开关、本地执行许可仍由 `nexus.toml` 管理。
+企业管理端的“沙箱引擎”沿用 WeKnora 的类型筛选、搜索卡片和分区编辑器，支持新增、编辑、删除 Local、SSH、Bubblewrap、Docker 和 HTTPS 托管档位。稳定标识与展示名称分离，智能体仍绑定稳定标识。当前企业 owner/admin 均可修改共享档位，无须额外的平台管理员身份。部署总开关、本地执行许可仍由 `nexus.toml` 管理。
 
 API 在共享 `workspace_root/_sandbox_profiles.json` 保存配置覆盖和删除标记，使用跨进程文件锁、原子替换和全局修订号拒绝过期提交。部署档位可以编辑，默认档位和被任意企业草稿或已发布版本引用的档位禁止删除。API 与 worker 必须共享控制卷。配置统一复用部署参数验证器，不接受任意配置键。SSH 私钥、known_hosts 和网关令牌只保存节点文件引用，供应商 API Key 仍经现有网关接口加密保存。
 
