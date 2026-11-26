@@ -20,7 +20,7 @@ const values = ref<SandboxConfiguration>(cloneValues(props.record?.configuration
 const name = ref(props.record?.display_name || props.record?.name || '')
 const description = ref(props.record?.description || '')
 const saving = ref(false)
-const failed = ref(false)
+const failure = ref('')
 let disposed = false
 onBeforeUnmount(() => { disposed = true })
 const advanced = ref(false)
@@ -48,15 +48,19 @@ function change(key: string, value: string | number | boolean | string[]) {
 async function save() {
   if (!valid.value || saving.value) return
   saving.value = true
-  failed.value = false
+  failure.value = ''
   const candidate: SandboxConfiguration = { ...values.value, type: kind.value,
     display_name: name.value.trim(), description: description.value.trim() }
   if (kind.value === 'bwrap' && !candidate.cgroup_root) { delete candidate.cpus; delete candidate.pids }
   try {
     const saved = await saveSandboxConfiguration(props.tenant, props.record?.name || null, candidate, props.revision)
     if (!disposed) emit('saved', saved)
-  } catch {
-    if (!disposed) failed.value = true
+  } catch (error: unknown) {
+    if (!disposed) {
+      const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined
+      failure.value = status === 403 ? 'saveForbidden' : status === 409 ? 'saveConflict'
+        : status === 422 ? 'saveInvalid' : status === 503 ? 'saveUnavailable' : 'saveFailed'
+    }
   } finally {
     if (!disposed) saving.value = false
   }
@@ -70,7 +74,10 @@ async function save() {
     storage-key="setting-drawer:sandbox-config" :confirm-loading="saving" :cancel-disabled="saving"
     :confirm-disabled="!valid" :confirm-text="t('sandboxConfig.save')" @confirm="save" @cancel="emit('close')"
     @update:visible="value => { if (!value && !saving) emit('close') }">
-    <t-alert v-if="failed" theme="error" class="compact-alert" :message="t('sandboxConfig.saveFailed')" />
+    <template #footer-extra>
+      <t-alert v-if="failure" role="alert" theme="error" :message="t(`sandboxConfig.${failure}`)" />
+      <p v-else-if="!valid" role="status" class="sandbox-validation-hint">{{ t('sandboxConfig.incomplete') }}</p>
+    </template>
     <t-form label-align="top" class="sandbox-editor-form" @submit="save">
       <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('sandboxConfig.basic') }}</h4>
@@ -119,6 +126,7 @@ async function save() {
 
 <style scoped lang="less">
 .sandbox-editor-form { display: flex; flex-direction: column; gap: 20px; }
+.sandbox-validation-hint { margin: 0; color: var(--td-text-color-secondary); }
 .sandbox-control { display: block; width: 100%; }
 .sandbox-control__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .setting-drawer__section + .setting-drawer__section { padding-top: 16px; border-top: 1px solid var(--td-component-stroke); }

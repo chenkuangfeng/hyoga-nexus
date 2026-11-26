@@ -854,6 +854,7 @@ test('企业管理员可新增编辑删除沙箱引擎配置', async ({ page, ap
   const defaults = { type: 'docker', image: 'python:3.11-slim', memory_mb: 512, cpus: 1, pids: 128,
     workspace_quota_mb: 512, exec_timeout_max_seconds: 120, skill_timeout_seconds: 120, skill_timeout_max_seconds: 600 }
   let revision = 0
+  let failSave = true
   let record: Record<string, unknown> | undefined
   api.handle(request => {
     const path = new URL(request.url()).pathname
@@ -867,6 +868,10 @@ test('企业管理员可新增编辑删除沙箱引擎配置', async ({ page, ap
     if (path === root && request.method() === 'POST' || path === root + '/new/configuration') {
       const body = request.postDataJSON()
       expect(body.revision).toBe(revision)
+      if (failSave) {
+        failSave = false
+        return { status: 503, body: { error: { code: 'service_unavailable', message: 'sandbox_configuration_write_failed' } } }
+      }
       revision++
       record = { name: 'new', display_name: body.values.display_name, description: body.values.description,
         type: 'docker', default: false, available: true, reason: '', editable: true, revision,
@@ -890,6 +895,11 @@ test('企业管理员可新增编辑删除沙箱引擎配置', async ({ page, ap
   await editor.getByRole('textbox', { name: '沙箱名称', exact: true }).fill('测试 Docker')
   await editor.getByRole('textbox', { name: '运行镜像', exact: true }).fill('python:3.12-slim')
   await page.screenshot({ path: '/tmp/nexus-sandbox-config-editor.png' })
+  await editor.getByRole('button', { name: '保存配置', exact: true }).click()
+  const failure = editor.getByRole('alert').filter({ hasText: '配置服务不可用或共享目录不可写' })
+  await expect(failure).toBeInViewport()
+  await expect(editor.getByRole('textbox', { name: '沙箱名称', exact: true })).toHaveValue('测试 Docker')
+  await expect(page.locator('.sandbox-card')).toHaveCount(0)
   await editor.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(page.locator('.sandbox-card')).toContainText('测试 Docker')
   await page.keyboard.press('Escape')

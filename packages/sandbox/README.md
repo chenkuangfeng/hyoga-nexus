@@ -63,3 +63,7 @@ Docker 命令、文件工具写入和供应商同步使用共享卷上的跨进�
 参见 [部署样例](../../configs/nexus.example.toml) 与 [网关协议](docs/design.md#托管网关协议-v1)。
 
 企业 owner/admin 与平台管理员可在企业管理端“沙箱引擎”新增或编辑五种执行档位，配置写入 API 与 worker 共享控制卷并自动加载。全局启用与本地执行许可仍由部署配置控制。SSH 与网关凭据填写执行节点上的文件路径。托管配置保存后在详情验证连接，并在 worker 完成隔离验收。默认档位及被智能体引用的档位不能删除，详见 [配置注册设计](docs/design.md#控制台配置注册)。
+
+## 控制台保存位置与反馈
+
+控制台新增、编辑、删除写入 `<workspace_root>/_sandbox_profiles.json`，默认路径为 `data/sandbox/_sandbox_profiles.json`，不修改 `configs/nexus.toml`。API 与 worker 必须读取同一共享目录。保存成功会重新读取目录并显示配置；保存配置不等于通过执行验收。编辑器固定底部显示未满足的保存条件及保存错误，输入不会因失败丢失；发生修订冲突时关闭编辑器并刷新列表后再提交。

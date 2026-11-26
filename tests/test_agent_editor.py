@@ -366,3 +366,37 @@ type = "docker"
     assert api.put(f'{root}/docker/configuration', json={
         'revision': 1, 'values': {'type': 'local', 'display_name': 'Changed backend'},
     }).status_code == 409
+
+
+@pytest.mark.parametrize('kind', ['docker', 'local', 'bwrap', 'ssh', 'managed'])
+def test_sandbox_editor_defaults_save_and_reload_through_real_api(api, database, tmp_path, monkeypatch, kind):
+    """Exercise the complete editor payload, including hidden defaults, against actual persistence."""
+    from nexus_sandbox.settings import load_config
+
+    tenant_id, *_ = _stack(database)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs').mkdir()
+    root = tmp_path / 'shared'
+    (tmp_path / 'configs' / 'nexus.toml').write_text(f'[sandbox]\nworkspace_root = "{root}"\n')
+    url = f'/api/v1/tenants/{tenant_id}/admin/sandboxes'
+    catalog = api.get(url).json()
+    values = catalog['defaults'][kind] | {'display_name': f'新增 {kind}', 'description': '真实参数回归'}
+    if kind == 'ssh':
+        values.update(ssh_host='node.example.test', ssh_user='nexus', ssh_identity_file='/run/key',
+                      ssh_known_hosts='/run/hosts', remote_profile='bwrap')
+    elif kind == 'managed':
+        values.update(endpoint='https://node.example.test', token_file='/run/token', remote_profile='docker')
+    created = api.post(url, json={'revision': catalog['revision'], 'values': values})
+    assert created.status_code == 201, created.text
+    name = created.json()['name']
+    assert load_config().get(name).display_name == f'新增 {kind}'
+    assert (root / '_sandbox_profiles.json').is_file()
+    fresh = api.get(url).json()
+    record = next(item for item in fresh['items'] if item['name'] == name)
+    assert record['configuration'] == created.json()['configuration']
+    changed = api.put(f'{url}/{name}/configuration', json={
+        'revision': fresh['revision'], 'values': record['configuration'] | {'display_name': '再次保存'},
+    })
+    assert changed.status_code == 200, changed.text
+    assert load_config().get(name).display_name == '再次保存'
+    assert '再次保存' in (root / '_sandbox_profiles.json').read_text()

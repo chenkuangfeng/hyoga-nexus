@@ -316,3 +316,5 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 ### 沙箱引擎配置
 
 企业管理端参照 WeKnora 的 SandboxSettings 与 SandboxConfigEditorDrawer，提供类型页签、搜索、状态卡片、更多菜单和共享 SettingDrawer 编辑器。基本信息、连接参数、资源与超时、高级参数按引擎动态展示。企业 owner/admin 与平台管理员均可新增、编辑和删除共享配置。编辑失败显示刷新与检查提示，保存后打开运行详情，衔接现有连接验证及供应商配置。界面通过配置修订号防止覆盖其他管理员的更新，企业切换时关闭编辑器并忽略过期请求结果。
+
+沙箱配置编辑器使用 SettingDrawer 固定底部反馈区展示保存失败，按 HTTP 状态区分权限、修订冲突、参数与服务故障，保留输入供修正重试；保存条件未满足时显示说明。错误不直接回显原始服务端内容。
