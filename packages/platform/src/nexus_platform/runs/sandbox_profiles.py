@@ -10,7 +10,7 @@ from nexus_core.deployment import DeploymentConfigError
 from nexus_core.platform import Principal
 from nexus_core.sandbox import SandboxError
 from nexus_platform.authz.audit import audit
-from nexus_platform.errors import Forbidden, InvalidConfiguration, NotFound, ServiceUnavailable
+from nexus_platform.errors import Conflict, Forbidden, InvalidConfiguration, NotFound, ServiceUnavailable
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import UserRecord
 from nexus_platform.tenants.service import ADMIN_ROLES
@@ -22,7 +22,7 @@ from .sandbox_acceptance import DbReportStore
 from .tool_gates import profile_facts, unavailable_groups
 
 
-def _settings(db: Session, principal: Principal, tenant_id: UUID, name: str) -> tuple[UserRecord, SandboxConfig, SandboxSettings]:
+def _context(db: Session, principal: Principal, tenant_id: UUID) -> tuple[UserRecord, SandboxConfig]:
     user = resolve_user(db, principal)
     require_tenant(db, tenant_id)
     membership = require_membership(db, tenant_id, user.id)
@@ -32,10 +32,25 @@ def _settings(db: Session, principal: Principal, tenant_id: UUID, name: str) -> 
         config = load_config()
     except DeploymentConfigError:
         raise ServiceUnavailable('sandbox_configuration_unavailable') from None
+    return user, config
+
+
+def _settings(db: Session, principal: Principal, tenant_id: UUID, name: str) -> tuple[UserRecord, SandboxConfig, SandboxSettings]:
+    user, config = _context(db, principal, tenant_id)
     settings = config.profiles.get(name)
     if settings is None:
         raise NotFound('sandbox_profile_not_found')
     return user, config, settings
+
+
+def _configuration(settings: SandboxSettings) -> dict:
+    from nexus_sandbox.registry import configuration
+    return configuration(settings)
+
+
+def _revision(config: SandboxConfig) -> int:
+    # Return the revision of the same snapshot as the fields, never a later registry read.
+    return config.registry_revision
 
 
 def _detail(db: Session, user: UserRecord, config: SandboxConfig, settings: SandboxSettings) -> dict:
@@ -58,8 +73,11 @@ def _detail(db: Session, user: UserRecord, config: SandboxConfig, settings: Sand
             resource_limits.update(cpus=settings.cpus, pids=settings.pids)
     items = report.get('items') if report else None
     return {
-        'name': settings.profile, 'type': settings.backend, 'default': settings.profile == config.default_profile,
+        'name': settings.profile, 'display_name': settings.display_name or settings.profile,
+        'description': settings.description, 'type': settings.backend, 'default': settings.profile == config.default_profile,
         'available': not reason, 'reason': reason, 'editable': user.is_platform_admin,
+        'configuration': _configuration(settings) if user.is_platform_admin else None,
+        'revision': _revision(config),
         'policy': {key: getattr(settings, key) for key in PROFILE_POLICY_FIELDS},
         'network': settings.network if settings.backend != 'local' else None,
         'image': settings.image if settings.backend == 'docker' else None,
@@ -239,3 +257,78 @@ def provider_settings(db: Session, principal: Principal, tenant_id: UUID, name: 
             audit(db, tenant_id, user.id, 'sandbox.provider_updated', 'sandbox_profile', name,
                   {'provider': public['type'], 'revision': public['revision']})
     return public
+
+
+def list_profiles(db: Session, principal: Principal, tenant_id: UUID) -> dict:
+    """List configured profiles including disabled deployments, with console maintenance permissions."""
+    from nexus_sandbox.settings import BACKENDS
+    with db.begin():
+        user, config = _context(db, principal, tenant_id)
+        return {
+            'items': [_detail(db, user, config, settings) for settings in config.profiles.values()],
+            'can_manage': user.is_platform_admin, 'enabled': config.enabled,
+            'revision': _revision(config),
+            'defaults': {kind: _configuration(SandboxSettings(backend=kind)) for kind in BACKENDS}
+            if user.is_platform_admin else {},
+        }
+
+
+def _referenced(db: Session, name: str) -> bool:
+    from sqlalchemy import select
+    from nexus_platform.persistence.models import AgentRecord, AgentVersionRecord
+
+    def chosen(budgets):
+        behavior = (budgets or {}).get('behavior') or {}
+        return behavior.get('sandbox_profile') if isinstance(behavior, dict) else None
+    drafts = db.scalars(select(AgentRecord.draft_budgets))
+    if any(chosen(budgets) == name for budgets in drafts):
+        return True
+    versions = db.scalars(select(AgentVersionRecord.budgets))
+    return any(chosen(budgets) == name for budgets in versions)
+
+
+def save_configuration(db: Session, principal: Principal, tenant_id: UUID, name: str | None,
+                       values: dict, revision: int) -> dict:
+    """Persist a type-checked profile; runtime identity changes allocate separate Docker containers."""
+    from uuid import uuid4
+    from nexus_sandbox.registry import RegistryConflict, configuration, validate, write
+    with db.begin():
+        user, config = _context(db, principal, tenant_id)
+        if not user.is_platform_admin:
+            raise Forbidden('sandbox_platform_admin_required')
+        creating = name is None
+        name = name or 'sandbox_' + uuid4().hex[:16]
+        if not creating and name not in config.profiles:
+            raise NotFound('sandbox_profile_not_found')
+        if not creating and values.get('type') != config.profiles[name].backend and _referenced(db, name):
+            raise Conflict('sandbox_profile_in_use')
+        try:
+            settings = validate(config, name, values)
+            write(config, name, configuration(settings), revision)
+        except RegistryConflict:
+            raise Conflict('sandbox_configuration_changed') from None
+        except DeploymentConfigError as error:
+            raise InvalidConfiguration(str(error)) from None
+        except OSError:
+            raise ServiceUnavailable('sandbox_configuration_write_failed') from None
+        audit(db, tenant_id, user.id, 'sandbox.created' if creating else 'sandbox.updated', 'sandbox_profile', name,
+              {'type': settings.backend, 'display_name': settings.display_name})
+    return profile_detail(db, principal, tenant_id, name)
+
+
+def delete_configuration(db: Session, principal: Principal, tenant_id: UUID, name: str, revision: int) -> None:
+    """Remove an unused named profile while retaining a tombstone for deployment-defined names."""
+    from nexus_sandbox.registry import RegistryConflict, write
+    with db.begin():
+        user, config, settings = _settings(db, principal, tenant_id, name)
+        if not user.is_platform_admin:
+            raise Forbidden('sandbox_platform_admin_required')
+        if _referenced(db, name) or name == config.default_profile:
+            raise Conflict('sandbox_profile_in_use')
+        try:
+            write(config, name, None, revision)
+        except RegistryConflict:
+            raise Conflict('sandbox_configuration_changed') from None
+        except (OSError, DeploymentConfigError):
+            raise ServiceUnavailable('sandbox_configuration_write_failed') from None
+        audit(db, tenant_id, user.id, 'sandbox.deleted', 'sandbox_profile', name)

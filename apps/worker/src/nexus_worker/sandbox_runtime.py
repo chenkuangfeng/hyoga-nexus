@@ -12,13 +12,13 @@ from functools import lru_cache
 
 from nexus_core.deployment import DeploymentConfigError
 from nexus_sandbox.manager import SandboxManager
-from nexus_sandbox.settings import apply_profile_policy, load_config
+from nexus_sandbox.settings import apply_profile_policy, configuration_revision, load_config
 
 logger = logging.getLogger("nexus_worker.sandbox")
 
 
 @lru_cache(maxsize=1)
-def _config():
+def _config(revision=None):
     """The parsed `[sandbox]` section, or None when it is off or invalid (logged once)."""
     try:
         config = load_config(include_policies=False)
@@ -34,7 +34,10 @@ _managers: dict[str, SandboxManager] = {}
 def manager(profile: str | None = None) -> SandboxManager | None:
     """The shared manager of one profile (the default profile for an empty name), or None when the sandbox is off or
     the profile does not exist. Each profile has its own manager so leases and containers never mix."""
-    config = _config()
+    try:
+        config = _config(configuration_revision())
+    except DeploymentConfigError:
+        return None
     settings = config.get(profile) if config is not None else None
     if settings is None:
         return None
@@ -45,7 +48,7 @@ def manager(profile: str | None = None) -> SandboxManager | None:
         return None
     if settings.paused:
         return None
-    if settings.profile not in _managers:
+    if settings.profile not in _managers or _managers[settings.profile].settings != settings:
         _managers[settings.profile] = SandboxManager(settings)
     else:
         _managers[settings.profile].settings = settings

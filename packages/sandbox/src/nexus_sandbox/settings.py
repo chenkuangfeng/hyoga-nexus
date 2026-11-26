@@ -51,7 +51,7 @@ _TOP_KEYS = frozenset({'enabled', 'default_profile', 'workspace_root', 'allow_lo
 #: Keys of the single flat profile of earlier configurations.
 _LEGACY_KEYS = frozenset({'backend', 'image', 'cpus', 'memory_mb', 'pids', 'network', 'idle_seconds',
                           'workspace_quota_mb', 'exec_timeout_max_seconds'})
-_COMMON_KEYS = frozenset({'type', 'workspace_quota_mb', 'exec_timeout_max_seconds', 'skill_timeout_seconds',
+_COMMON_KEYS = frozenset({'type', 'display_name', 'description', 'workspace_quota_mb', 'exec_timeout_max_seconds', 'skill_timeout_seconds',
                           'skill_timeout_max_seconds', 'env_passthrough', 'build_timeout_seconds', 'env_max_mb',
                           'quota_mount', 'quota_project_start', 'quota_inodes'})
 #: Keys each profile type accepts. A key that cannot take effect on a type is an error, not a silent no-op.
@@ -71,6 +71,9 @@ _TYPE_KEYS = {
 @dataclass(frozen=True)
 class SandboxSettings:
     """One profile, resolved. `backend` is the profile's type (``docker`` / ``bwrap`` / ``local``)."""
+    display_name: str = ''
+    description: str = ''
+    configuration_id: str = ''
     enabled: bool = False
     backend: str = 'docker'
     image: str = 'python:3.12-slim'
@@ -135,6 +138,7 @@ class SandboxConfig:
     """The whole ``[sandbox]`` section: top-level switches plus every profile."""
     enabled: bool = False
     default_profile: str = 'local'
+    registry_revision: int = 0
     workspace_root: str = 'data/sandbox'
     allow_local: bool = False
     allow_local_scripts: bool = False
@@ -208,6 +212,8 @@ def _profile(values: dict, where: str, name: str, top: dict, kind: str) -> Sandb
                       token_file=_pick(values, where, 'token_file', str, '', _absolute_path))
     return SandboxSettings(
         enabled=top['enabled'], backend=kind,
+        display_name=_pick(values, where, 'display_name', str, name, lambda v: 1 <= len(v.strip()) <= 160),
+        description=_pick(values, where, 'description', str, '', lambda v: len(v) <= 1000),
         image=_pick(values, where, 'image', str, defaults.image, lambda v: bool(v.strip()) and ' ' not in v.strip()),
         cpus=_pick(values, where, 'cpus', float, defaults.cpus, lambda v: 0.1 <= v <= 16),
         memory_mb=_pick(values, where, 'memory_mb', int, defaults.memory_mb, lambda v: 64 <= v <= 16384),
@@ -275,7 +281,7 @@ def save_profile_policy(settings: SandboxSettings, values: dict) -> dict:
     temporary = Path(stream.name)
     try:
         with stream:
-            json.dump(policy, stream)
+            json.dump(policy | {'_configuration_id': settings.configuration_id}, stream)
             stream.flush()
             os.fsync(stream.fileno())
         temporary.chmod(0o640)
@@ -297,6 +303,9 @@ def apply_profile_policy(settings: SandboxSettings) -> SandboxSettings:
         raise _invalid(f'sandbox.profiles.{settings.profile}', 'policy') from None
     if not isinstance(values, dict):
         raise _invalid(f'sandbox.profiles.{settings.profile}', 'policy')
+    if values.pop('_configuration_id', '') != settings.configuration_id:
+        paused = _pick(values, f'sandbox.profiles.{settings.profile}', 'paused', bool, False)
+        return replace(settings, paused=paused)
     return replace(settings, **_policy_values(settings, values))
 
 
@@ -340,13 +349,35 @@ def load_config(path: Path | None = None, *, include_policies: bool = True) -> S
     else:
         profiles['local'] = _profile({}, 'sandbox', 'local', top, 'local')
         default_profile = _pick(values, 'sandbox', 'default_profile', str, 'local')
-    if default_profile not in profiles:
+    config = SandboxConfig(enabled=top['enabled'], default_profile=default_profile, workspace_root=top['workspace_root'],
+                           allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'], profiles=profiles)
+    from .registry import merge
+    config = merge(config)
+    # The deployment default may reference a profile created through the console.
+    # Validate against the merged catalog so that a typo cannot silently select local execution.
+    if config.default_profile not in config.profiles:
         raise _invalid('sandbox', 'default_profile')
     if include_policies:
-        profiles = {name: apply_profile_policy(settings) for name, settings in profiles.items()}
-    return SandboxConfig(enabled=top['enabled'], default_profile=default_profile, workspace_root=top['workspace_root'],
-                         allow_local=top['allow_local'], allow_local_scripts=top['allow_local_scripts'],
-                         profiles=profiles)
+        config = replace(config, profiles={name: apply_profile_policy(settings) for name, settings in config.profiles.items()})
+    return config
+
+
+def configuration_revision() -> tuple:
+    """A cheap cross-process cache key for deployment and console profile changes."""
+    from nexus_core.deployment import config_path
+    target = config_path()
+    values = section('sandbox')
+    root = _pick(values, 'sandbox', 'workspace_root', str, 'data/sandbox', lambda value: bool(value.strip()))
+    registry = Path(root) / '_sandbox_profiles.json'
+    def stamp(path):
+        try:
+            info = path.stat()
+            return (info.st_mtime_ns, info.st_size, info.st_ino)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            raise DeploymentConfigError('Sandbox configuration metadata is unavailable') from None
+    return (str(target), stamp(target), str(registry.absolute()), stamp(registry))
 
 
 def load_settings(path: Path | None = None, profile: str | None = None) -> SandboxSettings:

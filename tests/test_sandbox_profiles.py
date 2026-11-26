@@ -337,3 +337,60 @@ def test_the_worker_startup_check_reports_unaccepted_profiles_without_running_pr
     assert sandbox_startup_check(Factory()) == []
     _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = false')
     assert sandbox_startup_check(Factory()) == []
+
+
+def test_console_profiles_reload_worker_and_keep_runtime_identity(tmp_path, monkeypatch):
+    from nexus_sandbox.registry import configuration, validate, write
+    from nexus_sandbox.settings import load_config
+    from nexus_worker import sandbox_runtime
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs').mkdir()
+    (tmp_path / 'configs' / 'nexus.toml').write_text(f'''
+[sandbox]
+enabled = true
+workspace_root = "{tmp_path / 'shared'}"
+''')
+    sandbox_runtime._config.cache_clear()
+    sandbox_runtime._managers.clear()
+    try:
+        config = load_config()
+        settings = validate(config, 'new_docker', {'type': 'docker', 'display_name': 'Docker'})
+        write(config, 'new_docker', configuration(settings), 0)
+        first = sandbox_runtime.manager('new_docker')
+        assert first is not None
+        first_id = first.settings.configuration_id
+        changed = configuration(first.settings) | {'memory_mb': 1024}
+        write(load_config(), 'new_docker', changed, 1)
+        second = sandbox_runtime.manager('new_docker')
+        assert second.settings.memory_mb == 1024 and second.settings.configuration_id != first_id
+        metadata = configuration(second.settings) | {'display_name': 'Renamed'}
+        write(load_config(), 'new_docker', metadata, 2)
+        assert sandbox_runtime.manager('new_docker').settings.configuration_id == second.settings.configuration_id
+    finally:
+        sandbox_runtime._config.cache_clear()
+        sandbox_runtime._managers.clear()
+
+
+def test_worker_invalid_console_registry_root_stays_unavailable(tmp_path, monkeypatch):
+    """The revision probe must fail closed on malformed deployment settings."""
+    from nexus_worker import sandbox_runtime
+    path = tmp_path / 'nexus.toml'
+    path.write_text('[sandbox]\nenabled = true\nworkspace_root = 42\n')
+    monkeypatch.setattr('nexus_core.deployment.config_path', lambda: path)
+    assert sandbox_runtime.manager() is None
+
+
+def test_deployment_default_can_select_console_profile(tmp_path):
+    """Resolve defaults after console overrides, while rejecting missing/deleted defaults."""
+    from nexus_sandbox.registry import write
+
+    path = tmp_path / 'nexus.toml'
+    body = f'[sandbox]\nworkspace_root = "{tmp_path / "shared"}"\n'
+    path.write_text(body)
+    write(load_config(path), 'production', {'type': 'docker'}, 0)
+    path.write_text(body + 'default_profile = "production"\n')
+    assert load_config(path).get().backend == 'docker'
+    write(load_config(path), 'production', None, 1)
+    with pytest.raises(DeploymentConfigError):
+        load_config(path)

@@ -29,13 +29,15 @@ _TIMEOUT_CODES = (124, 137)
 _GRACE_SECONDS = 2
 
 
-def container_name(tenant_id: str, session_id: str, profile: str = 'default') -> str:
+def container_name(tenant_id: str, session_id: str, profile: str = 'default', configuration_id: str = '') -> str:
     """Stable, collision-resistant container name for a (tenant, session, profile) triple.
 
     The profile joins the hash only when it is not ``default``, so containers created before profiles existed keep
     their names. Two profiles of one session (an agent version that changed its profile) never share a container.
     """
     material = f'{tenant_id}\0{session_id}' + ('' if profile == 'default' else f'\0{profile}')
+    if configuration_id:
+        material += f'\0{configuration_id}'
     return 'nexus-sbx-' + hashlib.sha256(material.encode()).hexdigest()[:20]
 
 

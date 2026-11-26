@@ -41,7 +41,7 @@ def fingerprint(settings: SandboxSettings) -> str:
     material = [settings.backend, settings.image, settings.cpus, settings.memory_mb, settings.pids, settings.network,
                 settings.workspace_quota_mb, settings.tmpfs_mb, list(settings.env_passthrough),
                 settings.cgroup_root, settings.quota_mount, settings.quota_project_start,
-                settings.quota_inodes, 'runtime-hardening-v3']
+                settings.quota_inodes, settings.configuration_id, 'runtime-hardening-v3']
     if settings.backend == 'docker':
         material.append('docker-cpu-v1')
     if settings.backend in ('ssh', 'managed'):
@@ -281,10 +281,10 @@ async def run(settings: SandboxSettings, *, manager: SandboxManager | None = Non
         await manager.release(f'accept-{tag}-a', 'probe')
         names = await docker.list_managed()
         from .backends.docker import container_name
-        gone = container_name(f'accept-{tag}-a', 'probe', settings.profile) not in names
+        gone = container_name(f'accept-{tag}-a', 'probe', settings.profile, settings.configuration_id) not in names
         # A container whose lease this process forgot (the crash case) must be found and removed by `reap`.
         manager._last_used.pop(f'accept-{tag}-b/probe', None)
-        orphan = container_name(f'accept-{tag}-b', 'probe', settings.profile)
+        orphan = container_name(f'accept-{tag}-b', 'probe', settings.profile, settings.configuration_id)
         removed = await manager.reap(only_names={orphan})
         leftover = orphan in await docker.list_managed()
         return gone and not leftover, f'released container removed; {len(removed)} orphan(s) reclaimed'

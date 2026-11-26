@@ -4,8 +4,8 @@ from __future__ import annotations
 from uuid import UUID
 from typing import Literal
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, Query, Response
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy.orm import Session
 
 from nexus_api.dependencies.platform import get_database_session, get_principal
@@ -82,3 +82,39 @@ def write_provider(tenant_id: UUID, name: str, body: ProviderInput,
                    principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """Save provider settings and invalidate the previous connection binding."""
     return sandbox_profiles.provider_settings(db, principal, tenant_id, name, body.model_dump())
+
+
+class ConfigurationInput(BaseModel):
+    """Typed profile envelope; backend-specific values are checked by the deployment settings validator."""
+    model_config = ConfigDict(extra='forbid')
+    revision: int = Field(ge=0)
+    values: dict[str, JsonValue]
+
+
+@router.get('')
+def list_profiles(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)):
+    """List profiles and editor defaults, including unavailable profiles."""
+    return sandbox_profiles.list_profiles(db, principal, tenant_id)
+
+
+@router.post('', status_code=201)
+def create_profile(tenant_id: UUID, body: ConfigurationInput, principal: Principal = Depends(get_principal),
+                   db: Session = Depends(get_database_session)):
+    """Create a console-managed profile with a generated stable name."""
+    return sandbox_profiles.save_configuration(db, principal, tenant_id, None, body.values, body.revision)
+
+
+@router.put('/{name}/configuration')
+def edit_profile(tenant_id: UUID, name: str, body: ConfigurationInput,
+                 principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Update backend-specific profile parameters with optimistic concurrency."""
+    return sandbox_profiles.save_configuration(db, principal, tenant_id, name, body.values, body.revision)
+
+
+@router.delete('/{name}', status_code=204)
+def delete_profile(tenant_id: UUID, name: str, revision: int = Query(ge=0),
+                   principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Delete only an unused profile."""
+    sandbox_profiles.delete_configuration(db, principal, tenant_id, name, revision)
+    return Response(status_code=204)

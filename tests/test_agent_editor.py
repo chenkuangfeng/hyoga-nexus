@@ -271,3 +271,86 @@ remote_profile = "node"
     assert response.status_code == 200 and 'supplier-secret' not in response.text and writes
     assert load_config().get('remote').remote_policy_digest == ''
     assert api.get(url).json()['reason'] == 'sandbox_connection_required'
+
+
+def test_sandbox_configuration_crud_permissions_revision_and_live_catalog(api, database, tmp_path, monkeypatch):
+    from nexus_platform.identity.service import resolve_user
+    from nexus_sandbox.settings import load_config
+
+    tenant_id, _, _, _, _ = _stack(database)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs').mkdir()
+    (tmp_path / 'configs' / 'nexus.toml').write_text(f'''
+[sandbox]
+enabled = true
+workspace_root = "{tmp_path / 'shared'}"
+[sandbox.profiles.local]
+type = "local"
+''')
+    root = f'/api/v1/tenants/{tenant_id}/admin/sandboxes'
+    listing = api.get(root)
+    assert listing.status_code == 200 and not listing.json()['can_manage']
+    values = {'type': 'docker', 'display_name': '研发隔离环境', 'image': 'python:3.12-slim'}
+    assert api.post(root, json={'revision': 0, 'values': values}).status_code == 403
+    with database() as db, db.begin():
+        resolve_user(db, OWNER).is_platform_admin = True
+    created = api.post(root, json={'revision': 0, 'values': values})
+    assert created.status_code == 201, created.text
+    name = created.json()['name']
+    assert name.startswith('sandbox_') and created.json()['display_name'] == '研发隔离环境'
+    assert load_config().get(name).image == 'python:3.12-slim'
+    assert api.post(root, json={'revision': 0, 'values': values}).status_code == 409
+    edited = api.put(f'{root}/{name}/configuration', json={'revision': 1, 'values': values | {'memory_mb': 1024}})
+    assert edited.status_code == 200
+    assert load_config().get(name).memory_mb == 1024
+    assert edited.json()['revision'] == 2
+    catalog = api.get(f'/api/v1/tenants/{tenant_id}/agent-tools').json()
+    assert any(item['name'] == name and item['display_name'] == '研发隔离环境' for item in catalog['sandbox_profiles'])
+    assert api.delete(f'{root}/{name}?revision=1').status_code == 409
+    assert api.delete(f'{root}/{name}?revision=2').status_code == 204
+    assert load_config().get(name) is None
+    assert api.get(f'{root}/{name}').status_code == 404
+    assert api.delete(f'{root}/local?revision=3').status_code == 409
+
+
+def test_sandbox_configuration_preserves_published_references_and_invalidates_runtime_policy(api, database, tmp_path, monkeypatch):
+    from nexus_platform.identity.service import resolve_user
+    from nexus_platform.persistence.models import AgentRecord, AgentVersionRecord
+    from nexus_sandbox.settings import load_config, save_profile_policy
+    tenant_id, _, agent, version, _ = _stack(database)
+    with database() as db, db.begin():
+        resolve_user(db, OWNER).is_platform_admin = True
+        db.get(AgentRecord, agent.id).draft_budgets = {'behavior': {'sandbox_profile': 'docker'}}
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs').mkdir()
+    (tmp_path / 'configs' / 'nexus.toml').write_text(f'''
+[sandbox]
+enabled = true
+default_profile = "local"
+workspace_root = "{tmp_path / 'shared'}"
+[sandbox.profiles.local]
+type = "local"
+[sandbox.profiles.docker]
+type = "docker"
+''')
+    root = f'/api/v1/tenants/{tenant_id}/admin/sandboxes'
+    save_profile_policy(load_config().get('docker'), {'exec_timeout_max_seconds': 30, 'paused': True})
+    invalid = api.put(f'{root}/docker/configuration', json={
+        'revision': 0, 'values': {'type': 'docker', 'cpus': 0, 'display_name': 'Bad'},
+    })
+    assert invalid.status_code == 422
+    changed = api.put(f'{root}/docker/configuration', json={
+        'revision': 0, 'values': {'type': 'docker', 'display_name': 'Updated', 'exec_timeout_max_seconds': 60},
+    })
+    assert changed.status_code == 200, changed.text
+    settings = load_config().get('docker')
+    assert settings.exec_timeout_max_seconds == 60 and settings.paused
+    assert api.delete(f'{root}/docker?revision=1').status_code == 409
+
+    with database() as db, db.begin():
+        db.get(AgentRecord, agent.id).draft_budgets = {}
+        db.get(AgentVersionRecord, version.id).budgets = {'behavior': {'sandbox_profile': 'docker'}}
+    assert api.delete(f'{root}/docker?revision=1').status_code == 409
+    assert api.put(f'{root}/docker/configuration', json={
+        'revision': 1, 'values': {'type': 'local', 'display_name': 'Changed backend'},
+    }).status_code == 409

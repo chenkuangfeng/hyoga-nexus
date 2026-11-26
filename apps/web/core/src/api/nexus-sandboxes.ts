@@ -1,4 +1,4 @@
-import { get, post, put } from '@nexus-web/core/utils/request'
+import { del, get, post, put } from '@nexus-web/core/utils/request'
 import type { AgentSandboxProfile } from './nexus-agents'
 
 export interface SandboxPolicy {
@@ -8,7 +8,12 @@ export interface SandboxPolicy {
   skill_timeout_max_seconds: number
 }
 
+export type SandboxBackend = AgentSandboxProfile['type']
+export type SandboxConfiguration = Record<string, string | number | boolean | string[]>
 export interface SandboxDetails extends AgentSandboxProfile {
+  description?: string
+  revision?: number
+  configuration?: SandboxConfiguration | null
   editable: boolean
   policy: SandboxPolicy
   network: 'none' | 'bridge' | null
@@ -72,4 +77,27 @@ export function getGatewayExecutions(tenant: string, profile: string): Promise<{
 }
 export function retryGatewayCleanup(tenant: string, profile: string, id: string): Promise<Pick<GatewayExecution, 'id' | 'state'>> {
   return post<Pick<GatewayExecution, 'id' | 'state'>>(`${profilePath(tenant, profile)}/executions/${encodeURIComponent(id)}/cleanup`, {})
+}
+
+
+export interface SandboxCatalog {
+  items: SandboxDetails[]
+  can_manage: boolean
+  enabled: boolean
+  revision: number
+  defaults: Record<SandboxBackend, SandboxConfiguration>
+}
+const collectionPath = (tenant: string) => `/api/v1/tenants/${encodeURIComponent(tenant)}/admin/sandboxes`
+
+export function listSandboxProfiles(tenant: string): Promise<SandboxCatalog> {
+  return get<SandboxCatalog>(collectionPath(tenant))
+}
+export function saveSandboxConfiguration(tenant: string, name: string | null, values: SandboxConfiguration,
+  revision: number): Promise<SandboxDetails> {
+  const body = { values, revision }
+  return name ? put<SandboxDetails>(`${profilePath(tenant, name)}/configuration`, body)
+    : post<SandboxDetails>(collectionPath(tenant), body)
+}
+export function deleteSandboxConfiguration(tenant: string, name: string, revision: number): Promise<void> {
+  return del<void>(`${profilePath(tenant, name)}?revision=${revision}`)
 }

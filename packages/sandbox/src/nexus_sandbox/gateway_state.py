@@ -91,6 +91,7 @@ class GatewayState:
         if execution.profile not in self.providers:
             self.journal.write(execution.id, container_name=container_name(
                 execution.tenant_id, f'{execution.session_id}-{execution.id}', execution.profile,
+                self.profiles[execution.profile].configuration_id,
             ), expires_at=time.time() + execution.timeout_seconds + 120)
 
     async def execute_docker(self, execution, settings, run):

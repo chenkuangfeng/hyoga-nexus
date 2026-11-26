@@ -661,6 +661,11 @@ test('沙箱引擎读取部署档位并按引擎和名称筛选', async ({ page,
     output_capture: 'bounded', cleanup: 'persistent', connected_at: '2026-11-23', template_revision: 'v1' }
   api.handle(request => {
     const path = new URL(request.url()).pathname
+    if (path === '/api/v1/tenants/a/admin/sandboxes') return { body: { can_manage: false,
+      enabled: true, revision: 0, defaults: {}, items: [
+        { name: 'isolated', type: 'docker', default: true, available: true, reason: '' },
+        { name: 'pending', type: 'bwrap', default: false, available: false, reason: 'sandbox_not_accepted' }, managed,
+      ] } }
     if (path === '/api/v1/tenants/a/admin/sandboxes/remote') return { body: detail }
     if (path === '/api/v1/tenants/a/admin/sandboxes/remote/connect') {
       return { body: { ...detail, connection: gatewayConnection } }
@@ -840,4 +845,58 @@ test('企业知识库确认上传、切换目标目录并保留本地文件夹�
   await expect(list.getByRole('button', { name: 'nested.txt', exact: true })).toBeVisible()
   await expect(list.getByRole('button', { name: 'plain.txt', exact: true })).toHaveCount(0)
   await expectResponsive(page)
+})
+
+
+test('沙箱引擎支持新增编辑删除配置', async ({ page, api }) => {
+  await api.signIn()
+  const root = '/api/v1/tenants/a/admin/sandboxes'
+  const defaults = { type: 'docker', image: 'python:3.11-slim', memory_mb: 512, cpus: 1, pids: 128,
+    workspace_quota_mb: 512, exec_timeout_max_seconds: 120, skill_timeout_seconds: 120, skill_timeout_max_seconds: 600 }
+  let revision = 0
+  let record: Record<string, unknown> | undefined
+  api.handle(request => {
+    const path = new URL(request.url()).pathname
+    if (path === root && request.method() === 'GET') return { body: { items: record ? [record] : [],
+      can_manage: true, enabled: true, revision, defaults: { docker: defaults } } }
+    if (path === root && request.method() === 'POST' || path === root + '/new/configuration') {
+      const body = request.postDataJSON()
+      expect(body.revision).toBe(revision)
+      revision++
+      record = { name: 'new', display_name: body.values.display_name, description: body.values.description,
+        type: 'docker', default: false, available: true, reason: '', editable: true, revision,
+        configuration: body.values, policy: { paused: false, exec_timeout_max_seconds: 120,
+          skill_timeout_seconds: 120, skill_timeout_max_seconds: 600 }, network: 'none', image: body.values.image,
+        remote_profile: null, workspace_quota_mb: 512, limits: { cpus: 1 }, acceptance: null }
+      return { status: request.method() === 'POST' ? 201 : 200, body: record }
+    }
+    if (path === root + '/new' && request.method() === 'DELETE') {
+      expect(new URL(request.url()).searchParams.get('revision')).toBe(String(revision))
+      record = undefined; revision++
+      return { status: 204, body: null }
+    }
+    if (path === root + '/new' && record) return { body: record }
+  })
+  await page.goto('settings')
+  await page.locator('#enterprise-navigation').getByRole('link', { name: '沙箱引擎' }).click()
+  await page.getByRole('button', { name: '添加沙箱', exact: true }).click()
+  let editor = page.locator('.sandbox-config-drawer')
+  await expect(editor.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+  await editor.getByRole('textbox', { name: '沙箱名称', exact: true }).fill('测试 Docker')
+  await editor.getByRole('textbox', { name: '运行镜像', exact: true }).fill('python:3.12-slim')
+  await page.screenshot({ path: '/tmp/nexus-sandbox-config-editor.png' })
+  await editor.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(page.locator('.sandbox-card')).toContainText('测试 Docker')
+  await page.keyboard.press('Escape')
+  await page.locator('.sandbox-card').click()
+  editor = page.locator('.sandbox-config-drawer')
+  await expect(editor.getByRole('textbox', { name: '运行镜像', exact: true })).toHaveValue('python:3.12-slim')
+  await editor.getByRole('textbox', { name: '沙箱名称', exact: true }).fill('修改 Docker')
+  await editor.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(page.locator('.sandbox-card')).toContainText('修改 Docker')
+  await page.keyboard.press('Escape')
+  await page.locator('.sandbox-card').getByRole('button', { name: '更多', exact: true }).click()
+  await page.getByText('删除沙箱', { exact: true }).click()
+  await page.getByRole('button', { name: '删除沙箱', exact: true }).click()
+  await expect(page.locator('.sandbox-card')).toHaveCount(0)
 })

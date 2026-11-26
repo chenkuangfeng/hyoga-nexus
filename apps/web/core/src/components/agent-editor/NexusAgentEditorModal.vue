@@ -663,10 +663,10 @@ const sandboxProfiles = computed<AgentSandboxProfile[]>(() => catalog.value?.san
 const sandboxOptions = computed(() => {
   const fallback = sandboxProfiles.value.find(profile => profile.default)
   return [
-    { value: '', label: t('nexusAgent.sandboxProfile.defaultOption', { name: fallback?.name || '-' }) },
+    { value: '', label: t('nexusAgent.sandboxProfile.defaultOption', { name: fallback?.display_name || fallback?.name || '-' }) },
     ...sandboxProfiles.value.map(profile => ({
       value: profile.name,
-      label: t('nexusAgent.sandboxProfile.option', { name: profile.name, type: sandboxTypeLabel(profile.type) })
+      label: t('nexusAgent.sandboxProfile.option', { name: profile.display_name || profile.name, type: sandboxTypeLabel(profile.type) })
         + (profile.available ? '' : ` · ${sandboxReasonLabel(profile.reason)}`),
     })),
   ]

@@ -166,6 +166,8 @@
 
 ### 8. 沙箱后端
 
+沙箱管理界面已支持参照 WeKnora 的卡片列表与五类引擎配置编辑，覆盖修订冲突、引用删除保护和 worker 自动加载。真实供应商与受限宿主环境验收仍按沙箱阶段的未完成项执行。
+
 - **目标**：评估候选后端，选择通过隔离验收的实现。
 - **参考项目**：DeerFlow（`sandbox/`）；Hermes Agent（`tools/environments/`）；DeepSeek Harness（接缝设计）；FastGPT（`agent-sandbox`，仅参考）；Octop（`infra/backend/` 可插拔工作区后端：本地、Docker、PostgreSQL、对象存储，`resolver.py` 组合路由，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。
 - **子计划**：

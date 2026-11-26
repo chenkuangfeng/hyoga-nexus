@@ -122,7 +122,7 @@ def sandbox_profiles(db) -> list[dict]:
     listed = []
     for name, settings in config.profiles.items():
         reason = _sandbox(profile_facts(db, config, settings))
-        listed.append({'name': name, 'type': settings.backend, 'default': name == config.default_profile,
+        listed.append({'name': name, 'display_name': settings.display_name or name, 'type': settings.backend, 'default': name == config.default_profile,
                        'available': not reason, 'reason': reason})
     return listed
 

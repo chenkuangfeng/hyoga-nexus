@@ -312,3 +312,7 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 员工工作台和企业管理端复用 `core/src/components/knowledge/documents/` 中的目录布局、树、新建目录弹窗、文件选择器和上传确认弹窗。目录树及选择器沿用 WeKnora e1f9a6166 的同名组件，上传确认沿用其 `views/knowledge/components/UploadConfirmDialog.vue` 和 `FolderPickerMenu.vue`。确认前可增删文件及调整目标目录，传输保留本地文件夹名称和相对路径。工作台继续使用上传与解析任务队列，企业端使用知识库默认解析配置并展示当前批次进度，企业或知识库等作用域变化时丢弃待确认批次。企业 Wiki 从「文档」标签进入源文件管理。手动创建目录可保存没有文件的目录，浏览器文件夹选择传入包含文件的路径。
 
 文档列表和卡片复用 Web core 的 `DocumentListView.vue`、`DocumentCardView.vue` 及其文件图标、操作菜单和空状态，源自 WeKnora e1f9a6166 的 `views/knowledge/components/` 同名视图。共用工具栏处理目录面包屑、搜索和视图切换，同源应用读取同一个浏览器视图偏好。Workspace 注入标签编辑器和解析轨迹，企业端通过原生 DTO 提供文档状态、大小、更新时间及错误原因，通过操作菜单执行下载、重试、重新索引和删除。
+
+### 沙箱引擎配置
+
+企业管理端参照 WeKnora 的 SandboxSettings 与 SandboxConfigEditorDrawer，提供类型页签、搜索、状态卡片、更多菜单和共享 SettingDrawer 编辑器。基本信息、连接参数、资源与超时、高级参数按引擎动态展示。平台管理员可新增、编辑和删除，其他企业管理员只读。编辑失败显示刷新与检查提示，保存后打开运行详情，衔接现有连接验证及供应商配置。界面通过配置修订号防止覆盖其他管理员的更新，企业切换时关闭编辑器并忽略过期请求结果。

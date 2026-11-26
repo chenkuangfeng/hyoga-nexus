@@ -81,7 +81,7 @@ class SandboxManager:
         key = f'{tenant_id}/{session_id}'
         if self.settings.backend == 'docker':
             container_session = str(session_id) if execution_id is None else f'{session_id}-{execution_id}'
-            executor = DockerExecutor(self.docker, container_name(str(tenant_id), container_session, self.settings.profile), workspace, outputs, skills, envs)
+            executor = DockerExecutor(self.docker, container_name(str(tenant_id), container_session, self.settings.profile, self.settings.configuration_id), workspace, outputs, skills, envs)
         elif self.settings.backend == 'bwrap':
             executor = BwrapExecutor(self.bwrap, workspace, outputs, skills, envs)
         elif self.settings.backend == 'local':
@@ -113,7 +113,7 @@ class SandboxManager:
         if self.docker is None:
             return []
         now = time.monotonic() if now is None else now
-        live = {container_name(*key.split('/', 1), self.settings.profile) for key, used in self._last_used.items()
+        live = {container_name(*key.split('/', 1), self.settings.profile, self.settings.configuration_id) for key, used in self._last_used.items()
                 if now - used < self.settings.idle_seconds}
         removed = []
         for name in await self.docker.list_managed():

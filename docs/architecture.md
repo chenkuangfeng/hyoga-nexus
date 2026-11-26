@@ -283,6 +283,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 
 ### 2.9 沙箱与执行环境
 
+管理端按 WeKnora 配置界面提供五类档位的增删改查，覆盖配置保存于共享控制卷，API 与 worker 依修订自动加载。全局启用仍由部署控制，共享配置仅平台管理员维护，详见 [沙箱配置注册](../packages/sandbox/docs/design.md#控制台配置注册)。
+
 借鉴：DeerFlow `sandbox/`（lease 租约、虚拟路径、原子写入、文件锁）；Hermes `tools/environments/`（多后端）；DeepSeek Harness（接缝）；FastGPT `agent-sandbox`（容器镜像，仅参考）；Octop `infra/backend/`（工作区后端可插拔：本地、Docker、PostgreSQL、对象存储，与控制面数据库分离）；octop-harness（`backends/docker_sandbox.py`、`backends/bwrap_shell.py` 目录隔离、`backends/local_shell.py` 虚拟路径转换、`backends/composite.py`、`backends/probe.py` 写读删连通探测、`security/ssrf.py` 出站请求 SSRF 防护）；octop-browser（`cdp/` 纯 asyncio CDP 客户端与进程管理、`dom/builder.py` 面向模型的分层 DOM、`profile.py` 会话持久化、`idle.py` 空闲回收、`mcp_server.py` 以 MCP 暴露浏览器操作）。
 
 - **接缝**：`CommandExecutorPort`（命令执行）与 `FileStorePort`（文件读写与产物）。后端包括 `local`（开发）、`bwrap`、`docker`、`ssh`（可信部署）与 `managed`（HTTPS 托管接口）。SSH 节点共用文件卷；HTTPS 网关与 worker 共用会话目录，云实例通过有界文件 API 同步当前会话，隔离由执行节点提供。

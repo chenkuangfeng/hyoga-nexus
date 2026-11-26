@@ -90,6 +90,7 @@ export type SandboxProfileReason =
 /** One sandbox profile the operator defined (`sandbox_profiles` of `GET /agent-tools`); an agent picks one by name. */
 export interface AgentSandboxProfile {
   name: string
+  display_name?: string
   type: 'local' | 'docker' | 'bwrap' | 'ssh' | 'managed'
   default: boolean
   available: boolean
