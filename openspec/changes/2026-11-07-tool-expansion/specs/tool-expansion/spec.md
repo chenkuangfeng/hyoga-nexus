@@ -104,3 +104,10 @@
 #### Scenario: 长表单保存失败
 - **WHEN** 用户滚动至长表单底部保存而请求失败
 - **THEN** 错误在保存按钮附近可见，用户可保留输入并修正后重试
+
+### Requirement: Windows 控制台保存
+沙箱配置注册 SHALL 支持 Windows API 宿主，不依赖 POSIX 文件锁，并在临时文件关闭后执行原子替换。注册文件 SHALL 按 UTF-8 读取，继续校验修订冲突。
+
+#### Scenario: Windows 管理员保存中文配置
+- **WHEN** Windows API 接受合法中文配置
+- **THEN** 获取跨进程锁并持久化，可重新读取，临时文件已关闭且失败时释放锁

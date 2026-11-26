@@ -5,10 +5,13 @@ forms overwriting newer settings. Secrets remain deployment references or encryp
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
 import tempfile
+import time
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,6 +23,41 @@ if TYPE_CHECKING:
     from .settings import SandboxConfig, SandboxSettings
 
 FILE = '_sandbox_profiles.json'
+_WINDOWS = os.name == 'nt'
+
+
+@contextmanager
+def _registry_lock(root: Path):
+    """Serialize registry changes on POSIX and Windows without requiring a sandbox executor.
+
+    Windows byte-range locks are always taken at offset zero; explicit nonblocking retries avoid
+    the finite retry window of LK_LOCK. Only contention errors are retried, never storage errors.
+    """
+    if not _WINDOWS:
+        with mutation(root, 'profile-registry'):
+            yield
+        return
+    import msvcrt
+    directory = root / '_execution_locks'
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = directory / 'profile-registry'
+    if target.is_symlink():
+        raise OSError(errno.ELOOP, 'Registry lock must not be a symbolic link')
+    with target.open('a+b') as stream:
+        while True:
+            stream.seek(0)
+            try:
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError as error:
+                if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
+                time.sleep(.05)
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 class RegistryConflict(Exception):
@@ -29,7 +67,7 @@ class RegistryConflict(Exception):
 def read(root: Path) -> dict:
     """Read a bounded registry, returning revision zero when absent and rejecting invalid storage."""
     try:
-        with (root / FILE).open() as stream:
+        with (root / FILE).open(encoding='utf-8') as stream:
             raw = stream.read(262145)
         if len(raw) > 262144:
             raise ValueError
@@ -97,7 +135,7 @@ def write(config: SandboxConfig, name: str, values: dict | None, revision: int) 
     """Atomically create/update an override or record a deletion, comparing the submitted revision."""
     root = Path(config.workspace_root)
     root.mkdir(parents=True, exist_ok=True)
-    with mutation(root, 'profile-registry'):
+    with _registry_lock(root):
         data = read(root)
         if data['revision'] != revision:
             raise RegistryConflict
@@ -114,13 +152,16 @@ def write(config: SandboxConfig, name: str, values: dict | None, revision: int) 
         serialized = json.dumps(data, ensure_ascii=False)
         if len(serialized) > 262144 or len(data['profiles']) > 100 or len(data['deleted']) > 1000:
             raise DeploymentConfigError('Sandbox profile registry capacity exceeded')
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=root, delete=False) as stream:
-            temporary = Path(stream.name)
-            try:
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=root, delete=False) as stream:
+                temporary = Path(stream.name)
                 stream.write(serialized)
                 stream.flush()
                 os.fsync(stream.fileno())
-                temporary.chmod(0o640)
-                os.replace(temporary, root / FILE)
-            finally:
+            # Windows refuses rename/delete while the temporary file is still open.
+            temporary.chmod(0o640)
+            os.replace(temporary, root / FILE)
+        finally:
+            if temporary is not None:
                 temporary.unlink(missing_ok=True)

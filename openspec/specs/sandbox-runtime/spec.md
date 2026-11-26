@@ -80,3 +80,11 @@
 #### Scenario: 保存失败后重试
 - **WHEN** 用户提交失败
 - **THEN** 错误在保存按钮附近可见，已输入参数保留，修正后可再次提交
+
+### Requirement: Windows 注册保存兼容
+
+沙箱配置注册 SHALL 在 Windows 使用原生跨进程锁，无须 fcntl，并在临时文件关闭后原子替换。JSON SHALL 以 UTF-8 读取，写入异常 SHALL 释放锁并清理临时文件，修订冲突保护 SHALL 保持。
+
+#### Scenario: Windows API 保存
+- **WHEN** Windows 宿主的管理员保存合法配置
+- **THEN** 配置可持久化并重新读取，不因 POSIX 文件锁依赖失败

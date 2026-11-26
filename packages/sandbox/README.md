@@ -67,3 +67,5 @@ Docker 命令、文件工具写入和供应商同步使用共享卷上的跨进�
 ## 控制台保存位置与反馈
 
 控制台新增、编辑、删除写入 `<workspace_root>/_sandbox_profiles.json`，默认路径为 `data/sandbox/_sandbox_profiles.json`，不修改 `configs/nexus.toml`。API 与 worker 必须读取同一共享目录。保存成功会重新读取目录并显示配置；保存配置不等于通过执行验收。编辑器固定底部显示未满足的保存条件及保存错误，输入不会因失败丢失；发生修订冲突时关闭编辑器并刷新列表后再提交。
+
+配置保存支持 Windows API 宿主，使用 Windows 文件锁并在临时文件关闭后替换共享注册文件；无需安装 `fcntl`。配置使用 UTF-8，支持中文名称。执行节点仍须满足各后端的运行条件，配置保存兼容不等于 Windows 原生隔离验收通过。

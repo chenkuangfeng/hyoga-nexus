@@ -100,3 +100,7 @@ API 在共享 `workspace_root/_sandbox_profiles.json` 保存配置覆盖和删�
 worker 以部署文件和注册文件的修改标识刷新配置。运行参数哈希作为配置版本，Docker 容器名称与验收指纹纳入版本。修改运行参数后旧策略与连接证明失效，暂停标记保留，需重新验证托管连接并执行隔离验收。名称或描述修改不改变运行版本。在途调用继续使用原管理器，新调用使用新配置。
 
 管理 API 为 `GET/POST /tenants/{tenant}/admin/sandboxes`、`PUT /{name}/configuration` 与 `DELETE /{name}?revision=...`，写入携带读取时的 `revision`。保存后进入详情，可继续连接验证、供应商管理和实例回收。
+
+### Windows 控制台宿主
+
+配置注册在 Windows 使用 `msvcrt` 字节范围锁，在 POSIX 保留 `fcntl` 锁；并发写入继续以全局修订号拒绝过期提交。注册 JSON 以 UTF-8 读写，临时文件在 flush/fsync 并关闭后才进行原子替换，失败清理临时文件。该兼容性适用于控制台配置保存，不声明 Windows 原生隔离执行能力。
