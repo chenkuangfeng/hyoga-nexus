@@ -263,6 +263,45 @@ test('会话产物在右侧折叠，失败可以重试，切换会话清除旧�
   await expect.poll(async () => (await page.locator('.platform-route-outlet').boundingBox())!.width >= 300).toBe(true)
 })
 
+test('会话可显式要求智能体把已验证流程整理成私有技能草稿', async ({ page, api }) => {
+  await api.signIn(); bootWorkspace(api)
+  const messages = [{ id: 'm1', run_id: null, sequence: 1, role: 'user', content: '部署流程已完成', created_at: '2026-11-27T00:00:00Z' }]
+  const completedRun = { id: 'r1', tenant_id: 'a', session_id: 's1', principal_id: 'u', status: 'completed',
+    attempt: 1, error_code: null, error_message: null, created_at: '2026-11-27T00:00:00Z',
+    started_at: '2026-11-27T00:00:00Z', ended_at: '2026-11-27T00:00:01Z', queue_position: null, attention_required: false }
+  let boundTools = ['skill_search', 'skill_manage', 'skill_save']
+  api.handle(request => {
+    const url = new URL(request.url()), path = url.pathname
+    if (path === '/api/v1/tenants/a/agents') return { body: [{ id: 'agent', name: 'Agent', description: '', status: 'published',
+      published_version_id: 'av1', resource_bindings: boundTools.map(resource_id => ({ kind: 'tool', resource_id })) }] }
+    if (path === '/api/v1/tenants/a/sessions') return { body: [{ id: 's1', agent_version_id: 'av1', title: '部署流程' }] }
+    if (path === '/api/v1/tenants/a/sessions/s1/messages') return { body: { messages, latest_run: completedRun, blocked: null } }
+    if (path === '/api/v1/tenants/a/native/sessions/s1/tool-grants') return { body: [] }
+    if (path === '/api/v1/tenants/a/artifacts') return { body: { items: [] } }
+    if (path === '/api/v1/tenants/a/sessions/s1/runs' && request.method() === 'POST') return { body: {
+      ...completedRun, id: 'r2', status: 'queued', started_at: null, ended_at: null,
+    } }
+    if (path === '/api/v1/tenants/a/runs/r2') return { body: { ...completedRun, id: 'r2' } }
+  })
+  await page.route('**/api/v1/tenants/a/runs/r2/events*', route => route.fulfill({
+    status: 200, headers: { 'content-type': 'text/event-stream' }, body: '',
+  }))
+  await page.goto('/platform/chat/s1')
+  const learn = page.getByTestId('chat-learn-skill')
+  await expect(learn).toBeVisible()
+  const submitted = page.waitForRequest(request => request.method() === 'POST'
+    && new URL(request.url()).pathname === '/api/v1/tenants/a/sessions/s1/runs')
+  await learn.click()
+  const request = await submitted
+  expect(request.postDataJSON().message).toContain('SKILL.md')
+  expect(request.postDataJSON().message).toContain('skill_save')
+  boundTools = []
+  const refreshedAgents = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/tenants/a/agents')
+  await page.reload()
+  await refreshedAgents
+  await expect(page.getByTestId('chat-learn-skill')).toHaveCount(0)
+})
+
 test('员工知识库新建目录并将所选文件上传到当前目录', async ({ page, api }) => {
   page.setDefaultTimeout(15000)
   await api.signIn()

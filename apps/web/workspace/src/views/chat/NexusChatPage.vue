@@ -45,6 +45,11 @@
   <div v-else class="chat" :class="{ 'is-embedded': compact, 'has-artifact-panel': artifactsOpen && !compact }">
     <div v-if="!compact" class="chat-topbar">
       <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
+      <t-button v-if="canLearnCurrentConversation" class="chat-learn-skill-button"
+        size="small" variant="outline" data-testid="chat-learn-skill"
+        :aria-label="t('nexusChat.learnSkill')" @click="learnCurrentConversation">
+        {{ t('nexusChat.learnSkill') }}
+      </t-button>
       <!-- Nexus: tools allowed for the rest of this session (openspec 2026-11-06-tool-call-hardening 7.3). -->
       <t-popup v-if="toolGrants.length" trigger="click" placement="bottom-right" overlay-class-name="wk-popover">
         <button type="button" class="tool-grants-toggle" :aria-label="$t('nativeRuns.toolGrants.title')">
@@ -284,6 +289,21 @@ const agentOptions = computed(() => agents.value.map(agent => ({
 })))
 
 const isReplying = computed(() => isActive(run.value))
+const canLearnCurrentConversation = computed(() => {
+  if (props.compact || isWelcome.value || isReplying.value || blockedSession.value
+      || !messages.value.some((message) => message.role === 'user')) return false
+  const agent = agents.value.find((item) => item.published_version_id === sessionAgentVersion.value)
+  const boundTools = new Set((agent?.resource_bindings ?? [])
+    .filter((binding) => binding.kind === 'tool')
+    .map((binding) => binding.resource_id))
+  return boundTools.has('skill_manage') && boundTools.has('skill_save') && boundTools.has('skill_search')
+})
+
+/** Submit a normal user turn that asks the current agent to draft a skill from this conversation. */
+function learnCurrentConversation() {
+  if (!canLearnCurrentConversation.value) return
+  void sendText(t('nexusChat.learnSkillPrompt'))
+}
 
 /** WeKnora shows a run-level error as the answer text; the code identifies the cause. */
 function failureMessage(code: string): string {
@@ -823,6 +843,10 @@ defineExpose({ sendText })
         background: var(--td-bg-color-container-hover);
         color: var(--td-text-color-primary);
     }
+}
+
+.chat-learn-skill-button {
+    flex-shrink: 0;
 }
 
 .tool-grants-panel {

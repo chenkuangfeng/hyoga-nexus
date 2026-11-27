@@ -64,6 +64,8 @@ export interface AgentView {
   status: string
   /** Version id to create Sessions against; null while the agent has never been published. */
   published_version_id: string | null
+  /** Tool bindings of the published version (or visible draft for a maintainer). */
+  resource_bindings?: Array<{ kind: string; resource_id: string }>
 }
 
 export interface ConversationMessage {
