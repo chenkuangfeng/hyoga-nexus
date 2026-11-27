@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from nexus_core.runtime import RuntimeFault
 
 from .assembly import append_context, trim_tool_results
+from .history import compact_history
 
 
 def message_bytes(messages) -> int:
@@ -94,8 +95,40 @@ class ContextAssembler:
                 'strategy': 'summary_or_archive' if self.policy.summarize_context else 'bounded_excerpts'})
         return history, removed
 
-    def view(self, history, *, working, turn: int) -> ModelView:
-        """Build the messages for this turn; call after turn.before transforms have run."""
+    def view(self, history, *, working, turn: int, definitions=None) -> ModelView:
+        """Build this turn's model view after turn.before transforms have run.
+
+        Pass the actual turn definitions when tools are withdrawn so the estimate matches the request.
+        """
         messages = append_context(trim_tool_results(history, self.policy.tool_result_window_rounds),
                                   working.anchor(turn), tail=self.policy.working_memory_tail)
-        return ModelView(messages, estimate_message_tokens(messages) + self._definitions_tokens)
+        definition_tokens = self._definitions_tokens if definitions is None else estimate_tokens(str(definitions))
+        return ModelView(messages, estimate_message_tokens(messages) + definition_tokens)
+
+    def fit_token_budget(self, messages, *, definitions, token_budget: int) -> tuple[list, int, int]:
+        """Compact this model view to fit the current input allowance without changing stored history.
+
+        Run-level character compaction may not trigger when cumulative token usage is nearly exhausted.
+        This deterministic pass keeps the system message and newest complete user/tool exchange intact;
+        older turns become labelled excerpts. It returns fitted messages, estimated input tokens and the
+        number of omitted source messages.
+        """
+        definition_tokens = estimate_tokens(str(definitions))
+        candidate = list(messages)
+        removed = 0
+        while True:
+            estimate = estimate_message_tokens(candidate) + definition_tokens
+            if estimate <= token_budget:
+                return candidate, estimate, removed
+            framing = 4 * len(candidate) + 4 * sum(len(message.tool_calls) for message in candidate)
+            payload_tokens = token_budget - definition_tokens - framing
+            if payload_tokens <= 0:
+                raise RuntimeFault('budget_exhausted')
+            try:
+                compacted, omitted = compact_history(tuple(candidate), payload_tokens * 3)
+            except RuntimeFault:
+                raise RuntimeFault('budget_exhausted') from None
+            if not omitted or len(compacted) >= len(candidate):
+                raise RuntimeFault('budget_exhausted')
+            candidate = list(compacted)
+            removed += omitted

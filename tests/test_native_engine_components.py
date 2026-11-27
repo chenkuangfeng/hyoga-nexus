@@ -12,7 +12,7 @@ import pytest
 
 from nexus_core.native import NativePolicy
 from nexus_core.runtime import (
-    AgentRuntime, ExecutionBudget, ModelMessage, RunContext, RunRequest, RuntimeCapabilities,
+    AgentRuntime, ExecutionBudget, ModelChunk, ModelMessage, RunContext, RunRequest, RuntimeCapabilities,
     RuntimeFault, RuntimeProgress, ToolCall, ToolDefinition, ToolDisposition, ToolResult,
 )
 from nexus_runtimes.native.context.assembler import ContextAssembler, estimate_message_tokens, message_bytes
@@ -230,9 +230,16 @@ def test_error_budget_exhaustion_stops_the_run_explicitly():
 class _Store:
     def __init__(self):
         self.events = []
+        self.messages = []
 
     async def emit(self, kind, payload):
         self.events.append((kind, payload))
+
+    async def message(self, message):
+        self.messages.append(message)
+
+    async def save_progress(self, progress):
+        pass
 
 
 def _assembler():
@@ -265,6 +272,60 @@ def test_cjk_input_estimate_is_not_charged_as_three_tokens_per_character():
     message = ModelMessage('user', '创建技能' * 100)
     assert message_bytes([message]) == 1200
     assert estimate_message_tokens([message]) < message_bytes([message]) // 2
+
+
+def test_model_view_compacts_old_exchanges_to_fit_remaining_token_allowance():
+    assembler = _assembler()
+    definitions = _defs('echo')
+    assembler.freeze(definitions)
+    call = ToolCall('call-1', 'echo', '{"text":"latest"}')
+    messages = [
+        ModelMessage('system', 'system instructions'),
+        ModelMessage('user', 'old request ' + 'x' * 1500),
+        ModelMessage('assistant', 'old response ' + 'y' * 1000),
+        ModelMessage('user', 'current skill request'),
+        ModelMessage('assistant', '', (call,)),
+        ModelMessage('tool', 'latest tool result', tool_call_id=call.id),
+    ]
+    fitted, estimate, omitted = assembler.fit_token_budget(messages, definitions=definitions, token_budget=500)
+    assert omitted == 2
+    assert estimate <= 500
+    assert 'current skill request' in [message.content for message in fitted]
+    assert 'latest tool result' in [message.content for message in fitted]
+    assert not any('x' * 100 in message.content for message in fitted)
+
+
+def test_orchestrator_compacts_history_when_total_token_budget_is_nearly_spent():
+    class _Model:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            yield ModelChunk('text', text='完成')
+            yield ModelChunk('done', finish_reason='stop')
+
+        async def close(self):
+            pass
+
+    class _Tools:
+        async def definitions(self):
+            return (_defs('echo')[0],)
+
+    old_text = 'historical details ' + 'z' * 7000
+    model, store = _Model(), _Store()
+    budget = ExecutionBudget(max_tokens=1500, max_output_tokens=256, max_context_chars=20000)
+    request = RunRequest('run', (
+        ModelMessage('system', 'system'), ModelMessage('user', old_text),
+        ModelMessage('assistant', 'older result'), ModelMessage('user', 'create a skill from this'),
+    ), budget)
+    context = RunContext(CancellationToken(), progress=RuntimeProgress())
+    outcome = asyncio.run(RunOrchestrator(model, _Tools(), store).run(request, context))
+    assert outcome.status == 'completed'
+    sent = model.requests[0].messages
+    assert any('Earlier conversation excerpts' in message.content for message in sent)
+    assert not any(old_text in message.content for message in sent)
+    assert any(message.content == 'create a skill from this' for message in sent)
 
 
 def test_message_bytes_counts_content_and_tool_arguments():

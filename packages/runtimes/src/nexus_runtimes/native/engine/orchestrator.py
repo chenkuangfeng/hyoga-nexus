@@ -170,18 +170,29 @@ class RunOrchestrator:
                     await self._transform(run_id, 'turn.before', turn, history, done)
                     await self.store.emit('turn.started', {'turn': turn})
                     self.context.ensure_frozen(definitions)
-                    view = self.context.view(history, working=working, turn=turn)
-                    model_history, input_estimate = view.messages, view.input_estimate
                     # Last allowed turn: withdraw tools and say so; any call the model still makes is refused below.
                     last_turn = progress.turns >= budget.max_rounds
                     turn_definitions = definitions
                     if last_turn:
                         turn_definitions = ()
-                        model_history = list(model_history) + [ModelMessage('user', FINAL_ANSWER_HINT)]
+                    view = self.context.view(history, working=working, turn=turn, definitions=turn_definitions)
+                    model_history = list(view.messages)
+                    if last_turn:
+                        model_history.append(ModelMessage('user', FINAL_ANSWER_HINT))
                         await self.store.emit('turn.tools_disabled', {'turn': turn})
-                    remaining = budget.max_tokens - progress.tokens - input_estimate
-                    if remaining <= 0:
+                    remaining_total = budget.max_tokens - progress.tokens
+                    # Keep enough room for a useful answer or tool call. The remaining allowance is
+                    # then used to compact older context instead of rejecting a long but recoverable Run.
+                    output_reserve = min(budget.max_output_tokens, max(256, remaining_total // 8))
+                    input_allowance = remaining_total - output_reserve
+                    if input_allowance <= 0:
                         raise RuntimeFault('budget_exhausted')
+                    model_history, input_estimate, omitted = self.context.fit_token_budget(
+                        model_history, definitions=turn_definitions, token_budget=input_allowance)
+                    if omitted:
+                        await self.store.emit('context.compacted', {'omitted_messages': omitted,
+                            'strategy': 'token_budget_excerpts'})
+                    remaining = remaining_total - input_estimate
                     await self.store.save_progress(progress)
                     await self._hook(run_id, 'model.before', turn)
                     await self.store.emit('model.started', {'turn': turn})
