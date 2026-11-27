@@ -15,7 +15,7 @@ from nexus_core.runtime import (
     AgentRuntime, ExecutionBudget, ModelMessage, RunContext, RunRequest, RuntimeCapabilities,
     RuntimeFault, RuntimeProgress, ToolCall, ToolDefinition, ToolDisposition, ToolResult,
 )
-from nexus_runtimes.native.context.assembler import ContextAssembler, message_bytes
+from nexus_runtimes.native.context.assembler import ContextAssembler, estimate_message_tokens, message_bytes
 from nexus_runtimes.native.context.working import WorkingMemory
 from nexus_runtimes.native.engine.cancellation import CancellationToken
 from nexus_runtimes.native.engine.completion import CompletionJudge, JudgeDecision
@@ -250,14 +250,21 @@ def test_definitions_are_frozen_and_a_changed_schema_fails_explicitly():
         assembler.ensure_frozen(_defs('echo', 'write'))
 
 
-def test_view_counts_message_bytes_and_definition_size_for_the_budget():
+def test_view_estimates_tokens_for_messages_and_tool_definitions():
     assembler = _assembler()
     definitions = _defs('echo')
     assembler.freeze(definitions)
     history = [ModelMessage('user', 'hello')]
     working = WorkingMemory({}, NativePolicy())
     view = assembler.view(history, working=working, turn=1)
-    assert view.input_estimate >= message_bytes(view.messages) + len(str(definitions).encode())
+    assert view.input_estimate >= estimate_message_tokens(view.messages)
+    assert view.input_estimate >= (len('hello'.encode()) + 2) // 3
+
+
+def test_cjk_input_estimate_is_not_charged_as_three_tokens_per_character():
+    message = ModelMessage('user', '创建技能' * 100)
+    assert message_bytes([message]) == 1200
+    assert estimate_message_tokens([message]) < message_bytes([message]) // 2
 
 
 def test_message_bytes_counts_content_and_tool_arguments():

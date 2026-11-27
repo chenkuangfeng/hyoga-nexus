@@ -10,6 +10,7 @@ long Run from compacting again on every turn once it sits near the limit.
 import asyncio
 from nexus_core.runtime import ModelMessage, ModelRequest, RuntimeFault
 from nexus_runtimes.native.engine.cancellation import cancellable
+from .assembler import estimate_tokens
 from .history import compact_history
 
 
@@ -49,7 +50,7 @@ async def compact(model, messages, limit, token, budget, progress, store, *, hig
     older, recent = history[:cut], history[cut:]
     archive = '\n'.join(f'[{m.role}] {m.content}' for m in older)
     remaining = budget.max_tokens - progress.tokens
-    if remaining <= len(archive.encode()) + 256:
+    if remaining <= estimate_tokens(archive) + 256:
         return compact_within(messages, high, low, limit)
     summarizer, owned = model, False
     if summarizer_factory is not None:
@@ -100,5 +101,5 @@ async def compact(model, messages, limit, token, budget, progress, store, *, hig
     finally:
         if owned and hasattr(summarizer, 'close'):
             await summarizer.close()
-        progress.tokens += usage or len(archive.encode()) + len(output.encode())
+        progress.tokens += usage or estimate_tokens(archive) + estimate_tokens(output)
         await store.save_progress(progress)

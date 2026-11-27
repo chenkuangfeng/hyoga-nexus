@@ -32,6 +32,8 @@ Chat Completions 将已有模型版本的空字符串思考强度视为使用服
 
 `usage.py` 接受缺失/null 为未知零值，计数必须是 0..2**53-1 的 JSON 整数，拒绝布尔、字符串、负数、分数和越界。Responses/Chat 缺 total 时用 input+output，Anthropic 用 input+cache_read+cache_creation+output；有效显式 total 包括零值予以保留。累计输出快照覆盖而非累加，Anthropic 输入/缓存计数不会被输出尾块清零。零/缺用量时 Native 仍按既有方式估算预算；不能由计数零推断真实免费调用，也不宣称已观测失败尝试的真实供应商消耗。
 
+模型请求前的输入预估按消息文本、工具参数和工具定义分别统计，使用每三个 UTF-8 字节约一个 token 的保守近似，并加入消息/调用协议开销；UTF-8 字节不再一比一扣 token 预算。收到供应商 usage 后以实际计数更新 Run 预算。零/缺 usage 的降级估值也使用相同文本 token 近似。
+
 已确认的上游行为差异原记录于已删除的 OpenSpec 批次设计（见提交 `2a9ee03`）。完整模型签名/历史、供应商兼容参数、多模态和 cache 状态治理不在此局部修复的完成声明内。
 
 ## 行为补齐（native-engine-behaviour）

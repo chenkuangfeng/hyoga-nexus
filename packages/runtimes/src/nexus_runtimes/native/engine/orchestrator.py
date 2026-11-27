@@ -189,7 +189,12 @@ class RunOrchestrator:
                         response = await self.turn_executor.execute(model_history, turn_definitions, remaining, token, turn, budget)
                     finally:
                         await self._hook(run_id, 'model.after', turn)
-                    progress.tokens += response.tokens or input_estimate + len(response.text.encode()) + sum(len(c.arguments.encode()) for c in response.calls)
+                    if response.tokens:
+                        progress.tokens += response.tokens
+                    else:
+                        from nexus_runtimes.native.context.assembler import estimate_tokens
+                        progress.tokens += input_estimate + estimate_tokens(response.text)
+                        progress.tokens += sum(estimate_tokens(call.arguments) for call in response.calls)
                     completed = ('model.completed', {'turn': turn, 'tokens': progress.tokens, 'usage': response.usage})
                     if progress.tokens > budget.max_tokens:
                         await self.store.emit(*completed)

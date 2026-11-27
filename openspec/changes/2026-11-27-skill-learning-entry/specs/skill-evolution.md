@@ -1,5 +1,9 @@
 ## ADDED Requirements
 
+### Requirement: 中文会话的 token 预算估算
+
+Native Run 在模型调用前估算输入预算时，必须将 UTF-8 文本按 token 近似值计算，并计入消息与工具调用开销；不得把每个 UTF-8 字节直接当作一个 token。供应商返回实际 usage 后，以实际值累计 Run token 消耗。
+
 ### Requirement: Worker 本地技能缓存与用户数据工作区
 
 数据库是技能正文、脚本、版本、草稿、权限与审批状态的权威来源。Worker 仅可将当前 Run 通过动态授权检查的技能版本投射到本机 workspace，并按内容哈希缓存；缓存不授予使用权，权限撤销后工具调用必须拒绝。投射的技能版本只读。
