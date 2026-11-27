@@ -1,6 +1,6 @@
 """`exec_skill` through the Run store and the real worker (openspec 2026-11-07-skill-evolution, S2).
 
-The sandbox is the `local` profile (development mode with `allow_local`), which runs real processes; the worker,
+The sandbox is the `local` profile (bubblewrap isolated on Linux), which runs real processes; the worker,
 gateway, approval records and Run store are the real ones. These tests replace those of the retired
 `run_skill_script`: the same gates, events and audit, with scripts that need no declaration.
 """
@@ -38,6 +38,8 @@ FILES = {
     'scripts/handoff_read.py': 'print(open("handoff.txt").read())\n',
     'scripts/missing_module.py': 'import a_module_that_does_not_exist\n',
     'scripts/slow.py': 'import time\ntime.sleep(30)\n',
+    'scripts/data_write.py': 'import os\nfrom pathlib import Path\np=Path(os.environ["NEXUS_DATA_DIR"]) / "shared.txt"\np.write_text("persistent user data")\nprint(os.environ["TMPDIR"])\n',
+    'scripts/data_read.py': 'import os\nfrom pathlib import Path\nprint((Path(os.environ["NEXUS_DATA_DIR"]) / "shared.txt").read_text())\n',
     'scripts/perl.pl': '#!/usr/bin/perl\nprint 1;\n',
     'refs/notes.md': 'notes',
 }
@@ -53,6 +55,9 @@ def gate(monkeypatch, tmp_path):
                     encoding='utf-8')
     monkeypatch.setattr('nexus_core.deployment.config_path', lambda: path)
     monkeypatch.setattr('nexus_platform.configuration.auth_settings', lambda *a, **k: SimpleNamespace(mode='development'))
+    settings = load_settings(path, 'local')
+    from nexus_sandbox.acceptance import FileReportStore, fingerprint
+    FileReportStore().save(settings, {'passed': True, 'fingerprint': fingerprint(settings)})
     import nexus_worker.sandbox_runtime as runtime
     runtime._config.cache_clear(), runtime._managers.clear()
     yield path
@@ -77,7 +82,7 @@ def _run_context(database, budgets=None, tools=TOOLS, skill=SKILL, files=FILES):
 def _exec(database, gate, script, args=None, stdin=None, timeout=0, **context_options):
     tenant_id, run_id, context, task = _run_context(database, **context_options)
     store = DurableRuntimeStore(database, context, 'script-worker', task)
-    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id))
+    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id), user_id=str(context.principal_id))
     run = asyncio.run(store.exec_skill('greeter', script, args, stdin, timeout, session))
     return tenant_id, run_id, run
 
@@ -86,7 +91,7 @@ def test_the_tool_is_offered_and_the_script_runs_with_input_events_and_an_audit_
     tenant_id, run_id, context, task = _run_context(database)
     assert context is not None and 'exec_skill' in [name for name, _, _ in context.bindings]
     store = DurableRuntimeStore(database, context, 'script-worker', task)
-    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id))
+    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id), user_id=str(context.principal_id))
     run = asyncio.run(store.exec_skill('greeter', 'scripts/go.py', [], '{"text": "world"}', 0, session))
     assert run.refused == '' and run.result.exit_code == 0 and run.result.stdout.strip() == 'hello world'
     with database() as db:
@@ -112,10 +117,25 @@ def test_the_script_finds_its_directory_and_the_output_directory(database, gate)
 def test_scripts_of_one_skill_hand_data_over_through_the_workspace(database, gate):
     tenant_id, run_id, context, task = _run_context(database)
     store = DurableRuntimeStore(database, context, 'script-worker', task)
-    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id))
+    session = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id), user_id=str(context.principal_id))
     first = asyncio.run(store.exec_skill('greeter', 'scripts/handoff_write.py', [], None, 0, session))
     second = asyncio.run(store.exec_skill('greeter', 'scripts/handoff_read.py', [], None, 0, session))
     assert first.result.exit_code == 0 and second.result.stdout.strip() == 'from step one'
+
+
+def test_skill_data_persists_per_user_and_host_secrets_are_not_mounted(database, gate):
+    _, _, context, task = _run_context(database)
+    store = DurableRuntimeStore(database, context, 'script-worker', task)
+    manager = SandboxManager(load_settings(gate))
+    first_session = manager.session(str(context.tenant_id), str(context.session_id), user_id=str(context.principal_id))
+    first = asyncio.run(store.exec_skill('greeter', 'scripts/data_write.py', [], None, 0, first_session))
+    second_session = manager.session(str(context.tenant_id), 'another-session', user_id=str(context.principal_id))
+    second = asyncio.run(store.exec_skill('greeter', 'scripts/data_read.py', [], None, 0, second_session))
+    guard = asyncio.run(second_session.exec('test -r /etc/shadow && echo host-readable || echo blocked',
+                                            cwd='/workspace', timeout_seconds=5))
+    assert first.result.exit_code == 0 and first.result.stdout.strip() == '/data/tmp'
+    assert second.result.stdout.strip() == 'persistent user data'
+    assert guard.stdout.strip() == 'blocked'
 
 
 @pytest.mark.parametrize('script', ['scripts/nope.py', '../scripts/go.py', '/etc/passwd', 'SKILL.md', 'refs/notes.md', 'scripts/perl.pl'])
@@ -170,7 +190,8 @@ def test_load_skill_names_the_real_directory_and_the_script_is_there(database, g
     assert '${NEXUS_SKILL_DIR}' not in text and '$NEXUS_SKILL_DIR as it is' in text  # only the braced form is replaced
     path = text.split('python3 ', 1)[1].split(' ', 1)[0]
     assert path.endswith('/scripts/go.py') and '/skills/greeter@' in path
-    assert open(path, encoding='utf-8').read().startswith('import json')  # projected, so the path is real
+    projected = session.skills_dir / path.removeprefix('/skills/')
+    assert projected.read_text(encoding='utf-8').startswith('import json')  # the jailed /skills view maps to the read-only host cache
 
 
 def test_without_a_sandbox_the_placeholder_is_left_alone_and_loading_still_works(database, gate):
@@ -242,10 +263,10 @@ def test_without_a_usable_sandbox_the_tool_is_not_offered_and_the_call_is_refuse
         asyncio.run(store.exec_skill('greeter', 'scripts/go.py', [], None, 0, None))
 
 
-def test_outside_development_mode_a_local_profile_does_not_offer_it(database, gate, monkeypatch):
+def test_local_profile_is_available_in_production_after_isolation_acceptance(database, gate, monkeypatch):
     monkeypatch.setattr('nexus_platform.configuration.auth_settings', lambda *a, **k: SimpleNamespace(mode='production'))
     _, _, context, _ = _run_context(database)
-    assert 'exec_skill' not in [name for name, _, _ in context.bindings]
+    assert 'exec_skill' in [name for name, _, _ in context.bindings]
 
 
 def test_the_agent_setting_off_hides_the_tool(database, gate):
@@ -367,7 +388,7 @@ def test_a_script_uses_the_dependencies_built_at_install_time(database, gate, mo
     done = asyncio.run(store.exec_skill('greeter', 'scripts/use.py', [], None, 0, session))
     assert done.refused == '' and done.result.exit_code == 0, done
     value, executable = done.result.stdout.split()
-    assert value == '42' and '_skill_envs' in executable  # the environment's interpreter, not the host's
+    assert value == '42' and '/skill_envs/' in executable  # the environment's interpreter, not the host's
     # Another profile without a built copy is refused with a hint rather than failing at import time.
     other = SandboxManager(load_settings(gate)).session(str(context.tenant_id), str(context.session_id))
     other.envs_dir = tmp_path / 'nowhere'

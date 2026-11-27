@@ -9,7 +9,11 @@
 3. 运行 `uv run python -m nexus_worker --sandbox-check`，全部通过后写入验收报告（平台数据库的 `sandbox_acceptance` 表，并在 `workspace_root` 下留一份 JSON 副本；未配置数据库时只写文件）。 worker 启动时会对未通过验收的档位打警告（只读，不自动验收）。
 4. 在智能体编辑器里打开「沙箱」工具组并勾选需要的工具。部署、验收、智能体开关三者缺一，工具都不会出现。
 
-`local` 后端不隔离，只用于开发，需要 `allow_local = true` 和开发认证模式，且不能运行验收。
+`local` 档位仍在 Worker 主机运行，但由 bubblewrap 为每条命令建立隔离 jail。生产启用需 Linux 安装 `bwrap`、设置 `allow_local = true` 并通过 `uv run python -m nexus_worker --sandbox-check --profile local` 验收；任何条件不满足都会拒绝执行，不会回退到宿主无隔离执行。Windows 原生 local 不支持生产隔离。
+
+local 的 `network = "bridge"` 会加入 Worker 主机网络命名空间，以便技能访问部署配置允许的数据库等服务；这不是 Docker bridge，也不提供目标级出站白名单。生产中应保持 `network = "none"`，确需联网时配合主机防火墙限制 Worker 的出站目标。
+
+Native Run 会按当前用户 ID 在 `<workspace_root>/<tenant-id>/users/<user-id>/` 建立持久目录：`skills/` 保存从数据库按内容哈希投射的只读技能版本与可重建草稿镜像，`data/` 是该用户技能共享的数据区，`data/tmp/` 用作临时目录。多 Worker 部署必须将 `workspace_root` 配置为 API/worker 共享的持久卷；技能数据库仍是事实源，工作区缓存不代表授权。
 
 ## 模块
 

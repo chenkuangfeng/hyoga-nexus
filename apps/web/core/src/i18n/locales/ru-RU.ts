@@ -8859,7 +8859,7 @@ export default {
     groupReason: {
       reasonSandboxDisabled: "Песочница не включена",
       reasonNotAccepted: "Песочница не прошла проверку изоляции",
-      reasonLocalNotAllowed: "Локальный профиль не изолирован; только режим разработки и с разрешения оператора",
+      reasonLocalNotAllowed: "Для локального профиля нужны Linux bubblewrap, успешная проверка изоляции и разрешение оператора",
       reasonUnknown: "Выбранного профиля песочницы не существует",
       reasonSandboxRequired: "Нужна доступная песочница",
       reasonWebDisabled: "Web-инструменты не включены в этом развёртывании",
@@ -9028,7 +9028,7 @@ export default {
       available: "Готов",
       reasonSandboxDisabled: "песочница выключена",
       reasonNotAccepted: "не пройдена проверка изоляции",
-      reasonLocalNotAllowed: "локальный профиль без изоляции доступен только в режиме разработки с разрешения оператора",
+      reasonLocalNotAllowed: "Для локального профиля нужны Linux bubblewrap, успешная проверка изоляции и разрешение оператора",
       reasonUnknown: "такого профиля нет",
       reasonOther: "причина неизвестна",
       reasonUnavailable: "песочница сейчас недоступна",

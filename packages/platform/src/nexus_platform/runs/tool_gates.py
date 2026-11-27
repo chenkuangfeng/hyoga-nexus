@@ -22,11 +22,10 @@ from nexus_core.native import GROUP_IDS, group_enabled
 class GateFacts:
     """Deployment facts the availability checks read. Built once per process or request, never per tool call."""
     sandbox_enabled: bool = False
-    #: Latest isolation acceptance passed for the agent's sandbox profile (or, for a `local` profile, the operator
-    #: allowed it in development mode).
+    #: Latest isolation acceptance passed for the agent's sandbox profile.
     sandbox_accepted: bool = False
     #: Why an enabled sandbox is not usable when that is not simply "no accepted report": an unknown profile name or
-    #: a `local` profile outside development mode.
+    #: a `local` profile without its Linux bubblewrap isolation prerequisites.
     sandbox_reason: str = ''
     #: The operator enabled outbound web access (`[web].enabled`).
     web_enabled: bool = False
@@ -67,7 +66,6 @@ def hidden_groups(facts: GateFacts, switches: dict[str, bool] | None) -> frozens
 
 def profile_facts(db, config, settings, web_enabled: bool = False) -> GateFacts:
     """Gate facts for one sandbox profile of an enabled `[sandbox]` section (`settings` None: no such profile)."""
-    from nexus_platform.configuration import auth_settings
     from nexus_sandbox import acceptance
     from nexus_sandbox.settings import sandbox_local_allowed
     if settings is None:
@@ -77,9 +75,14 @@ def profile_facts(db, config, settings, web_enabled: bool = False) -> GateFacts:
     if settings.backend == 'managed' and not settings.remote_policy_digest:
         return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_connection_required', web_enabled=web_enabled)
     if settings.backend == 'local':
-        allowed = sandbox_local_allowed(settings, development_mode=auth_settings().mode == 'development')
-        return GateFacts(sandbox_enabled=True, sandbox_accepted=allowed,
-                         sandbox_reason='' if allowed else 'sandbox_local_not_allowed', web_enabled=web_enabled)
+        allowed = sandbox_local_allowed(settings)
+        if not allowed:
+            return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_local_not_allowed',
+                             web_enabled=web_enabled)
+        from nexus_platform.runs.sandbox_acceptance import DbReportStore
+        accepted = acceptance.passed(settings, DbReportStore(db))
+        return GateFacts(sandbox_enabled=True, sandbox_accepted=accepted,
+                         sandbox_reason='' if accepted else 'sandbox_not_accepted', web_enabled=web_enabled)
     if settings.backend == 'ssh' and not settings.trusted_ssh:
         return GateFacts(sandbox_enabled=True, sandbox_reason='sandbox_ssh_not_allowed', web_enabled=web_enabled)
     from nexus_platform.runs.sandbox_acceptance import DbReportStore
@@ -91,9 +94,8 @@ def deployment_gate_facts(db, profile: str | None = None) -> GateFacts:
     """Facts read from the deployment for one agent: whether the sandbox is enabled and its profile usable.
 
     `profile` is the agent's `sandbox_profile`; empty or None takes the deployment's default profile. A stored
-    isolation report counts only when it matches that profile's backend, image and limits. A `local` profile never
-    passes acceptance: it is usable only when the operator set `allow_local` and the platform runs in development
-    auth mode (reason `sandbox_local_not_allowed` otherwise). A broken `[sandbox]` section leaves the group
+    isolation report counts only when it matches that profile's backend, image and limits. A `local` profile uses
+    bubblewrap on Linux and requires explicit `allow_local` plus a passed isolation acceptance. A broken `[sandbox]` section leaves the group
     unavailable rather than failing the Run. `db` is read for the acceptance report only.
     """
     from nexus_core.deployment import DeploymentConfigError

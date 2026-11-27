@@ -353,9 +353,9 @@ def test_local_backend_has_no_docker_to_reap(tmp_path):
 
 # ------------------------------------------------------------------ acceptance bookkeeping
 
-def test_acceptance_refuses_the_local_backend(tmp_path):
+def test_acceptance_refuses_local_when_operator_opt_in_is_disabled(tmp_path):
     with pytest.raises(SandboxError) as error:
-        run(acceptance.run(local_settings(tmp_path)))
+        run(acceptance.run(SandboxSettings(backend='local', workspace_root=str(tmp_path / 'sbx'), allow_local=False)))
     assert error.value.code == 'sandbox_acceptance_requires_isolating_backend'
 
 

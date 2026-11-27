@@ -10,7 +10,7 @@ and the isolation acceptance need, so they work per profile without knowing abou
     enabled = false                  # the sandbox stays off until the operator turns it on
     default_profile = "local"        # used by agents that name no profile
     workspace_root = "data/sandbox"
-    allow_local = false              # `local` profiles also need the development auth mode
+    allow_local = false              # production local requires Linux bubblewrap isolation and a passed acceptance
     allow_local_scripts = false      # builtin skills declaring execution = "local" may run on a `local` profile
 
     [sandbox.profiles.docker]
@@ -58,7 +58,8 @@ _COMMON_KEYS = frozenset({'type', 'display_name', 'description', 'workspace_quot
 _TYPE_KEYS = {
     'docker': _COMMON_KEYS | {'image', 'cpus', 'memory_mb', 'pids', 'network', 'install_network', 'tmpfs_mb', 'idle_seconds'},
     'bwrap': _COMMON_KEYS | {'memory_mb', 'network', 'install_network', 'cgroup_root', 'cpus', 'pids'},
-    'local': _COMMON_KEYS - {'quota_mount', 'quota_project_start', 'quota_inodes'},
+    'local': (_COMMON_KEYS - {'quota_mount', 'quota_project_start', 'quota_inodes'})
+    | {'network', 'memory_mb', 'cgroup_root', 'cpus', 'pids'},
     'ssh': (_COMMON_KEYS - {'env_passthrough', 'build_timeout_seconds', 'env_max_mb',
                             'quota_mount', 'quota_project_start', 'quota_inodes'})
     | {'ssh_host', 'ssh_user', 'ssh_port', 'ssh_identity_file', 'ssh_known_hosts', 'remote_profile', 'trusted_ssh'},
@@ -194,7 +195,7 @@ def _profile(values: dict, where: str, name: str, top: dict, kind: str) -> Sandb
                                   lambda v: 1 <= v <= 4000000000),
         quota_inodes=_pick(values, where, 'quota_inodes', int, 10000, lambda v: 100 <= v <= 1000000),
     )
-    if kind == 'bwrap':
+    if kind in ('bwrap', 'local'):
         group = _pick(values, where, 'cgroup_root', str, '', lambda v: v == '' or _absolute_path(v))
         if not group and ('cpus' in values or 'pids' in values):
             raise _invalid(where, 'cgroup_root')
@@ -391,9 +392,16 @@ def load_settings(path: Path | None = None, profile: str | None = None) -> Sandb
     return selected
 
 
-def sandbox_local_allowed(settings: SandboxSettings, *, development_mode: bool) -> bool:
-    """Whether a `local` profile may be used: the operator allowed it and the platform runs in development auth mode."""
-    return settings.allow_local and development_mode
+def sandbox_local_allowed(settings: SandboxSettings, *, development_mode: bool | None = None) -> bool:
+    """Whether a local profile can provide its required host-local, bubblewrap-enforced filesystem boundary.
+
+    ``development_mode`` remains an accepted compatibility argument; local is no longer development-only, but it
+    still requires an explicit operator opt-in and a Linux host with bubblewrap installed.
+    """
+    if not settings.allow_local or not os.sys.platform.startswith('linux'):
+        return False
+    from .backends.bwrap import find_binary
+    return find_binary() is not None
 
 
 def with_profile(settings: SandboxSettings, name: str) -> SandboxSettings:

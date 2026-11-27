@@ -232,6 +232,8 @@ def test_scripts_need_a_sandbox_that_can_run_them(database, ids, tmp_path, monke
                     '[sandbox.profiles.local]\ntype = "local"\n', encoding='utf-8')
     monkeypatch.setattr('nexus_core.deployment.config_path', lambda: path)
     monkeypatch.setattr('nexus_platform.configuration.auth_settings', lambda *a, **k: SimpleNamespace(mode='development'))
+    monkeypatch.setattr('nexus_platform.runs.tool_gates.deployment_gate_facts',
+                        lambda *a, **k: SimpleNamespace(sandbox_enabled=True, sandbox_accepted=True))
     assert _do(database, private.save, tenant.id, alice, 'my-notes', profile='local')['build_state'] == 'ready'
 
 

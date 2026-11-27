@@ -33,9 +33,10 @@ class SandboxSession:
     """Session surface for the tools. File operations validate before reaching the store."""
 
     def __init__(self, files: FileStorePort, executor: CommandExecutorPort, *, default_timeout: float,
-                 max_timeout: float, output_limit: int, skills_dir: Path | None = None, envs_dir: Path | None = None):
+                 max_timeout: float, output_limit: int, skills_dir: Path | None = None, envs_dir: Path | None = None,
+                 data_dir: Path | None = None):
         self.files, self.executor, self.skills_dir = files, executor, skills_dir
-        self.envs_dir = envs_dir
+        self.envs_dir, self.data_dir = envs_dir, data_dir
         self.default_timeout, self.max_timeout, self.output_limit = default_timeout, max_timeout, output_limit
 
     async def list_files(self, path: str, *, limit: int) -> list[FileEntry]:
@@ -84,11 +85,20 @@ class SandboxSession:
         projection.project(self.skills_dir, name, content_hash, files)
         return f"{mount.rstrip('/')}/{projection.directory_name(name, content_hash)}"
 
+    def sync_skill_draft(self, name: str, files: dict[str, str] | None) -> None:
+        """Refresh the rebuildable mirror of a database-owned draft in the user's persistent skills workspace."""
+        if self.skills_dir is None:
+            raise SandboxError('sandbox_skills_unavailable')
+        projection.sync_draft(self.skills_dir, name, files)
+
     def skill_environment(self, skill_dir: str, env_name: str | None = None) -> dict[str, str]:
         """Variables a skill script finds: its own directory and the directory for deliverables, and, when it has a
         built dependency environment (`env_name`), where that environment's packages are (``NODE_PATH``)."""
         variables = {'NEXUS_SKILL_DIR': skill_dir,
                      'NEXUS_SKILL_OUTPUT_DIR': getattr(self.executor, 'outputs_path', '/outputs')}
+        if self.data_dir is not None and getattr(self.executor, 'data_mount', None):
+            variables['NEXUS_DATA_DIR'] = self.executor.data_mount
+            variables['TMPDIR'] = f"{self.executor.data_mount.rstrip('/')}/tmp"
         base = self.env_path(env_name) if env_name else None
         if base is not None:
             variables['NODE_PATH'] = f'{base}/node/node_modules'

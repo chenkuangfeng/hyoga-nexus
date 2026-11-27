@@ -109,11 +109,14 @@ def test_invalid_profiles_are_rejected_without_echoing_values(tmp_path, body):
         assert leaked not in str(error.value)
 
 
-def test_a_local_profile_is_usable_only_in_development_mode_with_the_operator_switch():
+def test_a_local_profile_requires_operator_switch_and_bubblewrap(monkeypatch):
     off, on = SandboxSettings(backend='local'), SandboxSettings(backend='local', allow_local=True)
-    assert not sandbox_local_allowed(off, development_mode=True)
-    assert not sandbox_local_allowed(on, development_mode=False)
-    assert sandbox_local_allowed(on, development_mode=True)
+    monkeypatch.setattr('nexus_sandbox.backends.bwrap.find_binary', lambda: '/usr/bin/bwrap')
+    monkeypatch.setattr('nexus_sandbox.settings.os.sys.platform', 'linux')
+    assert not sandbox_local_allowed(off)
+    assert sandbox_local_allowed(on)
+    monkeypatch.setattr('nexus_sandbox.settings.os.sys.platform', 'win32')
+    assert not sandbox_local_allowed(on)
 
 
 # ------------------------------------------------------------------ parameters reach the backends
@@ -179,25 +182,29 @@ def _facts(monkeypatch, tmp_path, body, mode='development'):
     monkeypatch.setattr('nexus_core.deployment.config_path', lambda: path)
     monkeypatch.setattr('nexus_platform.configuration.auth_settings', lambda: type('A', (), {'mode': mode})())
     monkeypatch.setattr(tool_gates, '_web_enabled', lambda: False)
+    monkeypatch.setattr('nexus_sandbox.settings.sandbox_local_allowed', lambda settings, **kwargs: settings.allow_local)
+    actual_passed = acceptance.passed
+    monkeypatch.setattr(acceptance, 'passed', lambda settings, store=None:
+                        True if settings.backend == 'local' else actual_passed(settings, store))
 
 
 def test_gating_follows_the_agents_profile(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, FULL)
-    assert tool_gates.deployment_gate_facts(db, 'local').sandbox_accepted is True            # allow_local and development mode
+    assert tool_gates.deployment_gate_facts(db, 'local').sandbox_accepted is True            # accepted isolated local profile
     assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'docker'))['sandbox'] == 'sandbox_not_accepted'
     assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'ghost'))['sandbox'] == 'sandbox_profile_unknown'
     assert tool_gates.deployment_gate_facts(db, '').sandbox_accepted is False                # the empty name is the default: docker
 
 
-def test_a_local_profile_is_unavailable_outside_development_mode(db, monkeypatch, tmp_path):
+def test_a_local_profile_is_available_in_production_after_isolation_acceptance(db, monkeypatch, tmp_path):
     _facts(monkeypatch, tmp_path, FULL, mode='production')
     facts = tool_gates.deployment_gate_facts(db, 'local')
-    assert unavailable_groups(facts)['sandbox'] == 'sandbox_local_not_allowed'
-    assert 'sandbox' in hidden_groups(facts, {'sandbox': True})
+    assert facts.sandbox_accepted
+    assert 'sandbox' not in hidden_groups(facts, {'sandbox': True})
 
 
-def test_local_profile_is_unavailable_in_production_without_failing(db, monkeypatch, tmp_path):
-    _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = true', mode='production')
+def test_local_profile_remains_unavailable_when_operator_has_not_allowed_it(db, monkeypatch, tmp_path):
+    _facts(monkeypatch, tmp_path, '[sandbox]\nenabled = true\nallow_local = false', mode='production')
     assert unavailable_groups(tool_gates.deployment_gate_facts(db, 'local'))['sandbox'] == 'sandbox_local_not_allowed'
 
 
@@ -329,7 +336,7 @@ def test_the_worker_startup_check_reports_unaccepted_profiles_without_running_pr
         def __exit__(self, *_):
             return False
     with caplog.at_level('WARNING', logger='nexus_worker'):
-        assert sorted(sandbox_startup_check(Factory())) == ['bwrap', 'docker']   # `local` is never accepted, so never listed
+        assert sorted(sandbox_startup_check(Factory())) == ['bwrap', 'docker']   # `local` has a mocked passed report
     assert 'sandbox-check' in caplog.text
     for name in ('docker', 'bwrap'):
         settings = load_config().get(name)

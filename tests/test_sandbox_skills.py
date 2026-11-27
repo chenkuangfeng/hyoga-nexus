@@ -74,15 +74,42 @@ def test_binary_files_are_projected_byte_for_byte(tmp_path):
     assert (target / 'assets' / 'blob.bin').read_bytes() == bytes(range(256))
 
 
+def test_private_draft_mirror_tracks_database_draft_contents(tmp_path):
+    root = tmp_path / 'users' / 'u1' / 'skills'
+    body = '---\nname: hello\ndescription: test\n---\n# Hello\n'
+    projection.sync_draft(root, 'hello', {'SKILL.md': body, 'scripts/run.py': 'print(1)'})
+    assert (root / 'drafts' / 'hello' / 'SKILL.md').read_text() == body
+    assert (root / 'drafts' / 'hello' / 'scripts' / 'run.py').read_text() == 'print(1)'
+    projection.sync_draft(root, 'hello', {'SKILL.md': body})
+    assert not (root / 'drafts' / 'hello' / 'scripts' / 'run.py').exists()
+    projection.sync_draft(root, 'hello', None)
+    assert not (root / 'drafts' / 'hello').exists()
+
+
+def test_user_data_is_persistent_and_exposed_only_at_the_data_mount(tmp_path):
+    settings = SandboxSettings(enabled=True, backend='local', workspace_root=str(tmp_path / 'sbx'), allow_local=True)
+    manager = SandboxManager(settings)
+    first = manager.session('t1', 's1', user_id='u1')
+    second = manager.session('t1', 's2', user_id='u1')
+    assert first.data_dir == second.data_dir
+    assert (first.data_dir / 'tmp').is_dir()
+    env = first.skill_environment('/skills/hello@hash')
+    assert env['NEXUS_DATA_DIR'] == '/data' and env['TMPDIR'] == '/data/tmp'
+    args = manager.bwrap.jail_arguments(first.files.roots['/workspace'], first.files.roots['/outputs'], '/workspace', 'true',
+                                        skills=first.skills_dir, data=first.data_dir)
+    assert [str(first.data_dir.resolve()), '/data'] == args[args.index('--bind', args.index('/outputs')) + 1:
+                                                                args.index('--bind', args.index('/outputs')) + 3]
+
+
 # ------------------------------------------------------------------ the session
 
-def test_the_session_projects_into_the_sessions_own_directory_and_names_the_path_a_command_sees(tmp_path):
+def test_the_session_projects_a_hashed_skill_into_the_jail_visible_read_only_root(tmp_path):
     session = local_session(tmp_path)
     directory = session.project_skill('report-writer', HASH, {'SKILL.md': 'body', 'scripts/hello.sh': 'echo hi'})
-    assert directory.endswith('/skills/report-writer@' + 'a' * 12)  # on the local profile commands see host paths
-    assert directory.startswith(str(tmp_path / 'sbx' / 't1' / 's1'))
+    assert directory.endswith('/skills/report-writer@' + 'a' * 12)
+    assert directory.startswith('/skills/')
     env = session.skill_environment(directory)
-    assert env['NEXUS_SKILL_DIR'] == directory and env['NEXUS_SKILL_OUTPUT_DIR'].endswith('/t1/s1/outputs')
+    assert env['NEXUS_SKILL_DIR'] == directory and env['NEXUS_SKILL_OUTPUT_DIR'] == '/outputs'
     result = run(session.exec('sh "$NEXUS_SKILL_DIR/scripts/hello.sh"', cwd='/workspace', timeout_seconds=5, env=env))
     assert (result.exit_code, result.stdout.strip()) == (0, 'hi')
 

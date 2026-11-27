@@ -1,5 +1,18 @@
 # 设计：当前会话整理为技能
 
+## Worker workspace 与 local 技能脚本（扩展范围）
+
+- 数据库保持技能内容的事实源，避免多 Worker 因各自磁盘不同步看到不同版本。每次 Run 在权限检查之后读取完整不可变版本，用内容哈希目录名投射到该 Worker 的 `skills/` 缓存；每个工具调用仍检查当前绑定、所有者、版本状态和授权。技能脚本目录不可写。
+- 持久布局按租户及用户稳定 ID 分区：`<workspace-root>/<tenant-id>/users/<user-id>/{skills,data}`，并创建 `data/tmp`。私有技能工作副本位于用户 `skills/` 下；平台技能使用独立只读根；用户名和智能体名不作为授权路径键。用户的 `data/` 跨该用户技能共享，不属于某个 Agent。
+- 目标是 `skill_manage` 读写用户 workspace 的草稿副本；`skill_save` 在用户确认后从该副本创建有界快照，校验路径不含链接/特殊文件、大小和文件数量上限、草稿基线哈希，之后复用现有扫描与数据库版本发布逻辑。发布成功后缓存按新哈希建立，不原地覆盖旧版本。当前实现仍由既有数据库事务读写草稿，再将结果镜像到 workspace；workspace 优先编辑及保存时同步回数据库尚未完成，见 `tasks.md` 4.3。
+- 多 Worker 的 `data/` 使用部署指定共享持久卷，并以用户级跨进程锁串行化写入；技能内容缓存仍是每 Worker 本机缓存，不要求共享技能磁盘。该卷需备份、容量与权限管理。当前只允许 workspace 位于受信任的本地/共享文件系统；不把普通对象存储伪装成 POSIX 工作区。
+- 生产 local 调用不执行无约束的 `LocalExecutor`。沿用本仓库已实现并验收的 bubblewrap jail 来承载 local 技能子进程：系统根只读、只绑定当前用户数据和当前 Run 的只读技能/依赖，outputs 可写，tmp 指向 `data/tmp`，网络按档位策略配置，进程使用非 root 身份及资源/超时限制。执行前检查 Linux、bwrap 可用性与隔离验收指纹；任何一项不满足都 fail closed。Docker 与托管后端仍可用。
+- file tool 的虚拟 `/workspace` 与用户持久数据入口分开授权：用户工作区工具映射仅能访问该用户根；Run 结束继续清理会话临时区，保留 `data/`。同一用户的并发 Run 通过 workspace 锁协调修改；平台需避免把用户私有 data 自动登记为可分享 artifact。
+
+### 威胁边界与取舍
+
+Hermes 的 `HERMES_WRITE_SAFE_ROOT` 仅限制专用文件写工具，官方安全文档仍将 local terminal 描述为无隔离并建议生产使用容器后端。因此本实现不复刻“local 同权限直接运行 + 路径规则”作为安全方案；把 Hermes 的根目录白名单思路用于受控文件工具，同时由 Linux bubblewrap 对技能进程强制只读系统根和受限挂载。来源：[Hermes 安全工作站指南](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/guides/secure-hermes-on-a-work-machine.md)、[Hermes 安全文档](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/security.md)。
+
 ## 参考行为与映射
 
 - Hermes `/learn` 将学习请求作为普通对话回合，使用当前智能体可用的读取工具收集资料，再通过技能管理工具保存；技能可以由当前会话内容、外部资料或用户描述生成。首期只实现当前会话来源，后续来源输入另行设计。参考 [Hermes Skills 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills) 与 `tools/skill_manager_tool.py`。

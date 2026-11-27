@@ -1,8 +1,8 @@
 """Bubblewrap backend: every command runs in a fresh, unprivileged Linux namespace jail (no daemon, no image).
 
 Isolation comes from `bwrap`, not from this code. A command sees the host's system directories read-only
-(`/usr` and the `/bin`, `/lib` family), a private `/proc`, `/dev` and `/tmp`, and exactly two writable
-directories: the session's `/workspace` and `/outputs`. Nothing else of the host is mounted, so host paths,
+(`/usr` and the `/bin`, `/lib` family), a private `/proc`, `/dev` and `/tmp`, and explicit writable
+directories: the session's `/workspace` and `/outputs`, plus the current user's persistent `/data`. Nothing else of the host is mounted, so host paths,
 other tenants' workspaces and the server's configuration do not exist inside the jail. The jail has its own
 user, PID, IPC, UTS and cgroup namespaces, and its own network namespace unless the deployment opens the
 network. It is created per command and disappears with it; `--die-with-parent` and the PID namespace make
@@ -59,7 +59,7 @@ class BwrapBackend:
 
     def jail_arguments(self, workspace: Path, outputs: Path, cwd: str, command: str,
                        env: dict[str, str] | None = None, skills: Path | None = None,
-                       envs: Path | None = None) -> list[str]:
+                       envs: Path | None = None, data: Path | None = None) -> list[str]:
         """The `bwrap` argument list. Pure, so every isolation flag is testable without running anything."""
         args = [self.binary, '--die-with-parent', '--new-session', '--unshare-all', '--cap-drop', 'ALL']
         if self.settings.network != 'none':
@@ -76,13 +76,16 @@ class BwrapBackend:
             args += ['--ro-bind-try', name, name]
         args += ['--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
                  '--bind', str(workspace.resolve()), '/workspace', '--bind', str(outputs.resolve()), '/outputs',
+                 *(['--bind', str(data.resolve()), '/data'] if data is not None else []),
                  *(['--ro-bind', str(skills.resolve()), '/skills'] if skills is not None else []),
                  *(['--ro-bind', str(envs.resolve()), '/skill_envs'] if envs is not None else []),
-                 '--remount-ro', '/',  # the root is a tmpfs: only /workspace, /outputs and /tmp stay writable
+                 '--remount-ro', '/',  # the root is a tmpfs: only explicit workspace, output, data and tmp mounts are writable
                  # No `--clearenv`: bwrap before 0.4.1 does not know it. The environment is rebuilt anyway, because
                  # the executor starts bwrap with only PATH (`run`), so the host's variables never reach the jail.
                  '--setenv', 'PATH', _PATH, '--setenv', 'HOME', '/workspace',
-                 '--setenv', 'LANG', 'C.UTF-8', '--setenv', 'LC_ALL', 'C.UTF-8', '--setenv', 'TMPDIR', '/tmp',
+                 '--setenv', 'LANG', 'C.UTF-8', '--setenv', 'LC_ALL', 'C.UTF-8',
+                 '--setenv', 'TMPDIR', '/data/tmp' if data is not None else '/tmp',
+                 *(['--setenv', 'NEXUS_DATA_DIR', '/data'] if data is not None else []),
                  *[flag for key in self.settings.env_passthrough if key in os.environ
                    for flag in ('--setenv', key, os.environ[key])],
                  *[flag for key, value in (env or {}).items() for flag in ('--setenv', key, value)],
@@ -110,11 +113,12 @@ class BwrapExecutor:
     skills_mount = '/skills'
     envs_mount = '/skill_envs'
     outputs_path = '/outputs'
+    data_mount = '/data'
 
     def __init__(self, backend: BwrapBackend, workspace: Path, outputs: Path, skills: Path | None = None,
-                 envs: Path | None = None):
+                 envs: Path | None = None, data: Path | None = None):
         self.backend, self.workspace, self.outputs, self.skills = backend, workspace, outputs, skills
-        self.envs = envs
+        self.envs, self.data = envs, data
 
     async def run(self, command: str, *, cwd: str, timeout_seconds: float, output_limit: int,
                   env: dict[str, str] | None = None, stdin: str | None = None) -> ExecResult:
@@ -122,7 +126,8 @@ class BwrapExecutor:
         paths.split(cwd)  # only /workspace and /outputs are valid working directories
         if find_binary(self.backend.binary) is None:
             raise SandboxError('sandbox_backend_unavailable', 'bwrap is not installed')
-        argv = self.backend.limited(self.backend.jail_arguments(self.workspace, self.outputs, cwd, command, env, self.skills, self.envs))
+        argv = self.backend.limited(self.backend.jail_arguments(self.workspace, self.outputs, cwd, command, env,
+                                                                 self.skills, self.envs, self.data))
         from ...disk_quota import ensure
         await asyncio.to_thread(ensure, self.backend.settings, self.workspace.parent)
         from ...cgroups import CommandCgroup

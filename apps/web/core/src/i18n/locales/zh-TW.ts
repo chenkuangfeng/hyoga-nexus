@@ -8856,7 +8856,7 @@ export default {
     groupReason: {
       reasonSandboxDisabled: "沙箱未啟用",
       reasonNotAccepted: "沙箱尚未通過隔離驗收",
-      reasonLocalNotAllowed: "本機檔位沒有隔離，僅限開發模式且需維運允許",
+      reasonLocalNotAllowed: "本機檔位需在 Linux 安裝 bubblewrap、通過隔離驗收並由維運啟用",
       reasonUnknown: "所選沙箱檔位不存在",
       reasonSandboxRequired: "需要可用的沙箱",
       reasonWebDisabled: "Web 功能未在部署中啟用",
@@ -9025,7 +9025,7 @@ export default {
       available: "可用",
       reasonSandboxDisabled: "沙箱未啟用",
       reasonNotAccepted: "尚未通過隔離驗收",
-      reasonLocalNotAllowed: "本機檔位沒有隔離，僅限開發模式且需維運允許",
+      reasonLocalNotAllowed: "本機檔位需在 Linux 安裝 bubblewrap、通過隔離驗收並由維運啟用",
       reasonUnknown: "該檔位不存在",
       reasonOther: "原因未知",
       reasonUnavailable: "沙箱目前不可用",

@@ -20,7 +20,7 @@
 ## 当前能力
 
 - 内联加载：`load_skill`、`read_skill_file`。
-- 脚本执行：`exec_skill(name, script, args?, stdin?, timeout_seconds?)` 在智能体所选的沙箱档位里运行技能目录内的一个脚本文件。脚本无需在 frontmatter 声明，`args` 作为参数列表传入、不经 shell 解释，`stdin` 最多 65536 字节；解释器按扩展名或 `#!` 行在 `python3`、`bash` / `sh`、`node` 中选择；技能被只读投射到沙箱，脚本从 `$NEXUS_SKILL_DIR` 找到自己的文件、把成品写到 `$NEXUS_SKILL_OUTPUT_DIR`。仅当智能体设置 `skill_scripts` 开启且所选档位可用（docker / bwrap 通过验收，或 `local` 档位在开发模式且 `allow_local`）时才出现；运行位置由技能的 `execution` 声明与档位共同决定，不满足时不运行、不回退。风险等级与审批沿用 `sandbox_exec` 和 `tool_access`。
+- 脚本执行：`exec_skill(name, script, args?, stdin?, timeout_seconds?)` 在智能体所选的沙箱档位里运行技能目录内的一个脚本文件。脚本无需在 frontmatter 声明，`args` 作为参数列表传入、不经 shell 解释，`stdin` 最多 65536 字节；解释器按扩展名或 `#!` 行在 `python3`、`bash` / `sh`、`node` 中选择；技能被只读投射，脚本从 `$NEXUS_SKILL_DIR` 找到自己的文件，通过 `$NEXUS_DATA_DIR` 读写当前用户的持久数据（临时文件位于 `$TMPDIR`，即 `data/tmp`），并把交付物写到 `$NEXUS_SKILL_OUTPUT_DIR`。仅当智能体设置 `skill_scripts` 开启且所选档位通过隔离验收时出现；生产 `local` 档位必须在 Linux 上由 bubblewrap 执行。运行位置由技能的 `execution` 声明与档位共同决定，不满足时不运行、不回退。风险等级与审批沿用 `sandbox_exec` 和 `tool_access`。
 - 发布：管理员通过 `POST /api/v1/tenants/{tenant_id}/skills` 发布新版本（不可修改）；发布前做规则扫描并按来源查放行矩阵，`dangerous` 须带 `acknowledge_findings` 确认，被拦截时错误里带发现列表；`POST .../skills/{name}/versions/{version}/rescan` 用当前扫描器重扫。
 - 内置技能：平台管理员 `POST /api/v1/platform/skills/import-builtin` 或 `uv run python -m nexus_api.cli import-builtin-skills` 把仓库 `skills/`（`[skills].builtin_dir`）发布到系统租户，所有空间可见可分配；内容相同报告 `unchanged`，升级产生新版本；同名的空间技能拒绝（`skill_name_taken_by_builtin`）。
 - 上传与导出：`POST .../skills/upload`（原始 zip 请求体，≤32 MB，管理员）与 `GET .../skills/{name}/bundle?version=`；包内二进制文件只存于版本的 zip，运行时与文本文件一起投射进沙箱，内容哈希覆盖二进制。
@@ -33,7 +33,7 @@
 
 ## 限制
 
-- 脚本只在沙箱档位里运行；`local` 档位没有隔离，仅限开发。隔离验收见 `docs/architecture.md` 2.9 节。
+- 脚本只在通过隔离验收的档位运行；生产 `local` 使用 Linux bubblewrap，脚本只能看到当前用户数据目录、当前 Run 输出、只读技能和必要系统运行库。多 Worker 需共享 workspace 持久卷。隔离验收见 `docs/architecture.md` 2.9 节。
 - 尚未实现：私有技能与对话式创建、技能包（分发单位）、MCP。远程来源的 ClawHub 下载地址与 GitHub、GitLab 真实服务未联网验证。
 
 ## 文档

@@ -8851,7 +8851,7 @@ export default {
     groupReason: {
       reasonSandboxDisabled: "The sandbox is not enabled",
       reasonNotAccepted: "The sandbox has not passed isolation acceptance",
-      reasonLocalNotAllowed: "The local profile has no isolation; development mode only and the operator must allow it",
+      reasonLocalNotAllowed: "The local profile requires Linux bubblewrap, a passed isolation check, and operator approval",
       reasonUnknown: "The chosen sandbox profile does not exist",
       reasonSandboxRequired: "A usable sandbox is required",
       reasonWebDisabled: "Web tools are not enabled in this deployment",
@@ -9020,7 +9020,7 @@ export default {
       available: "Ready",
       reasonSandboxDisabled: "the sandbox is off",
       reasonNotAccepted: "it has not passed the isolation check",
-      reasonLocalNotAllowed: "a local profile has no isolation and is limited to development mode with the operator's permission",
+      reasonLocalNotAllowed: "a local profile requires Linux bubblewrap, a passed isolation check, and operator approval",
       reasonUnknown: "this profile does not exist",
       reasonOther: "unknown reason",
       reasonUnavailable: "the sandbox is unavailable right now",

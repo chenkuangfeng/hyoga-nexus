@@ -60,12 +60,14 @@ def managers() -> list[SandboxManager]:
     return list(_managers.values())
 
 
-def session_for(tenant_id: str, session_id: str, *, default_timeout: float, output_limit: int, profile: str | None = None):
+def session_for(tenant_id: str, session_id: str, *, default_timeout: float, output_limit: int,
+               profile: str | None = None, user_id: str | None = None):
     """A sandbox session for this Run on the agent's profile, or None when no sandbox is available."""
     current = manager(profile)
     if current is None:
         return None
-    return current.session(tenant_id, session_id, default_timeout=default_timeout, output_limit=output_limit)
+    return current.session(tenant_id, session_id, user_id=user_id,
+                           default_timeout=default_timeout, output_limit=output_limit)
 
 
 async def reap_idle() -> None:

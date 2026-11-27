@@ -8859,7 +8859,7 @@ export default {
     groupReason: {
       reasonSandboxDisabled: "サンドボックスが有効ではありません",
       reasonNotAccepted: "サンドボックスが隔離検証に合格していません",
-      reasonLocalNotAllowed: "ローカルプロファイルは隔離されません。開発モードかつ運用者の許可が必要です",
+      reasonLocalNotAllowed: "ローカルプロファイルには Linux の bubblewrap、分離チェックの合格、運用者の許可が必要です",
       reasonUnknown: "選択したサンドボックスプロファイルが存在しません",
       reasonSandboxRequired: "利用可能なサンドボックスが必要です",
       reasonWebDisabled: "このデプロイでは Web ツールが有効ではありません",
@@ -9028,7 +9028,7 @@ export default {
       available: "利用可能",
       reasonSandboxDisabled: "サンドボックスが無効です",
       reasonNotAccepted: "分離検証に合格していません",
-      reasonLocalNotAllowed: "ローカルのプロファイルは分離がなく、開発モードかつ運用担当者の許可が必要です",
+      reasonLocalNotAllowed: "ローカルプロファイルには Linux の bubblewrap、分離チェックの合格、運用者の許可が必要です",
       reasonUnknown: "このプロファイルは存在しません",
       reasonOther: "理由不明",
       reasonUnavailable: "サンドボックスが現在利用できません",

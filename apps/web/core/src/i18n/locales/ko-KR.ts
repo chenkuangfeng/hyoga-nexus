@@ -8859,7 +8859,7 @@ export default {
     groupReason: {
       reasonSandboxDisabled: "샌드박스가 활성화되지 않았습니다",
       reasonNotAccepted: "샌드박스가 격리 검증을 통과하지 않았습니다",
-      reasonLocalNotAllowed: "로컬 프로필은 격리되지 않습니다. 개발 모드이며 운영자의 허용이 필요합니다",
+      reasonLocalNotAllowed: "로컬 프로필은 Linux bubblewrap, 격리 검사 통과 및 운영자 허용이 필요합니다",
       reasonUnknown: "선택한 샌드박스 프로필이 없습니다",
       reasonSandboxRequired: "사용 가능한 샌드박스가 필요합니다",
       reasonWebDisabled: "이 배포에서는 Web 도구가 활성화되지 않았습니다",
@@ -9028,7 +9028,7 @@ export default {
       available: "사용 가능",
       reasonSandboxDisabled: "샌드박스가 꺼져 있습니다",
       reasonNotAccepted: "격리 검증을 통과하지 않았습니다",
-      reasonLocalNotAllowed: "로컬 프로필은 격리가 없어 개발 모드에서 운영자가 허용한 경우에만 쓸 수 있습니다",
+      reasonLocalNotAllowed: "로컬 프로필은 Linux bubblewrap, 격리 검사 통과 및 운영자 허용이 필요합니다",
       reasonUnknown: "이 프로필이 없습니다",
       reasonOther: "알 수 없는 이유",
       reasonUnavailable: "샌드박스를 지금 사용할 수 없습니다",

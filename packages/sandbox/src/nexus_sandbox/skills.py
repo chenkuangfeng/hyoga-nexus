@@ -78,3 +78,50 @@ def project(skills_dir: Path, name: str, content_hash: str, files: dict[str, str
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return target
+
+
+def sync_draft(skills_dir: Path, name: str, files: dict[str, str] | None) -> None:
+    """Mirror one database-owned private draft beneath the user's persistent skills workspace.
+
+    The database remains authoritative. Each file is replaced atomically, paths use the same strict allowlist as
+    private skill drafts, and stale files are removed only from this draft directory.
+    """
+    from nexus_skills.loader import parse_skill
+    if not _NAME.fullmatch(name):
+        raise SandboxError('sandbox_skill_invalid')
+    base = skills_dir / 'drafts'
+    base.mkdir(parents=True, exist_ok=True)
+    target = base / name
+    if target.is_symlink():
+        raise SandboxError('sandbox_skill_invalid')
+    if files is None:
+        shutil.rmtree(target, ignore_errors=True)
+        return
+    if 'SKILL.md' not in files or len(files) > MAX_FILES:
+        raise SandboxError('sandbox_skill_invalid')
+    if parse_skill(files['SKILL.md']).name != name:
+        raise SandboxError('sandbox_skill_invalid')
+    prepared: dict[str, bytes] = {}
+    total = 0
+    for path, content in files.items():
+        clean = _safe_relative(path)
+        if clean != 'SKILL.md' and not clean.startswith(('refs/', 'scripts/', 'assets/', 'templates/')):
+            raise SandboxError('sandbox_skill_invalid')
+        data = content.encode('utf-8')
+        total += len(data)
+        if total > MAX_BYTES:
+            raise SandboxError('sandbox_skill_too_large')
+        prepared[clean] = data
+    target.mkdir(parents=True, exist_ok=True)
+    existing = {path.relative_to(target).as_posix() for path in target.rglob('*') if path.is_file() and not path.is_symlink()}
+    for stale in existing - prepared.keys():
+        (target / stale).unlink(missing_ok=True)
+    for path, data in prepared.items():
+        destination = target.joinpath(*path.split('/'))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name('.draft-' + uuid.uuid4().hex)
+        try:
+            temporary.write_bytes(data)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)

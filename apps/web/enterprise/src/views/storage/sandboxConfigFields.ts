@@ -13,7 +13,7 @@ export const backendNames: Record<SandboxBackend, string> = {
   local: 'Local', ssh: 'SSH', bwrap: 'Bubblewrap', docker: 'Docker', managed: 'HTTPS',
 }
 export const connectionFields: Record<SandboxBackend, ConfigField[]> = {
-  local: [],
+  local: [{ key: 'cgroup_root', input: 'text' }],
   docker: [{ key: 'image', input: 'text', required: true }],
   bwrap: [{ key: 'cgroup_root', input: 'text' }],
   ssh: [
@@ -33,8 +33,8 @@ const cpu: ConfigField = { key: 'cpus', input: 'number', min: 0.1, max: 16, step
 const pids: ConfigField = { key: 'pids', input: 'number', min: 16, max: 4096 }
 export function resourceFields(type: SandboxBackend, cgroup: boolean): ConfigField[] {
   return [
-    ...(['docker', 'managed'].includes(type) || (type === 'bwrap' && cgroup) ? [cpu, pids] : []),
-    ...(['docker', 'managed', 'bwrap'].includes(type) ? [memory] : []),
+    ...(['docker', 'managed'].includes(type) || (['bwrap', 'local'].includes(type) && cgroup) ? [cpu, pids] : []),
+    ...(['docker', 'managed', 'bwrap', 'local'].includes(type) ? [memory] : []),
     { key: 'workspace_quota_mb', input: 'number', min: 1, max: 102400 },
     { key: 'exec_timeout_max_seconds', input: 'number', min: 1, max: 3600 },
     { key: 'skill_timeout_seconds', input: 'number', min: 1, max: 3600 },
@@ -43,6 +43,7 @@ export function resourceFields(type: SandboxBackend, cgroup: boolean): ConfigFie
 }
 export function advancedFields(type: SandboxBackend): ConfigField[] {
   return [
+    ...(type === 'local' ? [{ key: 'network', input: 'network' } as ConfigField] : []),
     ...(['docker', 'bwrap'].includes(type) ? [
       { key: 'network', input: 'network' }, { key: 'install_network', input: 'network' },
       { key: 'quota_mount', input: 'text' }, { key: 'quota_project_start', input: 'number', min: 1, max: 4000000000 },

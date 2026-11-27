@@ -9,7 +9,7 @@
 | `files` | `HostFileStore`：宿主目录上的文件读、分页读、原子写、唯一匹配编辑、搜索、配额、产物收集（`output_files()` 给出 `/outputs` 下普通文件的宿主路径，供平台在 Run 结束时登记，符号链接不收） |
 | `backends/docker` | 每个（租户，会话）一个容器；`docker exec` 执行；`timeout` 带进程组；取消时按命令标记杀进程组 |
 | `backends/bwrap` | 每条命令一个 bubblewrap 隔离环境：宿主 `/usr` 等只读、仅 `/workspace` 与 `/outputs` 可写、独立 user/pid/ipc/uts/cgroup/net 命名空间；不依赖守护进程与镜像 |
-| `backends/local` | 开发替身，不隔离 |
+| `backends/local` | 仅保留内部开发/单元测试执行器；`SandboxManager` 的 `local` 档位实际使用 bubblewrap，生产路径不调用无隔离执行器 |
 | `backends/output` | 输出按头 70% 加尾 30% 保留 |
 | `session` | `SandboxSession`：把文件存储与执行器合成工具使用的 `SandboxSessionPort`（契约在 `nexus_core.sandbox`） |
 | `manager` | 租约：目录、容器名、空闲与孤儿回收 |
@@ -31,15 +31,17 @@
 
 `[sandbox.profiles.<名字>]` 定义命名档位，类型为 `local`、`docker`、`bwrap`、`ssh`、`managed`；`default_profile` 在未声明档位时缺省为 `docker`；档位只能由运维在部署配置里定义，智能体设置 `sandbox_profile` 只能选名字，已发布的智能体版本固定其档位。每个档位解析为一个 `SandboxSettings`，后端、管理器和验收都按档位工作：每个档位有自己的 `SandboxManager`，docker 容器名在非 `default` 档位时带档位名，容器带 `nexus.sandbox.profile` 标签，空闲与孤儿回收只处理本档位；验收报告为 `acceptance.json`（旧的 `default` 档位）或 `acceptance-<档位>.json`，指纹含档位的类型、镜像与限制。`--sandbox-check` 默认检查全部隔离档位，`--profile` 只检查一个。
 
-不适用于某类型的键直接报错（bwrap 的 `pids` 和 `cpus` 需要同时配置 `cgroup_root`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位仅当 `allow_local = true` 且认证为开发模式时可用，否则可用性为 `sandbox_local_not_allowed`，沙箱工具组不出现，不会因此启动失败。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时默认启用 `docker` 与 `local` 两个档位，总开关与 `allow_local` 缺省为 `true`；Docker 仍需验收，Local 仍需开发认证。显式自定义档位不补入缺省档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
+不适用于某类型的键直接报错（bwrap 的 `pids` 和 `cpus` 需要同时配置 `cgroup_root`），避免静默无效；`docker run` 的加固（非 root、只读根、`cap-drop ALL`、`no-new-privileges`）不可配置，也不支持透传任意 `docker run` 参数；`env_passthrough` 显式转发宿主变量，名字像凭据（含 `KEY`、`TOKEN`、`SECRET`、`PASSW`、`AUTH` 等）、沙箱自己设置的名字（`PATH`、`HOME`……）和 `NEXUS_` 前缀的名字被拒绝。`local` 档位只有在 Linux 安装 bubblewrap、`allow_local = true` 且通过隔离验收后才可用，否则可用性为 `sandbox_local_not_allowed` 或 `sandbox_not_accepted`；认证模式不影响隔离判定，Windows 原生 local 不开放。旧的扁平键等同一个名为 `default` 的档位；没有任何沙箱配置时默认启用 `docker` 与 `local` 两个档位，总开关与 `allow_local` 缺省为 `true`；Docker 与 Local 都需验收。显式自定义档位不补入缺省档位。可用性原因码：`sandbox_disabled`、`sandbox_not_accepted`、`sandbox_local_not_allowed`、`sandbox_profile_unknown`。
+
+`local` / `bwrap` 的 `network = "bridge"` 是共享 Worker 主机网络命名空间（通过 bubblewrap 的 `--share-net`），不是 Docker bridge，也没有目标级出站白名单；生产需保持 `none`，或由主机防火墙约束 Worker 的出站目标。
 
 ## 技能与标准输入
 
-技能脚本由 `exec_skill` 运行（见 `packages/skills`）。沙箱侧提供三样东西：**投射**（`nexus_sandbox/skills.py`）把技能文件按 `<技能>@<内容哈希前 12 位>` 写进会话的 `skills` 目录——先写到暂存目录再原子改名，同一哈希不会被覆盖，最多 1000 个文件、32 MB——docker 与 bwrap 把该目录只读挂载为 `/skills`，`local` 档位的命令看到宿主路径，所以直接用宿主上的目录；**命令环境**，调用方（不是模型参数）可以给一次命令追加环境变量，名字须是大写字母、数字与下划线，`exec_skill` 用它设置 `NEXUS_SKILL_DIR` 与 `NEXUS_SKILL_OUTPUT_DIR`；**标准输入**，`sandbox_exec` 与 `exec_skill` 可传最多 65536 字节的文本，三个执行器都支持（docker 用 `exec -i`），不传时仍然关闭。技能的超时有单独上限：`exec_skill` 用档位的 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（600），不受 `exec_timeout_max_seconds` 限制。已存在的 docker 容器（改动前创建）没有 `/skills` 挂载，空闲回收后重建即带上。
+技能脚本由 `exec_skill` 运行（见 `packages/skills`）。沙箱将授权技能按 `<技能>@<内容哈希前 12 位>` 写到用户 `skills/`（无用户上下文时放在会话目录）；Worker 从数据库读取版本，目录是可重建缓存且由隔离环境只读挂载为 `/skills`。用户持久数据挂载为 `/data`，在其技能之间共享；`/data/tmp` 暴露为 `TMPDIR`，`NEXUS_DATA_DIR=/data` 是脚本写业务数据的稳定入口，`/outputs` 仍是当前 Run 交付目录。`local` 档位也只在 bubblewrap jail 内运行；技能只能看到当前用户数据和本 Run 输出，无法访问其他用户目录。所有环境变量由调用方设置，不采纳模型提供的宿主路径。技能的超时有单独上限：`exec_skill` 用档位的 `skill_timeout_seconds`（默认 120）与 `skill_timeout_max_seconds`（600），不受 `exec_timeout_max_seconds` 限制。共享 workspace 卷上的同一用户执行按锁串行化。
 
 ## 验收项
 
-connectivity、user、network、time_limit、output_limit、memory_limit、process_limit、tenant_isolation、path_escape、environment、cancellation、cleanup_and_residue。`local` 后端在任何探测运行前被拒绝，因为内存与进程数探测本身带有破坏性。
+connectivity、user、network、time_limit、output_limit、memory_limit、process_limit、tenant_isolation、path_escape、environment、cancellation、cleanup_and_residue。无隔离的 `LocalExecutor` 在任何探测运行前被拒绝；`local` profile 只有实际使用 bubblewrap jail 后才运行同一组探测。
 
 **bwrap 档位的验收差异**：没有长驻容器，且每条命令是独立的 PID 命名空间，所以 `process_limit`、`cancellation`、`cleanup_and_residue` 三项改为从宿主进程表按标记进程（`sleep <本次随机秒数>`）检查。`process_limit` 不再要求“被限制在 pids 以内”（bwrap 没有进程数限制，真正的限制需要 cgroup），而是验证 fork 出 `pids × 2` 个进程后，它们随 jail 一起结束；取消与后台进程同理。这是有意放宽的准入条件，进程数仍只靠命令超时和 jail 销毁兜底。
 
@@ -55,7 +57,7 @@ connectivity、user、network、time_limit、output_limit、memory_limit、proce
 
 - `docker`：一次性容器（标签 `nexus.sandbox.build`，`--rm`、非 root、`--cap-drop ALL`、只读根文件系统），网络取档位的 `install_network`（默认 `bridge`），只挂载清单（只读）与空的 `env` 目录（可写）；
 - `bwrap`：与运行时相同的 jail，开放网络，`env` 可写；
-- `local`：宿主子进程，仅开发。
+- `local`：本机子进程，由 bubblewrap jail 执行；缺少 bwrap、Linux 或有效验收时 fail closed。
 
 产物是 `env/venv` 与 `env/node/node_modules`，另有构建结束时 `pip list` 的 `installed.json`（供验证关核对清单包，核对后删除）。构建有墙钟上限（`build_timeout_seconds`，默认 600）、日志只留末尾 60 行、目录大小上限（`env_max_mb`，默认 512）。环境放在 `<workspace_root>/_skill_envs/<档位>/<内容哈希前 16 位>-<环境指纹>/`，环境指纹是 docker 的镜像标识或宿主 Python 版本的摘要，所以同一版本在不同档位各有一份。
 

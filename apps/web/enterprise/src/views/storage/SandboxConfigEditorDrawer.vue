@@ -51,7 +51,7 @@ async function save() {
   failure.value = ''
   const candidate: SandboxConfiguration = { ...values.value, type: kind.value,
     display_name: name.value.trim(), description: description.value.trim() }
-  if (kind.value === 'bwrap' && !candidate.cgroup_root) { delete candidate.cpus; delete candidate.pids }
+  if (['bwrap', 'local'].includes(kind.value) && !candidate.cgroup_root) { delete candidate.cpus; delete candidate.pids }
   try {
     const saved = await saveSandboxConfiguration(props.tenant, props.record?.name || null, candidate, props.revision)
     if (!disposed) emit('saved', saved)

@@ -21,6 +21,9 @@ def _deployment(monkeypatch, tmp_path, body, mode='development'):
     path.write_text(body.replace('@ROOT@', json.dumps(str(tmp_path / 'sbx'))), encoding='utf-8')
     monkeypatch.setattr('nexus_core.deployment.config_path', lambda: path)
     monkeypatch.setattr('nexus_platform.configuration.auth_settings', lambda *a, **k: SimpleNamespace(mode=mode))
+    if 'allow_local = true' in body:
+        settings = load_settings(path, 'local')
+        acceptance.FileReportStore().save(settings, {'passed': True, 'fingerprint': acceptance.fingerprint(settings)})
     return path
 
 
@@ -80,11 +83,11 @@ def test_a_container_profile_needs_a_passed_isolation_check(database, space, mon
     assert _runs(database, space, 'docker')['scripted'] == {'ok': True, 'reason': ''}
 
 
-def test_a_local_profile_runs_scripts_only_in_development_mode(database, space, monkeypatch, tmp_path):
+def test_a_local_profile_runs_scripts_in_production_after_isolation_acceptance(database, space, monkeypatch, tmp_path):
     _deployment(monkeypatch, tmp_path, PROFILES)
     assert _runs(database, space, 'local')['scripted'] == {'ok': True, 'reason': ''}
     _deployment(monkeypatch, tmp_path, PROFILES, mode='production')
-    assert _runs(database, space, 'local')['scripted'] == {'ok': False, 'reason': 'sandbox_local_not_allowed'}
+    assert _runs(database, space, 'local')['scripted'] == {'ok': True, 'reason': ''}
 
 
 def test_the_empty_profile_means_the_default_one(database, space, monkeypatch, tmp_path):

@@ -649,6 +649,11 @@ class DurableRuntimeStore:
                     viewed.discard(name)
                 else:
                     raise InvalidConfiguration('skill_manage_action_unknown')
+                if action != 'delete_draft':
+                    from nexus_platform.persistence.models import SkillDraftRecord
+                    draft = db.get(SkillDraftRecord, (tenant, user, name))
+                    if draft is not None:
+                        out['_workspace_files'] = {'SKILL.md': draft.skill_md, **draft.files}
                 if action != 'view':
                     audit(db, tenant, user, 'skill.draft', 'run', str(run.id), {'action': action, 'skill': name[:64]})
                 return out

@@ -1,4 +1,5 @@
 """Access to the Run-scoped services that shared builtin tools need."""
+import asyncio
 from nexus_core.runtime import RuntimeFault
 
 
@@ -24,6 +25,31 @@ class RunServices:
 
     def __getattr__(self, name):
         return getattr(self._store, name)
+
+    async def skill_manage(self, action: str, arguments: dict):
+        """Apply a private draft edit to the database, then refresh its user-workspace mirror."""
+        result = await self._store.skill_manage(action, arguments)
+        sync = getattr(self.sandbox, 'sync_skill_draft', None)
+        if sync is not None:
+            files = result.pop('_workspace_files', None)
+            name = result.get('name', arguments.get('name', ''))
+            try:
+                await asyncio.to_thread(sync, name, None if action == 'delete_draft' else files)
+            except Exception:
+                # This is a rebuildable cache. The committed database draft remains the source of truth.
+                pass
+        return result
+
+    async def skill_save(self, name: str):
+        """Save through the existing database approval flow and remove the now-consumed draft mirror."""
+        result = await self._store.skill_save(name)
+        sync = getattr(self.sandbox, 'sync_skill_draft', None)
+        if sync is not None:
+            try:
+                await asyncio.to_thread(sync, name, None)
+            except Exception:
+                pass
+        return result
 
 
 def store_of(context):

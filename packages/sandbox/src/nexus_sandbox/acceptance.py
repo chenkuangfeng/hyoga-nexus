@@ -18,6 +18,7 @@ import json
 import os
 import time
 import uuid
+from pathlib import Path
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
@@ -41,7 +42,18 @@ def fingerprint(settings: SandboxSettings) -> str:
     material = [settings.backend, settings.image, settings.cpus, settings.memory_mb, settings.pids, settings.network,
                 settings.workspace_quota_mb, settings.tmpfs_mb, list(settings.env_passthrough),
                 settings.cgroup_root, settings.quota_mount, settings.quota_project_start,
-                settings.quota_inodes, settings.configuration_id, 'runtime-hardening-v3']
+                settings.quota_inodes, settings.configuration_id, 'runtime-hardening-v4']
+    if settings.backend == 'local':
+        from .backends.bwrap import find_binary
+        binary = find_binary()
+        identity = 'missing'
+        if binary:
+            try:
+                stat = Path(binary).stat()
+                identity = f'{binary}:{stat.st_size}:{stat.st_mtime_ns}'
+            except OSError:
+                identity = f'{binary}:unavailable'
+        material.extend(['local-bwrap-v1', identity])
     if settings.backend == 'docker':
         material.append('docker-cpu-v1')
     if settings.backend in ('ssh', 'managed'):
@@ -140,7 +152,11 @@ async def _guard(name: str, probe) -> Item:
 async def run(settings: SandboxSettings, *, manager: SandboxManager | None = None,
               store: ReportStore | None = None) -> dict:
     """Run every probe and store the report (in `store` when given, and always as a file copy for operators). Raises `sandbox_acceptance_requires_isolating_backend` for `local`."""
-    if settings.backend not in ('docker', 'bwrap', 'ssh', 'managed'):
+    local_isolated = False
+    if settings.backend == 'local':
+        from .settings import sandbox_local_allowed
+        local_isolated = sandbox_local_allowed(settings)
+    if settings.backend not in ('docker', 'bwrap', 'ssh', 'managed') and not local_isolated:
         raise SandboxError('sandbox_acceptance_requires_isolating_backend')
     if settings.backend == 'ssh' and not settings.trusted_ssh:
         raise SandboxError('sandbox_ssh_not_allowed')

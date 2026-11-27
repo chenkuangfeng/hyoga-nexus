@@ -193,7 +193,8 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         needs_sandbox = 'sandbox' not in hidden or any(name == 'exec_skill' for name, _, _ in context.bindings)
         sandbox = None if not needs_sandbox else session_for(
             str(context.tenant_id), str(context.session_id), default_timeout=policy.sandbox_exec_timeout_seconds,
-            output_limit=policy.sandbox_output_limit, profile=policy.sandbox_profile)
+            output_limit=policy.sandbox_output_limit, profile=policy.sandbox_profile,
+            user_id=str(context.principal_id))
         services = RunServices(store, context.progress.state, sandbox)
         tool_access = ToolAccess(store)
         bound = {name: version for name, version, _ in context.bindings}
