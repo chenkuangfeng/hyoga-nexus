@@ -25,7 +25,7 @@ watch(() => [route.path, context.revision], () => { count.value = undefined }, {
         <h2><t-icon name="tools" size="24px" aria-hidden="true" />{{ t('consoleLayout.toolbox') }}</h2>
         <div id="enterprise-toolbox-action" />
       </div>
-      <p v-if="selected" class="toolbox-subtitle">{{ t(selected.description) }}</p>
+      <p v-if="selected?.path === '/skills'" class="toolbox-subtitle">{{ t(selected.description) }}</p>
     </header>
     <t-alert v-if="!context.can('tools:manage')" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>

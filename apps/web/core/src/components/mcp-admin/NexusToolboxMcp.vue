@@ -8,8 +8,8 @@
   <div class="tbm">
     <t-alert v-if="error" theme="error" :message="error" class="tbm-alert" />
 
-    <div class="tbm-head">
-      <p class="tbm-hint">{{ $t(isAdmin ? 'toolbox.mcp.hintAdmin' : 'toolbox.mcp.hintMember') }}</p>
+    <div class="tbm-head" :class="{ 'tbm-head--compact': props.showIntro === false && !!actionTarget }">
+      <p v-if="props.showIntro !== false" class="tbm-hint">{{ $t(isAdmin ? 'toolbox.mcp.hintAdmin' : 'toolbox.mcp.hintMember') }}</p>
       <Teleport v-if="isAdmin" :to="actionTarget || 'body'" :disabled="!actionTarget">
         <t-button theme="primary" variant="outline" size="small" @click="openCreate">
           <template #icon><t-icon name="add" size="16px" /></template>
@@ -95,7 +95,7 @@ import { getMyApiPermissions } from '@nexus-web/core/api/nexus-agents'
 import NexusMcpServiceDialog from './NexusMcpServiceDialog.vue'
 import { enabledToolNames, serviceTarget } from './toolboxMcp'
 
-const props = defineProps<{ tenantId: string; canManage?: boolean; actionTarget?: string; searchTarget?: string }>()
+const props = defineProps<{ tenantId: string; canManage?: boolean; actionTarget?: string; searchTarget?: string; showIntro?: boolean }>()
 const emit = defineEmits<{ (event: 'count', value: number): void }>()
 const { t, te } = useI18n()
 
@@ -333,6 +333,7 @@ onBeforeUnmount(() => { generation++; dialogVisible.value = false })
 .tbm-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--td-component-stroke); }
 .tbm-alert { margin-bottom: 8px; }
 .tbm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.tbm-head--compact { display: contents; }
 .tbm-hint { margin: 0; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); line-height: 1.5; }
 .tbm-empty { margin: 0; color: var(--td-text-color-secondary); font-size: var(--app-text-sm); }
 .tbm-row { padding: 10px 0; border-bottom: 1px solid var(--td-component-stroke); }

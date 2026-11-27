@@ -85,12 +85,10 @@ const props = defineProps<{ embedded?: boolean }>()
 
 <template>
   <section class="tool-catalog-page">
-    <header class="section-header"><div v-if="!props.embedded"><h2>{{ t('adminToolCatalog.title') }}</h2><p>{{ t('adminToolCatalog.description') }}</p></div><t-button variant="outline" :loading="loading" :disabled="!!busy" @click="load">{{ t('connectionUi.refresh') }}</t-button></header>
+    <header v-if="!props.embedded" class="section-header"><h2>{{ t('adminToolCatalog.title') }}</h2></header>
     <t-alert v-if="!canManage" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
       <t-alert v-if="error" theme="error" :message="error" />
-      <t-alert theme="info" :message="t('adminToolCatalog.scopeHint')" />
-      <p class="tool-switch-description">{{ t('toolUi.description') }}</p>
       <t-loading :loading="loading">
         <section v-for="section in sections" :key="section.key" class="tool-group">
           <header class="tool-group-header">
@@ -127,7 +125,6 @@ const props = defineProps<{ embedded?: boolean }>()
 .tool-group { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,320px),1fr)); gap: 12px; }
 .tool-group-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tool-group-header > .t-switch { margin-left: auto; }
-.tool-switch-description { color: var(--td-text-color-secondary); }
 .tool-row { .provider-card(); display: block; }
 .tool-catalog-page { min-width: 0; }
 .tool-group { margin-top: 20px; }

@@ -15,11 +15,10 @@ const emit = defineEmits<{ count: [value: number] }>()
 
 <template>
   <section class="mcp-services-page">
-    <header v-if="!props.embedded" class="section-header"><div><h2>{{ t('consoleLayout.mcpRegister') }}</h2><p>{{ t('mcpSettings.description') }}</p></div></header>
+    <header v-if="!props.embedded" class="section-header"><h2>{{ t('consoleLayout.mcpRegister') }}</h2></header>
     <t-alert v-if="!context.can('tools:manage')" theme="info" :message="t('adminConsole.denied')" />
     <template v-else>
-      <t-alert theme="info" :message="t('mcpSettings.manageAndTest')" />
-      <NexusToolboxMcp :key="scopeKey" :tenant-id="tenant"  :can-manage="true"
+      <NexusToolboxMcp :key="scopeKey" :tenant-id="tenant" :can-manage="true" :show-intro="false"
         :action-target="props.embedded ? '#enterprise-toolbox-action' : undefined"
         :search-target="props.embedded ? '#enterprise-toolbox-search' : undefined" @count="emit('count', $event)" />
     </template>
