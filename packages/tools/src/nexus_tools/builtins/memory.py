@@ -34,7 +34,7 @@ def memory_tools():
         store = _store(context)
         return ToolResult(await store.search_memory(arguments['query'], arguments.get('limit', 5)))
     draft_schema = {'type': 'object', 'properties': {
-        'kind': {'enum': ['memory', 'sop', 'profile']},
+        'kind': {'enum': ['memory', 'sop', 'profile', 'fact', 'preference', 'personal_info', 'interest', 'task']},
         'diff': {'type': 'string', 'minLength': 1, 'maxLength': 8000},
         'entry_id': {'type': 'string', 'maxLength': 36},
         'base_version': {'type': 'integer', 'minimum': 1},
@@ -56,7 +56,8 @@ def memory_tools():
         'Use expire only for an explicitly expired fact; identify the existing entry, quote the user and keep the full current text in diff. Approval marks it expired. '
         'Topic similarity only returns candidate hints; it does not update an existing entry. To explicitly edit, pass entry_id and base_version. '
         'importance is 1-5; valid_until (YYYY-MM-DD) only for time-bound notes. '
-        'Use kind profile for stable identity and preferences (injected only when the agent enables profile injection), '
+        'Use preference for stable preferences and personal_info for stable identity; these can be included by default in agent context. '
+        'Use fact, interest, or task for information that should be retrieved only when relevant. '
         'memory for environment facts and conventions, sop for verified procedures.',
         draft_schema), draft, lambda r: r.data)
     yield RegisteredTool(ToolDefinition('start_long_term_update', 'Read the memory index and consolidate reusable findings.',

@@ -981,7 +981,7 @@ class DurableRuntimeStore:
         """
         from nexus_platform.memory.service import propose as propose_draft
         from nexus_platform.errors import Conflict, NotFound
-        if kind not in ('memory', 'sop', 'profile') or scope != 'session':
+        if kind not in ('memory', 'sop', 'profile', 'fact', 'preference', 'personal_info', 'interest', 'task') or scope != 'session':
             raise RuntimeFault('memory_scope_invalid')
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session

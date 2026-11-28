@@ -27,11 +27,11 @@ class MemoryContribution:
 
 
 class MemoryContextProvider:
-    """Freeze a session index and recall from the original user query under all memory switches."""
+    """Keep only configured stable categories resident; retrieve all other entries on demand."""
 
     def build(self, db: Session, run: RunRecord, version: AgentVersionRecord, query: str) -> MemoryContribution:
         from nexus_memory import service as rules
-        from nexus_memory.switches import profile_injection_enabled, recall_enabled
+        from nexus_memory.switches import recall_enabled, resident_kinds
         from nexus_platform.memory.snapshots import session_snapshot
         from nexus_platform.memory.switches import memory_state
         from nexus_platform.memory.repository import SqlMemoryRepository
@@ -39,32 +39,26 @@ class MemoryContextProvider:
         if not memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
                             agent_budgets=version.budgets).available:
             return MemoryContribution((), False)
-        profile_enabled = profile_injection_enabled(version.budgets)
         snapshot = session_snapshot(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
             session_id=run.session_id, project=version.budgets.get('behavior', {}).get('project_name', ''),
             include_profile=False)
+        snapshot_dependencies = tuple(ContextDependency(**item) for item in (snapshot.context_dependencies or []))
         import re
-        index_text = re.sub(r'<user_memory kind="profile">[\s\S]*?</user_memory>\n?', '', snapshot.index_text)
-        resident_ids = {str(item['id']) for item in (snapshot.resident_entries or [])}
-        dependencies = tuple(ContextDependency(**d) for d in (snapshot.context_dependencies or [])
-                             if not (d.get('kind') == 'memory' and d.get('resource_id') in resident_ids))
         blocks = []
-        if index_text:
-            blocks.append(ContextBlock('memory:index', 'memory', 'system', 'system_catalog', 10,
-                '\nPublished memory/SOP index (read authorized entries on demand):\n' + index_text,
-                lifetime='session', dependencies=dependencies))
         resident_entries = ()
-        if profile_enabled:
-            profile_snapshot = rules.snapshot(SqlMemoryRepository(db), run.tenant_id, run.principal_id,
-                version.budgets.get('behavior', {}).get('project_name', ''), now=utc_now(), include_profile=True)
-            match = re.search(r'<user_memory kind="profile">[\s\S]*?</user_memory>', profile_snapshot.text)
-            resident_entries = tuple(profile_snapshot.resident)
+        configured_kinds = resident_kinds(version.budgets)
+        resident_snapshot = rules.snapshot(SqlMemoryRepository(db), run.tenant_id, run.principal_id,
+            version.budgets.get('behavior', {}).get('project_name', ''), now=utc_now(),
+            include_profile=False, resident_kinds=configured_kinds)
+        resident_entries = tuple(resident_snapshot.resident)
+        if resident_entries:
+            match = re.search(r'<user_memory kind="resident">[\s\S]*?</user_memory>', resident_snapshot.text)
+            resident_ids = {item['id'] for item in resident_entries}
+            resident_dependencies = tuple(ContextDependency(**d) for d in resident_snapshot.dependencies
+                                          if d.get('resource_id') in resident_ids)
             if match:
-                profile_ids = {item['id'] for item in resident_entries}
-                profile_dependencies = tuple(ContextDependency(**d) for d in profile_snapshot.dependencies
-                                             if d.get('resource_id') in profile_ids)
-                blocks.append(ContextBlock('memory:profile', 'memory', 'system', 'system_catalog', 35,
-                    match.group(0), dependencies=profile_dependencies))
+                blocks.append(ContextBlock('memory:resident', 'memory', 'system', 'system_catalog', 35,
+                    match.group(0), dependencies=resident_dependencies))
         recall_entries = ()
         if query and recall_enabled(version.budgets):
             resident = frozenset(item['id'] for item in resident_entries)
@@ -78,7 +72,7 @@ class MemoryContextProvider:
         provider = providers.provider_for(db, run.tenant_id)
         return MemoryContribution(tuple(blocks), True, resident_entries,
             recall_entries, provider.name if provider else None, providers.generation(provider.name) if provider else '',
-            bool(provider and not any(d.kind == 'provider' for d in dependencies)))
+            bool(provider and not any(d.kind == 'provider' for d in snapshot_dependencies)))
 
 
 class SkillCatalogProvider:

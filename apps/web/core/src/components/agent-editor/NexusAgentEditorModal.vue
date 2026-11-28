@@ -62,37 +62,6 @@
             </div>
           </div>
 
-          <!-- Long-term memory (openspec 2026-11-05-memory-switches; WeKnora AgentEditorModal basic section).
-               The switch can only turn memory off: space or member settings that are off still win. -->
-          <div class="setting-row">
-            <div class="setting-info">
-              <label>{{ $t('agent.editor.memoryEnabled') }}</label>
-              <p class="desc">{{ $t('agentEditor.desc.memoryEnabled') }}</p>
-            </div>
-            <div class="setting-control">
-              <t-switch v-model="form.memory_enabled" />
-            </div>
-          </div>
-
-          <div v-if="form.memory_enabled" class="setting-row">
-            <div class="setting-info">
-              <label>{{ $t('nexusMemory.agentRecall') }}</label>
-              <p class="desc">{{ $t('nexusMemory.agentRecallDesc') }}</p>
-            </div>
-            <div class="setting-control">
-              <t-switch v-model="form.memory_recall" />
-            </div>
-          </div>
-
-          <div v-if="form.memory_enabled" class="setting-row">
-            <div class="setting-info">
-              <label>{{ $t('nexusMemory.agentProfileInjection') }}</label>
-              <p class="desc">{{ $t('nexusMemory.agentProfileInjectionDesc') }}</p>
-            </div>
-            <div class="setting-control">
-              <t-switch v-model="form.memory_profile" />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -241,6 +210,42 @@
             <div class="setting-control">
               <t-input-number v-model="timeoutInput" :min="1" :max="3600" theme="column"
                 :placeholder="String(DEFAULT_MODEL_TIMEOUT_SECONDS)" clearable />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory configuration follows model settings; only stable user context is resident by default. -->
+      <div v-show="currentSection === 'memory'" class="section">
+        <div class="section-header">
+          <h2>{{ $t('nexusMemory.agentMemoryConfig') }}</h2>
+          <p class="section-description">{{ $t('nexusMemory.agentMemoryConfigDesc') }}</p>
+        </div>
+        <div class="settings-group">
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('agent.editor.memoryEnabled') }}</label>
+              <p class="desc">{{ $t('agentEditor.desc.memoryEnabled') }}</p>
+            </div>
+            <div class="setting-control"><t-switch v-model="form.memory_enabled" /></div>
+          </div>
+          <div v-if="form.memory_enabled" class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusMemory.agentRecall') }}</label>
+              <p class="desc">{{ $t('nexusMemory.agentRecallDesc') }}</p>
+            </div>
+            <div class="setting-control"><t-switch v-model="form.memory_recall" /></div>
+          </div>
+          <div v-if="form.memory_enabled" class="setting-row setting-row-vertical">
+            <div class="setting-info">
+              <label>{{ $t('nexusMemory.residentKindsLabel') }}</label>
+              <p class="desc">{{ $t('nexusMemory.residentKindsDesc') }}</p>
+            </div>
+            <div class="setting-control setting-control-full">
+              <t-checkbox-group v-model="form.memory_context_kinds">
+                <t-checkbox value="preference">{{ $t('nexusMemory.kinds.preference') }}</t-checkbox>
+                <t-checkbox value="personal_info">{{ $t('nexusMemory.kinds.personal_info') }}</t-checkbox>
+              </t-checkbox-group>
             </div>
           </div>
         </div>
@@ -599,6 +604,7 @@ const navGroups = computed(() => [
       { key: 'basic', icon: 'info-circle', label: t('agent.editor.basicInfo') },
       { key: 'prompts', icon: 'file-paste', label: t('agent.editor.promptsConfig') },
       { key: 'model', icon: 'control-platform', label: t('agent.editor.modelConfig') },
+      { key: 'memory', icon: 'root-list', label: t('nexusMemory.agentMemoryConfig') },
     ],
   },
   {

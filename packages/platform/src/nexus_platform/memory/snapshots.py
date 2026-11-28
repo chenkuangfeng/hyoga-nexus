@@ -4,9 +4,8 @@ The published-memory index in the system prompt is frozen per session: the first
 later Run in that session reuses the stored text, so the prompt prefix does not change when memory changes.
 New published entries reach the session only after an explicit refresh, which deletes the stored row.
 Since openspec 2026-11-06-memory-evolution stage 2 the snapshot also carries a capacity line and the
-bodies of `profile` entries (the resident block, at most 1000 characters); other bodies are still read
-by ID through `read_memory`. The resident entries are stored with the snapshot so each Run can report
-them in a `memory.used` event.
+bodies of resident memory entries (at most 1000 characters); other bodies are still read by ID through
+`read_memory`. Resident entries are stored with the snapshot so each Run can report them in a `memory.used` event.
 
 All functions take the caller's transaction and never commit.
 """

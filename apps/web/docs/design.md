@@ -331,4 +331,4 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 
 ### Workspace 我的记忆分区
 
-`NexusMemorySettings.vue` 沿用 WeKnora 固定版本 `e1f9a6166` 的 `frontend/src/views/settings/MemorySettings.vue` 设置行、列表工具栏与手动输入模式；按 Nexus 现有记忆契约改为两个顶层 TDesign Tab，原类别作为“记忆”的二级 Tab。新增使用对话框，收集标题、类型、内容和重要度，失败保留输入，提交期间禁止重复操作；沿用原归档确认。新增客户端调用 `POST native/memory`，本人提交就是明确发布，后端沿用筛查、去重与容量规则。组件局部语言包提供分区标签，避免影响共享语言文件。
+`NexusMemorySettings.vue` 对照 WeKnora 固定版本 `e1f9a6166` 的 `frontend/src/views/settings/MemorySettings.vue` 列表工具栏、状态标签、记忆卡片和添加弹层；个人页不承载记忆策略配置，状态依次为生效中、待确认、自动提炼、归档。归档列表来自 owner-scoped `list_memory` 返回值；自动提炼复用主题跟踪数据。类别含事实、偏好、个人信息、长期关注、在办事项，旧 `memory` / `sop` / `profile` 数据继续兼容。智能体编辑器在模型配置之后提供独立记忆区；偏好和个人信息默认常驻，其他类别只通过主动召回或受授权的记忆工具加载。

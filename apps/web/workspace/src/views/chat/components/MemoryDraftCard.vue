@@ -64,8 +64,10 @@ const submitting = ref(false)
 // An edit keeps its entry's title unless the owner changes it; a new entry starts from its topic.
 const title = ref(props.baseEntry?.title || props.topic || props.diff.slice(0, 20))
 
-const kindLabel = computed(() => (['memory', 'sop', 'profile'].includes(props.kind)
-  ? t(`agentStream.memoryDraft.kinds.${props.kind}`) : t('agentStream.memoryDraft.kinds.memory')))
+const kindLabel = computed(() => {
+  const key = props.kind === 'profile' ? 'personal_info' : ['memory', 'sop'].includes(props.kind) ? 'fact' : props.kind
+  return t(`nexusMemory.kinds.${key}`)
+})
 
 const statusText = computed(() => {
   switch (state.value) {

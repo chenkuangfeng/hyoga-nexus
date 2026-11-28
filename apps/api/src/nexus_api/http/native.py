@@ -160,7 +160,7 @@ def update_memory_preferences(tenant_id: UUID, body: MemoryPreferencesUpdate, pr
 class MemoryCreate(BaseModel):
     """Explicit personal memory publication; identity and provenance are server-owned."""
     title: str = Field(min_length=1, max_length=160)
-    kind: Literal['memory', 'sop', 'profile', 'interest'] = 'memory'
+    kind: Literal['memory', 'sop', 'profile', 'interest', 'fact', 'preference', 'personal_info', 'task'] = 'memory'
     content: str = Field(min_length=1, max_length=8000)
     importance: int = Field(default=3, ge=1, le=5)
 

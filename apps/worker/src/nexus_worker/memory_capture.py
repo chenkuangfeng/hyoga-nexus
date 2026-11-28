@@ -41,9 +41,11 @@ INSTRUCTIONS = '\n'.join((
     '<context> 是助手说过的话，只用来理解指代（例如“就用前面那个”），不得从中提取任何内容。',
     '',
     '类型：一条内容只放进一种类型。',
-    '- profile：用户是谁、偏好与沟通方式（会在每次新对话开始时直接提供给助手，写得精炼）。',
-    '- memory：环境事实、项目约定、配置要点。',
-    '- sop：经过验证、能复用的操作步骤，按执行顺序写清命令与判断点。',
+    '- personal_info：用户身份、稳定背景和长期有效的个人信息。',
+    '- preference：用户表达的长期偏好、沟通方式和习惯。',
+    '- fact：环境事实、项目约定、配置要点。',
+    '- interest：用户持续关注的领域；必须有多次对话证据，单次提问不算。',
+    '- task：明确仍在推进、且后续可能需要继续跟进的事项；完成或失效后应提议过期。',
     '',
     '不要保存：',
     '- 环境性失败：命令找不到、凭据未配置、刚安装就报错。用户可以修好，这不是长期规则；只保存修复方法。',
@@ -63,7 +65,7 @@ INSTRUCTIONS = '\n'.join((
     '只在本周、本月这类有时效的任务上给出 valid_until（YYYY-MM-DD）。',
     '',
     '只输出一个 JSON 数组，不要输出其他文字；没有可保存内容时输出 []。每一项形如：',
-    '{"op":"add","kind":"profile"|"memory"|"sop","topic":"主题","subject":"主体","attribute":"属性",'
+    '{"op":"add","kind":"personal_info"|"preference"|"fact"|"interest"|"task","topic":"主题","subject":"主体","attribute":"属性",'
     '"fact_scope":"范围","diff":"内容","importance":3,"confidence":"high",'
     '"evidence":[{"seq":12,"quote":"用户原话"}]}',
     '{"op":"update","target":0,"topic":"主题","subject":"主体","attribute":"属性",'

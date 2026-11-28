@@ -65,9 +65,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const MEMORY_KINDS = ['profile', 'preference', 'fact', 'task', 'interest'] as const
+const MEMORY_KINDS = ['profile', 'personal_info', 'preference', 'fact', 'task', 'interest'] as const
 
 const memoryKindLabel = (kind: string) => {
+  if (kind === 'personal_info') return t('memorySettings.kinds.profile')
   if ((MEMORY_KINDS as readonly string[]).includes(kind)) {
     return t(`memorySettings.kinds.${kind}`)
   }

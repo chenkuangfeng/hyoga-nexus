@@ -116,7 +116,7 @@ export async function getCaptureUsage(tenantId: string): Promise<CaptureUsage> {
   return { days: asNumber(data.days, 30), calls: asNumber(data.calls), usage }
 }
 
-export async function listMemory(tenantId: string): Promise<{ entries: MemoryEntry[]; drafts: MemoryDraft[] }> {
+export async function listMemory(tenantId: string): Promise<{ entries: MemoryEntry[]; drafts: MemoryDraft[]; archived: MemoryEntry[] }> {
   return memoryListFromResponse(await get(`${memoryPath(tenantId)}/memory`))
 }
 
@@ -164,7 +164,7 @@ export async function clearMemoryDocAffinity(tenantId: string, documentId?: stri
 
 /** Explicit form submission publishes a private memory with server-owned manual provenance. */
 export async function createManualMemory(tenantId: string,
-  body: { title: string; kind: 'memory' | 'sop' | 'profile' | 'interest'; content: string; importance: number }): Promise<void> {
+  body: { title: string; kind: 'memory' | 'sop' | 'profile' | 'interest' | 'fact' | 'preference' | 'personal_info' | 'task'; content: string; importance: number }): Promise<void> {
   const data: unknown = await post(`${memoryPath(tenantId)}/memory`, body)
   if (!isRecord(data) || data.status !== 'published' || !isString(data.id)) {
     throw new Error('Unexpected memory creation response')

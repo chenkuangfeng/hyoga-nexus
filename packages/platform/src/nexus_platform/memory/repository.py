@@ -50,6 +50,15 @@ class SqlMemoryRepository:
             query = query.where(MemoryEntryRecord.project.in_(['', project]))
         return [_entry(row) for row in self.db.scalars(query.order_by(MemoryEntryRecord.title))]
 
+    def archived_entries(self, tenant_id: UUID, owner_id: UUID) -> list[EntryView]:
+        """Return the owner's retired entries for the archive-only memory list."""
+        query = select(MemoryEntryRecord).where(
+            MemoryEntryRecord.tenant_id == tenant_id,
+            MemoryEntryRecord.owner_user_id == owner_id,
+            MemoryEntryRecord.active.is_(False),
+        ).order_by(MemoryEntryRecord.title)
+        return [_entry(row) for row in self.db.scalars(query)]
+
     def pending_drafts(self, tenant_id: UUID, owner_id: UUID) -> list[DraftView]:
         query = (
             select(MemoryDraftRecord, RunRecord.principal_id)

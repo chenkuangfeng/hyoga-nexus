@@ -38,6 +38,7 @@ export interface CaptureUsage {
 export interface MemoryEntry {
   id: string
   title: string
+  content: string
   kind: string
   project: string
   version: number
@@ -125,12 +126,12 @@ function hints(value: unknown): MemoryHint[] {
 }
 
 /** Validate and normalize `GET /native/memory`; malformed items are dropped, not trusted. */
-export function memoryListFromResponse(data: unknown): { entries: MemoryEntry[]; drafts: MemoryDraft[] } {
+export function memoryListFromResponse(data: unknown): { entries: MemoryEntry[]; drafts: MemoryDraft[]; archived: MemoryEntry[] } {
   if (!isRecord(data) || !Array.isArray(data.entries) || !Array.isArray(data.drafts)) {
     throw new Error('Unexpected memory list response')
   }
   const entries = data.entries.filter(isRecord).filter(item => isString(item.id)).map(item => ({
-    id: item.id as string, title: asString(item.title), kind: asString(item.kind, 'memory'),
+    id: item.id as string, title: asString(item.title), content: asString(item.content), kind: asString(item.kind, 'memory'),
     project: asString(item.project), version: asNumber(item.version, 1), enabled: item.enabled !== false,
     valid_until: typeof item.valid_until === 'string' ? item.valid_until : null,
     topic: asString(item.topic), fact_identity: isRecord(item.fact_identity) ? item.fact_identity as Record<string, string> : {},
@@ -162,6 +163,7 @@ export function memoryListFromResponse(data: unknown): { entries: MemoryEntry[];
         .filter(m => m.id),
     }
   })
-  return { entries, drafts }
+  const archived = Array.isArray(data.archived) ? memoryListFromResponse({ entries: data.archived, drafts: [] }).entries : []
+  return { entries, drafts, archived }
 }
 

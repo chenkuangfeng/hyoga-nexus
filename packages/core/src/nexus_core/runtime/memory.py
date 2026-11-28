@@ -5,7 +5,7 @@ from typing import Literal, Protocol
 
 class MemoryDraftPort(Protocol):
     """Propose a memory change for review; this operation does not publish long-term memory."""
-    async def propose(self, kind: Literal['memory', 'sop', 'profile'], scope: str, diff: str, *,
+    async def propose(self, kind: Literal['memory', 'sop', 'profile', 'fact', 'preference', 'personal_info', 'interest', 'task'], scope: str, diff: str, *,
                       entry_id: str | None = None, base_version: int | None = None,
                       topic: str = '', importance: int | None = None, valid_until: str | None = None) -> str:
         """Create a pending draft and return a short outcome line for the model.

@@ -55,8 +55,8 @@ CONTEXT_CHARS = 300
 #: Origins of messages a person wrote: '' is the Run's initial message (stored without metadata),
 #: `user_input` answers a question, `user_steer` is an instruction added while the Run was working.
 USER_ORIGINS = ('', 'user_input', 'user_steer')
-#: Kinds an extractor may add; `interest` comes only from topic counts (stage 6, D4).
-EXTRACT_KINDS = ('memory', 'sop', 'profile')
+#: Kinds accepted from the current extractor and older deployments; new prompts use the five explicit categories.
+EXTRACT_KINDS = ('memory', 'sop', 'profile', 'fact', 'preference', 'personal_info', 'interest', 'task')
 
 OPS = ('add', 'update', 'delete', 'none')
 UNATTENDED_OPS = ('add', 'update')
@@ -195,7 +195,7 @@ def validate_actions(raw: Any, *, unattended: bool, related: Sequence[dict[str, 
     """Check extractor output against the action schema.
 
     Accepted item shapes (optional fields in brackets):
-    - `{'op': 'add', 'kind': 'memory'|'sop', 'diff': str, [topic, subject, attribute, fact_scope, importance, confidence, valid_until, evidence]}`
+    - `{'op': 'add', 'kind': 'fact'|'preference'|'personal_info'|'interest'|'task', 'diff': str, [topic, subject, attribute, fact_scope, importance, confidence, valid_until, evidence]}`
     - `{'op': 'update', 'target': int, 'diff': str, [...]}`: `target` indexes `related`; the action is
       resolved to that entry's id and current version. Unattended runs may update only this way.
     - `{'op': 'update', 'entry_id': uuid, 'base_version': int, 'diff': str}` (attended only)

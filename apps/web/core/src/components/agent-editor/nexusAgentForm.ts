@@ -50,6 +50,8 @@ export interface AgentEditorForm {
   memory_recall: boolean
   /** `budgets.memory.profile`: true injects approved profile facts into each request. */
   memory_profile: boolean
+  /** Categories resident in the initial model context; defaults to preferences and personal facts. */
+  memory_context_kinds: ('preference' | 'personal_info')[]
   /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
   tool_access: ToolAccess
   /** Progressive tool loading threshold; 0 disables it. */
@@ -158,6 +160,10 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     memory_enabled: memoryOf(budgets).enabled !== false,
     memory_recall: memoryOf(budgets).recall === true,
     memory_profile: memoryOf(budgets).profile === true,
+    memory_context_kinds: Array.isArray(memoryOf(budgets).context_kinds)
+      ? (memoryOf(budgets).context_kinds as unknown[]).filter((kind): kind is 'preference' | 'personal_info' =>
+        kind === 'preference' || kind === 'personal_info')
+      : ['preference', 'personal_info'],
     tool_access: accessOf(budgets),
     tool_search_min_tokens: toolSearchThresholdOf(budgets),
     skills: (agent.resource_bindings || []).filter(b => b.kind === 'skill')
@@ -187,6 +193,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     memory_enabled: true,
     memory_recall: false,
     memory_profile: false,
+    memory_context_kinds: ['preference', 'personal_info'],
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
     tool_search_min_tokens: numberOr(defaults?.settings.behavior.tool_search_min_tokens, DEFAULT_TOOL_SEARCH_MIN_TOKENS),
     skills: [],
@@ -239,7 +246,9 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   const memory: Record<string, unknown> = {}
   if (!form.memory_enabled) memory.enabled = false
   memory.recall = form.memory_recall
-  memory.profile = form.memory_profile
+  memory.context_kinds = [...form.memory_context_kinds]
+  // Keep legacy readers from injecting all profile entries after this agent is saved.
+  memory.profile = false
   if (Object.keys(memory).length) budgets.memory = memory
   else delete budgets.memory
 

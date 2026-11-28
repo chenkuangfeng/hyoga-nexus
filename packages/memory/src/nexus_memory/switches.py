@@ -72,6 +72,15 @@ def profile_injection_enabled(budgets: Mapping[str, Any] | None) -> bool:
     return isinstance(group, dict) and group.get('profile') is True
 
 
+def resident_kinds(budgets: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """Return the configured always-on categories, with safe defaults for old agents."""
+    group = (budgets or {}).get(AGENT_BUDGET_KEY)
+    kinds = group.get('context_kinds') if isinstance(group, dict) else None
+    if isinstance(kinds, list):
+        return tuple(kind for kind in ('preference', 'personal_info') if kind in kinds)
+    return ('preference', 'personal_info')
+
+
 def resolve(*, space_enabled: bool, write_mode: str, user_enabled: bool,
             agent_enabled: bool | None = None) -> MemoryState:
     """Combine the three switches. ``agent_enabled=None`` means no agent context or the agent inherits."""
@@ -97,7 +106,7 @@ def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
         return
     if not isinstance(group, dict):
         raise ValueError('Agent memory settings must be an object')
-    if set(group) - {'enabled', 'recall', 'profile'}:
+    if set(group) - {'enabled', 'recall', 'profile', 'context_kinds'}:
         raise ValueError('Unknown agent memory setting')
     if 'enabled' in group and not isinstance(group['enabled'], bool):
         raise ValueError('Agent memory enabled must be a boolean')
@@ -105,3 +114,7 @@ def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
         raise ValueError('Agent memory recall must be a boolean')
     if 'profile' in group and not isinstance(group['profile'], bool):
         raise ValueError('Agent profile injection must be a boolean')
+    if 'context_kinds' in group and (not isinstance(group['context_kinds'], list)
+            or any(kind not in ('preference', 'personal_info') for kind in group['context_kinds'])
+            or len(set(group['context_kinds'])) != len(group['context_kinds'])):
+        raise ValueError('Agent memory context categories are invalid')
