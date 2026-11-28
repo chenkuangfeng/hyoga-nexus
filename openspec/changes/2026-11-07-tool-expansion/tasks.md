@@ -93,7 +93,7 @@
 - [x] 5.1 `nexus_tools.schema.sanitize` 与测试（属性名、顶层联合、缺 `properties`、`default` 与 `$ref`、布尔 `required`、名称还原）；模型客户端接入。
   - `nexus_core.schema`（放在 core，因为 runtimes 不依赖 tools）；`openai_compatible` 与文本工具协议发送前清洗，网关对参数 `restore`；`tests/test_schema_sanitize.py`。
 - [x] 5.2 `tool_search` / `tool_describe` / `tool_call` 与目录构建；阈值与目录预算；`tool_call` 经完整网关；Run 内工具块不变的测试。
-  - `nexus_tools/bridge.py` 与网关集成；阈值改为 `tool_search_min_tokens`（调整：绝对 token 数，不用上下文比例，网关不知道上下文窗口）；目录写进 `tool_search` 描述；`tests/test_tool_search.py`。当前没有内置工具声明 `deferrable`，等 MCP 接入生效。
+  - `nexus_tools/bridge.py` 与网关集成；阈值改为 `tool_search_min_tokens`（调整：绝对 token 数，不用上下文比例，网关不知道上下文窗口）；目录写进 `tool_search` 描述；`tests/test_tool_search.py`。内置工具名单与可配置阈值在第 20 节补齐。
 - [x] 5.3 未绑定或组开关关闭的工具经桥接调用被拒绝的测试。
 
 ## 6. Web 工具组（阶段 E）
@@ -215,3 +215,11 @@
 - [x] 19.3 更新中文名称与描述、工具包设计文档和本 OpenSpec；人工检查旧 Agent 兼容、部署门控与前端分组处理。未执行自动测试或构建。
 
 实施记录：管理端、智能体编辑器和策略门控已检查；模型侧工具 ID 与沙箱档位配置不变。依照工作区指令，本次不运行测试或构建。
+
+## 20. 内置工具渐进加载与阈值配置
+
+- [x] 20.1 将不常用的记忆整理、技能管理、知识辅助、沙箱辅助及定时管理工具标记为可延迟，常用工具保持直达；继续复用既有 bridge 完整授权执行链。
+- [x] 20.2 默认阈值调整为 2500 Token，修正中文 schema 估算的 JSON 转义放大问题，并在智能体编辑器提供 0–200000 阈值设置。
+- [x] 20.3 更新工具包文档及本提案；人工检查注册、设置持久化和 Run 装配。遵循本轮工作要求，未运行自动测试、类型检查或构建。
+
+实施记录：当前内置延迟名单 18 个工具的启发式 schema 估算合计约 3092 Token，默认阈值可触发渐进加载。估算仅用于是否延迟的决策，不代表 tokenizer 或供应商账单用量。常用工具和授权、审批、沙箱隔离行为未改变。

@@ -97,7 +97,7 @@ class NativePolicy:
     #: `[sandbox].exec_timeout_max_seconds` still caps the timeout.
     #: Progressive tool loading (R4): deferrable tools (MCP and tools that declare it) whose schemas together reach
     #: this many tokens are reached through tool_search / tool_describe / tool_call. 0 turns it off.
-    tool_search_min_tokens: int = 6000
+    tool_search_min_tokens: int = 2500
     #: Model profile version used by `vision_analyze` (type vision). Empty: the tool reports that none is configured.
     vision_model_profile_version_id: str = ''
     sandbox_exec_timeout_seconds: int = 30

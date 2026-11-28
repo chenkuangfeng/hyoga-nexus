@@ -17,6 +17,8 @@ export const MAX_OUTPUT_TOKENS_LIMIT = 128000
 export const MAX_ROUNDS_LIMIT = 1000
 export const MAX_RUN_TOKENS_LIMIT = 10000000
 export const DEFAULT_TEMPERATURE = 0.7
+/** Below this tool schema estimate, all bound tools remain directly available to the model. */
+export const DEFAULT_TOOL_SEARCH_MIN_TOKENS = 2500
 
 /** Reasoning levels accepted in `budgets.generation.reasoning_effort`; `auto` follows the model profile. */
 export const REASONING_EFFORTS = ['off', 'auto', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
@@ -48,6 +50,8 @@ export interface AgentEditorForm {
   memory_recall: boolean
   /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
   tool_access: ToolAccess
+  /** Progressive tool loading threshold; 0 disables it. */
+  tool_search_min_tokens: number
   /** Bound skills (openspec 2026-11-07-skill-evolution): the name, the version bound and the space that owns it. */
   skills: SkillBinding[]
   /** `budgets.behavior.sandbox_profile`: the sandbox profile this agent runs on; empty takes the deployment's default. */
@@ -88,6 +92,12 @@ function accessOf(budgets: Record<string, unknown> | undefined): ToolAccess {
   const behavior = budgets?.behavior
   const value = behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).tool_access : undefined
   return (TOOL_ACCESS_LEVELS as readonly string[]).includes(value as string) ? (value as ToolAccess) : 'standard'
+}
+
+function toolSearchThresholdOf(budgets: Record<string, unknown> | undefined): number {
+  const behavior = budgets?.behavior
+  const value = behavior && typeof behavior === 'object' ? (behavior as Record<string, unknown>).tool_search_min_tokens : undefined
+  return numberOr(value, DEFAULT_TOOL_SEARCH_MIN_TOKENS)
 }
 
 function sandboxProfileOf(budgets: Record<string, unknown> | undefined): string {
@@ -146,6 +156,7 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     memory_enabled: memoryOf(budgets).enabled !== false,
     memory_recall: memoryOf(budgets).recall !== false,
     tool_access: accessOf(budgets),
+    tool_search_min_tokens: toolSearchThresholdOf(budgets),
     skills: (agent.resource_bindings || []).filter(b => b.kind === 'skill')
       .map(b => ({ name: b.resource_id, version_id: b.resource_version_id || '', source_tenant_id: b.source_tenant_id })),
     sandbox_profile: sandboxProfileOf(budgets),
@@ -173,6 +184,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     memory_enabled: true,
     memory_recall: true,
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
+    tool_search_min_tokens: numberOr(defaults?.settings.behavior.tool_search_min_tokens, DEFAULT_TOOL_SEARCH_MIN_TOKENS),
     skills: [],
     sandbox_profile: '',
     tool_groups_enabled: groupSwitchesOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
@@ -228,6 +240,12 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
 
   const behavior = budgets.behavior && typeof budgets.behavior === 'object' ? { ...(budgets.behavior as Record<string, unknown>) } : {}
   if (form.tool_access !== 'standard' || 'tool_access' in behavior) behavior.tool_access = form.tool_access
+  const toolThreshold = Math.min(Math.max(0, Math.round(form.tool_search_min_tokens)), 200000)
+  if (toolThreshold !== DEFAULT_TOOL_SEARCH_MIN_TOKENS || 'tool_search_min_tokens' in behavior) {
+    behavior.tool_search_min_tokens = toolThreshold
+  } else {
+    delete behavior.tool_search_min_tokens
+  }
   // An empty profile means "the deployment's default": the key is dropped rather than stored as an empty string.
   if (form.sandbox_profile) behavior.sandbox_profile = form.sandbox_profile
   else delete behavior.sandbox_profile

@@ -82,7 +82,7 @@
 13. 沙箱写入后递增全局写入计数，读缓存据此失效（WeKnora `sandboxFileMutationEpoch`）。
 
 **D. 渐进加载与 schema 清洗（Runtime、模型适配变化）**
-14. `tool_search` / `tool_describe` / `tool_call` 三个桥接工具（决定 6）。绑定工具的 schema 总量超过上下文预算的某个比例时，低频工具只在目录里列名称与一句话，模型经 `tool_search` 检索、`tool_describe` 取 schema、`tool_call` 调用。`tool_call` 展开为真实工具名后走完整网关管线（授权、审批、守卫、审计都看到真实工具），桥接工具本身不开新口子。Run 内工具块保持不变，保护提示缓存。默认只对 MCP 与大型工具组启用，现有内置工具不受影响。
+14. `tool_search` / `tool_describe` / `tool_call` 三个桥接工具（决定 6）。MCP 工具及明确标记的低频内置工具 schema 估算合计达到智能体可调阈值时，模型经 `tool_search` 检索、`tool_describe` 取 schema、`tool_call` 调用；默认阈值 2500，0 关闭。内置常用对话、技能执行、知识检索及沙箱读写/同步执行工具仍直接提供。`tool_call` 展开为真实工具名后走完整网关管线（授权、审批、守卫、审计都看到真实工具），桥接工具本身不开新口子。Run 内工具块保持不变，保护提示缓存。Token 阈值采用紧凑 schema 的字符比例估值，仅用于延迟决策，不代表模型供应商用量。
 15. `nexus_tools.schema.sanitize(schema, provider)`：在模型客户端发请求前清洗（属性名正则、顶层 `anyOf`、缺 `properties` 的对象、`default` 与 `$ref` 并存等）。只作用于发给供应商的副本，不改注册的定义。
 16. 工具来源标记 `ToolDefinition.source`（`builtin` / `domain` / `mcp`），接 MCP 时用于命名空间与审计。
 

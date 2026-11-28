@@ -26,8 +26,14 @@ _WORD = re.compile(r'[a-z0-9]+|[一-鿿]')
 
 
 def estimate_tokens(definition: ToolDefinition) -> int:
-    """Tokens the definition would add to every request."""
-    return (len(definition.name) + len(definition.description) + len(json.dumps(definition.parameters))) // CHARS_PER_TOKEN
+    """Estimate schema tokens from compact UTF-8 JSON before provider serialization.
+
+    This is a stable threshold heuristic, not a billing count: tokenizer and provider wrappers
+    differ. Avoiding ASCII escaping matters for Chinese descriptions, whose escaped JSON can
+    inflate the estimate several-fold without changing the model-visible text.
+    """
+    payload = json.dumps(definition.parameters, ensure_ascii=False, separators=(',', ':'))
+    return (len(definition.name) + len(definition.description) + len(payload)) // CHARS_PER_TOKEN
 
 
 def is_deferrable(definition: ToolDefinition) -> bool:

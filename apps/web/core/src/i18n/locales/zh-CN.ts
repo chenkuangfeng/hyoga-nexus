@@ -8842,6 +8842,7 @@ export default {
   },
   nexusAgent: {
     toolAccess: { label: "工具访问级别", read_only: "只读", standard: "标准", strict: "严格", read_onlyDesc: "只提供只读工具，写入和高危工具不可用。", standardDesc: "写入类工具直接执行，高危工具需要审批。", strictDesc: "写入类和高危工具都需要审批。" },
+    toolLoading: { label: "渐进加载工具阈值", desc: "当可延迟工具的 Schema 估算总量达到此值时，改用按需搜索与加载；0 表示关闭。默认 2500 Token，较低阈值会更早按需加载。" },
     risk: { read: "只读", probe: "探查", write: "写入", destructive: "高危", low: "低风险", medium: "中风险", high: "高风险" },
     basicInfoDesc: "配置智能体的名称与描述",
     promptsConfigDesc: "配置智能体的系统提示词",

@@ -137,7 +137,9 @@ class ConcurrencyHint(NamedTuple):
 
 ## 4. 渐进加载
 
-触发：绑定工具的 schema 估算 token 数超过上下文窗口的 `tool_search_threshold_pct`（默认 10%）。被延迟的工具：`source == 'mcp'` 和声明 `deferrable=True` 的大型工具组；`base` 与现有内置工具永不延迟。
+触发：MCP 工具与显式声明 `deferrable=True` 的内置工具 schema 估算合计达到智能体的 `budgets.behavior.tool_search_min_tokens`（默认 2500，0 关闭）。schema 估算使用紧凑 JSON 和约 3 字符/token 的启发式，不等同于供应商实际 token。延迟集合集中在不常用的记忆整理、技能管理、知识图谱/文档辅助、沙箱目录/搜索/编辑/异步任务、定时管理工具；常用对话、技能加载与执行、知识搜索、沙箱读写与同步执行保持直接可用。
+
+智能体编辑器可调整该阈值，便于老版本仍保存 6000 的智能体显式改小。低于门槛时不做延迟；达到门槛时 Run 的工具块保持不变，由 `tool_search` / `tool_describe` / `tool_call` 提供按需发现。工具是否绑定、授权、可用和审批的检查不变。
 
 - Run 开始时：工具块 = 非延迟工具 + `tool_search` + `tool_describe` + `tool_call`；系统提示附一份名称加一句话的目录，受 `listing_max_tokens` 约束，超限降级为只列组名。
 - `tool_search(queries)`：在延迟目录里做关键词检索，返回名称与摘要，次数与结果数有上限。

@@ -17,6 +17,17 @@ from .tool_output import tool_output_tools
 from .todo import todo_tool
 from .web import web_tools
 
+# These are useful on demand but uncommon on most turns. Keep the frequently used
+# conversation, skill loading/execution, knowledge search, and sandbox read/write/exec
+# schemas directly available; the gateway exposes these through the existing bridge only
+# when their combined schema estimate crosses the agent's threshold.
+_DEFERRABLE_BUILTINS = frozenset({
+    'propose_memory_draft', 'start_long_term_update', 'read_conversation', 'read_skill_file',
+    'skill_manage', 'skill_save', 'skill_rollback', 'grep_chunks', 'document_outline',
+    'query_knowledge_graph', 'sandbox_list_files', 'sandbox_search_files', 'sandbox_edit_file',
+    'sandbox_exec_async', 'sandbox_job_wait', 'sandbox_job_cancel', 'cronjob_list', 'cronjob_manage',
+})
+
 
 @lru_cache(maxsize=1)
 def builtins() -> ToolRegistry:
@@ -41,7 +52,10 @@ def builtins() -> ToolRegistry:
         ('schedule', tuple(schedule_tools())),
     ):
         for tool in tools:
-            registry.register(RegisteredTool(replace(tool.definition, group=group), tool.handler, tool.public_result))
+            registry.register(RegisteredTool(
+                replace(tool.definition, group=group, deferrable=tool.definition.name in _DEFERRABLE_BUILTINS),
+                tool.handler, tool.public_result,
+            ))
     return registry
 
 

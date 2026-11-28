@@ -379,6 +379,17 @@
             </div>
           </div>
 
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusAgent.toolLoading.label') }}</label>
+              <p class="desc">{{ $t('nexusAgent.toolLoading.desc') }}</p>
+            </div>
+            <div class="setting-control">
+              <t-input-number v-model="form.tool_search_min_tokens" :min="0" :max="200000" :step="500"
+                theme="column" />
+            </div>
+          </div>
+
           <!-- Sandbox profile: defined by the operator; an agent only picks one by name (empty = the default). -->
           <div v-if="sandboxProfiles.length" class="setting-row">
             <div class="setting-info">

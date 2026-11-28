@@ -65,6 +65,6 @@
 
 终端和工作区文件工具在智能体编辑器及企业工具目录中归入「基础」展示组，内部稳定名称保留 `sandbox_*`。它们仍由 sandbox backend 通过 Run 的 `SandboxSessionPort` 执行，并继续经过部署可用性、隔离验收、workspace 虚拟路径、实时授权、审批和危险命令守卫；此处的分组调整不赋予 worker 宿主机任意文件或命令访问权。旧智能体保存的 `tool_groups_enabled.sandbox` 值不再控制这些工具。
 
-- **渐进加载**（`bridge.py`）：`source == 'mcp'` 或声明 `deferrable` 的工具，其 schema 估算 token 之和达到 `NativePolicy.tool_search_min_tokens`（默认 6000，0 关闭）时，不再直接发给模型，改为 `tool_search` / `tool_describe` / `tool_call` 三个桥接工具。目录写在 `tool_search` 的描述里，Run 内工具块不变。`tool_call` 展开为真实工具后走完整网关管线；只能调用已绑定、已授权、未被分组隐藏、且确实被延迟的工具。当前没有内置工具声明 `deferrable`，所以现有行为不变，MCP 接入后生效。
+- **渐进加载**（`bridge.py`）：`source == 'mcp'` 或声明 `deferrable` 的工具，其 schema 估算 token 之和达到 `NativePolicy.tool_search_min_tokens`（默认 2500，0 关闭）时，不再直接发给模型，改为 `tool_search` / `tool_describe` / `tool_call` 三个桥接工具。估算采用紧凑 JSON 和约 3 字符/token 的启发式，并非供应商实际 token。内置延迟名单覆盖低频的记忆整理、技能管理、知识辅助、沙箱目录/搜索/编辑/异步任务和定时管理；常用对话、技能加载与执行、知识搜索、沙箱读写与同步执行保留直达 schema。智能体编辑器可覆盖阈值。目录写在 `tool_search` 的描述里，Run 内工具块不变。`tool_call` 展开为真实工具后走完整网关管线；只能调用已绑定、已授权、未被分组隐藏、且确实被延迟的工具。
 - **schema 清洗**（`nexus_core.schema`）：发给供应商的是清洗后的副本（属性名、类型数组、缺失的 `properties` 与 `required`、`$ref` 旁的 `default`、顶层组合子），模型返回的参数由 `restore` 还原属性名。
 - **Web 工具**（`builtins/web.py`、`web/`，`web` 组）：`web_search` 的后端注册表有 tavily、brave、searxng，请求形状按各家公开 API 编写，未对真实服务验证；`web_fetch` 逐跳校验（协议、端口 80/443/8080/8443、解析出的每个地址都必须是公网地址），连接到校验过的字面地址并保留 SNI，手动跟随最多 5 次重定向，正文有字节上限；结果带「外部网页内容」前缀，并经过网关的注入扫描。`[web].enabled` 默认关闭。
