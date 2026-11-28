@@ -23,14 +23,17 @@ class ToolGroup:
     planned: str = ''
 
 
-#: Display order. High-impact groups (`sandbox`, `web`, `collab`, `schedule`, `media`) default to off, so an
+#: Display order. High-impact groups (`web`, `collab`, `schedule`, `media`) default to off, so an
 #: agent version saved before a group existed never gains its tools.
 TOOL_GROUPS: tuple[ToolGroup, ...] = (
-    ToolGroup('base', '基础', locked=True),
+    ToolGroup('base', '基础工具', locked=True),
     ToolGroup('memory', '记忆'),
     ToolGroup('knowledge', '知识库'),
     ToolGroup('skills', '技能'),
-    ToolGroup('sandbox', '沙箱', default_enabled=False),
+    # Kept as an internal execution-availability gate for compatibility. The
+    # sandbox-backed terminal and file tools are presented under `base`; the
+    # sandbox profile still controls whether those tools can run.
+    ToolGroup('sandbox', '执行环境', default_enabled=True),
     ToolGroup('wiki', 'Wiki', planned='知识库 K6.1'),
     ToolGroup('web', 'Web', default_enabled=False, planned='工具扩展 E'),
     ToolGroup('collab', '协作', default_enabled=False, planned='工具扩展 G'),
@@ -48,10 +51,14 @@ def group_of(group_id: str) -> ToolGroup | None:
 
 
 def group_enabled(switches: dict[str, bool] | None, group_id: str) -> bool:
-    """Whether the agent's switches leave `group_id` on. Unknown groups are off; `base` is always on."""
+    """Whether the agent's switches leave `group_id` on.
+
+    The sandbox id remains an internal deployment gate, not an agent-selectable group;
+    old saved false switches are ignored. Deployment availability still filters it.
+    """
     group = _BY_ID.get(group_id)
     if group is None:
         return False
-    if group.locked:
+    if group.locked or group_id == 'sandbox':
         return True
     return bool((switches or {}).get(group_id, group.default_enabled))

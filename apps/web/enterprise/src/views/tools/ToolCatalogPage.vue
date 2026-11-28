@@ -13,7 +13,10 @@ const tenant = computed(() => String(auth.effectiveTenantId || '')), canManage =
 const catalog = ref<AgentToolCatalog | null>(null), loading = ref(false), busy = ref(''), error = ref(''), ready = ref(false)
 let epoch = 0, confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
 const sections = computed(() => {
-  const tools = catalog.value?.tools ?? [], order = catalog.value?.groups ?? []
+  // Sandbox is an execution backend, not a user-facing capability group.
+  // Keep its runtime isolation gate intact while listing these tools as base tools.
+  const tools = (catalog.value?.tools ?? []).map(tool => tool.group === 'sandbox' ? { ...tool, group: 'base' } : tool)
+  const order = (catalog.value?.groups ?? []).filter(group => group !== 'sandbox')
   const keys = [...new Set([...order, ...tools.map((tool) => tool.group)])]
   return keys.map(key => {
     const members = tools.filter(tool => tool.group === key)

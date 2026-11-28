@@ -57,11 +57,13 @@
 
 提案：`openspec/changes/2026-11-07-tool-expansion`。
 
-- **分组**：`ToolDefinition.group` 在注册处声明（`builtins/registration.py`），分组本身（标签、默认开关、是否锁定）定义在 `nexus_core.native.tool_groups`。`base` 锁定，`sandbox`、`web`、`collab`、`schedule`、`media` 默认关闭。门控两层：可用性（`nexus_platform.runs.tool_gates`，部署侧事实）与智能体开关（`NativePolicy.tool_groups_enabled`）。两层都通过的组之外，工具既不出现在定义里，直接调用也返回 `tool_authorization_denied`（网关 `hidden_groups`）。门控只能收紧，授权、访问级别、守卫、审批照常。记忆、知识库、技能脚本三处仍在 `preparation.py` 按名过滤。
+- **分组**：`ToolDefinition.group` 在注册处声明（`builtins/registration.py`），分组本身（标签、默认开关、是否锁定）定义在 `nexus_core.native.tool_groups`。`base` 锁定；`web`、`collab`、`schedule`、`media` 默认关闭。`sandbox` 保留为内部执行可用性门控，旧智能体组开关值不再影响终端/工作区文件工具。门控仍先校验部署档位和隔离验收，再经网关 `hidden_groups` 同时过滤模型目录与直接调用。授权、访问级别、守卫、审批照常。记忆、知识库、技能脚本三处仍在 `preparation.py` 按名过滤。
 - **调度**：工具可声明 `concurrency(arguments)`，返回 `parallel` / `exclusive` / `serial(key)`。未声明时沿用「只读、幂等、无副作用、无审批才并行」。可能进入审批的调用（`gateway.may_suspend`：访问级别为 `ask`，或参数命中 `HIGH` 守卫规则）一律独占，因为挂起后从第一个待处理调用恢复，并行出去的兄弟调用会被重复执行。
-- **沙箱工具**（`builtins/sandbox.py`，`sandbox` 组）：`sandbox_list_files`、`sandbox_read_file`、`sandbox_search_files`、`sandbox_write_file`、`sandbox_edit_file`、`sandbox_exec`。模型只看到 `/workspace` 与 `/outputs`。读写同一文件按路径串行，列目录和搜索独占。`sandbox_exec` 的风险：沙箱网络关闭时为 `write`，打开时为 `destructive`；`dangerous_shell_commands.json` 的规则同样作用于它。没有沙箱会话时返回 `sandbox_unavailable`，而不是抛出 Run 级错误。沙箱本身见 `packages/sandbox`。
+- **终端与工作区文件工具**（`builtins/sandbox.py`，内部 `sandbox` 组）：`sandbox_list_files`、`sandbox_read_file`、`sandbox_search_files`、`sandbox_write_file`、`sandbox_edit_file`、`sandbox_exec`、`sandbox_exec_async`、`sandbox_job_wait`、`sandbox_job_cancel`。智能体编辑器与企业目录把它们放在「基础工具」展示组；模型调用 ID 保持不变。模型只看到 `/workspace` 与 `/outputs`。读写同一文件按路径串行，列目录和搜索独占。`sandbox_exec` 的风险：网络关闭时为 `write`，开放时为 `destructive`；`dangerous_shell_commands.json` 的规则同样作用于它。没有可用执行档位时仍返回拒绝结果，而不是访问宿主机。执行后端见 `packages/sandbox`。
 
 ## 渐进加载、schema 清洗与 Web 工具
+
+终端和工作区文件工具在智能体编辑器及企业工具目录中归入「基础」展示组，内部稳定名称保留 `sandbox_*`。它们仍由 sandbox backend 通过 Run 的 `SandboxSessionPort` 执行，并继续经过部署可用性、隔离验收、workspace 虚拟路径、实时授权、审批和危险命令守卫；此处的分组调整不赋予 worker 宿主机任意文件或命令访问权。旧智能体保存的 `tool_groups_enabled.sandbox` 值不再控制这些工具。
 
 - **渐进加载**（`bridge.py`）：`source == 'mcp'` 或声明 `deferrable` 的工具，其 schema 估算 token 之和达到 `NativePolicy.tool_search_min_tokens`（默认 6000，0 关闭）时，不再直接发给模型，改为 `tool_search` / `tool_describe` / `tool_call` 三个桥接工具。目录写在 `tool_search` 的描述里，Run 内工具块不变。`tool_call` 展开为真实工具后走完整网关管线；只能调用已绑定、已授权、未被分组隐藏、且确实被延迟的工具。当前没有内置工具声明 `deferrable`，所以现有行为不变，MCP 接入后生效。
 - **schema 清洗**（`nexus_core.schema`）：发给供应商的是清洗后的副本（属性名、类型数组、缺失的 `properties` 与 `required`、`$ref` 旁的 `default`、顶层组合子），模型返回的参数由 `restore` 还原属性名。

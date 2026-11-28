@@ -419,6 +419,9 @@
                       @change="(value: boolean) => onGroupSwitch(group.key, value)" />
                   </header>
                   <p v-if="group.info?.locked" class="sandbox-note">{{ $t('toolUi.baseHint') }}</p>
+                  <p v-if="group.executionInfo && !group.executionInfo.available" class="sandbox-note" role="status">
+                    {{ $t('nexusAgent.toolGroupSwitch.executionUnavailable', { reason: $t(`nexusAgent.groupReason.${groupReasonKey(group.executionInfo.reason)}`) }) }}
+                  </p>
                   <p v-if="group.info && !group.info.available" class="sandbox-note" role="status">
                     {{ $t('nexusAgent.toolGroupSwitch.unavailable', { reason: $t(`nexusAgent.groupReason.${groupReasonKey(group.info.reason)}`) }) }}
                   </p>
@@ -715,7 +718,7 @@ function sandboxReasonLabel(reason: string): string {
 // ---- Tool group switches: explicit choices live in `form.tool_groups_enabled`, defaults come from the catalog.
 function onGroupSwitch(id: string, value: boolean) {
   if (saving.value) return
-  const tools = (catalog.value?.tools || []).filter(tool => tool.group === id)
+  const tools = toolGroups.value.find(group => group.key === id)?.tools || []
   if (!tools.length) return
   const info = (catalog.value?.group_info || []).find(item => item.id === id)
   if (info && !info.locked) form.tool_groups_enabled = withGroupSwitch(form.tool_groups_enabled, info, value)
@@ -732,14 +735,14 @@ function onToolSwitch(tool: AgentToolEntry, enabled: boolean) {
   const info = catalog.value?.group_info?.find(item => item.id === tool.group)
   // Old drafts can retain bindings under a closed gate. Turning on one child must not revive its siblings.
   const initial = enabled && info && !groupEnabled(info, form.tool_groups_enabled)
-    ? withGroupTools(form.allowed_tools, (catalog.value?.tools || []).filter(item => item.group === tool.group), false)
+    ? withGroupTools(form.allowed_tools, toolGroups.value.find(group => group.key === tool.group)?.tools || [], false)
     : form.allowed_tools
   const chosen = new Set(initial)
   if (enabled) chosen.add(tool.name)
   else chosen.delete(tool.name)
   form.allowed_tools = [...chosen]
   if (info && !info.locked) {
-    const anySelected = (catalog.value?.tools || []).some(item => item.group === tool.group && chosen.has(item.name))
+    const anySelected = (toolGroups.value.find(group => group.key === tool.group)?.tools || []).some(item => chosen.has(item.name))
     form.tool_groups_enabled = withGroupSwitch(form.tool_groups_enabled, info, anySelected)
   }
 }
@@ -798,14 +801,17 @@ const timeoutInput = computed<number | undefined>({
 })
 
 const toolGroups = computed(() => {
-  const tools = catalog.value?.tools || []
+  // Keep execution isolated in the sandbox backend while presenting terminal
+  // and workspace file tools with the base tools, as in Hermes.
+  const tools = (catalog.value?.tools || []).map(tool => tool.group === 'sandbox' ? { ...tool, group: 'base' } : tool)
   const infos = catalog.value?.group_info || []
   const order = [...new Set([...(catalog.value?.groups || []), ...infos.map(info => info.id), ...tools.map(tool => tool.group)])]
   return order.map(key => {
     const members = tools.filter(tool => tool.group === key)
     const info = infos.find(item => item.id === key)
     const selectedCount = members.filter(toolSelected).length
-    return { key, info, selectedCount, partial: selectedCount > 0 && selectedCount < members.length,
+    return { key, info, executionInfo: key === 'base' ? infos.find(item => item.id === 'sandbox') : undefined,
+      selectedCount, partial: selectedCount > 0 && selectedCount < members.length,
       label: te(`nexusAgent.toolGroups.${key}`) ? t(`nexusAgent.toolGroups.${key}`) : info?.label || key,
       tools: members }
   }).filter(group => group.tools.length > 0 || group.info?.planned)
