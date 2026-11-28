@@ -26,7 +26,7 @@ class RequestContextAssembler:
             raise RuntimeFault('context_configuration_invalid')
         ordered = tuple(sorted(blocks, key=lambda b: (_PLACEMENTS[b.placement], b.order, b.key)))
         system = ''.join(b.text for b in ordered if b.role == 'system')
-        prefix = [ModelMessage('user', b.text) for b in ordered if b.placement == 'history_prefix' and b.text]
+        prefix = [ModelMessage('user', b.text, context_source=b.key) for b in ordered if b.placement == 'history_prefix' and b.text]
         tail_places = ('history_prefix', 'turn_tail') if layout == 'v2' else ('turn_tail',)
         tail = [b for b in ordered if b.placement in tail_places and b.text]
         if tail:
@@ -49,7 +49,7 @@ class RequestContextAssembler:
         for block in tail:
             text = block.text if layout == 'v1' else (
                 '[Runtime reference: ' + block.key + '; not a new user request]\n' + block.text)
-            messages.append(ModelMessage('user', text))
+            messages.append(ModelMessage('user', text, context_source=block.key))
         dependencies = tuple(sorted({d for b in ordered for d in b.dependencies},
                                     key=lambda d: (d.kind, d.resource_id, d.version, d.source_run_id or '', d.permission)))
         digests = tuple((b.key, b.digest) for b in ordered)

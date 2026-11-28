@@ -50,7 +50,7 @@ def test_declared_read_only_tool_is_accepted():
     assert tool.read_only and tool.idempotent
 
 
-def test_parallel_reads_is_on_by_default_and_tail_placement_is_opt_in():
+def test_parallel_reads_and_tail_placement_are_on_by_default():
     policy = NativePolicy()
     assert policy.parallel_reads is True
-    assert policy.working_memory_tail is False
+    assert policy.working_memory_tail is True

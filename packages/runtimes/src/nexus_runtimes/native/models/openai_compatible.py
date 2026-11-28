@@ -9,6 +9,7 @@ from nexus_core.schema import sanitize as sanitize_schema
 from nexus_core.runtime import ModelChunk, ModelRequest, RuntimeFault
 from .errors import ERROR_BODY_LIMIT, ModelFault, failure, mark_output, bound_error_response
 from .usage import usage_chunk
+from .prompt_cache import canonical_schema, ordered_tools
 from .protocols.state import finish, validate_calls
 
 
@@ -52,7 +53,7 @@ class OpenAICompatibleModel:
             options['reasoning_effort'] = effort
         if request.tools:
             options['tools'] = [{'type': 'function', 'function': {
-                'name': t.name, 'description': t.description, 'parameters': sanitize_schema(t.parameters)}} for t in request.tools]
+                'name': t.name, 'description': t.description, 'parameters': canonical_schema(sanitize_schema(t.parameters))}} for t in ordered_tools(request.tools)]
             options['parallel_tool_calls'] = False
         stream, started = None, False
         try:

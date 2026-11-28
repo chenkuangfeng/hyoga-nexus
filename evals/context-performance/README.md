@@ -26,3 +26,7 @@ uv run python evals/context-performance/harness.py --json out.json       # 每�
 - 尚未采集：`cached_tokens`、模型耗时、真实 token 用量。这些需要配置真实供应商后，通过 `run_case(case, model_factory=...)` 替换模型工厂采集。
 - `baseline.md` 尚未生成。在真实模型上采集后再写入，不使用脚本化结果冒充基线。
 - 质量评测（追问正确率）见同一变更的第六节，需要真实模型。
+
+## 提示前缀结构对比
+
+执行 `uv run python evals/context-performance/prompt_prefix_benchmark.py`，复用 `cases.py` 的 20 段固定语料，对比工作记忆在历史前与尾部时的共同消息前缀字节数。结果写入 `prompt-prefix-results.json`，解释与验证限制见 [报告](prompt-prefix-report.md)。此脚本不调用真实模型，也不报告缓存 token 或回答质量。

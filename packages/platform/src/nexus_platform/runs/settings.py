@@ -22,7 +22,7 @@ LABELS = {
     'summarize_context': '使用模型生成历史摘要', 'reminder_interval': '工作检查点提醒间隔',
     'memory_interval': '长期记忆提醒间隔', 'durable_checkpoint_interval': '持久检查点提醒间隔',
     'user_direction_interval': '询问用户方向间隔', 'project_name': '项目名称', 'project_context': '项目规则与记忆指针',
-    'working_memory_tail': '工作记忆放在历史尾部（实验）', 'tool_output_inline_limit': '工具输出外置阈值（字符）',
+    'working_memory_tail': '工作记忆放在历史尾部（提高提示缓存复用）', 'tool_output_inline_limit': '工具输出外置阈值（字符）',
     'tool_preview_chars': '外置后的预览长度（字符）', 'tool_output_page_chars': '分页读取每页上限（字符）',
     'tool_result_window_rounds': '工具结果保留的模型调用轮数', 'compact_high_ratio': '触发压缩的上下文比例',
     'compact_low_ratio': '压缩后的目标上下文比例', 'summary_max_chars': '单条摘要字符上限',

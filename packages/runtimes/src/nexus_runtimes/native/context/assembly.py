@@ -18,9 +18,9 @@ def append_context(messages, context: str, *, tail: bool = False):
     result = list(messages)
     if context:
         if tail:
-            result.append(ModelMessage('user', context))
+            result.append(ModelMessage('user', context, context_source='runtime:working_memory'))
         else:
-            result.insert(1 if result and result[0].role == 'system' else 0, ModelMessage('user', context))
+            result.insert(1 if result and result[0].role == 'system' else 0, ModelMessage('user', context, context_source='runtime:working_memory'))
     return result
 
 

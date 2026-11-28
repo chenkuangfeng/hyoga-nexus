@@ -64,8 +64,8 @@ class NativePolicy:
     project_name: str = ''
     project_context: str = ''
     # Context and tool-output governance (openspec 2026-11-01-context-token-performance, design §14).
-    # Byte-stable prefix placement of working memory is opt-in until the eval gate passes (P1).
-    working_memory_tail: bool = False
+    # Keep changing working notes after the reusable history prefix; explicit False preserves legacy placement.
+    working_memory_tail: bool = True
     tool_output_inline_limit: int = 2000
     tool_preview_chars: int = 500
     tool_output_page_chars: int = 4000

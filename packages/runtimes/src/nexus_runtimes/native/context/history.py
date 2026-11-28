@@ -4,6 +4,11 @@ from __future__ import annotations
 from nexus_core.runtime import ModelMessage, RuntimeFault
 
 
+def is_user_boundary(message: ModelMessage) -> bool:
+    """Only original user/history messages start a task, never model-only reference blocks."""
+    return message.role == 'user' and message.context_source is None
+
+
 def _estimated_tokens(messages: tuple[ModelMessage, ...]) -> int:
     """Use the same conservative UTF-8 approximation as model request fitting."""
     return sum((len(message.content.encode('utf-8')) + 2) // 3 + 4
@@ -21,7 +26,7 @@ def compact_history(messages: tuple[ModelMessage, ...], limit: int) -> tuple[tup
         return messages, 0
     system = messages[0]
     history = list(messages[1:])
-    boundaries = [index for index, message in enumerate(history) if message.role == 'user']
+    boundaries = [index for index, message in enumerate(history) if is_user_boundary(message)]
     latest_user = boundaries[-1] if boundaries else 0
     latest_tool_turn = max((index for index, message in enumerate(history) if message.tool_calls), default=latest_user)
     protected_start = min(latest_user, latest_tool_turn)

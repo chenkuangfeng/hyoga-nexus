@@ -55,3 +55,19 @@ Native SHALL 将宿主注入的工具目录、技能目录、记忆、知识库�
 #### Scenario: 无可用摘要的长历史
 - **WHEN** 历史长度超过读取批次大小且没有合法摘要覆盖
 - **THEN** 分批读取现有回放规则要求保留的消息，不能以硬窗口静默丢失用户请求和最终回答
+
+### Requirement: 提示缓存前缀稳定化
+
+Native 默认 SHALL 将工作锚点放在完整历史/工具交换之后，显式关闭配置继续有效；会话检查点 SHALL 为尾部 user 参考资料，不进入 system。使用统计变化 SHALL NOT 改变常驻内容的选择与排列；授权、到期、内容版本和显式重要度变化仍实时生效。工具和目录 SHALL 使用确定性的排序及序列化。
+
+#### Scenario: 连续模型回合
+- **WHEN** 只有工作锚点或检查点变化
+- **THEN** 前面的指令与历史保持相同，工具调用与结果不会被拆开，源消息不改写。
+
+### Requirement: 按供应商协议启用缓存
+
+原生 Anthropic Messages SHALL 为工具、system 和最近消息设置合计至多四个 ephemeral 断点；Chat Completions 与 Responses SHALL NOT 携带 Anthropic 专属字段。缓存命中统计 SHALL 使用供应商 usage，不以本地前缀字节数冒充真实 token。
+
+#### Scenario: 尾部参考资料与压缩边界
+- **WHEN** 最新用户问题之后有检查点、召回资料或工作锚点
+- **THEN** 裁剪与摘要仍保护该真实用户问题，不将尾部参考当作新任务边界；预算不足时明确失败而非静默丢弃当前问题。

@@ -8,6 +8,7 @@ import httpx
 from nexus_core.runtime import ModelChunk, RuntimeFault
 from ..errors import ERROR_BODY_LIMIT, ModelFault, failure, mark_output
 from ..usage import usage_chunk
+from ..prompt_cache import canonical_schema, mark_anthropic_cache, ordered_tools
 from .state import ProtocolState
 
 
@@ -68,14 +69,15 @@ class StructuredModel:
                 payload = {'model': self.model, 'system': system, 'messages': messages,
                            'max_tokens': request.max_output_tokens, 'stream': streaming}
                 if request.tools:
-                    payload['tools'] = [{'name': t.name, 'description': t.description, 'input_schema': t.parameters} for t in request.tools]
+                    payload['tools'] = [{'name': t.name, 'description': t.description, 'input_schema': canonical_schema(t.parameters)} for t in ordered_tools(request.tools)]
+                mark_anthropic_cache(payload)
                 headers = {'x-api-key': self._key, 'anthropic-version': '2023-06-01'}
                 path = '/messages'
             else:
                 payload = {'model': self.model, 'input': responses_messages(request.messages),
                            'max_output_tokens': request.max_output_tokens, 'stream': streaming}
                 if request.tools:
-                    payload['tools'] = [{'type': 'function', 'name': t.name, 'description': t.description, 'parameters': t.parameters} for t in request.tools]
+                    payload['tools'] = [{'type': 'function', 'name': t.name, 'description': t.description, 'parameters': canonical_schema(t.parameters)} for t in ordered_tools(request.tools)]
                 headers = {'Authorization': 'Bearer ' + self._key}
                 path = '/responses'
             if self.options.get('temperature') is not None:

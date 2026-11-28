@@ -11,7 +11,7 @@ import asyncio
 from nexus_core.runtime import ModelMessage, ModelRequest, RuntimeFault
 from nexus_runtimes.native.engine.cancellation import cancellable
 from .assembler import estimate_tokens, estimate_message_tokens
-from .history import compact_history
+from .history import compact_history, is_user_boundary
 
 
 def _size(messages) -> int:
@@ -41,7 +41,7 @@ async def compact(model, messages, limit, token, budget, progress, store, *, hig
     if size <= high:
         return messages, 0
     history = list(messages[1:])
-    users = [i for i, m in enumerate(history) if m.role == 'user']
+    users = [i for i, m in enumerate(history) if is_user_boundary(m)]
     latest_user = users[-1] if users else 0
     latest_tool = max((i for i, m in enumerate(history) if m.tool_calls), default=latest_user)
     cut = min(latest_user, latest_tool)

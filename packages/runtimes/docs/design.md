@@ -57,3 +57,13 @@ Chat Completions 将已有模型版本的空字符串思考强度视为使用服
 `context/providers.py` 的 `ContextProviderRegistry` 只接受应用注册的异步实现，限制命名空间、角色、大小、超时和生命周期。普通 provider 只能提供 user/reference，system 权限由注册入口显式授予；step provider 不能修改 system 前缀。最多四个 provider 并发，组截止时间八秒；失败不暴露原始异常。session/run 贡献可通过 store 恢复，step 贡献在该 step 首次请求前生成，模型重试复用同一输入。工具始终由独立授权网关提供。
 
 `HookRegistry` 保留原有追加消息和 done_prompts 行为，为接受的消息赋予 `context_source`，持久化时更新来源摘要。实际请求快照写入已有轨迹事务时同步记录 context.assembled，重试前重新授权。辅助摘要请求也复核来源，权限失败不能降级成绕过授权的摘要调用。
+
+## 供应商提示缓存
+
+动态工作锚点默认追加在完整工具交换之后，并标注为运行参考资料；`working_memory_tail=False` 保留旧布局。缺省配置会使用新默认，已经发布且显式保存 False 的版本不原地修改，需经既有智能体编辑/发布流程启用。所有模型适配器按工具名排序，并递归稳定 schema 字典键的序列化，保留数组顺序和源对象。工具执行仍逐次授权，末轮撤下工具、上下文容量裁剪和错误恢复规则保持有效。
+
+原生 Anthropic Messages 沿用 GenericAgent `llmcore.py` 的有限断点方式，在最后一个工具、非空 system 和最后两个消息块放置 `cache_control: {type: ephemeral}`，最多四个断点，采用供应商默认有效期。不使用参考实现的 persistent 类型、CLI 身份提示或伪造思考块。Chat Completions/Responses 不注入 Anthropic 专属字段，也不根据模型名猜测代理协议。原始消息、工具 Schema 及审计快照不写入这些 wire 专属标记。
+
+实际缓存读写继续由供应商 usage 归一化并进入既有回合用量和轨迹。Chat/Responses 的 cache_read 是 input 的子集；Anthropic 的总输入需合计 input、cache_read、cache_creation。离线共同前缀字节数只衡量可复用结构，不能替代真实 cached_tokens、首字延迟或语义质量验收。
+
+运行时参考块携带 `context_source`；确定性裁剪和模型摘要只将真正的用户/历史消息作为任务边界，尾部检查点、召回资料和工作锚点不能使最新用户请求被当作旧历史压缩。

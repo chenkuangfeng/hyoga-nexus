@@ -8,6 +8,7 @@ import re
 from dataclasses import replace
 from contextlib import aclosing
 from .errors import mark_output
+from .prompt_cache import canonical_schema, ordered_tools
 from nexus_core.schema import sanitize as sanitize_schema
 from nexus_core.runtime import ModelChunk, ModelMessage, RuntimeFault, ToolCall
 
@@ -54,7 +55,7 @@ class TextToolModel:
         self._sequence = 0
 
     async def stream(self, request):
-        schema = json.dumps([{'name': t.name, 'description': t.description, 'parameters': sanitize_schema(t.parameters)} for t in request.tools], ensure_ascii=False)
+        schema = json.dumps([{'name': t.name, 'description': t.description, 'parameters': canonical_schema(sanitize_schema(t.parameters))} for t in ordered_tools(request.tools)], ensure_ascii=False)
         guidance = ModelMessage('system', 'When an authorized tool is needed, emit <tool_use>{"name":"tool_name","arguments":{}}</tool_use>. '
             'After tool results, continue until the user task is complete. Mounted tools: ' + schema)
         actual = replace(request, messages=(guidance, *request.messages), tools=())

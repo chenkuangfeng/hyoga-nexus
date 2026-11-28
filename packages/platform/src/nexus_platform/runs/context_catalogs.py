@@ -63,7 +63,7 @@ class MemoryContextProvider:
                 profile_ids = {item['id'] for item in resident_entries}
                 profile_dependencies = tuple(ContextDependency(**d) for d in profile_snapshot.dependencies
                                              if d.get('resource_id') in profile_ids)
-                blocks.append(ContextBlock('memory:profile', 'memory', 'system', 'system_catalog', 9,
+                blocks.append(ContextBlock('memory:profile', 'memory', 'system', 'system_catalog', 35,
                     match.group(0), dependencies=profile_dependencies))
         recall_entries = ()
         if query and recall_enabled(version.budgets):
@@ -114,7 +114,7 @@ class KnowledgeCatalogProvider:
             return False, ()
         bases = access.readable_bases(db, run.tenant_id, run.principal_id, bound)
         lines = []
-        for base in bases:
+        for base in sorted(bases, key=lambda base: str(base.id)):
             profile = ((base.settings or {}).get('generated_profile') or {}).get('description', '')
             description = ' '.join((base.description or profile or '').split())[:240]
             lines.append(f'- {base.name} (id {base.id})' + (f': {description}' if description else ''))
@@ -123,4 +123,4 @@ class KnowledgeCatalogProvider:
         return True, (ContextBlock('knowledge:catalog', 'knowledge', 'system', 'system_catalog', 30,
             '\nKnowledge bases (search with search_knowledge; end each sentence that uses a '
             'passage with its [ID:n]):\n' + '\n'.join(lines),
-            dependencies=tuple(ContextDependency('knowledge', str(b.id), 'catalog-v1') for b in bases)),)
+            dependencies=tuple(ContextDependency('knowledge', str(b.id), 'catalog-v1') for b in sorted(bases, key=lambda base: str(base.id)))),)

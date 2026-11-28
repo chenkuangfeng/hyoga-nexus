@@ -16,7 +16,7 @@ def test_defaults_match_the_specified_values():
     assert policy.summary_max_chars == 8000
     assert policy.compaction_model_profile_version_id == ''
     assert policy.summarize_context is True
-    assert policy.working_memory_tail is False
+    assert policy.working_memory_tail is True
 
 
 @pytest.mark.parametrize('override', [

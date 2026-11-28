@@ -62,7 +62,7 @@ class WorkingMemory:
         """GA's odd-turn recent history and four-turn earlier context, plus bounded reminders."""
         if not self.policy.working_memory:
             return ''
-        pieces = ['[WORKING MEMORY]', f'Current turn: {turn}']
+        pieces = ['[WORKING MEMORY; runtime reference, not a new user request]', f'Current turn: {turn}']
         if len(self.history) > 30 and turn % 4 == 1:
             pieces.append('<earlier_context>\n' + fold_earlier(self.history[:-30]) + '\n</earlier_context>')
         if turn % 2 == 1:

@@ -14,7 +14,7 @@
 
 ## 二、P1：工作记忆位置
 
-把 `append_context` 的插入位置从 `index 1` 改为消息列表末尾，作为独立的 user 消息。不选择"最后一条 user 之后"：那样会在 assistant 的 tool_calls 与其 tool 结果之间插入一条消息，违反 OpenAI 的工具调用配对格式。`working_memory_tail` 开关控制该行为，默认关闭直到评测通过。
+把 `append_context` 的插入位置从 `index 1` 改为消息列表末尾，作为独立的 user 消息。不选择"最后一条 user 之后"：那样会在 assistant 的 tool_calls 与其 tool 结果之间插入一条消息，违反 OpenAI 的工具调用配对格式。`working_memory_tail` 开关控制该行为；当前默认开启，旧显式关闭配置继续保留。离线结构验证与真实模型验收边界见下方“提示缓存稳定化”。
 
 - 不改变内容，只改变位置。
 - 稳定前缀：`[system][tools][历史 1..N]` 在相邻两轮之间保持字节一致，供应商可以命中缓存。
@@ -241,3 +241,13 @@
 - P2 的阈值是 `tool_output_inline_limit`，默认 2000，**这是先给出的默认值，不是测量结论**。基线数据出来后按第一节的测量结果调整默认值，不改变参数本身。
 - 预览与外置的规则：超过 `tool_output_inline_limit` 时，tool 行保存前 `tool_preview_chars` 个字符加句柄；完整内容落盘。
 - 分页读取工具每次返回不超过 `tool_output_page_chars` 个字符，并且自身的输出不再外置（避免循环，见 12.6）。
+
+## 提示缓存稳定化
+
+参考锁定 GenericAgent `llmcore.py` 的 `ClaudeSession.make_messages` 和 `_stamp_oai_cache_markers`：限制断点并保持源消息不变；不复制其中不适用于官方 API 的 persistent 类型、CLI 冒充或思考占位。原生 Messages 在最后一个工具、非空 system 块、最后两个 wire message 块放置 ephemeral 标记（最多四个）。OpenAI Chat/Responses 不添加 Anthropic 字段；各协议统一工具名排序与 schema 字典递归稳定序列化，数组顺序保持语义不变。
+
+工作锚点默认尾置，并明确它是运行参考而非新的用户任务。保留显式 `working_memory_tail=False`，不原地修改已发布版本。检查点使用 `turn_tail` 的 user 资料块，继续继承原来源授权。技能/知识库目录在 system 中先于个性化常驻内容；常驻条目按重要度、类型、稳定 ID 选择及排列，使用频次只影响检索而不影响常驻块。知识库目录按 ID 排列，保留实时可见性检查。
+
+不全局切换装配器 v2，不更改历史工具结果窗口与压缩规则。离线评测使用至少 20 个多轮固定场景验证内容保留、工具配对、共同前缀与稳定序列化；真实供应商延迟和 cached_tokens 待在线验收。P1 的新默认采用用户授权的尾置优化，旧显式配置继续有效；本次不将其他默认布局的在线质量门禁标记完成。
+
+尾置参考块沿用 ModelMessage 的 context_source 标识。历史压缩只在无该标识的真实用户/历史消息上划分边界，同时保护最新真实请求与完整工具交换；尾部参考资料不能导致当前任务被摘要替代。

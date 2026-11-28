@@ -33,7 +33,7 @@
 
 ## 四、上下文稳定化（改变模型输入，需要评测）
 
-- [ ] P1：`working_memory_tail` 开关，默认关闭。在 `evals/` 中建立对比样例。
+- [x] P1：`working_memory_tail` 开关及 20 个固定语料的尾置对比样例；用户确认后默认开启，旧显式关闭值保留；真实语义质量/缓存用量仍待在线验收。
 - [x] P3：摘要落库、滞后阈值（`compact_high_ratio` / `compact_low_ratio`）、降级不落库；摘要长度受 `summary_max_chars` 限制；`compaction_model_profile_version_id` 指定的压缩模型每次调用授权，不可用时降级。测试：`tests/test_compaction_policy.py`（阈值之间不压缩、超过高阈值压缩到低目标以下、摘要截断、降级事件、压缩模型使用与释放）。评测（P3 的质量对比）待补。
 - [x] P2：工具输出外置与滚动裁剪；`read_tool_output` 分页读取工具。测试：外置内容的授权与审计；视图确定性。（阈值待基线确定后再调整默认值。）
 
@@ -94,3 +94,13 @@
 - [ ] A12b：真实模型等剩余任务全部验证后，完成 living specs 同步并归档；本变更保持活动状态。
 
 本节平台侧最终验证：分组去重 1,859 passed / 3 failed / 6 deselected / 1 skipped；9 项既有失败已在改造前源码复现。SQLite 新增上下文写锁升级问题修复后，受影响批次及上下文专项联合 133 passed / 1 skipped。core/platform/runtimes 构建通过。真实 PostgreSQL 和真实模型仍未验收，详见装配报告。
+
+## 九、提示缓存稳定化（2026-11-28 用户确认）
+
+- [x] C1：工作记忆默认尾置，保留旧版显式关闭，检查点迁出 system。
+- [x] C2：稳定常驻条目选择/排序、知识目录与工具 schema 序列化。
+- [x] C3：原生 Anthropic Messages 增加最多四个 ephemeral 断点，不污染其他协议或源消息。
+- [x] C4：多轮、工具配对、权限与协议回归，20 个离线前缀对比场景并记录真实验收限制。
+- [x] C5：同步模块文档及本变更规格；提交范围排除其他任务的工作区差异。
+
+本批验证：最终隔离暂存代码回归 297 passed；扩大范围时的 7 个既有失败均用未修改记忆规则复现；core/runtimes/platform/memory 构建通过；20/20 固定语料共同消息前缀增长。真实供应商缓存 token、首字延迟和语义质量未验收，原变更与 A11b/A12b 等在线任务保持未完成。详见 `evals/context-performance/prompt-prefix-report.md`。

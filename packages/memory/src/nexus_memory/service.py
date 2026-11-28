@@ -168,7 +168,9 @@ def snapshot(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, project: s
              '再提议新条目。']
     resident: list[LiveEntry] = []
     body_chars = 0
-    for item in rows:
+    # Retrieval usage and recency change frequently. Resident selection must instead stay
+    # stable until the owner changes importance/content or an entry becomes unavailable.
+    for item in sorted(rows, key=lambda item: (-item.entry.importance, item.entry.kind, str(item.entry.id))):
         if item.entry.kind != 'profile' or not include_profile:
             continue
         if body_chars + len(item.content) + 3 > RESIDENT_LIMIT:

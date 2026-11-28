@@ -1,0 +1,130 @@
+{
+  "kind": "offline_structural_prefix_bytes",
+  "cases": 20,
+  "provider_cached_tokens": null,
+  "provider_latency_ms": null,
+  "semantic_quality_evaluated": false,
+  "cases_improved": 20,
+  "results": [
+    {
+      "case": "single-100",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 890,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "single-900",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 1690,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "single-2500",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 3293,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "single-8000",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 8793,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "single-30000",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 30796,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "multi-1500x2",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 3968,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "multi-6000-300x2",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 7676,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "multi-rounds-4",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 13716,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "chat-3turns",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 764,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "chat-6turns",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 1000,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "chat-long-answers",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 7954,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "tools-3turns",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 9076,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "tools-5turns-mixed",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 16539,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "tools-heavy-turns",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 29528,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "followup-1500",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 2394,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "followup-3000",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 3894,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "followup-9000",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 9894,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "followup-20000",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 20898,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "followup-no-reader-9000",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 9904,
+      "source_messages_preserved": true
+    },
+    {
+      "case": "followup-chain",
+      "legacy_shared_prefix_bytes": 413,
+      "tail_shared_prefix_bytes": 11130,
+      "source_messages_preserved": true
+    }
+  ]
+}
