@@ -10,7 +10,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 采用现有主色、语义 token、系统字体与 TDesign 组件；按钮与标签提供可读名称，窄屏卡片与操作换行。
 
-主对话页（`/platform/creatChat` 新建对话；`/platform/chat/:chatid` 会话与运行，路由入口 `views/chat/NexusChatRoutePage.vue`，对话核心 `views/chat/NexusChatPage.vue` 由 `sessionId` 属性驱动）按 WeKnora 复制：会话态的结构与样式取自 `views/chat/index.vue`（`chat-topbar`、`chat_thread`、`chat_scroll_box`、`msg_list`、悬浮的 `chat_composer`、`chat_overlays`），欢迎态取自 `views/creatChat/creatChat.vue`（标题“Hi，我是Nexus”、输入框垂直居中；标题使用 28–36px 响应式字号，与输入框保持 24px 间距，不保留推荐问题占位留白）；窄容器（`compact`）使用 WeKnora 的嵌入布局。数据只来自平台 Run API，不调用 WeKnora 对话接口。旧的 `/platform/native` 地址重定向到上述页面。`/platform/knowledge-bases/:kbId/creatChat` 同样重定向到新建对话页（会话不挂载知识库）。
+主对话页（`/platform/creatChat` 新建对话；`/platform/chat/:chatid` 会话与运行，路由入口 `views/chat/NexusChatRoutePage.vue`，对话核心 `views/chat/NexusChatPage.vue` 由 `sessionId` 属性驱动）按 WeKnora 复制：会话态的结构与样式取自 `views/chat/index.vue`（`chat-topbar`、`chat_thread`、`chat_scroll_box`、`msg_list`、悬浮的 `chat_composer`、`chat_overlays`），欢迎态取自 `views/creatChat/creatChat.vue`（标题“Hi，我是Nexus”、输入框垂直居中；标题使用 24–28px 响应式字号，与输入框保持 24px 间距，不保留推荐问题占位留白）；窄容器（`compact`）使用 WeKnora 的嵌入布局。数据只来自平台 Run API，不调用 WeKnora 对话接口。旧的 `/platform/native` 地址重定向到上述页面。`/platform/knowledge-bases/:kbId/creatChat` 同样重定向到新建对话页（会话不挂载知识库）。
 
 - `api/native-run-types.ts`：Run、事件、会话等类型与运行时校验，不依赖网络或 i18n，便于测试。
 - `api/native-runs.ts`：类型化的请求封装；事件流使用 `@microsoft/fetch-event-source`，携带与 axios 相同的认证头，并从 `Last-Event-ID` 续读。

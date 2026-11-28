@@ -1225,7 +1225,7 @@ defineExpose({ sendText })
     display: flex;
     color: var(--td-text-color-primary);
     font-family: var(--app-font-family);
-    font-size: clamp(calc(var(--app-text-4xl) + 4px), 3vw, calc(var(--app-text-4xl) + 12px));
+    font-size: clamp(var(--app-text-4xl), 2.5vw, calc(var(--app-text-4xl) + 4px));
     font-weight: 600;
     line-height: 1.25;
     text-align: center;
