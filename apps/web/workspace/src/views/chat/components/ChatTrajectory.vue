@@ -139,32 +139,33 @@ const activities = computed<Activity[]>(() => {
         content: responseText, createdAt: record.started_at, status: record.status, records: [record] })
     }
   }
-  return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.sequence - b.sequence)
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.sequence - a.sequence)
 })
 const activityGroups = computed(() => {
   const byRun = new Map<string, Activity[]>()
   for (const activity of activities.value) byRun.set(activity.runId, [...(byRun.get(activity.runId) ?? []), activity])
   return [...byRun.entries()]
-    .sort(([, left], [, right]) => (left[0]?.createdAt ?? '').localeCompare(right[0]?.createdAt ?? ''))
-    .map(([runId, items]) => ({
-      runId,
-      groups: items.reduce<Array<{ id: string; user: Activity | null; activities: Activity[] }>>((groups, activity) => {
+    .sort(([, left], [, right]) => (right[0]?.createdAt ?? '').localeCompare(left[0]?.createdAt ?? ''))
+    .map(([runId, unsortedItems]) => {
+      const items = unsortedItems.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.sequence - b.sequence)
+      const groups = items.reduce<Array<{ id: string; user: Activity | null; activities: Activity[] }>>((result, activity) => {
         if (activity.kind === 'user') {
-          groups.push({ id: activity.id, user: activity, activities: [] })
+          result.push({ id: activity.id, user: activity, activities: [] })
         } else {
-          if (groups.length === 0) groups.push({ id: `run:${runId}:leading`, user: null, activities: [] })
-          groups[groups.length - 1]?.activities.push(activity)
+          if (result.length === 0) result.push({ id: `run:${runId}:leading`, user: null, activities: [] })
+          result[result.length - 1]?.activities.push(activity)
         }
-        return groups
-      }, []).map(group => ({ ...group, activities: group.activities.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.sequence - b.sequence) })),
-    }))
+        return result
+      }, [])
+      return { runId, groups: groups.reverse().map(group => ({ ...group, activities: group.activities.reverse() })) }
+    })
 })
 
 watch(activities, items => {
   if (!items.some(item => item.id === selectedId.value)) selectedId.value = ''
 }, { immediate: true })
 const selected = computed(() => activities.value.find(item => item.id === selectedId.value) ?? null)
-const inspectorRecords = computed(() => selected.value?.records ?? [])
+const inspectorRecords = computed(() => (selected.value?.records ?? []).slice().sort((a, b) => b.sequence - a.sequence))
 const inspectorTools = computed(() => {
   const activity = selected.value
   return activity?.kind === 'tool' ? [activity] : []
@@ -274,34 +275,34 @@ function details(value: unknown): string {
           <header><div><h2>{{ activityLabel(selected.kind) }}<template v-if="selected.toolName"> · {{ displayTool(selected.toolName) }}</template></h2><small>{{ selected.turn ? t('nexusChat.trajectory.turn', { turn: selected.turn }) : selected.createdAt }} · {{ selected.status }}</small></div></header>
           <t-tabs v-model="inspectorTab" class="trajectory__inspector-tabs">
             <t-tab-panel value="activity" :label="t('nexusChat.trajectory.details')">
-              <details open><summary>{{ activityLabel(selected.kind) }}</summary><pre>{{ selected.content || selected.summary }}</pre></details>
+              <section class="trajectory__detail-section"><h3>{{ activityLabel(selected.kind) }}</h3><pre>{{ selected.content || selected.summary }}</pre></section>
             </t-tab-panel>
             <t-tab-panel v-if="inspectorTools.length" value="tools" :label="`${t('nexusChat.trajectory.toolList')} (${inspectorTools.length})`">
-              <details v-for="activity in inspectorTools" :key="activity.id" class="trajectory__tool-item">
-                <summary>{{ displayTool(activity.toolName ?? activity.summary) }}</summary>
+              <section v-for="activity in inspectorTools" :key="activity.id" class="trajectory__detail-section trajectory__tool-item">
+                <h3>{{ displayTool(activity.toolName ?? activity.summary) }}</h3>
                 <p v-if="activity.toolArguments !== undefined"><strong>{{ t('nexusChat.trajectory.toolArguments') }}</strong><pre>{{ activity.toolArguments }}</pre></p>
                 <p v-if="activity.toolResult !== undefined"><strong>{{ t('nexusChat.trajectory.toolResult') }}</strong><pre>{{ activity.toolResult }}</pre></p>
                 <p v-if="activity.toolResult === undefined" class="trajectory__pending">{{ activity.status }}</p>
-              </details>
+              </section>
               <p v-if="inspectorTools.length === 0" class="trajectory__empty">—</p>
             </t-tab-panel>
             <t-tab-panel v-if="inspectorRecords.length" value="requests" :label="`${t('nexusChat.trajectory.modelRequest')} (${inspectorRecords.length})`">
-              <details v-for="record in inspectorRecords" :key="record.id" class="trajectory__request-item">
-              <summary>{{ t('nexusChat.trajectory.modelRequest') }} #{{ record.sequence }} · {{ record.status }}</summary>
+              <section v-for="record in inspectorRecords" :key="record.id" class="trajectory__detail-section trajectory__request-item" :data-request-sequence="record.sequence">
+              <h3>{{ t('nexusChat.trajectory.modelRequest') }} #{{ record.sequence }} · {{ record.status }}</h3>
               <div class="trajectory__metrics">
                 <div><span>{{ t('nexusChat.trajectory.inputEstimate') }}</span><strong>{{ formatTokens(record.input_estimate_tokens) }}</strong></div>
                 <div><span>{{ t('nexusChat.trajectory.actualUsage') }}</span><strong>{{ formatTokens(record.usage.input) }} / {{ formatTokens(record.usage.output) }}</strong></div>
                 <div><span>{{ t('nexusChat.trajectory.runTotal') }}</span><strong>{{ formatTokens(record.run_total_tokens) }}</strong></div>
                 <div><span>{{ t('nexusChat.trajectory.duration') }}</span><strong>{{ duration(record) }}</strong></div>
               </div>
-              <details><summary>{{ t('nexusChat.trajectory.request') }}</summary>
+              <section class="trajectory__snapshot"><h4>{{ t('nexusChat.trajectory.request') }}</h4>
                 <section v-for="(message, index) in (record.request_snapshot.messages as Record<string, unknown>[])" :key="index" class="trajectory__message">
                   <strong>{{ String(message.role ?? '') }}</strong><pre>{{ details(message.content ?? '') }}</pre>
                 </section>
-              </details>
-              <details v-if="Array.isArray(record.request_snapshot.tools)"><summary>{{ t('nexusChat.trajectory.tools') }} ({{ (record.request_snapshot.tools as unknown[]).length }})</summary><pre>{{ details(record.request_snapshot.tools) }}</pre></details>
-              <details><summary>{{ t('nexusChat.trajectory.response') }}</summary><pre>{{ details(record.response_snapshot) }}</pre><p v-if="record.error_code" class="trajectory__error">{{ record.error_code }}</p></details>
-              </details>
+              </section>
+              <section v-if="Array.isArray(record.request_snapshot.tools)" class="trajectory__snapshot"><h4>{{ t('nexusChat.trajectory.tools') }} ({{ (record.request_snapshot.tools as unknown[]).length }})</h4><pre>{{ details(record.request_snapshot.tools) }}</pre></section>
+              <section class="trajectory__snapshot"><h4>{{ t('nexusChat.trajectory.response') }}</h4><pre>{{ details(record.response_snapshot) }}</pre><p v-if="record.error_code" class="trajectory__error">{{ record.error_code }}</p></section>
+              </section>
             </t-tab-panel>
           </t-tabs>
         </aside>
@@ -318,12 +319,12 @@ function details(value: unknown): string {
 .trajectory__stat strong { font-size: var(--app-text-lg); line-height: 1.2; font-variant-numeric: tabular-nums; }
 .trajectory__split { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-md); background: var(--td-bg-color-container); }
 .trajectory__split--inspector { grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr); }
-.trajectory__table-scroll { min-width: 0; overflow: auto; border-right: 1px solid var(--td-component-stroke); }
+.trajectory__table-scroll { height: 100%; min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--td-component-stroke); }
 .trajectory__table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: var(--app-text-sm); }
 .trajectory__kind-column { width: 104px; }
 .trajectory__token-column { width: 88px; }
-.trajectory__table th { position: sticky; top: 0; z-index: 1; padding: 5px 6px; background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-secondary); font-weight: 500; line-height: 15px; }
-.trajectory__table td { height: 20px; max-width: 0; box-sizing: border-box; padding: 0 6px; border-top: 1px solid var(--td-component-stroke); vertical-align: middle; line-height: 19px; }
+.trajectory__table th { position: sticky; top: 0; z-index: 1; padding: 7px 8px; background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-secondary); font-weight: 550; font-size: 13px; line-height: 16px; }
+.trajectory__table td { height: 30px; max-width: 0; box-sizing: border-box; padding: 0 8px; border-top: 1px solid var(--td-component-stroke); vertical-align: middle; line-height: 28px; }
 .trajectory__table tbody tr { cursor: pointer; }
 .trajectory__table tbody tr:hover { background: var(--td-bg-color-container-hover); }
 .trajectory__table tbody tr[aria-selected="true"] { background: var(--td-brand-color-light); }
@@ -334,14 +335,14 @@ function details(value: unknown): string {
 .trajectory__table .trajectory__input-row--run-start td { box-shadow: inset 0 1px 0 var(--td-component-stroke); }
 .trajectory__table .trajectory__activity-row td:first-child { border-left: 1px solid var(--td-component-stroke); padding-left: 19px; }
 .trajectory__table .trajectory__activity-row .trajectory__summary { padding-left: 18px; }
-.trajectory__table .trajectory__kind strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 500; }
+.trajectory__table .trajectory__kind strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
 .trajectory__table .trajectory__input-row .trajectory__kind strong { font-weight: 650; }
 .trajectory__chevron { display: inline-block; width: 7px; height: 7px; margin: 0 9px 2px 2px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; color: var(--td-brand-color); transform: rotate(45deg); transition: transform 120ms ease; }
 .trajectory__chevron--collapsed { transform: rotate(-45deg); }
 .trajectory__summary, .trajectory__tokens { overflow: hidden; }
 .trajectory__summary span, .trajectory__tokens span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 14px; }
-.trajectory__summary span { font-size: 11px; }
-.trajectory__tokens { color: var(--td-text-color-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+.trajectory__summary span { font-size: 12px; }
+.trajectory__tokens { color: var(--td-text-color-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .trajectory__inspector { min-width: 0; overflow: auto; padding: 14px; }
 .trajectory__inspector-tabs { min-height: 0; }
 .trajectory__inspector header h2 { margin: 0 0 3px; font-size: var(--app-text-md); }
@@ -349,9 +350,10 @@ function details(value: unknown): string {
 .trajectory__metrics div { display: grid; gap: 3px; min-width: 0; padding: 8px; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-sm); }
 .trajectory__metrics span { color: var(--td-text-color-secondary); font-size: var(--app-text-xs); }
 .trajectory__metrics strong { overflow-wrap: anywhere; font-size: var(--app-text-sm); font-variant-numeric: tabular-nums; }
-.trajectory__inspector details { margin-top: 4px; border-top: 1px solid var(--td-component-stroke); }
-.trajectory__inspector summary { padding: 9px 0; cursor: pointer; font-weight: 600; }
-.trajectory__tool-item summary, .trajectory__request-item summary { padding: 7px 0; }
+.trajectory__detail-section { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--td-component-stroke); }
+.trajectory__detail-section h3 { margin: 0 0 8px; font-size: var(--app-text-sm); font-weight: 600; }
+.trajectory__snapshot { margin-top: 10px; }
+.trajectory__snapshot h4 { margin: 0 0 6px; font-size: var(--app-text-xs); font-weight: 600; color: var(--td-text-color-secondary); }
 .trajectory__tool-item p { margin: 6px 0 10px; }
 .trajectory__tool-item p strong { font-size: var(--app-text-xs); }
 .trajectory__pending, .trajectory__empty { color: var(--td-text-color-secondary); }
