@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ConversationMessage, RunTrajectoryRecord } from '@nexus-web/core/api/native-runs'
 import { toolDisplayName } from '@nexus-web/core/utils/toolPresentation'
+import { formatMessageTimestamp } from '@/utils/messageTimestamp'
 
 interface ToolCallSnapshot {
   id: string
@@ -248,8 +249,8 @@ function details(value: unknown): string {
       <div v-else class="trajectory__split" :class="{ 'trajectory__split--inspector': !!selected }">
         <div class="trajectory__table-scroll">
           <table class="trajectory__table">
-            <colgroup><col class="trajectory__kind-column"><col><col class="trajectory__token-column"></colgroup>
-            <thead><tr><th>{{ t('nexusChat.trajectory.record') }}</th><th>{{ t('nexusChat.trajectory.content') }}</th><th>{{ t('nexusChat.trajectory.tokensHeader') }}</th></tr></thead>
+            <colgroup><col class="trajectory__kind-column"><col><col class="trajectory__time-column"><col class="trajectory__token-column"></colgroup>
+            <thead><tr><th>{{ t('nexusChat.trajectory.record') }}</th><th>{{ t('nexusChat.trajectory.content') }}</th><th>{{ t('nexusChat.trajectory.timeHeader') }}</th><th>{{ t('nexusChat.trajectory.tokensHeader') }}</th></tr></thead>
             <tbody v-for="group in activityGroups" :key="group.runId" :data-run-id="group.runId">
               <template v-for="inputGroup in group.groups" :key="inputGroup.id">
                 <tr v-if="inputGroup.user" class="trajectory__input-row"
@@ -261,6 +262,7 @@ function details(value: unknown): string {
                   @keydown.space.prevent="selectActivity(inputGroup.user); toggleGroup(inputGroup.id)">
                   <td class="trajectory__kind" :title="inputGroup.user.createdAt"><strong><span class="trajectory__chevron" :class="{ 'trajectory__chevron--collapsed': collapsedGroups.has(inputGroup.id) }" aria-hidden="true"></span>{{ activityLabel('user') }}</strong></td>
                   <td class="trajectory__summary" :title="inputGroup.user.summary"><span>{{ inputGroup.user.summary }}</span></td>
+                  <td class="trajectory__time" :title="inputGroup.user.createdAt">{{ formatMessageTimestamp(inputGroup.user.createdAt) || '—' }}</td>
                   <td class="trajectory__tokens"></td>
                 </tr>
                 <tr v-for="activity in inputGroup.activities" v-show="!collapsedGroups.has(inputGroup.id)"
@@ -270,6 +272,7 @@ function details(value: unknown): string {
                   @keydown.space.prevent="selectActivity(activity)">
                   <td class="trajectory__kind" :title="activity.turn ? t('nexusChat.trajectory.turn', { turn: activity.turn }) : activity.createdAt"><strong>{{ activityLabel(activity.kind) }}</strong></td>
                   <td class="trajectory__summary" :title="activity.summary"><span>{{ activity.kind === 'tool' && activity.toolName ? displayTool(activity.toolName) : activity.summary }}</span></td>
+                  <td class="trajectory__time" :title="activity.createdAt">{{ formatMessageTimestamp(activity.createdAt) || '—' }}</td>
                   <td class="trajectory__tokens" :title="activityTokens(activity) ?? ''"><span v-if="activityTokens(activity)">{{ activityTokens(activity) }}</span></td>
                 </tr>
               </template>
@@ -327,6 +330,7 @@ function details(value: unknown): string {
 .trajectory__table-scroll { height: 100%; min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--td-component-stroke); }
 .trajectory__table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: var(--app-text-sm); }
 .trajectory__kind-column { width: 104px; }
+.trajectory__time-column { width: 136px; }
 .trajectory__token-column { width: 88px; }
 .trajectory__table th { position: sticky; top: 0; z-index: 1; padding: 7px 8px; background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-secondary); font-weight: 550; font-size: 13px; line-height: 16px; }
 .trajectory__table td { height: 30px; max-width: 0; box-sizing: border-box; padding: 0 8px; border-top: 1px solid var(--td-component-stroke); vertical-align: middle; line-height: 28px; }
@@ -345,6 +349,7 @@ function details(value: unknown): string {
 .trajectory__chevron { display: inline-block; width: 7px; height: 7px; margin: 0 9px 2px 2px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; color: var(--td-brand-color); transform: rotate(45deg); transition: transform 120ms ease; }
 .trajectory__chevron--collapsed { transform: rotate(-45deg); }
 .trajectory__summary, .trajectory__tokens { overflow: hidden; }
+.trajectory__time { overflow: hidden; color: var(--td-text-color-secondary); font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .trajectory__summary span, .trajectory__tokens span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 14px; }
 .trajectory__summary span { font-size: 12px; }
 .trajectory__tokens { color: var(--td-text-color-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }

@@ -8689,7 +8689,7 @@ export default {
       showLess: '收合'
     },
     trajectory: {
-      runGroup: 'Run {run}', tokensHeader: 'Token',
+      runGroup: 'Run {run}', tokensHeader: 'Token', timeHeader: '時間',
       totalTokens: '總 Token', sessionTotalHint: '依會話內各 Run 加總', cacheHits: '命中快取', cacheRate: '占輸入 {rate}%', cacheRateUnknown: '供應商未回傳快取用量',
       tokensActual: '實際', tokensEstimated: '估算', activityUser: '使用者', activityAssistant: '助理', activityTool: '工具', memoryRecall: '記憶', memoryUsedCount: '使用了 {count} 條記憶', toolList: '工具與技能', turn: '第 {turn} 輪', toolArguments: '呼叫參數', toolResult: '執行結果',
       conversation: '對話', title: '軌跡', tabsLabel: '查看會話執行軌跡', empty: '尚無執行事件',

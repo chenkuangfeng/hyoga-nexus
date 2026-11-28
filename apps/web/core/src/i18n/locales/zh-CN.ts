@@ -8684,7 +8684,7 @@ export default {
       showLess: '收起'
     },
     trajectory: {
-      runGroup: 'Run {run}', tokensHeader: 'Token',
+      runGroup: 'Run {run}', tokensHeader: 'Token', timeHeader: '时间',
       totalTokens: '总 Token', sessionTotalHint: '按会话内各 Run 累加', cacheHits: '命中缓存', cacheRate: '占输入 {rate}%', cacheRateUnknown: '供应商未返回缓存用量',
       tokensActual: '实际', tokensEstimated: '估算', activityUser: '用户', activityAssistant: '助手', activityTool: '工具', memoryRecall: '记忆', memoryUsedCount: '使用了 {count} 条记忆', toolList: '工具与技能', turn: '第 {turn} 轮', toolArguments: '调用参数', toolResult: '执行结果',
       conversation: '对话', title: '轨迹', tabsLabel: '查看会话执行轨迹', empty: '还没有运行事件',
