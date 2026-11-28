@@ -303,7 +303,7 @@ function details(value: unknown): string {
 .trajectory__kind-column { width: 104px; }
 .trajectory__token-column { width: 88px; }
 .trajectory__table th { position: sticky; top: 0; z-index: 1; padding: 5px 6px; background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-secondary); font-weight: 500; line-height: 15px; }
-.trajectory__table td { height: 15px; max-width: 0; box-sizing: border-box; padding: 0 6px; border-top: 1px solid var(--td-component-stroke); vertical-align: middle; line-height: 14px; }
+.trajectory__table td { height: 20px; max-width: 0; box-sizing: border-box; padding: 0 6px; border-top: 1px solid var(--td-component-stroke); vertical-align: middle; line-height: 19px; }
 .trajectory__table .trajectory__run-row th { position: static; padding: 8px 10px; border-top: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); color: var(--td-text-color-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trajectory__table .trajectory__run-row th { height: 22px; box-sizing: border-box; padding: 3px 8px; line-height: 15px; }
 .trajectory__table tbody tr { cursor: pointer; }

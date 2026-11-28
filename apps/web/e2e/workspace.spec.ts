@@ -335,7 +335,7 @@ test('会话页顶部只显示左对齐的对话、轨迹和产物标签', async
   await expect(page.getByTestId('trajectory-inspector')).toContainText('部署步骤已核验')
   await expect(trajectory.getByRole('row').filter({ hasText: '部署步骤已核验' })).toContainText('实际')
   const assistantRow = trajectory.getByRole('row').filter({ hasText: '部署步骤已核验' })
-  expect(await assistantRow.evaluate(row => Math.round(row.getBoundingClientRect().height))).toBe(15)
+  expect(await assistantRow.evaluate(row => Math.round(row.getBoundingClientRect().height))).toBe(20)
   await expect(page.getByTestId('chat-learn-skill')).toHaveCount(0)
 })
 
