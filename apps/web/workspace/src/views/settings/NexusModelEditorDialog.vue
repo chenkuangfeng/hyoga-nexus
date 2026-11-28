@@ -100,6 +100,13 @@
             <t-option value="anthropic_messages" label="Anthropic Messages" />
           </t-select>
         </div>
+        <div class="form-item">
+          <label class="form-label">{{ $t('nexusModels.contextWindowLabel') }}</label>
+          <t-input-number v-model="form.context_window_k" :min="1" :max="2000" :step="1" theme="column">
+            <template #suffix> K</template>
+          </t-input-number>
+          <p class="form-desc">{{ $t('nexusModels.contextWindowDesc') }}</p>
+        </div>
       </section>
     </t-form>
   </SettingDrawer>
@@ -159,7 +166,7 @@ function typeLabel(type: NexusModelType): string {
 
 function emptyForm(): ModelEditorForm {
   return { model_type: 'chat', model_name: '', provider_id: '', provider_name: '', base_url: '', api_key: '',
-    scope: 'personal', protocol: 'openai_chat_completions' }
+    scope: 'personal', protocol: 'openai_chat_completions', context_window_k: 200 }
 }
 
 watch(() => [props.visible, props.tenantId, props.draft, props.editing] as const, ([visible]) => {
@@ -173,6 +180,7 @@ watch(() => [props.visible, props.tenantId, props.draft, props.editing] as const
     model_type: card.type, model_name: card.model.name, provider_id: card.provider.id,
     provider_name: card.provider.name, base_url: card.provider.base_url, scope: card.provider.scope,
     protocol: String(card.model.options.protocol || 'openai_chat_completions'),
+    context_window_k: typeof card.model.options.context_window_k === 'number' ? card.model.options.context_window_k : 200,
   } : {
     model_type: props.draft ? (props.draft.type === 'vllm' ? 'vision' : props.draft.type === 'asr' ? 'speech' : props.draft.type) : props.initialType,
     model_name: props.draft?.model_name || '', provider_name: props.draft?.provider || '', base_url: props.draft?.base_url || '',

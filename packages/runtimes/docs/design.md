@@ -46,6 +46,6 @@ Chat Completions 将已有模型版本的空字符串思考强度视为使用服
 
 ## Run 累计 Token 与上下文压缩
 
-模型调用前按消息、工具参数、工具定义估算输入 token：文本约每三个 UTF-8 字节计一个 token，另计消息/调用 framing；供应商返回 usage 后以实际计数累计。`ExecutionBudget.max_tokens=0`（默认）表示不限制 Run 累计 Token；正值仍可作为显式成本上限。每次模型调用继续受 `max_output_tokens` 和 `max_context_chars` 控制，并保留最大回合、活跃时长、错误数及模型请求次数限制。
+模型调用前按消息、工具参数、工具定义估算输入 token：文本约每三个 UTF-8 字节计一个 token，另计消息/调用 framing；供应商返回 usage 后以实际计数累计。`ExecutionBudget.max_tokens=0`（默认）表示不限制 Run 累计 Token；正值仍可作为显式成本上限。模型档案的 `context_window_k` 和智能体可选的 `context_window_k` 均以 K tokens 表示；运行准备时按较小值解析为 `max_context_tokens`（模型缺省 200K），Native 压缩和请求拟合共用该 token 上限。每次模型调用继续受 `max_output_tokens` 和最大回合、活跃时长、错误数及模型请求次数限制。
 
 上下文摘要保存在平台的追加式 `context_summaries` 链中，包含来源 Run 和覆盖到的会话消息序号。新 Run 重新校验历史授权后复用最新有效摘要，并追加覆盖边界之后可见的非工具消息；原始 Session 消息和 Run 工具追踪不删除。摘要链通过 Session 行锁串行推进，拒绝不前移的检查点。上下文视图超出单次输入预算时压缩较早轮次，保留系统指令、当前用户请求和最近完整工具交换。供应商仍报告上下文溢出时，额外强制压缩到更低目标，缩短旧工具结果窗口，再拟合并重试一次；第二次溢出或无安全压缩空间则返回 `model_context_exceeded`。工具结果只在模型视图里裁剪，持久化执行记录保持完整并可通过受限句柄读取长输出。显式 Run 累计预算耗尽仍返回 `budget_exhausted`。字符预算是估算边界，不等价于任意供应商的真实 Context Window。

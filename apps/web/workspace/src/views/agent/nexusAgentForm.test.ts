@@ -64,6 +64,14 @@ test('Run token cap is optional and zero means unlimited', () => {
   assert.equal(capped.budgets.max_tokens, 24000)
 })
 
+test('context window can follow the model or persist an agent ceiling in K tokens', () => {
+  const base = agent({ budgets: {} })
+  const inherited = draftFromForm({ ...formFromAgent(base), context_window_k: 0 }, base, null, TENANT)
+  assert.equal('context_window_k' in inherited.budgets, false)
+  const limited = draftFromForm({ ...formFromAgent(base), context_window_k: 128 }, base, null, TENANT)
+  assert.equal(limited.budgets.context_window_k, 128)
+})
+
 test('new agent starts from native defaults and default tools', () => {
   const defaults = { version: 1, settings: { budgets: { max_rounds: 20, max_tokens: 16000 }, behavior: { enabled_tools: ['todo'] } } }
   const form = formForNewAgent(defaults, 'm-9', ['todo'])

@@ -257,10 +257,22 @@ class ExecutionPreparer:
                     append_event(db, run.id, 'memory.used', {'source': 'resident', 'entries': list(snapshot.resident_entries)})
                 if recalled is not None and recalled.entries:
                     append_event(db, run.id, 'memory.used', {'source': 'recall', 'entries': list(recalled.entries)})
+                # Resolve the model window and the optional agent ceiling for this immutable Run.
+                # Both are expressed in thousands of tokens in configuration; Runtime receives tokens.
+                model_window_k = model.options.get('context_window_k', 200) if isinstance(model.options, dict) else 200
+                if type(model_window_k) is not int or not 1 <= model_window_k <= 2000:
+                    model_window_k = 200
+                agent_window_k = version.budgets.get('context_window_k', 0)
+                if type(agent_window_k) is not int or agent_window_k < 0:
+                    raise RuntimeFault('runtime_budget_invalid')
+                effective_window_tokens = min(agent_window_k or model_window_k, model_window_k) * 1000
+                runtime_budgets = dict(version.budgets)
+                runtime_budgets.pop('context_window_k', None)
+                runtime_budgets['max_context_tokens'] = effective_window_tokens
                 return ExecutionContext(run.id, run.session_id, run.tenant_id, run.principal_id,
                     principal_for_user(db, user.id), version.runtime_type, profile.provider, model.model_name,
                     merged_model_options(model.options, version.budgets), credential, (ModelMessage('system', system), *history), bindings,
-                    version.budgets, RuntimeProgress(**state.progress), tuple(allowed_runs),
+                    runtime_budgets, RuntimeProgress(**state.progress), tuple(allowed_runs),
                     mcp_service_ids=tuple(run.config_snapshot.get("mcp_service_ids") or []))
             except (PlatformError, RuntimeFault) as exc:
                 code = exc.code if isinstance(exc, RuntimeFault) else 'run_authorization_denied'

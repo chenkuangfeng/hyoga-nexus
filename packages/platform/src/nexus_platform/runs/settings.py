@@ -11,7 +11,7 @@ from nexus_platform.authz.audit import audit
 LABELS = {
     'max_rounds': '最大回合数', 'max_tokens': 'Run 累计 Token 上限（0 为不限制）', 'max_output_tokens': '每次输出上限',
     'max_seconds': '活跃执行时间（秒）', 'model_timeout_seconds': '模型超时（秒）',
-    'max_errors': '工具错误上限', 'max_context_chars': '上下文字符预算',
+    'max_errors': '工具错误上限', 'max_context_tokens': '上下文 Token 上限', 'max_context_chars': '旧版上下文字符预算',
     'max_model_attempts': '模型请求上限（含重试，0 为自动）', 'max_continuations': '截断回答续写次数',
     'enabled_tools': '新智能体绑定的工具',
     'fallback_models': '故障转移模型', 'routing_spring_seconds': '回归主模型冷却（秒）',
@@ -40,7 +40,10 @@ LABELS = {
 
 def defaults() -> dict:
     """Return fresh serializable baseline settings; callers can edit only versioned personal defaults."""
-    return {'budgets': asdict(ExecutionBudget()), 'behavior': asdict(NativePolicy())}
+    budgets = asdict(ExecutionBudget())
+    # Resolved per Run from the immutable model profile plus the agent's optional K override.
+    budgets.pop('max_context_tokens')
+    return {'budgets': budgets, 'behavior': asdict(NativePolicy())}
 
 
 def _with_defaults(stored: dict) -> dict:
@@ -66,7 +69,7 @@ def validate(settings: dict) -> dict:
             raise ValueError('Invalid Native budget type')
     if budgets['max_model_attempts'] > 100000 or budgets['max_rounds'] > 1000 or budgets['max_tokens'] > 10000000 or budgets['max_output_tokens'] > 128000 or budgets['max_seconds'] > 86400:
         raise ValueError('Native budget exceeds service limits')
-    ExecutionBudget(**budgets)
+    ExecutionBudget(**budgets, max_context_tokens=200000)
     behavior = asdict(NativePolicy(**(baseline['behavior'] | settings['behavior'])))
     return {'budgets': budgets, 'behavior': behavior}
 

@@ -67,14 +67,14 @@ def test_usage_between_low_and_high_does_not_compact():
 
 def test_usage_above_high_is_summarized_under_the_low_target():
     messages = _history(1500, 'a' * 1500)
-    (result, removed), store = _run(messages, 2000)
+    (result, removed), store = _run(messages, 500)
     assert removed == 2 and result[1].content.startswith('[Historical summary')
     assert store.summaries == [(result[1].content, 'm2')]  # cut point is the last older row
 
 
 def test_summary_is_cut_to_the_configured_maximum_before_storage():
     messages = _history(15000, 'a' * 15000)
-    (result, removed), store = _run(messages, 30000, model=Summarizer('y' * 5000), summary_max=300)
+    (result, removed), store = _run(messages, 8000, model=Summarizer('y' * 2500), summary_max=300)
     assert removed == 2
     stored = store.summaries[0][0]
     assert stored.endswith('y' * 300) and 'y' * 301 not in stored
@@ -82,7 +82,7 @@ def test_summary_is_cut_to_the_configured_maximum_before_storage():
 
 def test_summary_failure_degrades_to_excerpts_and_emits_the_reason():
     messages = _history(1500, 'a' * 1500)
-    (result, removed), store = _run(messages, 2000, model=Summarizer(''))
+    (result, removed), store = _run(messages, 500, model=Summarizer(''))
     assert ('context.summary_degraded', {'reason': 'model_response_unusable'}) in store.events
     assert store.summaries == []  # nothing is persisted from a degraded attempt
     assert 'Earlier conversation excerpts' in result[1].content
@@ -91,7 +91,7 @@ def test_summary_failure_degrades_to_excerpts_and_emits_the_reason():
 def test_configured_compaction_model_is_used_and_released_instead_of_the_run_model():
     messages = _history(1500, 'a' * 1500)
     run_model, configured = Summarizer('wrong'), Summarizer('right')
-    (result, removed), store = _run(messages, 2000, model=run_model, summarizer_factory=lambda: configured)
+    (result, removed), store = _run(messages, 500, model=run_model, summarizer_factory=lambda: configured)
     assert configured.calls == 1 and run_model.calls == 0
     assert configured.closed and not run_model.closed  # the configured client is ours to close
     assert 'right' in result[1].content
@@ -102,7 +102,7 @@ def test_unavailable_compaction_model_degrades_without_failing():
     run_model = Summarizer('wrong')
     def unavailable():
         raise PermissionError('not authorized')
-    (result, removed), store = _run(messages, 2000, model=run_model, summarizer_factory=unavailable)
+    (result, removed), store = _run(messages, 500, model=run_model, summarizer_factory=unavailable)
     assert ('context.summary_degraded', {'reason': 'compaction_model_unavailable'}) in store.events
     assert run_model.calls == 0 and store.summaries == []
     assert removed >= 1
@@ -115,9 +115,9 @@ def test_deterministic_path_is_a_no_op_at_or_below_high_threshold():
 
 def test_run_uses_the_configured_compaction_model_end_to_end(database):
     behavior = {'summarize_context': True}
-    principal, tenant, session, run, _ = stack(database, budgets={'max_tokens': 100000, 'max_context_chars': 2000,
+    principal, tenant, session, run, _ = stack(database, budgets={'max_tokens': 100000, 'context_window_k': 2,
                                                                   'behavior': behavior})
-    first = FakeModel([[ModelChunk('text', text='A' * 2500)]])
+    first = FakeModel([[ModelChunk('text', text='A' * 7000)]])
     run_once(database, 'worker', model_factory=lambda _: first)
     from nexus_platform.runs.service import create_run
     with database() as db:
@@ -125,5 +125,5 @@ def test_run_uses_the_configured_compaction_model_end_to_end(database):
     main, summarizer = FakeModel([[ModelChunk('text', text='ok')]]), FakeModel([[ModelChunk('text', text='short summary')]])
     run_once(database, 'worker', model_factory=lambda _: main, compaction_model_factory=lambda: summarizer)
     assert summarizer.requests and summarizer.closed
-    assert not any('A' * 2500 in m.content for m in main.requests[0].messages)
+    assert not any('A' * 7000 in m.content for m in main.requests[0].messages)
     assert any('short summary' in m.content for m in main.requests[0].messages)

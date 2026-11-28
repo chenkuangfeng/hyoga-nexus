@@ -165,6 +165,10 @@ def clean_public_options(value: Any, path: str = "options") -> Any:
             ):
                 raise ValueError(f"Sensitive option is not allowed at {path}.{key}; use a CredentialRef")
             clean[str(key)] = clean_public_options(item, f"{path}.{key}")
+        if path.split('.', 1)[0] == 'options' and 'context_window_k' in clean:
+            window = clean['context_window_k']
+            if type(window) is not int or not 1 <= window <= 2000:
+                raise ValueError('context_window_k must be an integer between 1 and 2000')
         return clean
     if isinstance(value, list):
         return [clean_public_options(item, f"{path}[{index}]") for index, item in enumerate(value)]

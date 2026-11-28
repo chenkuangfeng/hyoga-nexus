@@ -208,6 +208,23 @@
 
           <div class="setting-row">
             <div class="setting-info">
+              <label>{{ $t('nexusAgent.contextWindowLabel') }}</label>
+              <p class="desc">{{ $t('nexusAgent.contextWindowDesc') }}</p>
+            </div>
+            <div class="setting-control max-tokens-control">
+              <t-radio-group v-model="contextWindowMode">
+                <t-radio-button value="model">{{ $t('nexusAgent.contextWindowModel') }}</t-radio-button>
+                <t-radio-button value="custom">{{ $t('nexusAgent.contextWindowCustom') }}</t-radio-button>
+              </t-radio-group>
+              <t-input-number v-if="contextWindowMode === 'custom'" v-model="form.context_window_k" :min="1"
+                :max="2000" :step="1" theme="column">
+                <template #suffix> K</template>
+              </t-input-number>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
               <label>{{ $t('agentEditor.llmCallTimeout.label') }}</label>
               <p class="desc">{{ $t('nexusAgent.llmCallTimeoutDesc', { seconds: DEFAULT_MODEL_TIMEOUT_SECONDS }) }}</p>
             </div>
@@ -768,6 +785,11 @@ const maxTokensMode = computed<'default' | 'custom'>({
 const runTokenCapMode = computed<'unlimited' | 'custom'>({
   get: () => (form.max_run_tokens > 0 ? 'custom' : 'unlimited'),
   set: mode => { form.max_run_tokens = mode === 'custom' ? (form.max_run_tokens || 100000) : 0 },
+})
+
+const contextWindowMode = computed<'model' | 'custom'>({
+  get: () => form.context_window_k > 0 ? 'custom' : 'model',
+  set: mode => { form.context_window_k = mode === 'custom' ? (form.context_window_k || 128) : 0 },
 })
 
 const timeoutInput = computed<number | undefined>({

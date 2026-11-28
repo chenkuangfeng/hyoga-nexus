@@ -17,6 +17,9 @@ class ExecutionBudget:
     max_seconds: float = 120
     model_timeout_seconds: float = 60
     max_errors: int = 4
+    # Effective model input window in tokens after resolving model and agent K settings.
+    max_context_tokens: int = 200000
+    # Kept for older saved settings; Native execution uses max_context_tokens.
     max_context_chars: int = 100000
     # Model requests including transport retries. 0 derives max_rounds * (model_retries + 1) at run time.
     max_model_attempts: int = 0

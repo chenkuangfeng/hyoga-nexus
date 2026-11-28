@@ -80,7 +80,7 @@ class ContextAssembler:
     async def compact(self, history, *, token, budget, progress, force=False):
         """Bound the history to the Run's context limit. Returns (history, removed_count)."""
         from nexus_runtimes.native.context.compaction import compact, compact_within
-        limit = budget.max_context_chars
+        limit = budget.max_context_tokens
         high = 0 if force else int(limit * self.policy.compact_high_ratio)
         low = int(limit * (min(self.policy.compact_low_ratio, 0.5) if force else self.policy.compact_low_ratio))
         if self.policy.summarize_context:
@@ -128,7 +128,7 @@ class ContextAssembler:
             if payload_tokens <= 0:
                 raise RuntimeFault(failure_code)
             try:
-                compacted, omitted = compact_history(tuple(candidate), payload_tokens * 3)
+                compacted, omitted = compact_history(tuple(candidate), payload_tokens)
             except RuntimeFault:
                 raise RuntimeFault(failure_code) from None
             if not omitted or len(compacted) >= len(candidate):

@@ -34,6 +34,8 @@ export interface AgentEditorForm {
   max_completion_tokens: number
   /** 0 disables the optional cumulative Run token cap. */
   max_run_tokens: number
+  /** 0 follows the model profile; positive values cap this agent's context in thousands of tokens. */
+  context_window_k: number
   max_iterations: number
   /** Seconds; null means "follow the default". */
   llm_call_timeout: number | null
@@ -135,6 +137,7 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     reasoning_effort: asEffort(generation.reasoning_effort),
     max_completion_tokens: typeof budgets.max_output_tokens === 'number' ? budgets.max_output_tokens : 0,
     max_run_tokens: numberOr(budgets.max_tokens, 0),
+    context_window_k: numberOr(budgets.context_window_k, 0),
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: typeof budgets.model_timeout_seconds === 'number' ? budgets.model_timeout_seconds : null,
     allowed_tools: (agent.resource_bindings || []).filter(b => b.kind === 'tool').map(b => b.resource_id),
@@ -162,6 +165,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     reasoning_effort: 'auto',
     max_completion_tokens: 0,
     max_run_tokens: numberOr(budgets.max_tokens, 0),
+    context_window_k: 0,
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: null,
     allowed_tools: [...defaultTools],
@@ -202,6 +206,8 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   else delete budgets.max_output_tokens
 
   budgets.max_tokens = Math.min(Math.max(0, Math.round(form.max_run_tokens)), MAX_RUN_TOKENS_LIMIT)
+  if (form.context_window_k > 0) budgets.context_window_k = Math.min(2000, Math.round(form.context_window_k))
+  else delete budgets.context_window_k
 
   budgets.max_rounds = Math.min(Math.max(1, Math.round(form.max_iterations)), MAX_ROUNDS_LIMIT)
 

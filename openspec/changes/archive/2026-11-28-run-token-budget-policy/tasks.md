@@ -10,3 +10,7 @@
 - [x] On provider context overflow, force compact, trim older tool results, and retry the request at most once.
 - [x] Add regression tests for forced overflow recovery and one-retry termination; retain existing cross-Run summary and authorization regressions.
 - [x] Run focused backend validation and inspect the final diff.
+- [x] Add model-level and agent-level context window settings in K tokens; resolve the effective window before Native execution.
+- [x] Use the effective token window consistently for Native compaction and request fitting.
+- [x] Validate model/agent context window editing and run-time resolution with backend regressions, focused frontend tests, and strict type checks.
+- [x] Attempt both production builds; enterprise build passed. Workspace build could not finish because the build process exceeded available memory during chunk rendering, including with a constrained Node heap.

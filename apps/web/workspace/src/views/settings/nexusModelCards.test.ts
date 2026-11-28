@@ -23,7 +23,7 @@ const view: ModelSettingsView = {
 
 const form: ModelEditorForm = {
   model_type: 'chat', model_name: 'x', provider_id: '', provider_name: 'New', base_url: 'https://n.example/v1',
-  api_key: 'sk', scope: 'personal', protocol: 'openai_chat_completions',
+  api_key: 'sk', scope: 'personal', protocol: 'openai_chat_completions', context_window_k: 128,
 }
 
 test('cards flatten providers, mark defaults and management rights', () => {
@@ -59,5 +59,9 @@ test('editing updates the provider only when its fields change', () => {
 
 test('non-chat models send no options; chat keeps known options', () => {
   assert.deepEqual(modelOptionsFor({ ...form, model_type: 'embedding' }, { temperature: 1 }), {})
-  assert.deepEqual(modelOptionsFor(form, { temperature: 0.5, base_url: 'x' }), { temperature: 0.5, protocol: 'openai_chat_completions' })
+  assert.deepEqual(modelOptionsFor(form, { temperature: 0.5, base_url: 'x' }), { temperature: 0.5, protocol: 'openai_chat_completions', context_window_k: 128 })
+})
+
+test('chat model context window is persisted as K tokens', () => {
+  assert.equal(modelOptionsFor({ ...form, context_window_k: 256 }).context_window_k, 256)
 })

@@ -3,19 +3,19 @@
 Recent complete exchanges remain protected. Summarization failures fall back to explicit
 archive excerpts; original records are never deleted or replaced in platform storage.
 
-Hysteresis (P3): compaction starts only above `high` (compact_high_ratio × max_context_chars)
-and aims at `low` (compact_low_ratio × max_context_chars). The gap between the two keeps a
+Hysteresis (P3): compaction starts only above `high` (compact_high_ratio × max_context_tokens)
+and aims at `low` (compact_low_ratio × max_context_tokens). The gap between the two keeps a
 long Run from compacting again on every turn once it sits near the limit.
 """
 import asyncio
 from nexus_core.runtime import ModelMessage, ModelRequest, RuntimeFault
 from nexus_runtimes.native.engine.cancellation import cancellable
-from .assembler import estimate_tokens
+from .assembler import estimate_tokens, estimate_message_tokens
 from .history import compact_history
 
 
 def _size(messages) -> int:
-    return sum(len(m.content) + sum(len(c.arguments) for c in m.tool_calls) for m in messages)
+    return estimate_message_tokens(messages)
 
 
 def compact_within(messages, high: int, low: int, limit: int):

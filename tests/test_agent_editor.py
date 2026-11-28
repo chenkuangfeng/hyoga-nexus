@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from nexus_api.dependencies.platform import get_database_session, get_principal
 from nexus_api.main import app
 from nexus_core.platform import Principal, TenantRole
-from nexus_platform.agents.generation import merged_model_options, validate_generation
+from nexus_platform.agents.generation import merged_model_options, validate_context_window_budget, validate_generation
 from nexus_platform.errors import Conflict
 from nexus_platform.persistence.models import AuditRecord
 from nexus_platform.runs.service import claim_next, create_run
@@ -74,6 +74,15 @@ def test_agent_generation_overrides_model_options():
     assert merged_model_options(profile, {"generation": {"reasoning_effort": "auto"}}) == profile
     assert "reasoning_effort" not in merged_model_options(profile, {"generation": {"reasoning_effort": "off"}})
     assert merged_model_options(profile, {"generation": {"reasoning_effort": "high"}})["reasoning_effort"] == "high"
+
+
+def test_agent_context_window_budget_uses_k_tokens_and_zero_follows_model():
+    validate_context_window_budget({})
+    validate_context_window_budget({'context_window_k': 0})
+    validate_context_window_budget({'context_window_k': 128})
+    for value in (-1, 2001, True, 128.0):
+        with pytest.raises(ValueError):
+            validate_context_window_budget({'context_window_k': value})
 
 
 def test_agent_api_rejects_invalid_generation_with_422(api, database):

@@ -79,6 +79,8 @@ export interface ModelEditorForm {
   api_key: string
   scope: ModelScope
   protocol: string
+  /** Model context capacity in thousands of tokens (for example 128 means 128K). */
+  context_window_k: number
 }
 
 export type SavePlan =
@@ -113,6 +115,7 @@ export function modelOptionsFor(form: ModelEditorForm, previous: Record<string, 
     if (key in previous) options[key] = previous[key]
   }
   options.protocol = form.protocol || 'openai_chat_completions'
+  options.context_window_k = Math.min(2000, Math.max(1, Math.round(form.context_window_k || 200)))
   return options
 }
 

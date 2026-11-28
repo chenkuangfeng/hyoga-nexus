@@ -606,7 +606,7 @@ def validate_model_type(value: str) -> str:
 
 def validate_model_options(options: dict) -> dict:
     """Whitelist user-visible protocol settings; addresses and secrets stay provider-owned."""
-    allowed = {'protocol', 'stream', 'temperature', 'reasoning_effort', 'text_tools', 'rerank_api'}
+    allowed = {'protocol', 'stream', 'temperature', 'reasoning_effort', 'text_tools', 'rerank_api', 'context_window_k'}
     if set(options) - allowed:
         raise ValueError('Unsupported model option')
     if options.get('protocol', 'openai_chat_completions') not in ('openai_chat_completions', 'openai_responses', 'anthropic_messages'):
@@ -619,6 +619,9 @@ def validate_model_options(options: dict) -> dict:
         value = options['temperature']
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 2:
             raise ValueError('Temperature must be between 0 and 2')
+    if 'context_window_k' in options and (type(options['context_window_k']) is not int
+                                           or not 1 <= options['context_window_k'] <= 2000):
+        raise ValueError('Context window must be an integer between 1K and 2000K')
     if options.get('reasoning_effort', '') not in ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'):
         raise ValueError('Unsupported reasoning effort')
     if options.get('rerank_api', 'cohere') not in ('cohere', 'tei', 'dashscope'):

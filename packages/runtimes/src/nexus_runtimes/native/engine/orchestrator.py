@@ -189,10 +189,9 @@ class RunOrchestrator:
                             raise RuntimeFault('budget_exhausted')
                         fit_failure = 'budget_exhausted'
                     else:
-                        # With no cumulative cap, keep the independent context ceiling. One character
-                        # is allowed one estimated token so CJK text is not under-budgeted.
+                        # With no cumulative cap, keep the independent model context ceiling.
                         output_reserve = budget.max_output_tokens
-                        input_allowance = max(1, budget.max_context_chars - output_reserve)
+                        input_allowance = max(1, budget.max_context_tokens - output_reserve)
                         remaining_total = None
                         fit_failure = 'model_context_exceeded'
                     model_history, input_estimate, omitted = self.context.fit_token_budget(
@@ -234,7 +233,7 @@ class RunOrchestrator:
                                 fit_failure = 'budget_exhausted'
                             else:
                                 remaining_total = None
-                                input_allowance = max(1, budget.max_context_chars - budget.max_output_tokens)
+                                input_allowance = max(1, budget.max_context_tokens - budget.max_output_tokens)
                                 fit_failure = 'model_context_exceeded'
                             retry_messages, retry_estimate, retry_omitted = self.context.fit_token_budget(
                                 retry_messages, definitions=turn_definitions, token_budget=input_allowance,

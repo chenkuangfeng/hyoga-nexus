@@ -95,7 +95,8 @@ class SubagentRunner:
         return ExecutionBudget(max_rounds=min(max_rounds or DEFAULT_SUB_ROUNDS, MAX_SUB_ROUNDS, parent.max_rounds),
                                max_tokens=tokens, max_output_tokens=parent.max_output_tokens,
                                max_seconds=max(10, parent.max_seconds / 2), model_timeout_seconds=parent.model_timeout_seconds,
-                               max_errors=parent.max_errors, max_context_chars=parent.max_context_chars)
+                               max_errors=parent.max_errors, max_context_tokens=parent.max_context_tokens,
+                               max_context_chars=parent.max_context_chars)
 
     async def run(self, task: str, context: str = '', tools: list[str] | None = None,
                   max_rounds: int | None = None) -> tuple[str, str | None]:

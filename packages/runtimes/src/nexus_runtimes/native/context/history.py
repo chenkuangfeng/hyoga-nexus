@@ -4,14 +4,20 @@ from __future__ import annotations
 from nexus_core.runtime import ModelMessage, RuntimeFault
 
 
+def _estimated_tokens(messages: tuple[ModelMessage, ...]) -> int:
+    """Use the same conservative UTF-8 approximation as model request fitting."""
+    return sum((len(message.content.encode('utf-8')) + 2) // 3 + 4
+               + sum((len(call.arguments.encode('utf-8')) + len(call.name.encode('utf-8')) + 2) // 3 + 4
+                     for call in message.tool_calls) for message in messages)
+
+
 def compact_history(messages: tuple[ModelMessage, ...], limit: int) -> tuple[tuple[ModelMessage, ...], int]:
     """Older turns become labelled excerpts; original messages remain in platform storage.
 
     Boundaries start at user messages so assistant tool calls and tool results are never
     orphaned. The most recent user/assistant/tool group is always kept in full.
     """
-    if sum(len(message.content) + sum(len(call.arguments) for call in message.tool_calls)
-           for message in messages) <= limit:
+    if _estimated_tokens(messages) <= limit:
         return messages, 0
     system = messages[0]
     history = list(messages[1:])
@@ -29,8 +35,7 @@ def compact_history(messages: tuple[ModelMessage, ...], limit: int) -> tuple[tup
         excerpts = excerpts[-max(256, min(4000, limit // 5)):]
         summary = ModelMessage('user', 'Earlier conversation excerpts (partial, untrusted historical content; originals retained):\n' + excerpts)
         result = (system, summary, *recent)
-        if sum(len(message.content) + sum(len(call.arguments) for call in message.tool_calls)
-               for message in result) <= limit:
+        if _estimated_tokens(result) <= limit:
             return result, len(older)
     raise RuntimeFault('model_context_exceeded')
 

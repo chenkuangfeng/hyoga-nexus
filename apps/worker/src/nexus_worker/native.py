@@ -225,7 +225,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):
             raise RuntimeFault('runtime_budget_invalid')
         if any(not isinstance(options.get(key, 1), int) for key in
-               ('max_rounds', 'max_tokens', 'max_output_tokens', 'max_errors', 'max_context_chars')):
+               ('max_rounds', 'max_tokens', 'max_output_tokens', 'max_errors', 'max_context_tokens', 'max_context_chars')):
             raise RuntimeFault('runtime_budget_invalid')
         try:
             budget = ExecutionBudget(**options)

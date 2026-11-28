@@ -327,7 +327,7 @@ def test_orchestrator_compacts_history_when_total_token_budget_is_nearly_spent()
 
     old_text = 'historical details ' + 'z' * 7000
     model, store = _Model(), _Store()
-    budget = ExecutionBudget(max_tokens=1500, max_output_tokens=256, max_context_chars=20000)
+    budget = ExecutionBudget(max_tokens=1500, max_output_tokens=256, max_context_tokens=20000)
     request = RunRequest('run', (
         ModelMessage('system', 'system'), ModelMessage('user', old_text),
         ModelMessage('assistant', 'older result'), ModelMessage('user', 'create a skill from this'),

@@ -30,7 +30,7 @@ from nexus_platform.authz.permissions import require_api_permission
 from nexus_platform.tenants.policies import require_self_build
 from nexus_platform.authz.audit import audit
 from nexus_platform.authz.resources import authorize_resource
-from nexus_platform.agents.generation import validate_generation
+from nexus_platform.agents.generation import validate_generation, validate_context_window_budget
 from nexus_memory.switches import validate_agent_budget as validate_memory_budget
 
 
@@ -63,6 +63,7 @@ def create_agent(
     now = utc_now()
     clean_public_options(budgets, "budgets")
     validate_generation(budgets)
+    validate_context_window_budget(budgets)
     validate_memory_budget(budgets)
     clean_public_options(instructions, "instructions")
     clean_public_options(description, "description")
@@ -110,6 +111,7 @@ def update_agent_draft(
     now = utc_now()
     clean_public_options(budgets, "budgets")
     validate_generation(budgets)
+    validate_context_window_budget(budgets)
     validate_memory_budget(budgets)
     clean_public_options(instructions, "instructions")
     clean_public_options(description, "description")

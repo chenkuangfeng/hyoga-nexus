@@ -43,6 +43,13 @@ def validate_generation(budgets: Mapping[str, Any]) -> None:
         raise ValueError('reasoning_effort is not supported')
 
 
+def validate_context_window_budget(budgets: Mapping[str, Any]) -> None:
+    """Validate the optional agent context ceiling, expressed in thousands of tokens."""
+    value = budgets.get('context_window_k', 0)
+    if type(value) is not int or not 0 <= value <= 2000:
+        raise ValueError('context_window_k must be an integer between 0 and 2000')
+
+
 def merged_model_options(options: Mapping[str, Any], budgets: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return model profile options overridden by the agent's generation settings.
 
