@@ -8364,6 +8364,7 @@ export default {
     deleteConfirmTitle: 'Удалить диалог',
     deleteConfirmBody: 'Удалить этот диалог? Это действие нельзя отменить.',
     deleteSuccess: 'Диалог удалён',
+    deleteFailed: 'Не удалось удалить диалог. Повторите попытку.',
     markdown: {
       sessionId: 'ID сессии',
       exportedAt: 'Время экспорта',

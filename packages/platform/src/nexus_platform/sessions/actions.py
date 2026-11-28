@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from nexus_core.platform import Principal, new_id, utc_now
@@ -16,10 +16,43 @@ from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Conflict, NotFound
 from nexus_platform.identity.service import require_membership, require_tenant, resolve_user
 from nexus_platform.persistence.models import (
-    ArtifactRecord, MessageRecord, RunRecord, RunTrajectoryRecord, SessionRecord,
+    ArtifactRecord, ContextSummaryRecord, MessageRecord, RunRecord, RunTrajectoryRecord,
+    SessionAdmissionRecord, SessionRecord,
 )
 
 _ACTIVE_RUNS = ('queued', 'running', 'waiting_input', 'waiting_approval')
+
+
+def delete_session(db: Session, principal: Principal, tenant_id: UUID, session_id: UUID) -> None:
+    """Permanently delete the caller's idle conversation, Run data, and stored artifacts."""
+    artifact_files = []
+    with db.begin():
+        user = resolve_user(db, principal)
+        require_tenant(db, tenant_id)
+        require_membership(db, tenant_id, user.id)
+        source = db.scalar(select(SessionRecord).where(
+            SessionRecord.id == session_id, SessionRecord.tenant_id == tenant_id,
+            SessionRecord.owner_user_id == user.id).with_for_update())
+        if source is None:
+            raise NotFound('Session unavailable')
+        if db.scalar(select(RunRecord.id).where(
+                RunRecord.session_id == session_id, RunRecord.status.in_(_ACTIVE_RUNS)).limit(1)):
+            raise Conflict('Finish or cancel the active Run before deleting this conversation')
+        if db.scalar(select(SessionAdmissionRecord.seq).where(
+                SessionAdmissionRecord.session_id == session_id,
+                SessionAdmissionRecord.status.in_(('queued', 'started', 'unknown'))).limit(1)):
+            raise Conflict('Resolve the pending Run admission before deleting this conversation')
+        if db.scalar(select(ArtifactRecord.id).where(
+                ArtifactRecord.session_id == session_id, ArtifactRecord.deleted_at.is_(None)).limit(1)):
+            from nexus_platform.governance.retention import purge_session
+            artifact_files = purge_session(db, session_id)
+        # Context summaries retain source Run references and intentionally lack ON DELETE CASCADE.
+        db.execute(delete(ContextSummaryRecord).where(ContextSummaryRecord.session_id == session_id))
+        audit(db, tenant_id, user.id, 'session.deleted', 'session', str(session_id),
+              {'title_chars': len(source.title or '')})
+        db.delete(source)
+    for path in artifact_files:
+        path.unlink(missing_ok=True)
 
 
 def fork_at_message(db: Session, principal: Principal, tenant_id: UUID, session_id: UUID,

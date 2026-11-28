@@ -8366,6 +8366,7 @@ export default {
     deleteConfirmTitle: '刪除對話',
     deleteConfirmBody: '確認刪除當前對話？刪除後將無法復原。',
     deleteSuccess: '對話已刪除',
+    deleteFailed: '刪除對話失敗，請稍後重試',
     markdown: {
       sessionId: '會話 ID',
       exportedAt: '匯出時間',

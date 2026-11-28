@@ -8471,6 +8471,7 @@ export default {
     deleteConfirmTitle: '删除对话',
     deleteConfirmBody: '确认删除当前对话？删除后将无法恢复。',
     deleteSuccess: '对话已删除',
+    deleteFailed: '删除对话失败，请稍后重试',
     markdown: {
       sessionId: '会话 ID',
       exportedAt: '导出时间',

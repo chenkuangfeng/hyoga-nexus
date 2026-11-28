@@ -55,6 +55,11 @@ export async function listSessions(tenantId: string): Promise<SessionView[]> {
   return data as SessionView[]
 }
 
+/** Permanently delete an owned idle conversation; the server refuses active or unresolved Runs. */
+export async function deleteSession(tenantId: string, sessionId: string): Promise<void> {
+  await del(`${tenantPath(tenantId)}/sessions/${encodeURIComponent(sessionId)}`)
+}
+
 export interface UnknownAdmission { admission_id: string; session_id: string; run_id: string; run_status: string; interrupted_at: string; safe: boolean }
 /** Sessions held by a Run whose worker disappeared; the endpoint limits non-admins to their own Runs. */
 export async function listUnknownAdmissions(tenantId: string): Promise<UnknownAdmission[]> {

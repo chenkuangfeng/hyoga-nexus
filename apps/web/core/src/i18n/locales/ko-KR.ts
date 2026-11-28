@@ -8364,6 +8364,7 @@ export default {
     deleteConfirmTitle: '대화 삭제',
     deleteConfirmBody: '현재 대화를 삭제할까요? 삭제 후에는 복구할 수 없습니다.',
     deleteSuccess: '대화가 삭제되었습니다',
+    deleteFailed: '대화를 삭제하지 못했습니다. 다시 시도해 주세요.',
     markdown: {
       sessionId: '세션 ID',
       exportedAt: '내보낸 시간',

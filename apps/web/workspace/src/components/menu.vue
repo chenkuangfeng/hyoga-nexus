@@ -161,13 +161,14 @@
                                 }">
                                 <div class="session-list-row session-list-row--flat">
                                     <div class="session-list-row__body">
-                                        <!-- Nexus 侧栏暂无会话改名/置顶/删除接口，不提供菜单项（menu-options 为空则隐藏更多按钮） -->
                                         <SessionSidebarRow :item="subitem" :batch-mode="false"
                                             :running="Boolean(sessionActivityEntries[subitem.id])"
                                             :unread="Boolean(sessionUnread[subitem.id])"
                                             :active-path="currentSecondpath" :selected-ids="[]"
-                                            :menu-options="[]"
+                                            :menu-options="subitem.owner_user_id === authStore.user?.id
+                                                ? [{ content: t('chatHeader.deleteSession'), value: 'delete', theme: 'error' }] : []"
                                             @navigate="gotopage(subitem.path)"
+                                            @menu-click="handleSessionAction(subitem, $event.value)"
                                             @hover-in="mouseenteBotDownr(subitem.id)" @hover-out="mouseleaveBotDown" />
                                     </div>
                                 </div>
@@ -199,6 +200,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { listSessions } from '@nexus-web/core/api/native-runs';
 import { useChatResourcesStore } from '@nexus-web/core/stores/chatResources';
 import SessionSidebarRow from './SessionSidebarRow.vue';
+import { removeNativeSession } from './sessionMutations'
 import PanelResizeHandle from './PanelResizeHandle.vue';
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '@/utils/sidebarWidth';
 import {
@@ -547,6 +549,7 @@ const mapSessionRow = (item: any) => ({
     title: item.title ? item.title : t('menu.newSession'),
     path: `chat/${item.id}`,
     id: item.id,
+    owner_user_id: item.owner_user_id,
     isMore: false,
     isNoTitle: item.title ? false : true,
     created_at: item.created_at,
@@ -558,6 +561,18 @@ const mapSessionRow = (item: any) => ({
     user_id: item.user_id || '',
     parent_session_id: item.parent_session_id || '',
 });
+
+async function handleSessionAction(item: { id: string; title: string }, action: string) {
+    if (action !== 'delete' || !item.id) return
+    const tenantId = authStore.effectiveTenantId
+    if (!tenantId) return
+    try {
+        await removeNativeSession(tenantId, item.id)
+        MessagePlugin.success(t('chatHeader.deleteSuccess'))
+    } catch (error: any) {
+        MessagePlugin.error(error?.message || t('chatHeader.deleteFailed'))
+    }
+}
 
 const syncMenuStoreFromBuckets = () => {
     usemenuStore.clearMenuArr();

@@ -32,7 +32,7 @@ import { useEditorResourcesStore } from '@nexus-web/core/stores/editorResources'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { hostSkillsOnly, mentionSkillTargetId } from '@/utils/skillTarget';
 import { useI18n } from 'vue-i18n'
-import { useNexusChatActions, type NexusAgentOption } from '@/composables/nexusChatActions';
+import type { NexusAgentOption } from '@/composables/nexusChatActions';
 import NexusAgentSelector from '@/components/NexusAgentSelector.vue';
 import AttachmentUpload, { type AttachmentFile } from './AttachmentUpload.vue';
 import {
@@ -2086,16 +2086,13 @@ const emit = defineEmits<{
   (e: 'retry-steer', steerId: string): void;
 }>();
 
-// Nexus 对话页：平台尚无后端的入口统一提示「暂未开放」（openspec 2026-11-04-weknora-chat-dialog）。
-const nexusActions = useNexusChatActions();
-const nexusPlanned = (feature: string) => nexusActions?.planned(feature);
-// Nexus 对话页的智能体按钮（WeKnora agent-mode-btn + 选择器）。
+// Nexus composer exposes only controls supported by the platform Run API.
 const nexusAgentButtonRef = ref<HTMLElement | null>(null);
 const showNexusAgentSelector = ref(false);
 const nexusAgentName = computed(() =>
   (props.nexusAgents as NexusAgentOption[]).find(agent => agent.id === props.nexusAgentId)?.name || t('input.agentMode'));
 const toggleNexusAgentSelector = () => {
-  if (props.nexusAgentLocked) { nexusPlanned('switchAgent'); return; }
+  if (props.nexusAgentLocked) return;
   showNexusAgentSelector.value = !showNexusAgentSelector.value;
 };
 
@@ -3004,77 +3001,20 @@ defineExpose({
 
           <slot name="controls" />
 
-          <!-- Nexus 对话页：与 WeKnora 控制栏相同的入口与样式；平台尚无对应能力，点击只提示「暂未开放」。 -->
+          <!-- Native Runs currently accept text and an agent-bound configuration. -->
           <template v-if="nexusMode">
-            <div ref="nexusAgentButtonRef" class="control-btn agent-mode-btn is-custom" data-testid="composer-agent"
-              @click.stop="toggleNexusAgentSelector">
+            <button ref="nexusAgentButtonRef" type="button" class="control-btn agent-mode-btn is-custom"
+              :class="{ 'is-locked': nexusAgentLocked }" data-testid="composer-agent"
+              :disabled="nexusAgentLocked" @click.stop="toggleNexusAgentSelector">
               <span class="agent-mode-text">{{ nexusAgentName }}</span>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="dropdown-arrow"
+              <svg v-if="!nexusAgentLocked" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="dropdown-arrow"
                 :class="{ 'rotate': showNexusAgentSelector }">
                 <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
               </svg>
-            </div>
+            </button>
             <NexusAgentSelector :visible="showNexusAgentSelector" :anchor-el="nexusAgentButtonRef"
               :current-agent-id="nexusAgentId" :agents="(nexusAgents as NexusAgentOption[])"
               @close="showNexusAgentSelector = false" @select="(id: string) => emit('update:nexusAgentId', id)" />
-
-            <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
-              :content="$t('input.webSearch.toggleOn')">
-              <div class="control-btn websearch-btn" data-testid="composer-planned-websearch" @click.stop="nexusPlanned('webSearch')">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"
-                  class="control-icon websearch-icon">
-                  <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
-                  <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                  <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                  <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-                  <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-                </svg>
-              </div>
-            </t-tooltip>
-            <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
-              :content="$t('chat.imageUploadTooltip')">
-              <div class="control-btn image-upload-btn" data-testid="composer-planned-image" @click.stop="nexusPlanned('imageUpload')">
-                <svg width="18" height="18" viewBox="0 0 1024 1024" fill="currentColor" class="control-icon">
-                  <path d="M896 128H128c-35.3 0-64 28.7-64 64v640c0 35.3 28.7 64 64 64h768c35.3 0 64-28.7 64-64V192c0-35.3-28.7-64-64-64zM128 832V192h768l0.1 640H128z" />
-                  <path d="M352 448a96 96 0 1 0 0-192 96 96 0 0 0 0 192z" />
-                  <path d="M128 768l224-288 160 160 192-256L896 640v128H128z" />
-                </svg>
-              </div>
-            </t-tooltip>
-            <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
-              :content="$t('chat.attachmentUploadTooltip')">
-              <div class="control-btn attachment-upload-btn" data-testid="composer-planned-attachment" @click.stop="nexusPlanned('attachmentUpload')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                  stroke-linecap="round" stroke-linejoin="round" class="control-icon">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                </svg>
-              </div>
-            </t-tooltip>
-            <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }"
-              :content="$t('input.knowledgeBase')">
-              <div class="control-btn kb-btn" data-testid="composer-planned-mention" @click.stop="nexusPlanned('mention')">
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="control-icon at-icon">
-                  <circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.8" />
-                  <path d="M13.5 10V11.5C13.5 12.163 13.7634 12.7989 14.2322 13.2678C14.7011 13.7366 15.337 14 16 14C16.663 14 17.2989 13.7366 17.7678 13.2678C18.2366 12.7989 18.5 12.163 18.5 11.5V10C18.5 7.74566 17.6045 5.58365 16.0104 3.98959C14.4163 2.39553 12.2543 1.5 10 1.5C7.74566 1.5 5.58365 2.39553 3.98959 3.98959C2.39553 5.58365 1.5 7.74566 1.5 10C1.5 12.2543 2.39553 14.4163 3.98959 16.0104C5.58365 17.6045 7.74566 18.5 10 18.5H12"
-                    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
-            </t-tooltip>
-            <div class="model-display">
-              <div class="model-selector-trigger" data-testid="composer-planned-model" @click.stop="nexusPlanned('modelSelect')">
-                <span class="model-selector-name">{{ $t('input.modelAuto') }}</span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="model-dropdown-arrow">
-                  <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-                </svg>
-              </div>
-            </div>
-            <button type="button" class="model-selector-trigger reasoning-effort-trigger" data-testid="composer-planned-reasoning"
-              :title="$t('modelSettings.debug.reasoningEffort')" @click.stop="nexusPlanned('reasoningEffort')">
-              <span class="model-selector-name">{{ $t(levelLabelKey('auto')) }}</span>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="model-dropdown-arrow">
-                <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-              </svg>
-            </button>
           </template>
 
           <!-- 模型显示 -->

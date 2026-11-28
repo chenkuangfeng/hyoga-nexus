@@ -501,6 +501,14 @@ def list_sessions(
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
 
 
+@router.delete("/tenants/{tenant_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_session(tenant_id: UUID, session_id: UUID,
+                   principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Permanently delete an owned idle conversation and its retained Run records."""
+    from nexus_platform.sessions.actions import delete_session as delete_owned_session
+    delete_owned_session(db, principal, tenant_id, session_id)
+
+
 @router.post("/tenants/{tenant_id}/sessions/{session_id}/fork", status_code=201)
 def fork_session(tenant_id: UUID, session_id: UUID, body: SessionMessageAction,
                  principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):

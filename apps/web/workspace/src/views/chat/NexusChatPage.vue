@@ -13,6 +13,7 @@
       <div class="dialogue-title">
         <span data-testid="chat-welcome-title">{{ $t('createChat.title') }}</span>
       </div>
+      <div class="suggested-questions-space" aria-hidden="true" />
       <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat-alert" />
       <div class="create-chat-composer">
         <InputField nexus-mode data-testid="chat-composer" :auto-focus="true" :is-replying="false" :can-steer="false"
@@ -1160,6 +1161,11 @@ defineExpose({ sendText })
     }
 }
 
+.suggested-questions-space {
+    width: 100%;
+    min-height: 112px;
+}
+
 .create-chat-composer {
     display: flex;
     flex-direction: column;
@@ -1246,6 +1252,10 @@ defineExpose({ sendText })
             width: 24px;
         }
     }
+}
+
+@media (max-width: 640px) {
+    .suggested-questions-space { min-height: 72px; }
 }
 
 </style>

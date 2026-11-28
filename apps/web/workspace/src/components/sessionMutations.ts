@@ -5,6 +5,7 @@ import {
   unpinSession,
   updateSession,
 } from '@nexus-web/core/api/chat/index'
+import { deleteSession } from '@nexus-web/core/api/native-runs'
 
 export const SESSION_MUTATION_EVENT = 'nexus:session-mutation'
 
@@ -62,5 +63,11 @@ export async function clearSession(sessionId: string): Promise<void> {
 
 export async function removeSession(sessionId: string): Promise<void> {
   ensureSuccess(await delSession(sessionId))
+  notifySessionMutation({ sessionId, removed: true })
+}
+
+/** Remove an owned Native conversation through the platform API, then refresh sidebar state. */
+export async function removeNativeSession(tenantId: string, sessionId: string): Promise<void> {
+  await deleteSession(tenantId, sessionId)
   notifySessionMutation({ sessionId, removed: true })
 }

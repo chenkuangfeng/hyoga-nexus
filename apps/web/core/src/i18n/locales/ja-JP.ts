@@ -1302,6 +1302,7 @@ export default {
     deleteConfirmTitle: '会話を削除',
     deleteConfirmBody: 'この会話を削除しますか？この操作は取り消せません。',
     deleteSuccess: '会話を削除しました',
+    deleteFailed: '会話を削除できませんでした。もう一度お試しください。',
     markdown: {
       sessionId: 'セッションID',
       exportedAt: 'エクスポート日時',

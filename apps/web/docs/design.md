@@ -10,7 +10,7 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 采用现有主色、语义 token、系统字体与 TDesign 组件；按钮与标签提供可读名称，窄屏卡片与操作换行。
 
-主对话页（`/platform/creatChat` 新建对话；`/platform/chat/:chatid` 会话与运行，路由入口 `views/chat/NexusChatRoutePage.vue`，对话核心 `views/chat/NexusChatPage.vue` 由 `sessionId` 属性驱动）按 WeKnora 复制：会话态的结构与样式取自 `views/chat/index.vue`（`chat-topbar`、`chat_thread`、`chat_scroll_box`、`msg_list`、悬浮的 `chat_composer`、`chat_overlays`），欢迎态取自 `views/creatChat/creatChat.vue`（标题“Hi，我是Nexus”、输入框垂直居中；不显示推荐问题区）；窄容器（`compact`）使用 WeKnora 的嵌入布局。数据只来自平台 Run API，不调用 WeKnora 对话接口。旧的 `/platform/native` 地址重定向到上述页面。`/platform/knowledge-bases/:kbId/creatChat` 同样重定向到新建对话页（会话不挂载知识库）。
+主对话页（`/platform/creatChat` 新建对话；`/platform/chat/:chatid` 会话与运行，路由入口 `views/chat/NexusChatRoutePage.vue`，对话核心 `views/chat/NexusChatPage.vue` 由 `sessionId` 属性驱动）按 WeKnora 复制：会话态的结构与样式取自 `views/chat/index.vue`（`chat-topbar`、`chat_thread`、`chat_scroll_box`、`msg_list`、悬浮的 `chat_composer`、`chat_overlays`），欢迎态取自 `views/creatChat/creatChat.vue`（标题“Hi，我是Nexus”、输入框垂直居中；推荐问题区留白但不展示占位内容）；窄容器（`compact`）使用 WeKnora 的嵌入布局。数据只来自平台 Run API，不调用 WeKnora 对话接口。旧的 `/platform/native` 地址重定向到上述页面。`/platform/knowledge-bases/:kbId/creatChat` 同样重定向到新建对话页（会话不挂载知识库）。
 
 - `api/native-run-types.ts`：Run、事件、会话等类型与运行时校验，不依赖网络或 i18n，便于测试。
 - `api/native-runs.ts`：类型化的请求封装；事件流使用 `@microsoft/fetch-event-source`，携带与 axios 相同的认证头，并从 `Last-Event-ID` 续读。
@@ -20,12 +20,12 @@ Vue 3、TypeScript、TDesign、Pinia、vue-router（history 模式）、vue-i18n
 
 模型输出由 WeKnora 的 Markdown 管线渲染（`botmsg.vue` 与 `AgentStreamDisplay.vue`），输出经 DOMPurify 净化。
 
-- 侧栏会话列表（`components/menu.vue`）只读取平台会话 `listSessions`，展示「我的会话」一个分组；IM、嵌入渠道与 API 文件夹尚未迁移，不生成对应分组。平台会话暂无改名、置顶、清空与删除接口，因此会话菜单不提供这些操作（`SessionSidebarRow` 在无菜单项时隐藏更多按钮）。
+- 侧栏会话列表（`components/menu.vue`）只读取平台会话 `listSessions`，展示「我的会话」一个分组；IM、嵌入渠道与 API 文件夹尚未迁移，不生成对应分组。本人拥有的会话提供删除菜单，调用 Native 平台接口；服务端拒绝删除活动 Run 或待解决准入记录，会话删除审计保留，关联 Run 与会话数据按外键级联清除。
 - 复用的 WeKnora 组件：`usermsg.vue`、`botmsg.vue`（含 `AgentStreamDisplay` 时间线与回答工具栏）、`MessageTimestamp`、`ChatQuestionMinimap`、`PendingPromptDock`、`ToolApprovalCard`、`AskUserCard`、`Input-field.vue`（`nexusMode`）。调用 WeKnora 接口的 `ChatHeader.vue` 按原模板复制为 `components/NexusChatHeader.vue`。
 - 数据适配：`utils/nexusChatTranscript.ts` 把平台消息按 Run 分组为 WeKnora 行（一条用户消息 + 一条助手回答），历史回答的时间线由该 Run 的事件重建（打开会话时以最多 4 个并发读取 `GET .../runs/{id}/events`；读取失败时回退为正文）。`utils/nexusAgentEvents.ts` 把 Run 事件映射为 `agentEventStream`：文本、工具调用、`approval.*` → `tool_approval_required`、`input.*` → `agent_prompt_required`（ask_user）。审批参数只经 `GET .../approvals` 取得。
 - 运行操作：`composables/nexusChatActions.ts` 由对话页提供；`ToolApprovalCard` 与 `AskUserCard` 检测到它时改调平台审批与回答接口（审批后 `useNativeRun.resume()` 继续跟随），否则保持 WeKnora 原行为。
-- 消息操作：复制在前端完成；分叉与回滚调用平台会话消息操作 API，保留授权历史，回滚遇到工具或产物副作用时拒绝；加入知识库打开现有知识编辑器；产物入口切换到会话产物标签；请求信息显示 Run、消息与会话标识。顶栏改名、查看授权、删除会话、沙箱面板、问助手仍为占位。输入栏联网搜索、图片与附件上传、@ 引用、模型与思考强度仍待接入 Native Run 请求契约。数据驱动区域在没有数据时与 WeKnora 一样不出现。
-- 智能体选择与 WeKnora 一致：输入框左侧的 `agent-mode-btn` 打开 `components/NexusAgentSelector.vue`（按 WeKnora `AgentSelector.vue` 的模板、定位与样式复制，只列平台已发布的智能体，归入「自定义智能体」；不读取 WeKnora 的 store 与接口）。会话已绑定智能体，会话内点击该按钮为占位。
+- 消息操作：复制在前端完成；分叉与回滚调用平台会话消息操作 API，保留授权历史，回滚遇到工具或产物副作用时拒绝；加入知识库打开现有知识编辑器；产物入口切换到会话产物标签；请求信息显示 Run、消息与会话标识。顶栏改名、查看授权、删除会话、沙箱面板、问助手仍为占位。Nexus 输入栏只显示 Native Run 当前支持的文本发送、停止和智能体选择；已绑定会话中的智能体选择器为只读。联网、上传、提及、模型和推理选项暂不显示，待 Run 请求与授权契约接通后再呈现。数据驱动区域在没有数据时与 WeKnora 一样不出现。
+- 智能体选择与 WeKnora 一致：输入框左侧的 `agent-mode-btn` 打开 `components/NexusAgentSelector.vue`（按 WeKnora `AgentSelector.vue` 的模板、定位与样式复制，只列平台已发布的智能体，归入「自定义智能体」；不读取 WeKnora 的 store 与接口）。会话已绑定智能体，按钮只读展示当前智能体。
 - 已去掉 Nexus 自加的元素：运行状态标签、运行停滞告警条（`NativeWatchdogBanner.vue` 保留但不再挂载）、失败与排队提示行。运行失败时与 WeKnora 处理运行级错误相同：错误说明作为回答写入时间线，并弹出错误提示。因此对话页目前没有「继续等待 / 发送提示」与排队位置的入口；取消用输入框的停止按钮，追加指令用运行中的发送。
 - 与 WeKnora 仍不同之处：欢迎页不显示宿主沙箱的项目目录条（WeKnora 仅桌面端显示）。
 - 尚未完成（见 `openspec/changes/2026-11-04-weknora-chat-dialog/tasks.md`）：完整 `vue-tsc` 与 `pnpm build` 未在受内存限制的环境中验证；浏览器用例未执行。

@@ -1377,6 +1377,7 @@ export default {
     deleteConfirmTitle: 'Delete Conversation',
     deleteConfirmBody: 'Delete this conversation? This cannot be undone.',
     deleteSuccess: 'Conversation deleted',
+    deleteFailed: 'Could not delete the conversation. Please try again.',
     markdown: {
       sessionId: 'Session ID',
       exportedAt: 'Exported at',
