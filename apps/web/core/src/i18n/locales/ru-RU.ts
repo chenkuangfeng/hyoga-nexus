@@ -8691,6 +8691,13 @@ export default {
       showAll: 'Показать ещё {count}',
       showLess: 'Свернуть'
     },
+    trajectory: {
+      conversation: 'Чат', title: 'Траектория', tabsLabel: 'Ход выполнения сеанса', empty: 'Событий запусков пока нет',
+      totalSession: 'Накопление токенов по сеансу (сумма Run)', actualTotal: 'Фактический расход провайдера', callsWithUsage: 'Расход возвращён в вызовах: {count}',
+      inputEstimate: 'Оценка входа запроса', inputEstimateShort: 'Оценка входа', actualUsage: 'Фактический расход (вход / выход)', usageUnavailable: 'Провайдер не вернул расход',
+      requestEstimate: 'Оценка входа этого запроса', runTotal: 'Накопление токенов Run', details: 'Подробности',
+      events: { runStarted: 'Запуск начат', runCompleted: 'Запуск завершён', runFailed: 'Ошибка запуска', runCancelled: 'Запуск отменён', turnStarted: 'Начат ход', modelStarted: 'Запрос модели', modelCompleted: 'Ответ модели', modelRecovery: 'Восстановление после переполнения контекста', contextCompacted: 'Контекст сжат', toolStarted: 'Инструмент запущен', toolCompleted: 'Инструмент завершён', toolFailed: 'Ошибка инструмента', toolProgress: 'Ход инструмента', approvalRequested: 'Запрошено подтверждение', approvalResolved: 'Подтверждение получено', inputRequested: 'Запрошен ввод' }
+    },
     placeholder: 'Введите сообщение. Enter — отправить, Shift+Enter — новая строка',
     needAgent: 'Сначала выберите агента',
     scrollToBottom: 'Прокрутить вниз',

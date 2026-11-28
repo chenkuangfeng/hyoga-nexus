@@ -8683,6 +8683,13 @@ export default {
       showAll: 'Show {count} more',
       showLess: 'Show less'
     },
+    trajectory: {
+      conversation: 'Chat', title: 'Trajectory', tabsLabel: 'Session execution trajectory', empty: 'No run events yet',
+      totalSession: 'Session cumulative tokens (sum of Runs)', actualTotal: 'Provider actual usage total', callsWithUsage: 'Usage returned by {count} calls',
+      inputEstimate: 'Request input estimate', inputEstimateShort: 'Input estimate', actualUsage: 'Actual usage (input / output)', usageUnavailable: 'Usage not returned by provider',
+      requestEstimate: 'Estimated input for this request', runTotal: 'Run cumulative tokens', details: 'Details',
+      events: { runStarted: 'Run started', runCompleted: 'Run completed', runFailed: 'Run failed', runCancelled: 'Run cancelled', turnStarted: 'Turn started', modelStarted: 'Model request', modelCompleted: 'Model response', modelRecovery: 'Context overflow recovery', contextCompacted: 'Context compacted', toolStarted: 'Tool started', toolCompleted: 'Tool completed', toolFailed: 'Tool failed', toolProgress: 'Tool progress', approvalRequested: 'Approval requested', approvalResolved: 'Approval resolved', inputRequested: 'Input requested' }
+    },
     placeholder: 'Type a message. Enter to send, Shift+Enter for a new line',
     needAgent: 'Choose an agent first',
     scrollToBottom: 'Scroll to bottom',

@@ -8691,6 +8691,13 @@ export default {
       showAll: '{count}개 더 보기',
       showLess: '접기'
     },
+    trajectory: {
+      conversation: '대화', title: '추적', tabsLabel: '세션 실행 추적', empty: '실행 이벤트가 없습니다',
+      totalSession: '세션 누적 토큰(Run 합계)', actualTotal: '공급자 실제 사용량 합계', callsWithUsage: '사용량을 반환한 호출 {count}회',
+      inputEstimate: '요청 입력 추정', inputEstimateShort: '입력 추정', actualUsage: '실제 사용량(입력 / 출력)', usageUnavailable: '공급자 사용량 없음',
+      requestEstimate: '이번 요청 입력 추정', runTotal: 'Run 누적 토큰', details: '세부 정보',
+      events: { runStarted: '실행 시작', runCompleted: '실행 완료', runFailed: '실행 실패', runCancelled: '실행 취소', turnStarted: '턴 시작', modelStarted: '모델 요청', modelCompleted: '모델 응답', modelRecovery: '컨텍스트 초과 복구', contextCompacted: '컨텍스트 압축', toolStarted: '도구 시작', toolCompleted: '도구 완료', toolFailed: '도구 실패', toolProgress: '도구 진행', approvalRequested: '승인 요청', approvalResolved: '승인 결과', inputRequested: '입력 요청' }
+    },
     placeholder: '메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)',
     needAgent: '먼저 에이전트를 선택하세요',
     scrollToBottom: '맨 아래로 이동',

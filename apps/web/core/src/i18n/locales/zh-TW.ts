@@ -8688,6 +8688,13 @@ export default {
       showAll: '展開其餘 {count} 個',
       showLess: '收合'
     },
+    trajectory: {
+      conversation: '對話', title: '軌跡', tabsLabel: '查看會話執行軌跡', empty: '尚無執行事件',
+      totalSession: '會話累計 token（依 Run 加總）', actualTotal: '供應商實際用量合計', callsWithUsage: '{count} 次呼叫有用量',
+      inputEstimate: '請求輸入估算', inputEstimateShort: '輸入估算', actualUsage: '單次實際用量（輸入 / 輸出）', usageUnavailable: '供應商未回傳用量',
+      requestEstimate: '本次請求估算輸入', runTotal: 'Run 累計 token', details: '詳情',
+      events: { runStarted: '開始執行', runCompleted: '執行完成', runFailed: '執行失敗', runCancelled: '執行取消', turnStarted: '開始一輪', modelStarted: '模型請求', modelCompleted: '模型回應', modelRecovery: '上下文溢位恢復', contextCompacted: '上下文壓縮', toolStarted: '工具開始', toolCompleted: '工具完成', toolFailed: '工具失敗', toolProgress: '工具進度', approvalRequested: '等待審批', approvalResolved: '審批結果', inputRequested: '等待輸入' }
+    },
     placeholder: '輸入訊息，按 Enter 傳送，Shift+Enter 換行',
     needAgent: '請先選擇智能體',
     scrollToBottom: '回到底部',

@@ -8691,6 +8691,13 @@ export default {
       showAll: '残り {count} 件を表示',
       showLess: '折りたたむ'
     },
+    trajectory: {
+      conversation: '会話', title: '軌跡', tabsLabel: 'セッション実行履歴', empty: '実行イベントはありません',
+      totalSession: 'セッション累計トークン（Run 合計）', actualTotal: 'プロバイダー実使用量の合計', callsWithUsage: '使用量が返された呼び出し：{count} 件',
+      inputEstimate: 'リクエスト入力推定', inputEstimateShort: '入力推定', actualUsage: '実使用量（入力 / 出力）', usageUnavailable: 'プロバイダー使用量なし',
+      requestEstimate: '今回の入力推定', runTotal: 'Run 累計トークン', details: '詳細',
+      events: { runStarted: '実行開始', runCompleted: '実行完了', runFailed: '実行失敗', runCancelled: '実行キャンセル', turnStarted: 'ターン開始', modelStarted: 'モデルリクエスト', modelCompleted: 'モデル応答', modelRecovery: 'コンテキスト超過からの復旧', contextCompacted: 'コンテキスト圧縮', toolStarted: 'ツール開始', toolCompleted: 'ツール完了', toolFailed: 'ツール失敗', toolProgress: 'ツール進行状況', approvalRequested: '承認待ち', approvalResolved: '承認結果', inputRequested: '入力待ち' }
+    },
     placeholder: 'メッセージを入力（Enter で送信、Shift+Enter で改行）',
     needAgent: '先にエージェントを選択してください',
     scrollToBottom: '一番下へ移動',

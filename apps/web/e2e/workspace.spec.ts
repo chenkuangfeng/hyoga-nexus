@@ -234,7 +234,7 @@ test('员工主菜单仅三项，设置弹出且个人设置仅三项，旧工�
 })
 
 
-test('会话产物在右侧折叠，失败可以重试，切换会话清除旧产物', async ({ page, api }) => {
+test('会话通过顶部标签查看对话、轨迹和产物，产物加载失败可以重试', async ({ page, api }) => {
   await api.signIn(); bootWorkspace(api)
   let fail = true
   api.handle(request => {
@@ -248,17 +248,20 @@ test('会话产物在右侧折叠，失败可以重试，切换会话清除旧�
     }
   })
   await page.goto('/platform/chat/s1')
-  await page.getByRole('button', { name: '会话产物', exact: true }).click()
-  await expect(page.locator('#session-artifacts')).toContainText('产物加载失败')
+  const tabs = page.getByRole('tablist')
+  await expect(tabs.getByRole('tab')).toHaveCount(3)
+  await expect(tabs.getByRole('tab', { name: '对话' })).toHaveAttribute('aria-selected', 'true')
+  await tabs.getByRole('tab', { name: '产物' }).click()
+  await expect(page.locator('#chat-panel-artifacts')).toContainText('产物加载失败')
   fail = false
-  await page.locator('#session-artifacts').getByRole('button', { name: '重试' }).click()
-  await expect(page.locator('#session-artifacts')).toContainText('report.txt')
-  await page.getByRole('button', { name: '会话产物', exact: true }).click()
-  await expect(page.locator('#session-artifacts')).toHaveCount(0)
+  await page.locator('#chat-panel-artifacts').getByRole('button', { name: '重试' }).click()
+  await expect(page.locator('#chat-panel-artifacts')).toContainText('report.txt')
+  await tabs.getByRole('tab', { name: '轨迹' }).click()
+  await expect(page.locator('#chat-panel-trajectory')).toBeVisible()
   await page.goto('/platform/chat/s2')
-  await page.getByRole('button', { name: '会话产物', exact: true }).click()
-  await expect(page.locator('#session-artifacts')).toContainText('当前会话暂无产物')
-  await expect(page.locator('#session-artifacts')).not.toContainText('report.txt')
+  await page.getByRole('tab', { name: '产物' }).click()
+  await expect(page.locator('#chat-panel-artifacts')).toContainText('当前会话暂无产物')
+  await expect(page.locator('#chat-panel-artifacts')).not.toContainText('report.txt')
   await expectResponsive(page)
   await expect.poll(async () => (await page.locator('.platform-route-outlet').boundingBox())!.width >= 300).toBe(true)
 })

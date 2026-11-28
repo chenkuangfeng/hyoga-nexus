@@ -22,7 +22,10 @@ test('page provides Nexus actions and the WeKnora prompt dock', () => {
   assert.match(page, /provideNexusChatActions\(/)
   assert.match(page, /providePromptDock\(/)
   assert.doesNotMatch(page, /planned\('askAssistant'\)/)
-  assert.match(page, /id="session-artifacts"/)
+  assert.match(page, /role="tablist"/)
+  assert.match(page, /id="chat-panel-artifacts"/)
+  assert.match(page, /id="chat-panel-trajectory"/)
+  assert.doesNotMatch(page, /class="session-artifacts"/)
   assert.match(page, /listSessionArtifacts\(sessionId\)/)
   assert.doesNotMatch(page, /planned\('sandboxPanel'\)/)
   for (const entry of ['suggestedQuestions', 'fork', 'rewind']) {

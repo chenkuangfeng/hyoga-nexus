@@ -146,3 +146,16 @@ GOLDEN = {
 def test_engine_event_sequence_matches_baseline(database, name):
     observed = SCENARIOS[name](database)
     assert observed == GOLDEN[name], f'{name} observed={observed!r}'
+
+
+def test_model_events_record_request_estimate_and_run_total(database):
+    principal, tenant, _, run, _ = stack(database, ['echo'])
+    model = FakeModel([[ModelChunk('text', text='Done')]])
+    run_once(database, 'worker', model_factory=lambda _: model)
+    with database() as db:
+        events = list_events(db, principal, tenant.id, run.id, 0)
+    started = next(event for event in events if event.event_type == 'model.started')
+    completed = next(event for event in events if event.event_type == 'model.completed')
+    assert started.payload['input_estimate_tokens'] > 0
+    assert completed.payload['request_input_estimate_tokens'] == started.payload['input_estimate_tokens']
+    assert completed.payload['run_total_tokens'] == completed.payload['tokens']

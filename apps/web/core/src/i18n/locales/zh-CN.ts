@@ -8683,6 +8683,13 @@ export default {
       showAll: '展开另外 {count} 个',
       showLess: '收起'
     },
+    trajectory: {
+      conversation: '对话', title: '轨迹', tabsLabel: '查看会话执行轨迹', empty: '还没有运行事件',
+      totalSession: '会话累计 token（按 Run 累加）', actualTotal: '供应商实际用量合计', callsWithUsage: '{count} 次调用返回了用量',
+      inputEstimate: '请求输入估算', inputEstimateShort: '输入估算', actualUsage: '单次实际用量（输入 / 输出）', usageUnavailable: '供应商未返回用量',
+      requestEstimate: '本次请求估算输入', runTotal: 'Run 累计 token', details: '详情',
+      events: { runStarted: '开始运行', runCompleted: '运行完成', runFailed: '运行失败', runCancelled: '运行取消', turnStarted: '开始一轮', modelStarted: '模型请求', modelCompleted: '模型响应', modelRecovery: '上下文溢出恢复', contextCompacted: '上下文压缩', toolStarted: '工具开始', toolCompleted: '工具完成', toolFailed: '工具失败', toolProgress: '工具进度', approvalRequested: '等待审批', approvalResolved: '审批结果', inputRequested: '等待输入' }
+    },
     placeholder: '输入消息，按 Enter 发送，Shift+Enter 换行',
     needAgent: '请先选择智能体',
     scrollToBottom: '回到底部',

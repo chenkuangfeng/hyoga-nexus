@@ -42,7 +42,7 @@
   </div>
 
   <!-- Conversation (WeKnora views/chat/index.vue). -->
-  <div v-else class="chat" :class="{ 'is-embedded': compact, 'has-artifact-panel': artifactsOpen && !compact }">
+  <div v-else class="chat" :class="{ 'is-embedded': compact }">
     <div v-if="!compact" class="chat-topbar">
       <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
       <t-button v-if="canLearnCurrentConversation" class="chat-learn-skill-button"
@@ -68,13 +68,14 @@
           </div>
         </template>
       </t-popup>
-      <button type="button" class="artifact-panel-toggle" :aria-label="$t('consoleLayout.artifacts')" :aria-expanded="artifactsOpen" aria-controls="session-artifacts" @click="artifactsOpen = !artifactsOpen"><t-icon name="folder" />{{ $t('consoleLayout.artifacts') }}<span v-if="sessionArtifacts.length">{{ sessionArtifacts.length }}</span></button>
+      <nav v-if="!compact" class="chat-view-tabs" role="tablist" :aria-label="t('nexusChat.trajectory.tabsLabel')">
+        <button v-for="tab in chatTabs" :key="tab.id" type="button" role="tab" class="chat-view-tab"
+          :id="`chat-tab-${tab.id}`" :aria-selected="activeTab === tab.id" :aria-controls="`chat-panel-${tab.id}`"
+          :tabindex="activeTab === tab.id ? 0 : -1" @click="activeTab = tab.id"
+          @keydown.right.prevent="moveChatTab(1)" @keydown.left.prevent="moveChatTab(-1)">{{ t(tab.label) }}<span v-if="tab.id === 'artifacts' && sessionArtifacts.length">{{ sessionArtifacts.length }}</span></button>
+      </nav>
     </div>
-    <aside v-if="artifactsOpen && !compact" id="session-artifacts" class="session-artifacts" :aria-label="$t('consoleLayout.artifacts')">
-      <header><h3>{{ $t('consoleLayout.artifacts') }}</h3><t-button variant="text" shape="square" :aria-label="$t('common.close')" @click="artifactsOpen = false"><t-icon name="close" /></t-button></header>
-      <t-loading :loading="artifactsLoading"><t-alert v-if="artifactsError" theme="error" :message="$t('consoleLayout.artifactFailed')"><template #operation><t-button variant="text" @click="loadArtifacts(activeSessionId)">{{ $t('common.retry') }}</t-button></template></t-alert><RunArtifactCards v-if="sessionArtifacts.length" :key="`${tenantId}:${authStore.user?.id}:${activeSessionId}`" :items="sessionArtifacts" /><t-empty v-else-if="!artifactsLoading && !artifactsError" :description="$t('consoleLayout.artifactEmpty')" /></t-loading>
-    </aside>
-    <div class="chat_thread" :style="{ '--chat-composer-height': `${composerHeight}px`, '--chat-scrollbar-gutter': `${scrollbarGutter}px` }">
+    <div v-if="compact || activeTab === 'conversation'" :id="compact ? undefined : 'chat-panel-conversation'" class="chat_thread" :role="compact ? undefined : 'tabpanel'" :aria-labelledby="compact ? undefined : 'chat-tab-conversation'" :style="{ '--chat-composer-height': `${composerHeight}px`, '--chat-scrollbar-gutter': `${scrollbarGutter}px` }">
       <div ref="scrollContainer" class="chat_scroll_box" @scroll="handleScroll">
         <div class="chat_scroll_content">
           <div class="msg_list" :class="{ 'is-embedded': compact }" data-testid="chat-transcript" aria-live="polite">
@@ -150,12 +151,23 @@
         <ChatQuestionMinimap :scroll-container="scrollContainer" :messages="rows" @jump="jumpToQuestion" />
       </div>
     </div>
+    <section v-else-if="activeTab === 'trajectory'" id="chat-panel-trajectory" class="chat-tab-panel" role="tabpanel" aria-labelledby="chat-tab-trajectory">
+      <ChatTrajectory :events-by-run="eventsByRun" :live-run-id="run?.id ?? null" :live-events="native.state.value.events" />
+    </section>
+    <section v-else id="chat-panel-artifacts" class="chat-tab-panel chat-artifacts-panel" role="tabpanel" aria-labelledby="chat-tab-artifacts">
+      <t-loading :loading="artifactsLoading">
+        <t-alert v-if="artifactsError" theme="error" :message="t('consoleLayout.artifactFailed')"><template #operation><t-button variant="text" @click="loadArtifacts(activeSessionId)">{{ t('common.retry') }}</t-button></template></t-alert>
+        <RunArtifactCards v-if="sessionArtifacts.length" :key="`${tenantId}:${authStore.user?.id}:${activeSessionId}`" :items="sessionArtifacts" />
+        <t-empty v-else-if="!artifactsLoading && !artifactsError" :description="t('consoleLayout.artifactEmpty')" />
+      </t-loading>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import KnowledgeCitations from '@/components/knowledge/KnowledgeCitations.vue'
 import RunArtifactCards from '@/views/chat/components/RunArtifactCards.vue'
+import ChatTrajectory from '@/views/chat/components/ChatTrajectory.vue'
 /**
  * Conversation core. The session comes from the parent as `sessionId`; empty means the welcome state.
  * Sending from the welcome state creates the session first and emits `session-created`.
@@ -223,6 +235,19 @@ const EVENT_READ_CONCURRENCY = 4
 const SCROLL_BOTTOM_THRESHOLD = 80
 
 const activeSessionId = computed(() => props.sessionId)
+type ChatTabId = 'conversation' | 'trajectory' | 'artifacts'
+const activeTab = ref<ChatTabId>('conversation')
+const chatTabs = [
+  { id: 'conversation' as const, label: 'nexusChat.trajectory.conversation' },
+  { id: 'trajectory' as const, label: 'nexusChat.trajectory.title' },
+  { id: 'artifacts' as const, label: 'consoleLayout.artifacts' },
+]
+function moveChatTab(direction: 1 | -1) {
+  const current = chatTabs.findIndex(tab => tab.id === activeTab.value)
+  const next = chatTabs[(current + direction + chatTabs.length) % chatTabs.length]
+  activeTab.value = next.id
+  void nextTick(() => document.getElementById(`chat-tab-${next.id}`)?.focus())
+}
 const isWelcome = computed(() => !activeSessionId.value)
 const tenantId = computed(() => authStore.effectiveTenantId)
 const native = useNativeRun(() => tenantId.value)
@@ -388,7 +413,7 @@ async function loadRunEvents(sessionId: string) {
 
 /** Files the session's Runs left under /outputs (openspec 2026-11-07-tool-expansion 4.6), shown under their answers. */
 const sessionArtifacts = ref<ArtifactLibraryItem[]>([])
-const artifactsOpen = ref(false), artifactsLoading = ref(false), artifactsError = ref(false)
+const artifactsLoading = ref(false), artifactsError = ref(false)
 let artifactRequest = 0
 
 async function loadArtifacts(sessionId: string) {
@@ -401,6 +426,7 @@ async function loadArtifacts(sessionId: string) {
 }
 
 async function openSession() {
+  activeTab.value = 'conversation'
   errorText.value = ''
   if (!tenantId.value) {
     errorText.value = t('nativeRuns.noSpace')
@@ -1410,10 +1436,12 @@ defineExpose({ sendText })
 </style>
 
 <style scoped>
-.artifact-panel-toggle { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-md); padding: 8px 12px; color: var(--td-text-color-primary); cursor: pointer; }
-.artifact-panel-toggle:focus-visible { outline: 2px solid var(--td-brand-color); }
-.session-artifacts { position: absolute; top: 56px; right: 0; bottom: 0; z-index: 10; width: min(360px,100%); box-sizing: border-box; padding: 16px; overflow: auto; border-left: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); }
-.session-artifacts header { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .session-artifacts h3 { font-size: var(--app-text-md); }
-.has-artifact-panel .chat_thread { margin-right: 360px; }
-@media(max-width:900px) { .has-artifact-panel .chat_thread { margin-right: 0; } }
+.chat-topbar { flex: 0 0 auto; flex-wrap: wrap; min-height: var(--app-chat-header-height); }
+.chat-view-tabs { display: flex; flex: 1 0 100%; align-items: center; gap: 4px; width: 100%; padding: 0 16px; overflow-x: auto; border-top: 1px solid var(--td-component-stroke); }
+.chat-view-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--td-text-color-secondary); cursor: pointer; }
+.chat-view-tab[aria-selected="true"] { border-bottom-color: var(--td-brand-color); color: var(--td-brand-color); font-weight: 600; }
+.chat-view-tab:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
+.chat-view-tab span { padding: 1px 6px; border-radius: 10px; background: var(--td-bg-color-secondarycontainer); font-size: var(--app-text-xs); }
+.chat-tab-panel { flex: 1; min-height: 0; overflow: auto; }
+.chat-artifacts-panel { padding: 20px clamp(16px, 4vw, 48px); box-sizing: border-box; }
 </style>

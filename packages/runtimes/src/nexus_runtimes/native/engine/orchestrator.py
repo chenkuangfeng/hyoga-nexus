@@ -197,13 +197,15 @@ class RunOrchestrator:
                     model_history, input_estimate, omitted = self.context.fit_token_budget(
                         model_history, definitions=turn_definitions, token_budget=input_allowance,
                         failure_code=fit_failure)
+                    request_input_estimate = input_estimate
                     if omitted:
                         await self.store.emit('context.compacted', {'omitted_messages': omitted,
                             'strategy': 'token_budget_excerpts'})
                     remaining = remaining_total - input_estimate if remaining_total is not None else budget.max_output_tokens
                     await self.store.save_progress(progress)
                     await self._hook(run_id, 'model.before', turn)
-                    await self.store.emit('model.started', {'turn': turn})
+                    await self.store.emit('model.started', {'turn': turn,
+                        'input_estimate_tokens': input_estimate})
                     model_hook_active = True
                     try:
                         try:
@@ -238,6 +240,7 @@ class RunOrchestrator:
                             retry_messages, retry_estimate, retry_omitted = self.context.fit_token_budget(
                                 retry_messages, definitions=turn_definitions, token_budget=input_allowance,
                                 failure_code=fit_failure)
+                            request_input_estimate = retry_estimate
                             if not recovered and not retry_omitted and sum(len(message.content) for message in retry_messages) >= old_size:
                                 await self.store.emit('context.recovery_failed', {'turn': turn, 'reason': exc.code})
                                 raise exc
@@ -254,7 +257,8 @@ class RunOrchestrator:
                                 'reason': 'model_context_exceeded', 'action': 'compact_and_retry'})
                             await self._hook(run_id, 'model.before', turn)
                             model_hook_active = True
-                            await self.store.emit('model.started', {'turn': turn, 'recovery_attempt': 1})
+                            await self.store.emit('model.started', {'turn': turn, 'recovery_attempt': 1,
+                                'input_estimate_tokens': retry_estimate})
                             response = await self.turn_executor.execute(
                                 retry_messages, turn_definitions, remaining, token, turn, budget)
                     finally:
@@ -264,9 +268,12 @@ class RunOrchestrator:
                         progress.tokens += response.tokens
                     else:
                         from nexus_runtimes.native.context.assembler import estimate_tokens
-                        progress.tokens += input_estimate + estimate_tokens(response.text)
+                        progress.tokens += request_input_estimate + estimate_tokens(response.text)
                         progress.tokens += sum(estimate_tokens(call.arguments) for call in response.calls)
-                    completed = ('model.completed', {'turn': turn, 'tokens': progress.tokens, 'usage': response.usage})
+                    completed = ('model.completed', {'turn': turn, 'tokens': progress.tokens,
+                        'run_total_tokens': progress.tokens,
+                        'request_input_estimate_tokens': request_input_estimate,
+                        'usage': response.usage})
                     if budget.max_tokens > 0 and progress.tokens > budget.max_tokens:
                         await self.store.emit(*completed)
                         raise RuntimeFault('budget_exhausted')
