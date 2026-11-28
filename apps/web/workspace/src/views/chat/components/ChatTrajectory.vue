@@ -161,7 +161,8 @@ const activityGroups = computed(() => {
         }
         return result
       }, [])
-      return { runId, groups: groups.reverse().map(group => ({ ...group, activities: group.activities.reverse() })) }
+      // Keep the newest user-input group first, while preserving chronological steps within each group.
+      return { runId, groups: groups.reverse() }
     })
 })
 
