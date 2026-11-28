@@ -205,10 +205,62 @@ class RunOrchestrator:
                     await self.store.save_progress(progress)
                     await self._hook(run_id, 'model.before', turn)
                     await self.store.emit('model.started', {'turn': turn})
+                    model_hook_active = True
                     try:
-                        response = await self.turn_executor.execute(model_history, turn_definitions, remaining, token, turn, budget)
+                        try:
+                            response = await self.turn_executor.execute(model_history, turn_definitions, remaining, token, turn, budget)
+                        except RuntimeFault as exc:
+                            if exc.code != 'model_context_exceeded' or getattr(exc, 'output_started', False):
+                                raise
+                            # Provider context windows can be smaller than our configured estimate.
+                            # Compact once more, aggressively trim older tool output, then retry once.
+                            await self._hook(run_id, 'model.after', turn)
+                            model_hook_active = False
+                            old_size = sum(len(message.content) for message in model_history)
+                            history, recovered = await self.context.compact(
+                                history, token=token, budget=budget, progress=progress, force=True)
+                            recovery_view = self.context.view(
+                                history, working=working, turn=turn, definitions=turn_definitions,
+                                tool_result_window_rounds=1)
+                            retry_messages = list(recovery_view.messages)
+                            if last_turn:
+                                retry_messages.append(ModelMessage('user', FINAL_ANSWER_HINT))
+                            if budget.max_tokens > 0:
+                                remaining_total = budget.max_tokens - progress.tokens
+                                output_reserve = min(budget.max_output_tokens, max(256, remaining_total // 8))
+                                input_allowance = remaining_total - output_reserve
+                                if input_allowance <= 0:
+                                    raise RuntimeFault('budget_exhausted')
+                                fit_failure = 'budget_exhausted'
+                            else:
+                                remaining_total = None
+                                input_allowance = max(1, budget.max_context_chars - budget.max_output_tokens)
+                                fit_failure = 'model_context_exceeded'
+                            retry_messages, retry_estimate, retry_omitted = self.context.fit_token_budget(
+                                retry_messages, definitions=turn_definitions, token_budget=input_allowance,
+                                failure_code=fit_failure)
+                            if not recovered and not retry_omitted and sum(len(message.content) for message in retry_messages) >= old_size:
+                                await self.store.emit('context.recovery_failed', {'turn': turn, 'reason': exc.code})
+                                raise exc
+                            if retry_omitted:
+                                await self.store.emit('context.compacted', {'omitted_messages': retry_omitted,
+                                    'strategy': 'overflow_tool_trim_and_excerpts'})
+                            if remaining_total is not None:
+                                remaining = remaining_total - retry_estimate
+                                if remaining <= 0:
+                                    raise RuntimeFault('budget_exhausted')
+                            else:
+                                remaining = budget.max_output_tokens
+                            await self.store.emit('model.recovery', {'turn': turn,
+                                'reason': 'model_context_exceeded', 'action': 'compact_and_retry'})
+                            await self._hook(run_id, 'model.before', turn)
+                            model_hook_active = True
+                            await self.store.emit('model.started', {'turn': turn, 'recovery_attempt': 1})
+                            response = await self.turn_executor.execute(
+                                retry_messages, turn_definitions, remaining, token, turn, budget)
                     finally:
-                        await self._hook(run_id, 'model.after', turn)
+                        if model_hook_active:
+                            await self._hook(run_id, 'model.after', turn)
                     if response.tokens:
                         progress.tokens += response.tokens
                     else:

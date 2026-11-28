@@ -32,9 +32,11 @@ def trim_tool_results(messages, rounds: int):
     is counted in assistant messages that issued tool calls, and it moves only when a new call is made.
     """
     rounds_at = [index for index, message in enumerate(messages) if message.role == 'assistant' and message.tool_calls]
-    if len(rounds_at) <= rounds:
+    # Emergency trimming still preserves the newest tool exchange as a complete unit.
+    keep_rounds = max(1, rounds)
+    if len(rounds_at) <= keep_rounds:
         return list(messages)
-    cutoff = rounds_at[-rounds]
+    cutoff = rounds_at[-keep_rounds]
     names = {call.id: call.name for message in messages if message.role == 'assistant' for call in message.tool_calls}
     result = list(messages)
     for index in range(cutoff):

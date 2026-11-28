@@ -269,6 +269,18 @@ def test_view_estimates_tokens_for_messages_and_tool_definitions():
     assert view.input_estimate >= (len('hello'.encode()) + 2) // 3
 
 
+def test_emergency_tool_result_window_keeps_only_the_latest_exchange():
+    from nexus_runtimes.native.context.assembly import trim_tool_results
+    first, latest = ToolCall('first', 'lookup', '{}'), ToolCall('latest', 'lookup', '{}')
+    messages = [ModelMessage('user', 'question'), ModelMessage('assistant', '', (first,)),
+                ModelMessage('tool', 'old full result', tool_call_id='first'),
+                ModelMessage('assistant', '', (latest,)),
+                ModelMessage('tool', 'latest full result', tool_call_id='latest')]
+    trimmed = trim_tool_results(messages, 0)
+    assert '[历史工具结果已省略：lookup]' in trimmed[2].content
+    assert trimmed[4].content == 'latest full result'
+
+
 def test_cjk_input_estimate_is_not_charged_as_three_tokens_per_character():
     message = ModelMessage('user', '创建技能' * 100)
     assert message_bytes([message]) == 1200
@@ -327,6 +339,50 @@ def test_orchestrator_compacts_history_when_total_token_budget_is_nearly_spent()
     assert any('Earlier conversation excerpts' in message.content for message in sent)
     assert not any(old_text in message.content for message in sent)
     assert any(message.content == 'create a skill from this' for message in sent)
+
+
+@pytest.mark.parametrize(('failures', 'expected_status'), [(1, 'completed'), (2, 'failed')])
+def test_provider_context_overflow_forces_compaction_and_retries_once(failures, expected_status):
+    class _Model:
+        def __init__(self):
+            self.requests = []
+
+        async def stream(self, request):
+            self.requests.append(request)
+            if len(self.requests) <= failures:
+                raise RuntimeFault('model_context_exceeded')
+            yield ModelChunk('text', text='完成')
+            yield ModelChunk('done', finish_reason='stop')
+
+        async def close(self):
+            pass
+
+    class _Tools:
+        async def definitions(self):
+            return ()
+
+    first, latest = ToolCall('first', 'lookup', '{}'), ToolCall('latest', 'lookup', '{}')
+    old_tool_result, latest_tool_result = 'old result ' + 'x' * 5000, 'latest result'
+    messages = (
+        ModelMessage('system', 'system'), ModelMessage('user', 'old question'),
+        ModelMessage('assistant', '', (first,)), ModelMessage('tool', old_tool_result, tool_call_id='first'),
+        ModelMessage('user', 'current question'), ModelMessage('assistant', '', (latest,)),
+        ModelMessage('tool', latest_tool_result, tool_call_id='latest'),
+    )
+    model, store = _Model(), _Store()
+    policy = NativePolicy(summarize_context=False, working_memory=False)
+    context = ContextAssembler(model, store, policy)
+    orchestrator = RunOrchestrator(model, _Tools(), store, policy=policy)
+    orchestrator.context = context
+    request = RunRequest('run', messages, ExecutionBudget(max_tokens=0, max_context_chars=12000,
+                                                          max_output_tokens=512, max_rounds=3))
+    outcome = asyncio.run(orchestrator.run(request, RunContext(CancellationToken(), progress=RuntimeProgress())))
+    assert outcome.status == expected_status
+    assert len(model.requests) == 2
+    assert any(message.content == old_tool_result for message in model.requests[0].messages)
+    assert not any(message.content == old_tool_result for message in model.requests[1].messages)
+    assert any(message.content == latest_tool_result for message in model.requests[1].messages)
+    assert ('model.recovery', {'turn': 1, 'reason': 'model_context_exceeded', 'action': 'compact_and_retry'}) in store.events
 
 
 def test_unlimited_run_continues_past_legacy_cumulative_token_default():

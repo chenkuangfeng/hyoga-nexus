@@ -77,12 +77,12 @@ class ContextAssembler:
         if self._digest is None or _digest(definitions) != self._digest:
             raise RuntimeFault('context_prefix_changed')
 
-    async def compact(self, history, *, token, budget, progress):
+    async def compact(self, history, *, token, budget, progress, force=False):
         """Bound the history to the Run's context limit. Returns (history, removed_count)."""
         from nexus_runtimes.native.context.compaction import compact, compact_within
         limit = budget.max_context_chars
-        high = int(limit * self.policy.compact_high_ratio)
-        low = int(limit * self.policy.compact_low_ratio)
+        high = 0 if force else int(limit * self.policy.compact_high_ratio)
+        low = int(limit * (min(self.policy.compact_low_ratio, 0.5) if force else self.policy.compact_low_ratio))
         if self.policy.summarize_context:
             compacted, removed = await compact(self.model, tuple(history), limit, token, budget, progress, self.store,
                 high=high, low=low, summary_max=self.policy.summary_max_chars,
@@ -95,12 +95,14 @@ class ContextAssembler:
                 'strategy': 'summary_or_archive' if self.policy.summarize_context else 'bounded_excerpts'})
         return history, removed
 
-    def view(self, history, *, working, turn: int, definitions=None) -> ModelView:
+    def view(self, history, *, working, turn: int, definitions=None,
+             tool_result_window_rounds=None) -> ModelView:
         """Build this turn's model view after turn.before transforms have run.
 
         Pass the actual turn definitions when tools are withdrawn so the estimate matches the request.
         """
-        messages = append_context(trim_tool_results(history, self.policy.tool_result_window_rounds),
+        rounds = self.policy.tool_result_window_rounds if tool_result_window_rounds is None else tool_result_window_rounds
+        messages = append_context(trim_tool_results(history, rounds),
                                   working.anchor(turn), tail=self.policy.working_memory_tail)
         definition_tokens = self._definitions_tokens if definitions is None else estimate_tokens(str(definitions))
         return ModelView(messages, estimate_message_tokens(messages) + definition_tokens)

@@ -24,6 +24,7 @@ from nexus_platform.persistence.models import (
     NativeRunStateRecord,
     OutboxRecord,
     RunRecord,
+    SessionRecord,
     ToolInvocationRecord,
     WorkingCheckpointRecord,
     MemoryDraftRecord,
@@ -429,10 +430,14 @@ class DurableRuntimeStore:
 
     @offloaded
     def save_summary(self, summary: str, source_id: str) -> None:
-        """Persist only a cutpoint belonging to this Session; later reads recheck source grants."""
+        """Persist a forward-only session cutpoint under a row lock; readers recheck source grants."""
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
+            # Serialize summary-chain advancement across workers before reading its current tip.
+            session = db.scalar(select(SessionRecord).where(SessionRecord.id == run.session_id).with_for_update())
+            if not session:
+                raise RuntimeFault('session_not_found')
             source = db.get(MessageRecord, UUID(source_id))
             if not source or source.session_id != run.session_id:
                 raise RuntimeFault('context_source_invalid')

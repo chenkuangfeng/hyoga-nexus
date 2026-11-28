@@ -152,8 +152,8 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **完成判断**：无工具且内容非空即完成；长度截断可按预算续写；空响应有限次重试（计入预算）；同一内容重复出现判为停滞；工具调用不完整则不执行，交给坏调用恢复。
 - **最后一轮**：达到最大步数时禁用工具，仍请求工具则以明确错误结束（参考 Dify）。
 - **预算**：逻辑回合、模型尝试、活跃耗时（不含等待用户时间）、token 用量四个维度分别计数，持久累计，恢复后继续累计。累计 token 上限为可选成本护栏，默认关闭（`max_tokens=0`）；回合、模型请求次数、活跃耗时、错误数及单次模型输出/上下文约束继续生效。
-- **上下文**：系统提示与工具 schema 在 Run 开始时计算一次，Run 内不变，保护供应商提示缓存（参考 Hermes 冻结快照）。历史是事件流，模型可见消息由事件派生（参考 DeepSeek Harness）。压缩结果作为新事件写入，源事件保留。处理方式参考 LobeHub `context-engine` 的可组合处理器与 WeKnora `compaction/`；证据句柄登记参考 RAGFlow `evidence_registry`。
-- **压缩**：优先完整保留最近的消息与工具交换；较早内容压缩为标注过的局部摘录；仍装不下则显式失败 `model_context_exceeded`。压缩带滞后：只在历史超过 `compact_high_ratio × max_context_chars` 时触发，目标为 `compact_low_ratio × max_context_chars`，两者之间不重复压缩。摘要长度不超过 `summary_max_chars`。摘要可由 `compaction_model_profile_version_id` 指定的模型生成，每次摘要调用都重新授权；该模型不可用时降级为确定性摘录并记录 `context.summary_degraded`，Run 继续。
+- **上下文**：系统提示与工具 schema 在 Run 开始时计算一次，Run 内不变，保护供应商提示缓存（参考 Hermes 冻结快照）。历史由会话消息投影构造。压缩摘要存入 `context_summaries` 追加式链，带 `through_sequence`、来源 Run 与 supersession；新 Run 在重新检查历史授权后，从最新有效摘要和边界之后可见的消息继续。原始消息保留。每会话摘要写入锁定 Session 行，并只允许推进切点；`run_events` 另记录压缩事件。处理方式参考 WeKnora 消息上的 `context_checkpoint`，同时保留 Nexus 独立版本链；证据句柄登记参考 RAGFlow `evidence_registry`。
+- **压缩**：优先完整保留当前请求和最近的完整工具交换；较早内容摘要或摘录。摘要带滞后：只在历史超过 `compact_high_ratio × max_context_chars` 时触发，目标为 `compact_low_ratio × max_context_chars`。摘要长度不超过 `summary_max_chars`。摘要可由 `compaction_model_profile_version_id` 指定的模型生成，每次摘要调用都重新授权；该模型不可用时降级为确定性摘录并记录 `context.summary_degraded`。供应商报告上下文溢出时，再进行一次强制压缩、旧工具结果窗口裁剪和请求拟合后重试；第二次溢出或没有可安全裁剪的历史时，显式失败 `model_context_exceeded`。工具结果窗口只改变模型视图，完整结果仍在本 Run 执行记录/产物中，模型按需读取长输出句柄。
 - **工具结果视图**：超过 `tool_result_window_rounds` 次模型调用之前的工具结果，在发给模型的视图中替换为单行索引（工具名与首行）；源消息不变。超过 `tool_output_inline_limit` 的输出外置，见 2.5。
 - **工具顺序**：同一回合内按模型声明顺序执行，每个调用独立记录 invocation；有副作用的工具之间不并发。工具声明为只读且幂等（`read_only`、`idempotent`，且无副作用、无需审批）时，可在 `parallel_reads` 开启下与相邻只读调用并行；结果仍按模型声明顺序返回。只读声明与副作用冲突时注册即拒绝。
 - **取消与等待**：取消信号在模型流、工具和沙箱调用的每个等待点检查；`ask_user` 类工具产生 `wait_input`，释放 worker，回答后在同一 Run 中幂等继续。
