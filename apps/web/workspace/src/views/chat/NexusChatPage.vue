@@ -128,7 +128,7 @@
       </div>
     </div>
     <section v-else-if="activeTab === 'trajectory'" id="chat-panel-trajectory" class="chat-tab-panel" role="tabpanel" aria-labelledby="chat-tab-trajectory">
-      <ChatTrajectory :records="trajectoryRecords" :loading="trajectoryLoading" :error="trajectoryError" @retry="loadSessionTrajectory(activeSessionId)" />
+      <ChatTrajectory :records="trajectoryRecords" :messages="messages" :loading="trajectoryLoading" :error="trajectoryError" @retry="loadSessionTrajectory(activeSessionId)" />
     </section>
     <section v-else id="chat-panel-artifacts" class="chat-tab-panel chat-artifacts-panel" role="tabpanel" aria-labelledby="chat-tab-artifacts">
       <t-loading :loading="artifactsLoading">

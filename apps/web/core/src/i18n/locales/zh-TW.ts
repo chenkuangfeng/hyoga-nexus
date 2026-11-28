@@ -8689,6 +8689,8 @@ export default {
       showLess: '收合'
     },
     trajectory: {
+      totalTokens: '總 Token', sessionTotalHint: '依會話內各 Run 加總', cacheHits: '命中快取', cacheRate: '占輸入 {rate}%', cacheRateUnknown: '供應商未回傳快取用量',
+      tokensActual: '實際', tokensEstimated: '估算', activityUser: '使用者', activityAssistant: '助理', activityTool: '工具', turn: '第 {turn} 輪', toolArguments: '呼叫參數', toolResult: '執行結果',
       conversation: '對話', title: '軌跡', tabsLabel: '查看會話執行軌跡', empty: '尚無執行事件',
       totalSession: '會話累計 token（依 Run 加總）', actualTotal: '供應商實際用量合計', callsWithUsage: '{count} 次呼叫有用量',
       inputEstimate: '請求輸入估算', inputEstimateShort: '輸入估算', actualUsage: '單次實際用量（輸入 / 輸出）', usageUnavailable: '供應商未回傳用量',

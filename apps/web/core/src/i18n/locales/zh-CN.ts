@@ -8684,6 +8684,8 @@ export default {
       showLess: '收起'
     },
     trajectory: {
+      totalTokens: '总 Token', sessionTotalHint: '按会话内各 Run 累加', cacheHits: '命中缓存', cacheRate: '占输入 {rate}%', cacheRateUnknown: '供应商未返回缓存用量',
+      tokensActual: '实际', tokensEstimated: '估算', activityUser: '用户', activityAssistant: '助手', activityTool: '工具', turn: '第 {turn} 轮', toolArguments: '调用参数', toolResult: '执行结果',
       conversation: '对话', title: '轨迹', tabsLabel: '查看会话执行轨迹', empty: '还没有运行事件',
       totalSession: '会话累计 token（按 Run 累加）', actualTotal: '供应商实际用量合计', callsWithUsage: '{count} 次调用返回了用量',
       inputEstimate: '请求输入估算', inputEstimateShort: '输入估算', actualUsage: '单次实际用量（输入 / 输出）', usageUnavailable: '供应商未返回用量',

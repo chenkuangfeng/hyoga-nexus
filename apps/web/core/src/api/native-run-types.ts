@@ -93,6 +93,8 @@ export interface ConversationMessage {
   role: string
   content: string
   created_at: string
+  /** Opaque call identity used to pair a persisted tool result with its trajectory call. */
+  tool_call_id?: string | null
   /** Knowledge citations of an assistant answer; empty for other messages. */
   citations?: KnowledgeCitation[]
 }

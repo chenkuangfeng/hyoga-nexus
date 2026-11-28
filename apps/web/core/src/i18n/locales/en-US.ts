@@ -8684,6 +8684,8 @@ export default {
       showLess: 'Show less'
     },
     trajectory: {
+      totalTokens: 'Total tokens', sessionTotalHint: 'Sum across Runs in this session', cacheHits: 'Cache hits', cacheRate: '{rate}% of input', cacheRateUnknown: 'Cache usage not returned',
+      tokensActual: 'actual', tokensEstimated: 'estimated', activityUser: 'User', activityAssistant: 'Assistant', activityTool: 'Tool', turn: 'Turn {turn}', toolArguments: 'Tool arguments', toolResult: 'Tool result',
       conversation: 'Chat', title: 'Trajectory', tabsLabel: 'Session execution trajectory', empty: 'No run events yet',
       totalSession: 'Session cumulative tokens (sum of Runs)', actualTotal: 'Provider actual usage total', callsWithUsage: 'Usage returned by {count} calls',
       inputEstimate: 'Request input estimate', inputEstimateShort: 'Input estimate', actualUsage: 'Actual usage (input / output)', usageUnavailable: 'Usage not returned by provider',

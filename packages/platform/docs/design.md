@@ -100,7 +100,7 @@ RunLeaseService 的旧 P1 process 路径按原顺序锁 Delivery、校验 lease 
 
 `config.py` 读取 `[run_events]` 与 `[deployment]`；`memory.py`、`redis_backend.py`、`database.py` 实现 `nexus_core.run_events` 的端口；`factory.py` 管理进程级通道；`hook.py` 在 `after_commit` 发布持久事件并在取消请求时发控制信号；`stream.py` 是订阅管线（数据库重放、通道消费、去重、补读、`resync`）。`control.py` 为 Redis 与数据库后端的控制唤醒与活动标记。配额在 `runs/quotas.py`，按模型限流在 `runs/model_limits.py`。
 
-模型调用轨迹独立保存在 `run_trajectory_records`，不从 `RunEventRecord` 派生。`DurableRuntimeStore` 在每次模型尝试前记录模型可见的消息与工具定义快照，完成或失败后补写响应、供应商 usage、输入估算和 Run 累计 token；唯一键 `(run_id, sequence)` 在 Run 行锁下递增。`runs/trajectory.py` 先调用标准 `get_run` 授权，再按序返回记录，API 使用独立 `RunTrajectoryRecordView`。该表用于受授权的诊断检查器，不改变事件重放和消息审计职责。
+模型调用轨迹独立保存在 `run_trajectory_records`，不从 `RunEventRecord` 派生。`DurableRuntimeStore` 在每次模型尝试前记录模型可见的消息与工具定义快照，完成或失败后补写响应、供应商 usage、输入估算和 Run 累计 token；唯一键 `(run_id, sequence)` 在 Run 行锁下递增。`runs/trajectory.py` 先调用标准 `get_run` 授权，再按序返回记录，API 使用独立 `RunTrajectoryRecordView`。前端将其与授权会话消息组合成用户、助手和工具活动行；工具结果 API 仅暴露 opaque `tool_call_id` 用于关联，不返回整份运行元数据。该表用于受授权的诊断检查器，不改变事件重放和消息审计职责。
 
 Redis 后端每个（事件循环，Run）一个共享的阻塞读取器，再扇出到该进程的订阅者；每个订阅者的队列有上限（2048 个事件），读得慢的订阅者被切断并收到 `BusUnavailable`，订阅管线随即改读数据库直到 Run 结束。memory 后端的订阅者在 Run 尚无事件时也会登记唤醒。压测与故障注入见 [run-events-benchmark.md](run-events-benchmark.md)。
 

@@ -269,7 +269,12 @@ test('会话通过顶部标签查看对话、轨迹和产物，产物加载失�
 test('会话页顶部只显示左对齐的对话、轨迹和产物标签', async ({ page, api }) => {
   test.setTimeout(120_000)
   await api.signIn(); bootWorkspace(api)
-  const messages = [{ id: 'm1', run_id: 'r1', sequence: 1, role: 'user', content: '部署流程已完成', created_at: '2026-11-27T00:00:00Z' }]
+  const messages = [
+    { id: 'm1', run_id: 'r1', sequence: 1, role: 'user', content: '部署流程已完成', created_at: '2026-11-27T00:00:00Z' },
+    { id: 'm2', run_id: 'r1', sequence: 2, role: 'assistant', content: '正在检查部署条件', created_at: '2026-11-27T00:00:01Z' },
+    { id: 'm3', run_id: 'r1', sequence: 3, role: 'tool', tool_call_id: 'call1', content: '部署环境检查通过', created_at: '2026-11-27T00:00:02Z' },
+    { id: 'm4', run_id: 'r1', sequence: 4, role: 'assistant', content: '部署步骤已核验', created_at: '2026-11-27T00:00:03Z' },
+  ]
   const completedRun = { id: 'r1', tenant_id: 'a', session_id: 's1', principal_id: 'u', status: 'completed',
     attempt: 1, error_code: null, error_message: null, created_at: '2026-11-27T00:00:00Z',
     started_at: '2026-11-27T00:00:00Z', ended_at: '2026-11-27T00:00:01Z', queue_position: null, attention_required: false }
@@ -281,12 +286,18 @@ test('会话页顶部只显示左对齐的对话、轨迹和产物标签', async
     if (path === '/api/v1/tenants/a/sessions/s1/messages') return { body: { messages, latest_run: completedRun, blocked: null } }
     if (path === '/api/v1/tenants/a/native/sessions/s1/tool-grants') return { body: [] }
     if (path === '/api/v1/tenants/a/sessions') return { body: [{ id: 's1', agent_version_id: 'av1', title: '部署流程' }] }
-    if (path === '/api/v1/tenants/a/runs/r1/trajectory') return { body: [{ id: 'tr1', run_id: 'r1', sequence: 1,
-      turn: 1, attempt: 1, purpose: 'assistant', status: 'completed', input_estimate_tokens: 128,
-      run_total_tokens: 160, request_snapshot: { messages: [{ role: 'user', content: '部署流程已完成' }],
-        tools: [{ name: 'deploy', description: '部署应用', parameters: { type: 'object' } }] },
-      response_snapshot: { text: '部署步骤已核验', tool_calls: [] }, usage: { input: 130, output: 30 }, error_code: null,
-      started_at: '2026-11-27T00:00:00Z', completed_at: '2026-11-27T00:00:01Z' }] }
+    if (path === '/api/v1/tenants/a/runs/r1/trajectory') return { body: [
+      { id: 'tr1', run_id: 'r1', sequence: 1, turn: 1, attempt: 1, purpose: 'assistant', status: 'completed',
+        input_estimate_tokens: 128, run_total_tokens: 160, request_snapshot: { messages: [{ role: 'user', content: '部署流程已完成' }],
+          tools: [{ name: 'deploy', description: '部署应用', parameters: { type: 'object' } }] },
+        response_snapshot: { text: '正在检查部署条件', tool_calls: [{ id: 'call1', name: 'deploy', arguments: '{"target":"production"}' }] },
+        usage: { input: 130, output: 30, cache_read: 50 }, error_code: null,
+        started_at: '2026-11-27T00:00:00Z', completed_at: '2026-11-27T00:00:01Z' },
+      { id: 'tr2', run_id: 'r1', sequence: 2, turn: 2, attempt: 1, purpose: 'assistant', status: 'completed',
+        input_estimate_tokens: 210, run_total_tokens: 260, request_snapshot: { messages: [{ role: 'tool', content: '部署环境检查通过' }], tools: [] },
+        response_snapshot: { text: '部署步骤已核验', tool_calls: [] }, usage: { input: 120, output: 30, cache_read: 40 }, error_code: null,
+        started_at: '2026-11-27T00:00:02Z', completed_at: '2026-11-27T00:00:03Z' },
+    ] }
     if (path === '/api/v1/tenants/a/artifacts') return { body: { items: [] } }
   })
   await page.goto('/platform/chat/s1')
@@ -303,9 +314,16 @@ test('会话页顶部只显示左对齐的对话、轨迹和产物标签', async
   await expect(topbar.getByRole('tab', { name: '轨迹' })).toHaveAttribute('aria-selected', 'true')
   await topbar.getByRole('tab', { name: '轨迹' }).click()
   await expect(page.locator('#chat-panel-trajectory')).toContainText('部署步骤已核验')
-  await page.locator('#chat-panel-trajectory').getByRole('row').nth(1).click()
-  await expect(page.getByTestId('trajectory-inspector')).toContainText('部署流程已完成')
-  await expect(page.getByTestId('trajectory-inspector')).toContainText('部署应用')
+  const trajectory = page.locator('#chat-panel-trajectory')
+  await expect(trajectory.getByRole('row')).toHaveCount(5)
+  await expect(trajectory).toContainText('命中缓存')
+  await expect(trajectory).toContainText('90')
+  await trajectory.getByRole('row').filter({ hasText: 'deploy' }).click()
+  await expect(page.getByTestId('trajectory-inspector')).toContainText('production')
+  await expect(page.getByTestId('trajectory-inspector')).toContainText('部署环境检查通过')
+  await trajectory.getByRole('row').filter({ hasText: '部署步骤已核验' }).click()
+  await expect(page.getByTestId('trajectory-inspector')).toContainText('部署步骤已核验')
+  await expect(trajectory.getByRole('row').filter({ hasText: '部署步骤已核验' })).toContainText('实际')
   await expect(page.getByTestId('chat-learn-skill')).toHaveCount(0)
 })
 

@@ -172,6 +172,7 @@ def test_history_api_returns_citations(kb_env):
     asyncio.run(store.search_knowledge('安装', [], 5, context.progress.state))
     asyncio.run(store.save_progress(context.progress))
     asyncio.run(store.message(ModelMessage('assistant', '见 [ID:1]')))
+    asyncio.run(store.message(ModelMessage('tool', '工具返回结果', tool_call_id='call-trajectory')))
     store.finish(RuntimeOutcome('completed'))
 
     def session():
@@ -186,6 +187,8 @@ def test_history_api_returns_citations(kb_env):
         app.dependency_overrides.clear()
     answer = next(m for m in body['messages'] if m['role'] == 'assistant')
     assert answer['citations'][0]['filename'] == '安装.md'
+    tool_result = next(m for m in body['messages'] if m['role'] == 'tool')
+    assert tool_result['tool_call_id'] == 'call-trajectory'
 
 
 def test_structure_tools_grep_outline_and_section_reading(kb_env):
