@@ -21,7 +21,7 @@ BRIDGE_NAMES = frozenset({TOOL_SEARCH, TOOL_DESCRIBE, TOOL_CALL})
 CHARS_PER_TOKEN = 3
 MAX_QUERIES, MAX_DESCRIBE, MAX_RESULTS = 7, 10, 10
 #: Characters of the catalog embedded in `tool_search`'s own description; beyond it only the group sizes show.
-CATALOG_CHARS = 3000
+CATALOG_CHARS = 1200
 _WORD = re.compile(r'[a-z0-9]+|[一-鿿]')
 
 
@@ -67,7 +67,9 @@ def bridge_definitions(catalog: dict[str, ToolDefinition]) -> list[ToolDefinitio
     """The three bridge tools. The catalog is listed in `tool_search`'s description (fixed for the Run)."""
     lines, used = [], 0
     for name in sorted(catalog):
-        line = f'- {name}: {catalog[name].description.strip().splitlines()[0][:100] if catalog[name].description.strip() else ""}'
+        # Keep the always-present manifest compact. Search results carry the matching
+        # description, and tool_describe returns the complete schema only when needed.
+        line = f'- {name}'
         if used + len(line) > CATALOG_CHARS:
             lines.append(f'- ... {len(catalog) - len(lines)} more; search by keyword')
             break

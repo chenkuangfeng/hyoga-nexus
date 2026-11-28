@@ -137,7 +137,7 @@ class ConcurrencyHint(NamedTuple):
 
 ## 4. 渐进加载
 
-触发：MCP 工具与显式声明 `deferrable=True` 的内置工具 schema 估算合计达到智能体的 `budgets.behavior.tool_search_min_tokens`（默认 2500，0 关闭）。schema 估算使用紧凑 JSON 和约 3 字符/token 的启发式，不等同于供应商实际 token。延迟集合集中在不常用的记忆整理、技能管理、知识图谱/文档辅助、沙箱目录/搜索/编辑/异步任务、定时管理工具；常用对话、技能加载与执行、知识搜索、沙箱读写与同步执行保持直接可用。
+触发：MCP 工具与显式声明 `deferrable=True` 的内置工具 schema 估算合计达到智能体的 `budgets.behavior.tool_search_min_tokens`（默认 2500，0 关闭）。schema 估算使用紧凑 JSON 和约 3 字符/token 的启发式，不等同于供应商实际 token。全量 38 个内置工具中，14 个高频工具直接提供：问询、检查点、待办、外置结果读取、记忆检索、技能加载/搜索/执行、主知识检索，以及工作区列举/读写/执行。其余 24 个内置工具按需发现；桥接目录仅列工具名，匹配结果再返回简介，`tool_describe` 按需提供完整 schema。
 
 智能体编辑器可调整该阈值，便于老版本仍保存 6000 的智能体显式改小。低于门槛时不做延迟；达到门槛时 Run 的工具块保持不变，由 `tool_search` / `tool_describe` / `tool_call` 提供按需发现。工具是否绑定、授权、可用和审批的检查不变。
 

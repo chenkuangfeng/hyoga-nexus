@@ -17,15 +17,17 @@ from .tool_output import tool_output_tools
 from .todo import todo_tool
 from .web import web_tools
 
-# These are useful on demand but uncommon on most turns. Keep the frequently used
-# conversation, skill loading/execution, knowledge search, and sandbox read/write/exec
-# schemas directly available; the gateway exposes these through the existing bridge only
-# when their combined schema estimate crosses the agent's threshold.
+# Keep a small ambient set for clarification, checkpoints, memory recall, skill discovery/
+# execution, the main knowledge search entry point, and everyday workspace operations.
+# Everything else remains bound and authorized, but its schema is offered through the
+# existing bridge when the combined estimate crosses the agent's threshold.
 _DEFERRABLE_BUILTINS = frozenset({
-    'propose_memory_draft', 'start_long_term_update', 'read_conversation', 'read_skill_file',
-    'skill_manage', 'skill_save', 'skill_rollback', 'grep_chunks', 'document_outline',
-    'query_knowledge_graph', 'sandbox_list_files', 'sandbox_search_files', 'sandbox_edit_file',
-    'sandbox_exec_async', 'sandbox_job_wait', 'sandbox_job_cancel', 'cronjob_list', 'cronjob_manage',
+    'cronjob_list', 'cronjob_manage', 'delegate_task', 'document_outline', 'grep_chunks',
+    'list_documents', 'propose_memory_draft', 'query_knowledge_graph', 'read_conversation',
+    'read_document', 'read_skill_file', 'sandbox_edit_file', 'sandbox_exec_async',
+    'sandbox_job_cancel', 'sandbox_job_wait', 'sandbox_search_files', 'search_conversations',
+    'skill_manage', 'skill_rollback', 'skill_save', 'start_long_term_update', 'vision_analyze',
+    'web_fetch', 'web_search',
 })
 
 
