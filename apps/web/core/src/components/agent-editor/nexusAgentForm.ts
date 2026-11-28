@@ -52,6 +52,12 @@ export interface AgentEditorForm {
   memory_profile: boolean
   /** Categories resident in the initial model context; defaults to preferences and personal facts. */
   memory_context_kinds: ('preference' | 'personal_info')[]
+  /** `budgets.memory.capture_enabled`: queue model-backed capture after successful Runs. */
+  memory_capture_enabled: boolean
+  /** Optional extraction model override; empty follows this Agent's main model. */
+  memory_capture_model_id: string
+  /** What automatic capture does when the personal memory budget is full. */
+  memory_capacity_policy: 'reject' | 'evict_auto'
   /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
   tool_access: ToolAccess
   /** Progressive tool loading threshold; 0 disables it. */
@@ -164,6 +170,10 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
       ? (memoryOf(budgets).context_kinds as unknown[]).filter((kind): kind is 'preference' | 'personal_info' =>
         kind === 'preference' || kind === 'personal_info')
       : ['preference', 'personal_info'],
+    memory_capture_enabled: memoryOf(budgets).capture_enabled === true,
+    memory_capture_model_id: typeof memoryOf(budgets).capture_model_version_id === 'string'
+      ? memoryOf(budgets).capture_model_version_id as string : '',
+    memory_capacity_policy: memoryOf(budgets).capacity_policy === 'evict_auto' ? 'evict_auto' : 'reject',
     tool_access: accessOf(budgets),
     tool_search_min_tokens: toolSearchThresholdOf(budgets),
     skills: (agent.resource_bindings || []).filter(b => b.kind === 'skill')
@@ -194,6 +204,9 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     memory_recall: false,
     memory_profile: false,
     memory_context_kinds: ['preference', 'personal_info'],
+    memory_capture_enabled: false,
+    memory_capture_model_id: '',
+    memory_capacity_policy: 'reject',
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
     tool_search_min_tokens: numberOr(defaults?.settings.behavior.tool_search_min_tokens, DEFAULT_TOOL_SEARCH_MIN_TOKENS),
     skills: [],
@@ -249,6 +262,9 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   memory.context_kinds = [...form.memory_context_kinds]
   // Keep legacy readers from injecting all profile entries after this agent is saved.
   memory.profile = false
+  memory.capture_enabled = form.memory_capture_enabled
+  memory.capture_model_version_id = form.memory_capture_model_id || null
+  memory.capacity_policy = form.memory_capacity_policy
   if (Object.keys(memory).length) budgets.memory = memory
   else delete budgets.memory
 

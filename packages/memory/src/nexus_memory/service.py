@@ -671,6 +671,50 @@ def set_availability(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, en
     return {'id': str(entry.id), 'enabled': entry.enabled if enabled is None else enabled}
 
 
+def edit_entry(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, entry_id: UUID, *,
+               content: str, expected_version: int, title: str | None = None,
+               importance: int | None = None, budget: int = MEMORY_BUDGET_CHARS) -> dict[str, Any]:
+    """Edit one owned memory immediately as a new immutable version, guarded by its base version."""
+    entry = _owned(repo, tenant_id, owner_id, entry_id, lock=True)
+    if entry.current_version != expected_version:
+        raise MemoryConflict('Memory changed; refresh and retry')
+    clean_title = (title if title is not None else entry.title).strip()
+    if not clean_title or len(clean_title) > TITLE_LIMIT:
+        raise MemoryConflict('Memory title is invalid')
+    screened = text.screen(content)
+    if screened.threats:
+        raise MemoryConflict('Memory content contains disallowed instructions')
+    next_content = screened.text.strip()[:CONTENT_LIMIT]
+    if not next_content:
+        raise MemoryConflict('Memory content cannot be empty')
+    old = _version(repo, entry.id, entry.current_version)
+    if next_content == old.content and clean_title == entry.title and (importance is None or importance == entry.importance):
+        return {'id': str(entry.id), 'version': entry.current_version, 'unchanged': True}
+    used = sum(item.chars for item in repo.sized_entries(tenant_id, owner_id)) - len(old.content)
+    if used + len(next_content) > budget:
+        raise MemoryConflict('Memory budget would be exceeded; merge or remove entries first')
+    chosen_importance = importance if importance is not None else entry.importance
+    if not 1 <= chosen_importance <= 5:
+        raise MemoryConflict('Memory importance is invalid')
+    fingerprint = text.fingerprint(next_content)
+    version = entry.current_version + 1
+    draft_id = repo.create_draft(
+        tenant_id=tenant_id, source_run_id=old.source_run_id, kind=entry.kind, diff=next_content,
+        fingerprint=fingerprint, base_version=entry.current_version, origin='foreground',
+        source_message_ids=old.source_message_ids,
+        meta=DraftMeta(topic=entry.topic, importance=chosen_importance,
+                       fact_identity=entry.fact_identity, target_entry_id=entry.id, intent='correct'))
+    repo.bump_entry(entry.id, current_version=version, title=clean_title, importance=chosen_importance)
+    repo.append_version(entry_id=entry.id, version=version, content=next_content,
+        source_run_id=old.source_run_id, source_draft_id=draft_id, reviewer_id=owner_id,
+        fingerprint=fingerprint, source_message_ids=old.source_message_ids,
+        search_context=(clean_title, entry.topic, *entry.fact_identity.values()))
+    repo.set_draft_status(draft_id, 'approved')
+    repo.audit(tenant_id, owner_id, 'memory.edited', 'memory', str(entry.id),
+               {'version': version, 'redacted': list(screened.redacted)})
+    return {'id': str(entry.id), 'version': version, 'unchanged': False}
+
+
 def restore(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, entry_id: UUID, version: int,
             expected_version: int) -> dict[str, Any]:
     """Restore a historical version by appending a new one; never erase intervening versions."""

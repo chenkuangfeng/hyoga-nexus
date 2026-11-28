@@ -69,6 +69,16 @@ def set_availability(db, principal: Principal, tenant_id: UUID, entry_id: UUID, 
 
 
 @_translate
+def edit_entry(db, principal: Principal, tenant_id: UUID, entry_id: UUID, *, content: str,
+               expected_version: int, title: str | None = None, importance: int | None = None) -> dict[str, Any]:
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        return rules.edit_entry(SqlMemoryRepository(db), user.id, tenant_id, entry_id,
+                                content=content, expected_version=expected_version,
+                                title=title, importance=importance)
+
+
+@_translate
 def list_memory(db, principal: Principal, tenant_id: UUID) -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, tenant_id)
@@ -113,6 +123,29 @@ def archive(db, principal: Principal, tenant_id: UUID, entry_id: UUID) -> None:
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         rules.archive(SqlMemoryRepository(db), user.id, tenant_id, entry_id)
+
+
+@_translate
+def clear(db, principal: Principal, tenant_id: UUID) -> dict[str, int]:
+    """Archive published entries and reject pending drafts while retaining immutable history."""
+    from sqlalchemy import delete
+    from nexus_platform.authz.audit import audit
+    from nexus_platform.persistence.models import MemoryTopicStatRecord
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        repo = SqlMemoryRepository(db)
+        entries = repo.published_entries(tenant_id, user.id, '')
+        for entry in entries:
+            rules.archive(repo, user.id, tenant_id, entry.id)
+        drafts = repo.pending_drafts(tenant_id, user.id)
+        for draft in drafts:
+            repo.set_draft_status(draft.id, 'rejected')
+        db.execute(delete(MemoryTopicStatRecord).where(
+            MemoryTopicStatRecord.tenant_id == tenant_id,
+            MemoryTopicStatRecord.owner_user_id == user.id))
+        audit(db, tenant_id, user.id, 'memory.cleared', 'memory', '',
+              {'archived_entries': len(entries), 'rejected_drafts': len(drafts)})
+        return {'removed': len(entries), 'drafts': len(drafts)}
 
 
 @_translate

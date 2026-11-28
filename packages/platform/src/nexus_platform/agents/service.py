@@ -179,6 +179,13 @@ def publish_agent(session: Session, principal: Principal, tenant_id: UUID, agent
                 raise InvalidConfiguration(f"Native behavior settings are invalid: {exc}") from None
             if policy.compaction_model_profile_version_id:
                 authorize_model(session, tenant_id, user.id, UUID(policy.compaction_model_profile_version_id))
+        memory = (agent.draft_budgets or {}).get('memory')
+        if isinstance(memory, dict) and memory.get('capture_enabled') and memory.get('capture_model_version_id'):
+            capture_profile, capture_version = verify_model_version(
+                session, tenant_id, UUID(str(memory['capture_model_version_id'])))
+            if capture_profile.model_type != 'chat':
+                raise InvalidConfiguration('Memory capture requires a chat model')
+            authorize_model(session, tenant_id, user.id, capture_version.id)
         if model_version.credential_reference_id:
             credential = session.get(CredentialReferenceRecord, model_version.credential_reference_id)
             if credential is None or credential.tenant_id != tenant_id or credential.status != "active":

@@ -248,6 +248,40 @@
               </t-checkbox-group>
             </div>
           </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusMemory.captureEnabled') }}</label>
+              <p class="desc">{{ $t('nexusMemory.captureEnabledDesc') }}</p>
+            </div>
+            <div class="setting-control"><t-switch v-model="form.memory_capture_enabled" /></div>
+          </div>
+          <template v-if="form.memory_capture_enabled">
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>{{ $t('nexusMemory.captureModel') }}</label>
+                <p class="desc">{{ $t('nexusMemory.captureModelDesc') }}</p>
+              </div>
+              <div class="setting-control">
+                <t-select v-model="form.memory_capture_model_id" clearable filterable
+                  :placeholder="$t('nexusMemory.captureModelFollowsAgent')">
+                  <t-option v-for="option in chatModels" :key="option.value" :value="option.value"
+                    :label="`${option.label} · ${option.provider}`" />
+                </t-select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>{{ $t('nexusMemory.capacityLabel') }}</label>
+                <p class="desc">{{ $t('nexusMemory.capacityDesc') }}</p>
+              </div>
+              <div class="setting-control">
+                <t-radio-group v-model="form.memory_capacity_policy">
+                  <t-radio-button value="reject">{{ $t('nexusMemory.capacityReject') }}</t-radio-button>
+                  <t-radio-button value="evict_auto">{{ $t('nexusMemory.capacityEvict') }}</t-radio-button>
+                </t-radio-group>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -566,6 +600,7 @@ import {
   type AgentToolCatalog, type AgentToolEntry, type NativeDefaults, type NexusAgent, type TenantSkill,
 } from '@nexus-web/core/api/nexus-agents'
 import { getModelSettings, type ModelSettingsView } from '@nexus-web/core/api/nexus-models'
+import { getCaptureSettings, type CaptureSettings } from '@nexus-web/core/api/nexus-memory'
 import { createEnterpriseAgent, updateEnterpriseAgent, publishEnterpriseAgent, getEnterpriseAgent, listAgentKnowledgeChoices, type AgentKnowledgeChoice } from '@nexus-web/core/api/enterprise-agents'
 import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@nexus-web/core/utils/nexusModelCards'
 import {
@@ -895,12 +930,16 @@ async function load() {
     modelSettings.value = settings
     catalog.value = tools
     void loadKnowledgeBases(current, tenant)
+    let legacyCapture: CaptureSettings | null = null
+    if (!adminApi) legacyCapture = await getCaptureSettings(tenant).catch(() => null)
+    if (!active(current)) return
     if (id) {
       const loaded = await (enterprise.value ? getEnterpriseAgent(tenant, id) : getNexusAgent(tenant, id))
       if (!active(current)) return
       agent.value = loaded
       const model = loaded.model_profile_version_id ? findModelByVersion(settings, loaded.model_profile_version_id) : undefined
       Object.assign(form, formFromAgent(loaded, model?.options || {}))
+      inheritLegacyCapture(loaded, legacyCapture)
     } else {
       agent.value = null
       const defaults = await getNativeDefaults(tenant)
@@ -909,6 +948,11 @@ async function load() {
       const enabled = new Set(tools.tools.filter(tool => tool.enabled_in_tenant).map(tool => tool.name))
       Object.assign(form, formForNewAgent(nativeDefaults.value, defaultChatVersion(settings),
         tools.default_tools.filter(name => enabled.has(name))))
+      if (legacyCapture) {
+        form.memory_capture_enabled = legacyCapture.enabled
+        form.memory_capture_model_id = legacyCapture.model_profile_version_id || ''
+        form.memory_capacity_policy = legacyCapture.capacity_policy
+      }
     }
     void loadSkills()
   } catch (error) {
@@ -917,6 +961,18 @@ async function load() {
   } finally {
     if (active(current)) loading.value = false
   }
+}
+
+function inheritLegacyCapture(currentAgent: NexusAgent, legacy: CaptureSettings | null): void {
+  if (!legacy) return
+  const budgets = currentAgent.budgets && typeof currentAgent.budgets === 'object'
+    ? currentAgent.budgets as Record<string, unknown> : {}
+  const memory = budgets.memory && typeof budgets.memory === 'object'
+    ? budgets.memory as Record<string, unknown> : {}
+  if ('capture_enabled' in memory) return
+  form.memory_capture_enabled = legacy.enabled
+  form.memory_capture_model_id = legacy.model_profile_version_id || ''
+  form.memory_capacity_policy = legacy.capacity_policy
 }
 
 // The per-skill "can its scripts run here" line depends on the chosen profile, so changing it asks again.

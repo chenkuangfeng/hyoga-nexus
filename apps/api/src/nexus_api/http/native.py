@@ -47,7 +47,11 @@ class MemoryRestore(BaseModel):
 
 
 class MemoryAvailability(BaseModel):
-    """Enable or disable an entry, and set or clear its validity end. Omitted fields are left unchanged."""
+    """Edit an entry's version or availability; omitted fields are left unchanged."""
+    content: str | None = Field(default=None, min_length=1, max_length=8000)
+    title: str | None = Field(default=None, max_length=160)
+    expected_version: int | None = Field(default=None, ge=1)
+    importance: int | None = Field(default=None, ge=1, le=5)
     enabled: bool | None = None
     valid_until: datetime | None = None
 
@@ -205,9 +209,22 @@ def update_memory_availability(tenant_id: UUID, entry_id: UUID, body: MemoryAvai
                                db: Session = Depends(get_database_session)):
     """Enable/disable an owned entry or set its validity end; archiving stays a separate action."""
     from nexus_memory.ports import UNSET
+    if body.content is not None:
+        if body.expected_version is None:
+            raise HTTPException(status_code=422, detail='expected_version is required when editing memory content')
+        return memory.edit_entry(db, principal, tenant_id, entry_id, content=body.content,
+                                 expected_version=body.expected_version, title=body.title,
+                                 importance=body.importance)
     valid_until: Any = body.valid_until if 'valid_until' in body.model_fields_set else UNSET
     enabled = body.enabled if 'enabled' in body.model_fields_set else None
     return memory.set_availability(db, principal, tenant_id, entry_id, enabled=enabled, valid_until=valid_until)
+
+
+@router.delete('/memory')
+def clear_memory(tenant_id: UUID, principal: Principal = Depends(get_principal),
+                 db: Session = Depends(get_database_session)):
+    """Archive all active personal memories, reject pending drafts, and clear tracked topics."""
+    return memory.clear(db, principal, tenant_id)
 
 
 @router.get('/memory-topics')

@@ -106,7 +106,8 @@ def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
         return
     if not isinstance(group, dict):
         raise ValueError('Agent memory settings must be an object')
-    if set(group) - {'enabled', 'recall', 'profile', 'context_kinds'}:
+    if set(group) - {'enabled', 'recall', 'profile', 'context_kinds', 'capture_enabled',
+                     'capture_model_version_id', 'capacity_policy'}:
         raise ValueError('Unknown agent memory setting')
     if 'enabled' in group and not isinstance(group['enabled'], bool):
         raise ValueError('Agent memory enabled must be a boolean')
@@ -118,3 +119,14 @@ def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
             or any(kind not in ('preference', 'personal_info') for kind in group['context_kinds'])
             or len(set(group['context_kinds'])) != len(group['context_kinds'])):
         raise ValueError('Agent memory context categories are invalid')
+    if 'capture_enabled' in group and not isinstance(group['capture_enabled'], bool):
+        raise ValueError('Agent memory capture enabled must be a boolean')
+    model_id = group.get('capture_model_version_id')
+    if model_id is not None and model_id != '':
+        from uuid import UUID
+        try:
+            UUID(str(model_id))
+        except (TypeError, ValueError):
+            raise ValueError('Agent memory capture model version is invalid') from None
+    if group.get('capacity_policy', 'reject') not in ('reject', 'evict_auto'):
+        raise ValueError('Agent memory capacity policy is invalid')

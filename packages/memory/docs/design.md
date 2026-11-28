@@ -39,6 +39,10 @@
 - 校验：`validate_actions()` 要求自动抓取的每一项带 1–3 条原文证据，引用规范化后必须出现在对应的来源消息中；重要度 ≤2 且置信度 low 的项只计数不建草稿；单次最多保留 8 项。参考 octop-memory `check_evidence`。
 - 抽取提示在 worker（`apps/worker/src/nexus_worker/memory_capture.py`）中，包含"不该保存"清单（参考 hermes-agent `_DO_NOT_CAPTURE_BLOCK`），关键句由测试锁定。
 
+### Agent 提炼配置
+
+自动提炼开关、可选的提炼模型版本和容量策略保存在 `AgentVersionRecord.budgets.memory` 中。Run 完成时，抓取队列依据来源 Run 的 Agent 版本快照决定是否排队、使用 Agent 主模型还是覆盖模型；写入阶段也按同一版本的容量策略执行。旧 Agent 未保存这些字段时暂时回退到 `memory_capture_settings`，个人 Agent 编辑器会将旧成员配置作为首次迁移默认值写入 Agent 新版本。空间管理员的长期记忆开关与写入模式仍可阻止自动抓取。
+
 ## 依赖方向
 
 ```text

@@ -47,14 +47,6 @@
         </div>
       </div>
 
-      <!-- WeKnora chooses the extraction model per space; Nexus keeps it per member in "my memory". -->
-      <div v-if="config.enabled && config.write_mode === 'auto'" class="setting-row">
-        <div class="setting-info">
-          <label>{{ t('memoryWorkspaceSettings.extractModelLabel') }} <span class="planned-tag">{{ t('nexusMemory.memberSetting') }}</span></label>
-          <p class="desc">{{ t('nexusMemory.extractModelPerMember') }}</p>
-        </div>
-      </div>
-
       <div v-for="item in plannedRows" v-show="config.enabled" :key="item" class="setting-row is-planned">
         <div class="setting-info">
           <label>{{ t(`memoryWorkspaceSettings.${item}Label`) }} <span class="planned-tag">{{ t('nexusMemory.planned') }}</span></label>

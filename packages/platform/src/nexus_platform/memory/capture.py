@@ -156,12 +156,20 @@ def enqueue_for_run(db: Session, run: RunRecord, *, now: datetime | None = None)
     """
     now = now or utc_now()
     settings = db.get(MemoryCaptureSettingsRecord, (run.tenant_id, run.principal_id))
-    if settings is None or not settings.enabled or settings.model_profile_version_id is None:
+    budgets = _run_budgets(db, run)
+    memory = (budgets or {}).get('memory') if isinstance(budgets, dict) else None
+    if isinstance(memory, dict) and isinstance(memory.get('capture_enabled'), bool):
+        capture_enabled = memory['capture_enabled']
+        capture_model_id = memory.get('capture_model_version_id') or (run.config_snapshot or {}).get('model_profile_version_id')
+    else:  # Existing Agent versions inherit the member's pre-migration preferences.
+        capture_enabled = bool(settings and settings.enabled)
+        capture_model_id = str(settings.model_profile_version_id) if settings and settings.model_profile_version_id else None
+    if not capture_enabled or not capture_model_id:
         return None
     # Memory switches (openspec 2026-11-05-memory-switches): nothing is queued, and the cursor stays where
     # it is, while memory is off for the space, the member or this Run's agent, or the space is `explicit`.
     if not memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
-                        agent_budgets=_run_budgets(db, run)).capture_allowed:
+                        agent_budgets=budgets).capture_allowed:
         return None
     busy = db.scalar(select(MemoryCaptureJobRecord.id).where(
         MemoryCaptureJobRecord.tenant_id == run.tenant_id,
@@ -308,15 +316,27 @@ class _Plan:
 def _plan(db: Session, job: MemoryCaptureJobRecord) -> _Plan:
     """Read-only: settings, model authorization, window messages and related entries."""
     empty = _Plan('', [], [], None, job.tenant_id, job.owner_user_id)
+    source_run = db.get(RunRecord, job.source_run_id)
     settings = db.get(MemoryCaptureSettingsRecord, (job.tenant_id, job.owner_user_id))
-    if settings is None or not settings.enabled or settings.model_profile_version_id is None:
+    budgets = _run_budgets(db, source_run) if source_run else None
+    memory = (budgets or {}).get('memory') if isinstance(budgets, dict) else None
+    if isinstance(memory, dict) and isinstance(memory.get('capture_enabled'), bool):
+        capture_enabled = memory['capture_enabled']
+        selected_model_id = memory.get('capture_model_version_id') or (
+            (source_run.config_snapshot or {}).get('model_profile_version_id') if source_run else None)
+    else:
+        capture_enabled = bool(settings and settings.enabled)
+        selected_model_id = settings.model_profile_version_id if settings else None
+    if not capture_enabled or not selected_model_id:
         return replace(empty, skip='capture_disabled')
     # A job queued before a switch was turned off completes without a model call.
-    source_run = db.get(RunRecord, job.source_run_id)
     if not memory_state(db, tenant_id=job.tenant_id, owner_id=job.owner_user_id,
-                        agent_budgets=_run_budgets(db, source_run) if source_run else None).capture_allowed:
+                        agent_budgets=budgets).capture_allowed:
         return replace(empty, skip='memory_disabled')
-    version_id = settings.model_profile_version_id
+    try:
+        version_id = UUID(str(selected_model_id))
+    except (TypeError, ValueError):
+        return replace(empty, skip='model_unavailable')
     try:
         authorize_model(db, job.tenant_id, job.owner_user_id, version_id)
     except PlatformError:
@@ -407,8 +427,13 @@ def _store(db: Session, job: MemoryCaptureJobRecord, now: datetime) -> None:
     repo = SqlMemoryRepository(db)
     actions = list(job.actions or [])
     source_ids = _source_message_ids(db, job)
+    source_run = db.get(RunRecord, job.source_run_id)
+    budgets = _run_budgets(db, source_run) if source_run else None
+    memory = (budgets or {}).get('memory') if isinstance(budgets, dict) else None
     settings = db.get(MemoryCaptureSettingsRecord, (job.tenant_id, job.owner_user_id))
-    policy = settings.capacity_policy if settings else 'reject'
+    policy = (memory.get('capacity_policy') if isinstance(memory, dict)
+              and memory.get('capacity_policy') in CAPACITY_POLICIES else
+              (settings.capacity_policy if settings else 'reject'))
     results: list[str] = []
     evicted = 0
     for index in range(job.stored_count, len(actions)):

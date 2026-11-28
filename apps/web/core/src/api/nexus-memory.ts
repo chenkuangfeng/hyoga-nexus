@@ -127,8 +127,16 @@ export async function reviewMemoryDraftWith(tenantId: string, draftId: string,
 }
 
 export async function setMemoryAvailability(tenantId: string, entryId: string,
-  body: { enabled?: boolean; valid_until?: string | null }): Promise<void> {
+  body: { enabled?: boolean; valid_until?: string | null; content?: string; title?: string;
+    importance?: number; expected_version?: number }): Promise<void> {
   await patch(`${memoryPath(tenantId)}/memory/${encodeURIComponent(entryId)}`, body)
+}
+
+/** Clear active entries, pending proposals and automatically tracked topics; archived history is retained. */
+export async function clearMemory(tenantId: string): Promise<{ removed: number; drafts: number }> {
+  const data: unknown = await del(`${memoryPath(tenantId)}/memory`)
+  if (!isRecord(data)) throw new Error('Unexpected memory clear response')
+  return { removed: asNumber(data.removed), drafts: asNumber(data.drafts) }
 }
 
 export async function restoreMemoryVersion(tenantId: string, entryId: string, version: number,

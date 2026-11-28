@@ -31,7 +31,9 @@ from nexus_memory import service as memory_rules
 from nexus_platform.authz.audit import audit
 from nexus_platform.errors import Conflict, PlatformError
 from nexus_platform.models.provider_settings import authorize_model, context
-from nexus_platform.persistence.models import MemoryCaptureSettingsRecord, MemoryConsolidationStateRecord
+from nexus_platform.persistence.models import (
+    AgentVersionRecord, MemoryCaptureSettingsRecord, MemoryConsolidationStateRecord, RunRecord,
+)
 
 from .repository import SqlMemoryRepository
 from .switches import memory_state
@@ -58,9 +60,13 @@ def request_consolidation(db: Session, principal: Principal, tenant_id: UUID) ->
         now = utc_now()
         if not memory_state(db, tenant_id=tenant_id, owner_id=user.id).available:
             raise Conflict('memory_disabled')
-        settings = db.get(MemoryCaptureSettingsRecord, (tenant_id, user.id))
-        if settings is None or settings.model_profile_version_id is None:
+        model_version_id = _capture_model_for_owner(db, tenant_id, user.id)
+        if model_version_id is None:
             raise Conflict('capture_model_required')
+        try:
+            authorize_model(db, tenant_id, user.id, model_version_id)
+        except PlatformError:
+            raise Conflict('capture_model_required') from None
         state = _state(db, tenant_id, user.id, lock=True)
         if state.last_forced_at is not None and _aware(state.last_forced_at) > now - rules.FORCED_INTERVAL:
             raise Conflict('too_soon')
@@ -97,6 +103,28 @@ def claim_due(db: Session, *, worker_id: str, now: datetime | None = None) -> _D
                             MemoryConsolidationStateRecord.last_run_at < stale)) & free))
             .limit(20)).all()
         candidates = [_Due(tenant, owner, False) for tenant, owner in rows]
+        # Agent-owned capture settings live in immutable Run snapshots rather than the
+        # legacy per-member table. Recent completed Runs provide the owner candidates;
+        # deduplicate below and let `_capture_policy_for_owner` select the newest enabled Agent.
+        recent_runs = db.scalars(select(RunRecord).where(
+            RunRecord.status == 'completed').order_by(RunRecord.ended_at.desc()).limit(500)).all()
+        seen = {(item.tenant_id, item.owner_id) for item in candidates}
+        for run in recent_runs:
+            if len(candidates) >= 20:
+                break
+            key = (run.tenant_id, run.principal_id)
+            if key in seen:
+                continue
+            state = db.get(MemoryConsolidationStateRecord, key)
+            if state and state.last_run_at and _aware(state.last_run_at) >= now - rules.BACKGROUND_INTERVAL:
+                continue
+            if state and state.lease_until and _aware(state.lease_until) >= now:
+                continue
+            enabled, model_id = _capture_policy_for_owner(db, run.tenant_id, run.principal_id)
+            if enabled and model_id and memory_state(db, tenant_id=run.tenant_id,
+                                                     owner_id=run.principal_id).capture_allowed:
+                candidates.append(_Due(run.tenant_id, run.principal_id, False))
+                seen.add(key)
     for due in candidates:
         _state(db, due.tenant_id, due.owner_id)
         won = db.execute(update(MemoryConsolidationStateRecord).where(
@@ -169,13 +197,19 @@ def consolidation_tick(factory: Callable[[], Session], merger: Merger, *, worker
 def _plan(db: Session, due: _Due) -> tuple[list[rules.Cluster], UUID] | None:
     """Clusters to check and the model to check them with, or None when this pass makes no model call."""
     settings = db.get(MemoryCaptureSettingsRecord, (due.tenant_id, due.owner_id))
-    if settings is None or settings.model_profile_version_id is None:
+    if due.forced:
+        version_id = _capture_model_for_owner(db, due.tenant_id, due.owner_id)
+    else:
+        capture_enabled, version_id = _capture_policy_for_owner(db, due.tenant_id, due.owner_id)
+        if not capture_enabled:
+            return None
+    if version_id is None:
         return None
     state = memory_state(db, tenant_id=due.tenant_id, owner_id=due.owner_id)
-    if not state.available or (not due.forced and (not settings.enabled or not state.capture_allowed)):
+    if not state.available or (not due.forced and not state.capture_allowed):
         return None
     try:
-        authorize_model(db, due.tenant_id, due.owner_id, settings.model_profile_version_id)
+        authorize_model(db, due.tenant_id, due.owner_id, version_id)
     except PlatformError:
         return None
     repo = SqlMemoryRepository(db)
@@ -186,7 +220,61 @@ def _plan(db: Session, due: _Due) -> tuple[list[rules.Cluster], UUID] | None:
     found = rules.clusters(entries, overlap=rules.FORCED_OVERLAP if due.forced else rules.BACKGROUND_OVERLAP,
                            max_clusters=rules.FORCED_CLUSTERS if due.forced else rules.BACKGROUND_CLUSTERS,
                            exclude=exclude)
-    return (found, settings.model_profile_version_id) if found else None
+    return (found, version_id) if found else None
+
+
+def _capture_model_for_owner(db: Session, tenant_id: UUID, owner_id: UUID) -> UUID | None:
+    """Resolve a configured Agent model, with legacy member settings as fallback."""
+    return _capture_policy_for_owner(db, tenant_id, owner_id, allow_disabled=True)[1]
+
+
+def _capture_policy_for_owner(db: Session, tenant_id: UUID, owner_id: UUID, *,
+                              allow_disabled: bool = False) -> tuple[bool, UUID | None]:
+    """Return the newest Agent capture policy, falling back to the legacy member setting."""
+    runs = db.scalars(select(RunRecord).where(
+        RunRecord.tenant_id == tenant_id, RunRecord.principal_id == owner_id,
+        RunRecord.status == 'completed').order_by(RunRecord.ended_at.desc()).limit(100)).all()
+    version_ids: set[UUID] = set()
+    for run in runs:
+        raw = (run.config_snapshot or {}).get('agent_version_id')
+        try:
+            if raw:
+                version_ids.add(UUID(str(raw)))
+        except ValueError:
+            continue
+    versions = (db.scalars(select(AgentVersionRecord).where(AgentVersionRecord.id.in_(version_ids))).all()
+                if version_ids else [])
+    by_id = {version.id: version for version in versions}
+    has_agent_policy = False
+    for run in runs:
+        snapshot = run.config_snapshot or {}
+        try:
+            version_id = UUID(str(snapshot['agent_version_id']))
+        except (KeyError, TypeError, ValueError):
+            continue
+        version = by_id.get(version_id)
+        budgets = version.budgets if version else {}
+        memory = budgets.get('memory') if isinstance(budgets, dict) else None
+        if not isinstance(memory, dict) or not isinstance(memory.get('capture_enabled'), bool):
+            continue
+        has_agent_policy = True
+        selected = memory.get('capture_model_version_id') or snapshot.get('model_profile_version_id')
+        if not memory['capture_enabled']:
+            if allow_disabled and selected:
+                try:
+                    return False, UUID(str(selected))
+                except ValueError:
+                    continue
+            continue
+        if selected:
+            try:
+                return True, UUID(str(selected))
+            except ValueError:
+                continue
+    if has_agent_policy:
+        return False, None
+    settings = db.get(MemoryCaptureSettingsRecord, (tenant_id, owner_id))
+    return (bool(settings and settings.enabled), settings.model_profile_version_id if settings else None)
 
 
 def _state(db: Session, tenant_id: UUID, owner_id: UUID, *, lock: bool = False) -> MemoryConsolidationStateRecord:
