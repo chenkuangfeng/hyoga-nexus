@@ -8694,7 +8694,7 @@ export default {
     trajectory: {
       runGroup: 'Run {run}', tokensHeader: 'Токены',
       totalTokens: 'Всего токенов', sessionTotalHint: 'Сумма Run в сеансе', cacheHits: 'Попадания в кэш', cacheRate: '{rate}% входных токенов', cacheRateUnknown: 'Расход кэша не возвращён',
-      tokensActual: 'факт', tokensEstimated: 'оценка', activityUser: 'Пользователь', activityAssistant: 'Ассистент', activityTool: 'Инструмент', memoryRecall: 'Поиск в памяти', toolList: 'Инструменты и навыки', turn: 'Ход {turn}', toolArguments: 'Аргументы инструмента', toolResult: 'Результат выполнения',
+      tokensActual: 'факт', tokensEstimated: 'оценка', activityUser: 'Пользователь', activityAssistant: 'Ассистент', activityTool: 'Инструмент', memoryRecall: 'Память', memoryUsedCount: 'Использовано записей памяти: {count}', toolList: 'Инструменты и навыки', turn: 'Ход {turn}', toolArguments: 'Аргументы инструмента', toolResult: 'Результат выполнения',
       conversation: 'Чат', title: 'Траектория', tabsLabel: 'Ход выполнения сеанса', empty: 'Событий запусков пока нет',
       totalSession: 'Накопление токенов по сеансу (сумма Run)', actualTotal: 'Фактический расход провайдера', callsWithUsage: 'Расход возвращён в вызовах: {count}',
       inputEstimate: 'Оценка входа запроса', inputEstimateShort: 'Оценка входа', actualUsage: 'Фактический расход (вход / выход)', usageUnavailable: 'Провайдер не вернул расход',

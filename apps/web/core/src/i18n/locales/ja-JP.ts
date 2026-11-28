@@ -8694,7 +8694,7 @@ export default {
     trajectory: {
       runGroup: 'Run {run}', tokensHeader: 'トークン',
       totalTokens: '合計トークン', sessionTotalHint: 'セッション内の Run 合計', cacheHits: 'キャッシュヒット', cacheRate: '入力の {rate}%', cacheRateUnknown: 'キャッシュ使用量は未返却',
-      tokensActual: '実績', tokensEstimated: '推定', activityUser: 'ユーザー', activityAssistant: 'アシスタント', activityTool: 'ツール', memoryRecall: 'メモリ検索', toolList: 'ツールとスキル', turn: '{turn} ターン目', toolArguments: 'ツール引数', toolResult: '実行結果',
+      tokensActual: '実績', tokensEstimated: '推定', activityUser: 'ユーザー', activityAssistant: 'アシスタント', activityTool: 'ツール', memoryRecall: '記憶', memoryUsedCount: '{count} 件の記憶を使用', toolList: 'ツールとスキル', turn: '{turn} ターン目', toolArguments: 'ツール引数', toolResult: '実行結果',
       conversation: '会話', title: '軌跡', tabsLabel: 'セッション実行履歴', empty: '実行イベントはありません',
       totalSession: 'セッション累計トークン（Run 合計）', actualTotal: 'プロバイダー実使用量の合計', callsWithUsage: '使用量が返された呼び出し：{count} 件',
       inputEstimate: 'リクエスト入力推定', inputEstimateShort: '入力推定', actualUsage: '実使用量（入力 / 出力）', usageUnavailable: 'プロバイダー使用量なし',

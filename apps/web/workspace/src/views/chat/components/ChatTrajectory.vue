@@ -67,6 +67,9 @@ const activities = computed<Activity[]>(() => {
   for (const [runId, runMessages] of messagesByRun) {
     const runRecords = (recordsByRun.get(runId) ?? []).slice().sort((a, b) => a.sequence - b.sequence)
     const used = new Set<string>()
+    const seenMemoryBlocks = new Set<string>()
+    const memoryBlocks: string[] = []
+    let firstMemoryRecord: RunTrajectoryRecord | undefined
     const orderedMessages = runMessages.slice().sort((a, b) => a.sequence - b.sequence)
     const recordsForCall = new Map<string, RunTrajectoryRecord>()
     for (const record of runRecords) for (const call of calls(record)) recordsForCall.set(call.id, record)
@@ -96,14 +99,28 @@ const activities = computed<Activity[]>(() => {
           status: result ? 'completed' : record.status === 'completed' ? 'running' : record.status,
           records: [record], toolName: call.name, toolArguments: call.arguments, toolResult: result?.content })
       }
-      const recalled = (record.request_snapshot.messages as Array<Record<string, unknown>> | undefined)
-        ?.find(message => message.role === 'user' && typeof message.content === 'string'
-          && message.content.includes('<user_memory source="recall">'))
-      if (recalled && typeof recalled.content === 'string') {
-        all.push({ id: `memory:${record.id}`, runId, sequence: record.sequence - 0.5, turn: record.turn,
-          kind: 'memory', summary: t('nexusChat.trajectory.memoryRecall'), content: recalled.content,
-          createdAt: record.started_at, status: 'completed', records: [record] })
+      const requestMessages = record.request_snapshot.messages as Array<Record<string, unknown>> | undefined
+      for (const message of requestMessages ?? []) {
+        if (typeof message.content !== 'string') continue
+        const blocks = message.content.match(/<user_memory\b[^>]*>[\s\S]*?<\/user_memory>/g) ?? []
+        for (const block of blocks) {
+          if (seenMemoryBlocks.has(block)) continue
+          seenMemoryBlocks.add(block)
+          memoryBlocks.push(block)
+          firstMemoryRecord ??= record
+        }
       }
+    }
+    if (firstMemoryRecord && memoryBlocks.length) {
+      const runInput = orderedMessages.find(message => message.role === 'user')
+      const count = memoryBlocks.reduce((total, block) => {
+        const entries = block.match(/^-\s+/gm)?.length ?? 0
+        return total + Math.max(entries, 1)
+      }, 0)
+      all.push({ id: `memory:${runId}`, runId, sequence: runInput ? runInput.sequence + 0.1 : firstMemoryRecord.sequence - 0.5,
+        turn: firstMemoryRecord.turn, kind: 'memory',
+        summary: t('nexusChat.trajectory.memoryUsedCount', { count }), content: memoryBlocks.join('\n\n'),
+        createdAt: runInput?.created_at ?? firstMemoryRecord.started_at, status: 'completed', records: [firstMemoryRecord] })
     }
     all.push(...callActivities.values())
     for (const message of orderedMessages) {
@@ -129,9 +146,8 @@ const activityGroups = computed(() => {
   for (const activity of activities.value) byRun.set(activity.runId, [...(byRun.get(activity.runId) ?? []), activity])
   return [...byRun.entries()]
     .sort(([, left], [, right]) => (left[0]?.createdAt ?? '').localeCompare(right[0]?.createdAt ?? ''))
-    .map(([runId, items], index) => ({
+    .map(([runId, items]) => ({
       runId,
-      label: `${t('nexusChat.trajectory.runGroup', { run: index + 1 })} · ${runId.slice(0, 8)}`,
       groups: items.reduce<Array<{ id: string; user: Activity | null; activities: Activity[] }>>((groups, activity) => {
         if (activity.kind === 'user') {
           groups.push({ id: activity.id, user: activity, activities: [] })
@@ -226,19 +242,20 @@ function details(value: unknown): string {
             <colgroup><col class="trajectory__kind-column"><col><col class="trajectory__token-column"></colgroup>
             <thead><tr><th>{{ t('nexusChat.trajectory.record') }}</th><th>{{ t('nexusChat.trajectory.content') }}</th><th>{{ t('nexusChat.trajectory.tokensHeader') }}</th></tr></thead>
             <tbody v-for="group in activityGroups" :key="group.runId" :data-run-id="group.runId">
-              <tr class="trajectory__run-row"><th colspan="3" :title="group.runId">{{ group.label }}</th></tr>
               <template v-for="inputGroup in group.groups" :key="inputGroup.id">
-                <tr v-if="inputGroup.user" class="trajectory__input-row" :aria-selected="inputGroup.user.id === selectedId"
+                <tr v-if="inputGroup.user" class="trajectory__input-row"
+                  :class="{ 'trajectory__input-row--run-start': inputGroup === group.groups[0] }"
+                  :aria-selected="inputGroup.user.id === selectedId"
                   :aria-expanded="!collapsedGroups.has(inputGroup.id)" tabindex="0"
                   @click="selectedId = inputGroup.user.id; toggleGroup(inputGroup.id)"
                   @keydown.enter.prevent="selectedId = inputGroup.user.id; toggleGroup(inputGroup.id)"
                   @keydown.space.prevent="selectedId = inputGroup.user.id; toggleGroup(inputGroup.id)">
-                  <td class="trajectory__kind" :title="inputGroup.user.createdAt"><strong><span class="trajectory__chevron">{{ collapsedGroups.has(inputGroup.id) ? '›' : '⌄' }}</span>{{ activityLabel('user') }}</strong></td>
+                  <td class="trajectory__kind" :title="inputGroup.user.createdAt"><strong><span class="trajectory__chevron" :class="{ 'trajectory__chevron--collapsed': collapsedGroups.has(inputGroup.id) }" aria-hidden="true"></span>{{ activityLabel('user') }}</strong></td>
                   <td class="trajectory__summary" :title="inputGroup.user.summary"><span>{{ inputGroup.user.summary }}</span></td>
                   <td class="trajectory__tokens"></td>
                 </tr>
                 <tr v-for="activity in inputGroup.activities" v-show="!collapsedGroups.has(inputGroup.id)"
-                  :key="activity.id" :aria-selected="activity.id === selectedId"
+                  :key="activity.id" class="trajectory__activity-row" :aria-selected="activity.id === selectedId"
                   :data-kind="activity.kind" :data-status="activity.status" tabindex="0"
                   @click="selectedId = activity.id" @keydown.enter.prevent="selectedId = activity.id"
                   @keydown.space.prevent="selectedId = activity.id">
@@ -304,16 +321,20 @@ function details(value: unknown): string {
 .trajectory__token-column { width: 88px; }
 .trajectory__table th { position: sticky; top: 0; z-index: 1; padding: 5px 6px; background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-secondary); font-weight: 500; line-height: 15px; }
 .trajectory__table td { height: 20px; max-width: 0; box-sizing: border-box; padding: 0 6px; border-top: 1px solid var(--td-component-stroke); vertical-align: middle; line-height: 19px; }
-.trajectory__table .trajectory__run-row th { position: static; padding: 8px 10px; border-top: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); color: var(--td-text-color-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trajectory__table .trajectory__run-row th { height: 22px; box-sizing: border-box; padding: 3px 8px; line-height: 15px; }
 .trajectory__table tbody tr { cursor: pointer; }
-.trajectory__table tbody tr.trajectory__run-row { cursor: default; }
 .trajectory__table tbody tr:hover { background: var(--td-bg-color-container-hover); }
-.trajectory__table tbody tr.trajectory__run-row:hover { background: var(--td-bg-color-container); }
 .trajectory__table tbody tr[aria-selected="true"] { background: var(--td-brand-color-light); }
 .trajectory__table tbody tr:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
+.trajectory__table .trajectory__input-row td { background: var(--td-bg-color-secondarycontainer); font-weight: 600; }
+.trajectory__table .trajectory__input-row[aria-selected="true"] td { background: var(--td-brand-color-light); }
+.trajectory__table .trajectory__input-row td:first-child { border-left: 3px solid var(--td-brand-color); }
+.trajectory__table .trajectory__input-row--run-start td { box-shadow: inset 0 2px 0 var(--td-brand-color); }
+.trajectory__table .trajectory__activity-row td:first-child { border-left: 3px solid var(--td-component-stroke); padding-left: 19px; }
+.trajectory__table .trajectory__activity-row .trajectory__summary { padding-left: 18px; }
 .trajectory__table .trajectory__kind strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 500; }
-.trajectory__chevron { display: inline-block; width: 12px; font-size: 13px; }
+.trajectory__table .trajectory__input-row .trajectory__kind strong { font-weight: 650; }
+.trajectory__chevron { display: inline-block; width: 7px; height: 7px; margin: 0 9px 2px 2px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; color: var(--td-brand-color); transform: rotate(45deg); transition: transform 120ms ease; }
+.trajectory__chevron--collapsed { transform: rotate(-45deg); }
 .trajectory__summary, .trajectory__tokens { overflow: hidden; }
 .trajectory__summary span, .trajectory__tokens span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 14px; }
 .trajectory__summary span { font-size: 11px; }
