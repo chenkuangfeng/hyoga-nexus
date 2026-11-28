@@ -225,6 +225,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
+import { memoryErrorText } from './memoryError'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
   createManualMemory, archiveMemoryEntry, getCaptureSettings, getCaptureUsage, getMemoryPreferences, listMemory, listMemoryDocAffinity, listMemoryTopics, clearMemoryDocAffinity,
@@ -300,7 +301,7 @@ const originKey = (origin: string) => (['capture', 'background', 'foreground'].i
 const entryTitle = (id: string) => entries.value.find(entry => entry.id === id)?.title || id.slice(0, 8)
 
 function errorText(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : t('agentStream.memoryDraft.failed')
+  return memoryErrorText(error, t('agentStream.memoryDraft.failed'))
 }
 
 async function loadLists() {
