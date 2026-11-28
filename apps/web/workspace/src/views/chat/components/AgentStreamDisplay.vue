@@ -1262,7 +1262,7 @@ const protectedFileAccess = computed<ProtectedFileAccessContext | undefined>(() 
 const nexusActions = useNexusChatActions();
 /** Template entry for the artifact drawer; on the Nexus page it is a placeholder. */
 function openArtifacts(previewIndex: number | null = null) {
-  if (nexusActions) { nexusActions.planned('artifacts'); return; }
+  if (nexusActions) { nexusActions.showArtifacts(); return; }
   openArtifactDrawer(previewIndex);
 }
 
@@ -3443,7 +3443,6 @@ const handleCopyAnswer = async (answerEvent: any) => {
 };
 
 const handleAddToKnowledge = (answerEvent: any) => {
-  if (nexusActions) { nexusActions.planned('addToKnowledgeBase'); return; }
   const content = getActualContent(answerEvent);
   if (!content) {
     MessagePlugin.warning(t('agentStream.saveToKb.emptyContent'));

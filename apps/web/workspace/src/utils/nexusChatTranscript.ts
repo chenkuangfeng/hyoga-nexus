@@ -66,13 +66,13 @@ export function statusFromEvents(events: readonly RunEvent[]): string {
 
 function assistantRow(runId: string | null, key: string, content: string, createdAt: string,
   events: readonly RunEvent[] | undefined, status: string, live: boolean, options?: AgentEventStreamOptions,
-  citations: KnowledgeCitation[] = []): ChatAssistantRow {
+  citations: KnowledgeCitation[] = [], persistedMessageId = ''): ChatAssistantRow {
   const stream = events ? toAgentEventStream(events, status, options) : []
   return {
     role: 'assistant',
     id: key,
     run_id: runId,
-    assistant_message_id: key,
+    assistant_message_id: persistedMessageId || key,
     request_id: runId ?? key,
     content,
     created_at: createdAt,
@@ -99,7 +99,8 @@ export function buildChatRows(messages: readonly ConversationMessage[],
   eventsByRun: ReadonlyMap<string, readonly RunEvent[]>, pendingUsers: readonly string[] = [],
   live: LiveRun | null = null, baseOptions: AgentEventStreamOptions = {}): ChatRow[] {
   const rows: ChatRow[] = []
-  let group: { runId: string | null; key: string; texts: string[]; createdAt: string; citations: KnowledgeCitation[] } | null = null
+  let group: { runId: string | null; key: string; texts: string[]; createdAt: string;
+    citations: KnowledgeCitation[]; lastAssistantMessageId: string } | null = null
 
   const flush = () => {
     if (!group) return
@@ -110,7 +111,7 @@ export function buildChatRows(messages: readonly ConversationMessage[],
     if (content || (events && events.length > 0)) {
       rows.push(assistantRow(group.runId, group.key, content, group.createdAt, events, status,
         isLive && !TERMINAL_RUN_STATUSES.has(status), { ...baseOptions, ...(isLive ? live!.options : {}) },
-        mergeCitations(group.citations)))
+        mergeCitations(group.citations), group.lastAssistantMessageId))
     }
     group = null
   }
@@ -125,9 +126,13 @@ export function buildChatRows(messages: readonly ConversationMessage[],
     const key = message.run_id ?? message.id
     if (!group || group.key !== key) {
       flush()
-      group = { runId: message.run_id, key, texts: [], createdAt: message.created_at, citations: [] }
+      group = { runId: message.run_id, key, texts: [], createdAt: message.created_at,
+        citations: [], lastAssistantMessageId: '' }
     }
-    if (message.role === 'assistant' && message.content.trim()) group.texts.push(message.content)
+    if (message.role === 'assistant') {
+      group.lastAssistantMessageId = message.id
+      if (message.content.trim()) group.texts.push(message.content)
+    }
     if (message.role === 'assistant' && message.citations?.length) group.citations.push(...message.citations)
   }
   flush()

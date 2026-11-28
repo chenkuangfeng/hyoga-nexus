@@ -68,6 +68,7 @@ from nexus_api.schemas.platform import (
     RunTrajectoryRecordView,
     RunView,
     SessionCreate,
+    SessionMessageAction,
     MemorySnapshotView,
     SessionView,
     TenantCreate,
@@ -498,6 +499,22 @@ def list_sessions(
 ):
     rows = sessions.list_sessions(db, principal, tenant_id)
     return [SessionView.model_validate(row, from_attributes=True) for row in rows]
+
+
+@router.post("/tenants/{tenant_id}/sessions/{session_id}/fork", status_code=201)
+def fork_session(tenant_id: UUID, session_id: UUID, body: SessionMessageAction,
+                 principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Create an owner-visible branch ending at a selected user or assistant message."""
+    from nexus_platform.sessions.actions import fork_at_message
+    return fork_at_message(db, principal, tenant_id, session_id, body.message_id)
+
+
+@router.post("/tenants/{tenant_id}/sessions/{session_id}/rewind")
+def rewind_session(tenant_id: UUID, session_id: UUID, body: SessionMessageAction,
+                   principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
+    """Rewind a text-only transcript; reject cuts that would desynchronize tools or artifacts."""
+    from nexus_platform.sessions.actions import rewind_to_message
+    return rewind_to_message(db, principal, tenant_id, session_id, body.message_id)
 
 
 @router.get("/tenants/{tenant_id}/sessions/{session_id}/memory-snapshot", response_model=MemorySnapshotView)

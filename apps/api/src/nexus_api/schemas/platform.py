@@ -176,6 +176,11 @@ class SessionCreate(BaseModel):
     title: str = Field(default="", max_length=255)
 
 
+class SessionMessageAction(BaseModel):
+    """A message boundary selected for branching or rewinding a conversation."""
+    message_id: UUID
+
+
 class SessionView(BaseModel):
     id: UUID
     tenant_id: UUID

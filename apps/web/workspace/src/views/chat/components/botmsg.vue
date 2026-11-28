@@ -319,7 +319,7 @@ const artifactPreviewIndex = ref(null);
 const nexusActions = useNexusChatActions();
 
 function openArtifactDrawer(previewIndex = null) {
-    if (nexusActions) { nexusActions.planned('artifacts'); return; }
+    if (nexusActions) { nexusActions.showArtifacts(); return; }
     if (!hasArtifacts.value) return;
     if (sandboxPanel && !props.embeddedMode) {
         if (previewIndex == null) {
@@ -467,7 +467,6 @@ const handleCopyAnswer = async () => {
 
 // 添加到知识库
 const handleAddToKnowledge = () => {
-    if (nexusActions) { nexusActions.planned('addToKnowledgeBase'); return; }
     const content = getActualContent();
     if (!content) {
         MessagePlugin.warning(t('chat.emptyContentWarning'));

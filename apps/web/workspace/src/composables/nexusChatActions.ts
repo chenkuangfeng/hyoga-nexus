@@ -35,6 +35,8 @@ export interface NexusChatActions {
   isMemoryDraftPending(draftId: string): Promise<boolean | null>
   /** Archive a published memory from the "used memories" row (it leaves future conversations). */
   forgetMemory(entryId: string): Promise<void>
+  /** Switch to this session's artifact tab. */
+  showArtifacts(): void
 }
 
 const nexusChatActionsKey: InjectionKey<NexusChatActions> = Symbol('nexusChatActions')

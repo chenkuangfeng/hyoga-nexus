@@ -7,32 +7,13 @@
     (openspec 2026-11-04-weknora-chat-dialog, scope change 2026-11-05).
   -->
 
-  <!-- Welcome (WeKnora creatChat): title, suggested questions, composer, centred together. -->
+  <!-- Welcome page keeps the title and composer together without recommendation placeholders. -->
   <div v-if="isWelcome && !compact" class="dialogue-wrap" data-testid="chat-welcome">
     <div class="dialogue-answers">
       <div class="dialogue-title">
         <span data-testid="chat-welcome-title">{{ $t('createChat.title') }}</span>
       </div>
       <t-alert v-if="errorText" theme="error" :message="errorText" class="nexus-chat-alert" />
-      <div class="suggested-questions-container has-questions">
-        <div class="suggested-questions-inner">
-          <div class="suggested-questions-title-row">
-            <p class="suggested-questions-caption">
-              <span class="suggested-questions-title">{{ $t('chat.suggestedQuestions') }}</span>
-              <button type="button" class="suggested-questions-refresh" :title="$t('chat.refreshSuggestedQuestions')"
-                :aria-label="$t('chat.refreshSuggestedQuestions')" @click="planned('suggestedQuestions')">
-                <t-icon name="refresh" />
-              </button>
-            </p>
-          </div>
-          <div class="suggested-questions-grid">
-            <div class="suggested-question-card sq-card-visible" data-testid="chat-planned-suggestions"
-              @click="planned('suggestedQuestions')">
-              <span class="suggested-question-text">{{ $t('nexusChat.suggestionsPlanned') }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
       <div class="create-chat-composer">
         <InputField nexus-mode data-testid="chat-composer" :auto-focus="true" :is-replying="false" :can-steer="false"
           :nexus-agents="agentOptions" :nexus-agent-id="selectedAgent ?? ''" :nexus-agent-locked="!allowAgentSelect"
@@ -87,13 +68,13 @@
               <div v-if="row.role === 'user'" class="message-row" :data-message-id="row.id">
                 <usermsg :content="row.content" :session-id="activeSessionId" :message-id="row.id"
                   :created-at="row.created_at" :embedded-mode="compact" :can-fork="!compact" :can-rewind="!compact"
-                  @fork="planned('fork')" @rewind="planned('rewind')" />
+                  @fork="handleFork" @rewind="handleRewind" />
               </div>
               <div v-else class="message-row" :data-message-id="row.id">
                 <botmsg :content="row.content" :session="row" :session-id="activeSessionId" :user-query="userQueryBefore(index)"
                   :is-first-enter="isFirstEnter" :embedded-mode="compact" :can-fork="!compact" :can-rewind="!compact"
-                  @scroll-bottom="scrollToBottom()" @fork="planned('fork')"
-                  @rewind="planned('rewind')" />
+                  @scroll-bottom="scrollToBottom()" @fork="handleFork"
+                  @rewind="handleRewind" />
                 <KnowledgeCitations v-if="row.citations?.length" :citations="row.citations" />
               </div>
             </div>
@@ -115,7 +96,7 @@
             </div>
           </transition>
           <PendingPromptDock :embedded-mode="compact" />
-          <InputField nexus-mode compact data-testid="chat-composer" :auto-focus="isWelcome" :is-replying="isReplying"
+          <InputField ref="inputFieldRef" nexus-mode compact data-testid="chat-composer" :auto-focus="isWelcome" :is-replying="isReplying"
             :can-steer="canSteer(run)" :embedded-mode="compact"
             :nexus-agents="agentOptions" :nexus-agent-id="isWelcome ? (selectedAgent ?? '') : sessionAgentVersion"
             :nexus-agent-locked="!isWelcome || !allowAgentSelect"
@@ -159,6 +140,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
   createSession as createSessionApi,
+  forkSessionAtMessage,
   getConversation,
   listAgents,
   listPendingApprovals,
@@ -166,6 +148,7 @@ import {
   listSessions,
   listRunTrajectoryRecords,
   resolveApproval,
+  rewindSessionToMessage,
   type AgentView,
   type ConversationMessage,
   type RunEvent,
@@ -240,6 +223,7 @@ const errorText = ref('')
 const agents = ref<AgentView[]>([])
 const selectedAgent = ref<string | undefined>(undefined)
 const pendingUsers = ref<string[]>([])
+const inputFieldRef = ref<{ prefill?: (text: string) => void } | null>(null)
 /** Agent version the open session is bound to; shown on the composer's agent button. */
 const sessionAgentVersion = ref('')
 /** WeKnora: true on entering a session (history renders without the typewriter), false after sending. */
@@ -515,6 +499,42 @@ async function sendText(text: string) {
 
 const onSendMsg = (text: string) => { void sendText(text) }
 
+/** Branch the current session at a persisted user or assistant message. */
+async function handleFork(messageId: string) {
+  if (!tenantId.value || !activeSessionId.value || !messageId || isReplying.value) return
+  try {
+    const branch = await forkSessionAtMessage(tenantId.value, activeSessionId.value, messageId)
+    if (!branch.id) throw new Error(t('nexusChat.forkFailed'))
+    MessagePlugin.success(t('nexusChat.forkSuccess'))
+    emit('session-created', branch.id)
+  } catch (error) {
+    MessagePlugin.error(messageOf(error, t('nexusChat.forkFailed')))
+  }
+}
+
+/** Rewind only when the server can keep the transcript and execution side effects consistent. */
+async function handleRewind(messageId: string) {
+  const sessionId = activeSessionId.value
+  if (!tenantId.value || !sessionId || !messageId || isReplying.value) return
+  try {
+    const result = await rewindSessionToMessage(tenantId.value, sessionId, messageId)
+    eventsByRun.value = new Map()
+    trajectoryByRun.value = new Map()
+    pendingUsers.value = []
+    messages.value = await native.loadSession(sessionId)
+    await loadRunEvents(sessionId)
+    await loadSessionTrajectory(sessionId)
+    void loadArtifacts(sessionId)
+    if (result.prefill) {
+      await nextTick()
+      inputFieldRef.value?.prefill?.(result.prefill)
+    }
+    MessagePlugin.success(t('chat.rewind.success'))
+  } catch (error) {
+    MessagePlugin.error(messageOf(error, t('chat.rewind.failed')))
+  }
+}
+
 /** A message sent while running is a steer for the current Run, shown as a pending user message. */
 const onSteerMsg = (text: string) => {
   pendingUsers.value = [...pendingUsers.value, text]
@@ -585,6 +605,9 @@ provideNexusChatActions({
   async forgetMemory(entryId) {
     if (!tenantId.value) throw new Error(t('nativeRuns.loadError'))
     await archiveMemoryEntry(tenantId.value, entryId)
+  },
+  showArtifacts() {
+    activeTab.value = 'artifacts'
   },
 })
 
@@ -1057,25 +1080,6 @@ defineExpose({ sendText })
     }
 }
 
-@import '../../components/css/suggested-questions.less';
-
-.suggested-questions-container {
-    transition: min-height var(--app-motion-slow) @suggested-ease;
-}
-
-.suggested-questions-inner {
-    animation: contentFadeIn 0.3s ease-out;
-}
-
-.sq-fade-enter-active,
-.sq-fade-leave-active {
-    transition: opacity var(--app-motion-slow) @suggested-ease;
-}
-
-.sq-fade-enter-from,
-.sq-fade-leave-to {
-    opacity: 0;
-}
 </style>
 
 <style lang="less">
@@ -1244,76 +1248,6 @@ defineExpose({ sendText })
     }
 }
 
-@import '../../components/css/suggested-questions.less';
-
-@keyframes skeletonFadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
-
-.suggested-questions-container {
-    max-width: 960px;
-    margin: 0;
-    padding: 0 16px;
-    transition: height var(--app-motion-slow) @suggested-ease;
-}
-
-.suggested-questions-inner {
-    animation: skeletonFadeIn 0.3s ease-out;
-}
-
-.sq-slide-fade-enter-active {
-    transition: opacity var(--app-motion-slow) @suggested-ease, transform var(--app-motion-slow) @suggested-ease;
-}
-
-.sq-slide-fade-leave-active {
-    transition: opacity var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1),
-        transform var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1);
-}
-
-.sq-slide-fade-enter-from {
-    opacity: 0;
-    transform: translateY(10px);
-}
-
-.sq-slide-fade-leave-to {
-    opacity: 0;
-    transform: translateY(-4px);
-}
-
-.suggested-question-card {
-    opacity: 0;
-    transform: translateY(8px) scale(0.97);
-    transition:
-        opacity var(--app-motion-slow) @suggested-ease,
-        transform var(--app-motion-slow) @suggested-ease,
-        background var(--app-motion-base) @suggested-ease,
-        border-color var(--app-motion-slow) @suggested-ease,
-        box-shadow var(--app-motion-slow) @suggested-ease;
-
-    &.sq-card-skeleton {
-        opacity: 1;
-        transform: none;
-    }
-
-    &.sq-card-visible {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-
-    &:not(.sq-card-skeleton):active {
-        transform: scale(0.98);
-    }
-
-    &.sq-card-visible:active {
-        transform: scale(0.98);
-    }
-}
 </style>
 
 <style lang="less" scoped>

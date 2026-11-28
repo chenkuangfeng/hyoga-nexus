@@ -73,6 +73,31 @@ export async function createSession(tenantId: string, agentVersionId: string, ti
   return post<SessionView>(`${tenantPath(tenantId)}/sessions`, { agent_version_id: agentVersionId, title })
 }
 
+export interface SessionMessageActionResult {
+  id?: string
+  title?: string
+  source_message_id?: string
+  message_id?: string
+  deleted_messages?: number
+  prefill?: string
+}
+
+/** Branch an idle session at a persisted user or assistant message. */
+export async function forkSessionAtMessage(tenantId: string, sessionId: string, messageId: string): Promise<SessionMessageActionResult> {
+  const data: unknown = await post(`${tenantPath(tenantId)}/sessions/${encodeURIComponent(sessionId)}/fork`, { message_id: messageId })
+  if (!isRecord(data) || typeof data.id !== 'string') throw new Error('Unexpected session fork response')
+  return { id: data.id, title: isString(data.title) ? data.title : '',
+    source_message_id: isString(data.source_message_id) ? data.source_message_id : '' }
+}
+
+/** Rewind an idle text-only transcript to a persisted user or assistant message. */
+export async function rewindSessionToMessage(tenantId: string, sessionId: string, messageId: string): Promise<SessionMessageActionResult> {
+  const data: unknown = await post(`${tenantPath(tenantId)}/sessions/${encodeURIComponent(sessionId)}/rewind`, { message_id: messageId })
+  if (!isRecord(data) || typeof data.deleted_messages !== 'number') throw new Error('Unexpected session rewind response')
+  return { deleted_messages: data.deleted_messages, prefill: isString(data.prefill) ? data.prefill : '',
+    message_id: isString(data.message_id) ? data.message_id : '' }
+}
+
 export async function getConversation(tenantId: string, sessionId: string): Promise<ConversationPage> {
   const data: unknown = await get(`${tenantPath(tenantId)}/sessions/${encodeURIComponent(sessionId)}/messages`)
   if (!isRecord(data) || !Array.isArray(data.messages)) throw new Error('Unexpected conversation response')
