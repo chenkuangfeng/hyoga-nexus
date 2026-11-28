@@ -39,6 +39,7 @@ def test_native_orchestrator_implements_the_runtime_port():
 
 def test_run_request_and_context_are_frozen_inputs():
     request = RunRequest('run-1', (ModelMessage('user', 'hi'),), ExecutionBudget())
+    assert request.budget.max_tokens == 0
     with pytest.raises(AttributeError):
         request.run_id = 'other'  # type: ignore[misc]
     context = RunContext(CancellationToken())
@@ -326,6 +327,37 @@ def test_orchestrator_compacts_history_when_total_token_budget_is_nearly_spent()
     assert any('Earlier conversation excerpts' in message.content for message in sent)
     assert not any(old_text in message.content for message in sent)
     assert any(message.content == 'create a skill from this' for message in sent)
+
+
+def test_unlimited_run_continues_past_legacy_cumulative_token_default():
+    class _Model:
+        def __init__(self):
+            self.requests = []
+            self.turns = iter((('partial', 'length'), ('完成', 'stop')))
+
+        async def stream(self, request):
+            self.requests.append(request)
+            text, reason = next(self.turns)
+            yield ModelChunk('usage', total_tokens=10000)
+            yield ModelChunk('text', text=text)
+            yield ModelChunk('done', finish_reason=reason)
+
+        async def close(self):
+            pass
+
+    class _Tools:
+        async def definitions(self):
+            return ()
+
+    model, store = _Model(), _Store()
+    progress = RuntimeProgress()
+    request = RunRequest('run', (ModelMessage('system', 'system'), ModelMessage('user', 'question')),
+                          ExecutionBudget(max_tokens=0, max_rounds=4, max_output_tokens=256))
+    outcome = asyncio.run(RunOrchestrator(model, _Tools(), store).run(
+        request, RunContext(CancellationToken(), progress=progress)))
+    assert outcome.status == 'completed'
+    assert len(model.requests) == 2
+    assert progress.tokens == 20000
 
 
 def test_message_bytes_counts_content_and_tool_arguments():

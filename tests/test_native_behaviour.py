@@ -137,8 +137,11 @@ def test_attempt_counter_persists_on_progress_and_older_rows_read_as_zero():
 
 def test_attempt_cap_is_derived_when_not_set_and_rejects_negative_values():
     assert ExecutionBudget().max_model_attempts == 0
+    assert ExecutionBudget().max_tokens == 0
     with pytest.raises(ValueError):
         ExecutionBudget(max_model_attempts=-1)
+    with pytest.raises(ValueError):
+        ExecutionBudget(max_tokens=-1)
 
 
 # ---------- 3.10 todo (unit) ----------

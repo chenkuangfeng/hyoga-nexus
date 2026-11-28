@@ -6,11 +6,13 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ExecutionBudget:
-    """Positive finite execution limits, validated on construction.
+    """Finite execution limits, validated on construction.
 
+    ``max_tokens=0`` disables the optional cumulative Run token cap. Token usage is
+    still recorded; per-request output, context, round, time and error limits remain.
     Invalid values raise ValueError; the Runtime decides how to account for each limit."""
     max_rounds: int = 12
-    max_tokens: int = 16000
+    max_tokens: int = 0
     max_output_tokens: int = 2048
     max_seconds: float = 120
     model_timeout_seconds: float = 60
@@ -20,8 +22,11 @@ class ExecutionBudget:
     max_model_attempts: int = 0
 
     def __post_init__(self) -> None:
-        if any(not math.isfinite(value) or value <= 0 for name, value in vars(self).items() if name != 'max_model_attempts'):
+        if any(not math.isfinite(value) or value <= 0 for name, value in vars(self).items()
+               if name not in ('max_model_attempts', 'max_tokens')):
             raise ValueError('Execution budgets must be positive')
+        if type(self.max_tokens) is not int or self.max_tokens < 0:
+            raise ValueError('max_tokens must be a non-negative integer (0 disables the cumulative cap)')
         if type(self.max_model_attempts) is not int or self.max_model_attempts < 0:
             raise ValueError('max_model_attempts must be a non-negative integer (0 derives the cap)')
 

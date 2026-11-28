@@ -151,7 +151,7 @@ RunOrchestrator     生命周期、取消、预算、事件持久化、租约检
 - **回合结果**：`ToolResult(data, next_prompt, disposition)`，disposition ∈ {`continue`、`complete`、`wait_input`、`exit_failed`}。`exit_failed` 必须带原因，不能用空提示推断成功。
 - **完成判断**：无工具且内容非空即完成；长度截断可按预算续写；空响应有限次重试（计入预算）；同一内容重复出现判为停滞；工具调用不完整则不执行，交给坏调用恢复。
 - **最后一轮**：达到最大步数时禁用工具，仍请求工具则以明确错误结束（参考 Dify）。
-- **预算**：逻辑回合、模型尝试、活跃耗时（不含等待用户时间）、token 四个维度分别计数，持久累计，恢复后继续累计。
+- **预算**：逻辑回合、模型尝试、活跃耗时（不含等待用户时间）、token 用量四个维度分别计数，持久累计，恢复后继续累计。累计 token 上限为可选成本护栏，默认关闭（`max_tokens=0`）；回合、模型请求次数、活跃耗时、错误数及单次模型输出/上下文约束继续生效。
 - **上下文**：系统提示与工具 schema 在 Run 开始时计算一次，Run 内不变，保护供应商提示缓存（参考 Hermes 冻结快照）。历史是事件流，模型可见消息由事件派生（参考 DeepSeek Harness）。压缩结果作为新事件写入，源事件保留。处理方式参考 LobeHub `context-engine` 的可组合处理器与 WeKnora `compaction/`；证据句柄登记参考 RAGFlow `evidence_registry`。
 - **压缩**：优先完整保留最近的消息与工具交换；较早内容压缩为标注过的局部摘录；仍装不下则显式失败 `model_context_exceeded`。压缩带滞后：只在历史超过 `compact_high_ratio × max_context_chars` 时触发，目标为 `compact_low_ratio × max_context_chars`，两者之间不重复压缩。摘要长度不超过 `summary_max_chars`。摘要可由 `compaction_model_profile_version_id` 指定的模型生成，每次摘要调用都重新授权；该模型不可用时降级为确定性摘录并记录 `context.summary_degraded`，Run 继续。
 - **工具结果视图**：超过 `tool_result_window_rounds` 次模型调用之前的工具结果，在发给模型的视图中替换为单行索引（工具名与首行）；源消息不变。超过 `tool_output_inline_limit` 的输出外置，见 2.5。

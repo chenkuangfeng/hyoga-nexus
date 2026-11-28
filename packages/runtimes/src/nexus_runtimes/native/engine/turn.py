@@ -163,7 +163,7 @@ class TurnExecutor:
         self.model, self.store, self.policy = model, store, policy
 
     async def execute(self, messages, definitions, remaining: int, token, turn: int, budget):
-        """Send `messages` with `definitions`, capped by the Run's remaining token budget."""
+        """Send the current context with per-request output and optional Run caps."""
         request = ModelRequest(tuple(messages), definitions, min(budget.max_output_tokens, remaining))
         return await collect_response(self.model, request, token, self.store, turn, budget.model_timeout_seconds,
                                       flush_ms=self.policy.delta_flush_ms, flush_chars=self.policy.delta_flush_chars)

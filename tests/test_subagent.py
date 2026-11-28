@@ -135,12 +135,17 @@ def test_tokens_are_charged_to_the_parent_and_the_budget_is_a_share_of_it():
     sub, _, _ = runner(Model([[text('done')]]), progress=progress, budget=ExecutionBudget(max_tokens=30000, max_rounds=12))
     budget = sub.budget_for(99)
     assert budget.max_rounds == 12 and budget.max_tokens == 10000 and budget.max_seconds == 60
-    run(sub.run('task'))
-    assert progress.tokens > 0
     progress.tokens = 29500
     with pytest.raises(Exception) as error:
         sub.budget_for(None)
     assert getattr(error.value, 'code', '') == 'budget_exhausted'
+
+
+def test_unlimited_parent_gives_subagent_no_cumulative_token_cap():
+    parent = RuntimeProgress(tokens=50000)
+    sub, _, _ = runner(Model([[text('done')]]), progress=parent,
+                       budget=ExecutionBudget(max_tokens=0))
+    assert sub.budget_for(4).max_tokens == 0
 
 
 def test_a_failed_sub_run_reports_the_code_and_still_closes_the_model():

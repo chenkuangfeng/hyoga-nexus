@@ -9,7 +9,7 @@ from nexus_platform.authz.audit import audit
 
 
 LABELS = {
-    'max_rounds': '最大回合数', 'max_tokens': '总 Token 预算', 'max_output_tokens': '每次输出上限',
+    'max_rounds': '最大回合数', 'max_tokens': 'Run 累计 Token 上限（0 为不限制）', 'max_output_tokens': '每次输出上限',
     'max_seconds': '活跃执行时间（秒）', 'model_timeout_seconds': '模型超时（秒）',
     'max_errors': '工具错误上限', 'max_context_chars': '上下文字符预算',
     'max_model_attempts': '模型请求上限（含重试，0 为自动）', 'max_continuations': '截断回答续写次数',

@@ -49,6 +49,14 @@ def test_validate_passes_new_keys_through_and_fills_missing_ones():
     assert result['behavior']['tool_output_inline_limit'] == 3000
     assert result['behavior']['tool_preview_chars'] == 600
     assert result['behavior']['summary_max_chars'] == 8000
+    assert result['budgets']['max_tokens'] == 0
+
+
+def test_run_cumulative_token_cap_accepts_unlimited_and_positive_values():
+    unlimited = native_settings.validate({'budgets': {'max_tokens': 0}, 'behavior': {}})
+    capped = native_settings.validate({'budgets': {'max_tokens': 32000}, 'behavior': {}})
+    assert unlimited['budgets']['max_tokens'] == 0
+    assert capped['budgets']['max_tokens'] == 32000
 
 
 def test_validate_rejects_unknown_keys():

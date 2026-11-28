@@ -85,10 +85,13 @@ class SubagentRunner:
 
     def budget_for(self, max_rounds: int | None) -> ExecutionBudget:
         parent = self.parent_budget
-        remaining_tokens = max(parent.max_tokens - self.parent_progress.tokens, 0)
-        tokens = min(remaining_tokens, max(4000, parent.max_tokens // 3))
-        if tokens < 1000:
-            raise RuntimeFault('budget_exhausted')
+        if parent.max_tokens > 0:
+            remaining_tokens = max(parent.max_tokens - self.parent_progress.tokens, 0)
+            tokens = min(remaining_tokens, max(4000, parent.max_tokens // 3))
+            if tokens < 1000:
+                raise RuntimeFault('budget_exhausted')
+        else:
+            tokens = 0
         return ExecutionBudget(max_rounds=min(max_rounds or DEFAULT_SUB_ROUNDS, MAX_SUB_ROUNDS, parent.max_rounds),
                                max_tokens=tokens, max_output_tokens=parent.max_output_tokens,
                                max_seconds=max(10, parent.max_seconds / 2), model_timeout_seconds=parent.model_timeout_seconds,

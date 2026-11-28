@@ -105,10 +105,11 @@ class ContextAssembler:
         definition_tokens = self._definitions_tokens if definitions is None else estimate_tokens(str(definitions))
         return ModelView(messages, estimate_message_tokens(messages) + definition_tokens)
 
-    def fit_token_budget(self, messages, *, definitions, token_budget: int) -> tuple[list, int, int]:
+    def fit_token_budget(self, messages, *, definitions, token_budget: int,
+                         failure_code: str = 'budget_exhausted') -> tuple[list, int, int]:
         """Compact this model view to fit the current input allowance without changing stored history.
 
-        Run-level character compaction may not trigger when cumulative token usage is nearly exhausted.
+        Character compaction may not account for tool definitions and the assembled system prefix.
         This deterministic pass keeps the system message and newest complete user/tool exchange intact;
         older turns become labelled excerpts. It returns fitted messages, estimated input tokens and the
         number of omitted source messages.
@@ -123,12 +124,12 @@ class ContextAssembler:
             framing = 4 * len(candidate) + 4 * sum(len(message.tool_calls) for message in candidate)
             payload_tokens = token_budget - definition_tokens - framing
             if payload_tokens <= 0:
-                raise RuntimeFault('budget_exhausted')
+                raise RuntimeFault(failure_code)
             try:
                 compacted, omitted = compact_history(tuple(candidate), payload_tokens * 3)
             except RuntimeFault:
-                raise RuntimeFault('budget_exhausted') from None
+                raise RuntimeFault(failure_code) from None
             if not omitted or len(compacted) >= len(candidate):
-                raise RuntimeFault('budget_exhausted')
+                raise RuntimeFault(failure_code)
             candidate = list(compacted)
             removed += omitted

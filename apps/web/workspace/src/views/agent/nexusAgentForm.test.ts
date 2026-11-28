@@ -26,6 +26,7 @@ test('form reads generation, budgets and tool bindings from the agent', () => {
   assert.equal(form.reasoning_effort, 'high')
   assert.equal(form.max_iterations, 8)
   assert.equal(form.max_completion_tokens, 0)
+  assert.equal(form.max_run_tokens, 9000)
   assert.equal(form.llm_call_timeout, null)
   assert.deepEqual(form.allowed_tools, ['todo'])
 })
@@ -53,6 +54,14 @@ test('default token and timeout remove the budget keys', () => {
   const draft = draftFromForm({ ...formFromAgent(base), max_completion_tokens: 0, llm_call_timeout: null }, base, null, TENANT)
   assert.equal('max_output_tokens' in draft.budgets, false)
   assert.equal('model_timeout_seconds' in draft.budgets, false)
+})
+
+test('Run token cap is optional and zero means unlimited', () => {
+  const form = { ...formFromAgent(agent({ budgets: {} })), name: 'Agent', system_prompt: 'Help' }
+  const draft = draftFromForm(form, null, null, TENANT)
+  assert.equal(draft.budgets.max_tokens, 0)
+  const capped = draftFromForm({ ...form, max_run_tokens: 24000 }, null, null, TENANT)
+  assert.equal(capped.budgets.max_tokens, 24000)
 })
 
 test('new agent starts from native defaults and default tools', () => {

@@ -49,8 +49,8 @@ async def compact(model, messages, limit, token, budget, progress, store, *, hig
         return compact_within(messages, high, low, limit)
     older, recent = history[:cut], history[cut:]
     archive = '\n'.join(f'[{m.role}] {m.content}' for m in older)
-    remaining = budget.max_tokens - progress.tokens
-    if remaining <= estimate_tokens(archive) + 256:
+    remaining = budget.max_tokens - progress.tokens if budget.max_tokens > 0 else None
+    if remaining is not None and remaining <= estimate_tokens(archive) + 256:
         return compact_within(messages, high, low, limit)
     summarizer, owned = model, False
     if summarizer_factory is not None:

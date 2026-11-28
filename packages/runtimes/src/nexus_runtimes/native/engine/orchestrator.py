@@ -155,7 +155,7 @@ class RunOrchestrator:
                         return resumed
                 while progress.turns < budget.max_rounds:
                     token.check()
-                    if progress.tokens >= budget.max_tokens or progress.errors >= budget.max_errors:
+                    if (budget.max_tokens > 0 and progress.tokens >= budget.max_tokens) or progress.errors >= budget.max_errors:
                         raise RuntimeFault('budget_exhausted')
                     # Steer is optional for standalone stores; production persists before returning it.
                     if hasattr(self.store, 'drain_steer'):
@@ -180,19 +180,28 @@ class RunOrchestrator:
                     if last_turn:
                         model_history.append(ModelMessage('user', FINAL_ANSWER_HINT))
                         await self.store.emit('turn.tools_disabled', {'turn': turn})
-                    remaining_total = budget.max_tokens - progress.tokens
-                    # Keep enough room for a useful answer or tool call. The remaining allowance is
-                    # then used to compact older context instead of rejecting a long but recoverable Run.
-                    output_reserve = min(budget.max_output_tokens, max(256, remaining_total // 8))
-                    input_allowance = remaining_total - output_reserve
-                    if input_allowance <= 0:
-                        raise RuntimeFault('budget_exhausted')
+                    if budget.max_tokens > 0:
+                        remaining_total = budget.max_tokens - progress.tokens
+                        # For an explicitly capped Run, reserve output from its remaining allowance.
+                        output_reserve = min(budget.max_output_tokens, max(256, remaining_total // 8))
+                        input_allowance = remaining_total - output_reserve
+                        if input_allowance <= 0:
+                            raise RuntimeFault('budget_exhausted')
+                        fit_failure = 'budget_exhausted'
+                    else:
+                        # With no cumulative cap, keep the independent context ceiling. One character
+                        # is allowed one estimated token so CJK text is not under-budgeted.
+                        output_reserve = budget.max_output_tokens
+                        input_allowance = max(1, budget.max_context_chars - output_reserve)
+                        remaining_total = None
+                        fit_failure = 'model_context_exceeded'
                     model_history, input_estimate, omitted = self.context.fit_token_budget(
-                        model_history, definitions=turn_definitions, token_budget=input_allowance)
+                        model_history, definitions=turn_definitions, token_budget=input_allowance,
+                        failure_code=fit_failure)
                     if omitted:
                         await self.store.emit('context.compacted', {'omitted_messages': omitted,
                             'strategy': 'token_budget_excerpts'})
-                    remaining = remaining_total - input_estimate
+                    remaining = remaining_total - input_estimate if remaining_total is not None else budget.max_output_tokens
                     await self.store.save_progress(progress)
                     await self._hook(run_id, 'model.before', turn)
                     await self.store.emit('model.started', {'turn': turn})
@@ -207,7 +216,7 @@ class RunOrchestrator:
                         progress.tokens += input_estimate + estimate_tokens(response.text)
                         progress.tokens += sum(estimate_tokens(call.arguments) for call in response.calls)
                     completed = ('model.completed', {'turn': turn, 'tokens': progress.tokens, 'usage': response.usage})
-                    if progress.tokens > budget.max_tokens:
+                    if budget.max_tokens > 0 and progress.tokens > budget.max_tokens:
                         await self.store.emit(*completed)
                         raise RuntimeFault('budget_exhausted')
                     working.record(response.text)

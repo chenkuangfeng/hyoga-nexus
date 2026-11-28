@@ -15,6 +15,7 @@ export const DEFAULT_MODEL_TIMEOUT_SECONDS = 60
 /** Service limits enforced by `runs/settings.py` and the worker. */
 export const MAX_OUTPUT_TOKENS_LIMIT = 128000
 export const MAX_ROUNDS_LIMIT = 1000
+export const MAX_RUN_TOKENS_LIMIT = 10000000
 export const DEFAULT_TEMPERATURE = 0.7
 
 /** Reasoning levels accepted in `budgets.generation.reasoning_effort`; `auto` follows the model profile. */
@@ -31,6 +32,8 @@ export interface AgentEditorForm {
   reasoning_effort: ReasoningEffort
   /** 0 means "follow the default" (no `max_output_tokens` in budgets). */
   max_completion_tokens: number
+  /** 0 disables the optional cumulative Run token cap. */
+  max_run_tokens: number
   max_iterations: number
   /** Seconds; null means "follow the default". */
   llm_call_timeout: number | null
@@ -131,6 +134,7 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     temperature: numberOr(generation.temperature, numberOr(modelOptions.temperature, DEFAULT_TEMPERATURE)),
     reasoning_effort: asEffort(generation.reasoning_effort),
     max_completion_tokens: typeof budgets.max_output_tokens === 'number' ? budgets.max_output_tokens : 0,
+    max_run_tokens: numberOr(budgets.max_tokens, 0),
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: typeof budgets.model_timeout_seconds === 'number' ? budgets.model_timeout_seconds : null,
     allowed_tools: (agent.resource_bindings || []).filter(b => b.kind === 'tool').map(b => b.resource_id),
@@ -157,6 +161,7 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     temperature: DEFAULT_TEMPERATURE,
     reasoning_effort: 'auto',
     max_completion_tokens: 0,
+    max_run_tokens: numberOr(budgets.max_tokens, 0),
     max_iterations: numberOr(budgets.max_rounds, DEFAULT_MAX_ROUNDS),
     llm_call_timeout: null,
     allowed_tools: [...defaultTools],
@@ -195,6 +200,8 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   const tokens = Math.round(form.max_completion_tokens)
   if (tokens > 0) budgets.max_output_tokens = Math.min(tokens, MAX_OUTPUT_TOKENS_LIMIT)
   else delete budgets.max_output_tokens
+
+  budgets.max_tokens = Math.min(Math.max(0, Math.round(form.max_run_tokens)), MAX_RUN_TOKENS_LIMIT)
 
   budgets.max_rounds = Math.min(Math.max(1, Math.round(form.max_iterations)), MAX_ROUNDS_LIMIT)
 

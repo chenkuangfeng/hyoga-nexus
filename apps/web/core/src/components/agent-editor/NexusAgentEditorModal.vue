@@ -193,6 +193,21 @@
 
           <div class="setting-row">
             <div class="setting-info">
+              <label>{{ $t('nexusAgent.runTokenLimit') }}</label>
+              <p class="desc">{{ $t('nexusAgent.runTokenLimitDesc') }}</p>
+            </div>
+            <div class="setting-control max-tokens-control">
+              <t-radio-group v-model="runTokenCapMode">
+                <t-radio-button value="unlimited">{{ $t('nexusAgent.runTokenUnlimited') }}</t-radio-button>
+                <t-radio-button value="custom">{{ $t('agent.editor.maxCompletionTokensCustom') }}</t-radio-button>
+              </t-radio-group>
+              <t-input-number v-if="runTokenCapMode === 'custom'" v-model="form.max_run_tokens" :min="1"
+                :max="MAX_RUN_TOKENS_LIMIT" :step="1000" theme="column" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
               <label>{{ $t('agentEditor.llmCallTimeout.label') }}</label>
               <p class="desc">{{ $t('nexusAgent.llmCallTimeoutDesc', { seconds: DEFAULT_MODEL_TIMEOUT_SECONDS }) }}</p>
             </div>
@@ -508,7 +523,7 @@ import { getModelSettings, type ModelSettingsView } from '@nexus-web/core/api/ne
 import { createEnterpriseAgent, updateEnterpriseAgent, publishEnterpriseAgent, getEnterpriseAgent, listAgentKnowledgeChoices, type AgentKnowledgeChoice } from '@nexus-web/core/api/enterprise-agents'
 import { chatModelOptions, defaultChatVersion, findModelByVersion } from '@nexus-web/core/utils/nexusModelCards'
 import {
-  DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_TIMEOUT_SECONDS, MAX_OUTPUT_TOKENS_LIMIT, MAX_ROUNDS_LIMIT, REASONING_EFFORTS,
+  DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MODEL_TIMEOUT_SECONDS, MAX_OUTPUT_TOKENS_LIMIT, MAX_ROUNDS_LIMIT, MAX_RUN_TOKENS_LIMIT, REASONING_EFFORTS,
   KNOWLEDGE_TOOLS, draftFromForm, formForNewAgent, formFromAgent, skillHasNewerVersion, skillToolNeeds, validateForm,
   type AgentEditorForm,
 } from './nexusAgentForm'
@@ -748,6 +763,11 @@ function onKnowledgeChange(ids: Array<string | number | boolean>) {
 const maxTokensMode = computed<'default' | 'custom'>({
   get: () => (form.max_completion_tokens > 0 ? 'custom' : 'default'),
   set: mode => { form.max_completion_tokens = mode === 'custom' ? (form.max_completion_tokens || 4096) : 0 },
+})
+
+const runTokenCapMode = computed<'unlimited' | 'custom'>({
+  get: () => (form.max_run_tokens > 0 ? 'custom' : 'unlimited'),
+  set: mode => { form.max_run_tokens = mode === 'custom' ? (form.max_run_tokens || 100000) : 0 },
 })
 
 const timeoutInput = computed<number | undefined>({

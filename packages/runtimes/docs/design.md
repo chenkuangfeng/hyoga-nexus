@@ -44,6 +44,8 @@ Chat Completions 将已有模型版本的空字符串思考强度视为使用服
 - 待办工具 `todo` 通过 `RunServices.run_state` 访问 `progress.state`（与进度同一对象）；工具权限仍由网关每次复核。
 - 工具循环检测（提案 2026-11-06-tool-call-hardening C，`engine/tool_guardrails.py`）：`ToolDispatcher` 对每个结果计算签名（工具名、规范化参数、结果前 2000 字符），相同签名连续出现或周期 2–4 循环时在第 `tool_repeat_warn_at` 次及其后两次各追加一次提醒，第 `tool_repeat_stop_at` 次以 `tool_loop_detected` 结束 Run；同一工具连续失败第 `tool_repeat_warn_at` 次提醒、第 `tool_failure_stop_at` 次结束，该工具成功或其他副作用工具成功时清零。状态在 `progress.state['tool_guard']`，用户追加指令或带答复恢复时清零；阈值为 0 关闭。审批恢复路径不计入。`ToolDispatcher` 每轮开始调用网关 `begin_turn()`。
 
-## 输入 token 预算与本轮上下文压缩
+## Run 累计 Token 与上下文压缩
 
-模型调用前按消息、工具参数、工具定义估算输入 token：文本约每三个 UTF-8 字节计一个 token，另计消息/调用 framing；供应商返回 usage 后以实际计数累计。每次请求会在剩余 Run token 预算中预留输出空间。如果输入视图仍超额，只对本次模型请求压缩较早的会话轮次为不可信、不完整摘录，保留系统指令、当前用户请求和最近完整工具交换，不修改 Session 原始消息。近期交换本身超出额度时 Run 才以 `budget_exhausted` 结束。
+模型调用前按消息、工具参数、工具定义估算输入 token：文本约每三个 UTF-8 字节计一个 token，另计消息/调用 framing；供应商返回 usage 后以实际计数累计。`ExecutionBudget.max_tokens=0`（默认）表示不限制 Run 累计 Token；正值仍可作为显式成本上限。每次模型调用继续受 `max_output_tokens` 和 `max_context_chars` 控制，并保留最大回合、活跃时长、错误数及模型请求次数限制。
+
+上下文视图超过单次输入预算时，只对本次模型请求压缩较早的会话轮次为不可信、不完整摘录，保留系统指令、当前用户请求和最近完整工具交换，不修改 Session 原始消息。无法把不可裁剪的系统/当前交互压入预算时返回 `model_context_exceeded`；显式 Run 累计预算耗尽仍返回 `budget_exhausted`。字符预算是估算边界，不等价于任意供应商的真实 Context Window。
