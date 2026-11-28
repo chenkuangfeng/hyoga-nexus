@@ -120,7 +120,11 @@ const activities = computed<Activity[]>(() => {
       all.push({ id: `memory:${runId}`, runId, sequence: runInput ? runInput.sequence + 0.1 : firstMemoryRecord.sequence - 0.5,
         turn: firstMemoryRecord.turn, kind: 'memory',
         summary: t('nexusChat.trajectory.memoryUsedCount', { count }), content: memoryBlocks.join('\n\n'),
-        createdAt: runInput?.created_at ?? firstMemoryRecord.started_at, status: 'completed', records: [firstMemoryRecord] })
+        createdAt: runInput?.created_at ?? firstMemoryRecord.started_at, status: 'completed',
+        // This row describes context provenance. The memory text was included in a model
+        // request, but it is not itself a model request; keep the request snapshot on the
+        // assistant activity where it belongs.
+        records: [] })
     }
     all.push(...callActivities.values())
     for (const message of orderedMessages) {
