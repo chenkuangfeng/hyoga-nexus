@@ -157,6 +157,21 @@ def update_memory_preferences(tenant_id: UUID, body: MemoryPreferencesUpdate, pr
     return memory_switches.set_preferences(db, principal, tenant_id, memory_enabled=body.memory_enabled)
 
 
+class MemoryCreate(BaseModel):
+    """Explicit personal memory publication; identity and provenance are server-owned."""
+    title: str = Field(min_length=1, max_length=160)
+    kind: Literal['memory', 'sop', 'profile', 'interest'] = 'memory'
+    content: str = Field(min_length=1, max_length=8000)
+    importance: int = Field(default=3, ge=1, le=5)
+
+
+@router.post('/memory', status_code=201)
+def create_memory(tenant_id: UUID, body: MemoryCreate, principal: Principal = Depends(get_principal),
+                  db: Session = Depends(get_database_session)):
+    """Publish the authenticated member's explicitly entered memory without requiring a Run."""
+    return memory.create_manual(db, principal, tenant_id, **body.model_dump())
+
+
 @router.get('/memory')
 def list_memory(tenant_id: UUID, principal: Principal = Depends(get_principal), db: Session = Depends(get_database_session)):
     """List owned published memory/SOP pointers and pending drafts for human review."""

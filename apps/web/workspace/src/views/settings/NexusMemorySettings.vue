@@ -1,7 +1,4 @@
 <template>
-  <!-- "My memory" on the Nexus API (openspec 2026-11-05-memory-switches 2.3; 2026-11-06-memory-evolution 2.8, 3.6,
-       5.5, 6.2). Layout and class names follow WeKnora MemorySettings.vue; WeKnora features Nexus does not have
-       (memory documents, export, clear, manual add) are not offered. -->
   <div class="memory-settings">
     <div class="section-header">
       <h2>{{ t('memorySettings.title') }}</h2>
@@ -13,6 +10,8 @@
     <template v-if="prefs">
       <div v-if="prefs.reason === 'space_disabled'" class="notice" role="status">{{ t('nexusMemory.spaceDisabled') }}</div>
 
+      <t-tabs v-model="section" class="memory-tabs">
+        <t-tab-panel value="config" :label="t('memoryPage.config')">
       <div class="settings-group">
         <div class="setting-row">
           <div class="setting-info">
@@ -86,6 +85,11 @@
         </div>
       </div>
 
+        </t-tab-panel>
+        <t-tab-panel value="memory" :label="t('memoryPage.memory')">
+          <div class="memory-toolbar">
+            <t-button theme="primary" :disabled="busy" @click="addVisible = true">{{ t('memorySettings.addTitle') }}</t-button>
+          </div>
       <t-tabs v-model="tab" class="memory-tabs">
         <t-tab-panel value="pending" :label="t('nexusMemory.tabPending', { count: drafts.length })">
           <p v-if="!drafts.length" class="empty">{{ t('nexusMemory.emptyPending') }}</p>
@@ -187,6 +191,32 @@
           <p class="empty">{{ t('nexusMemory.archivedPlanned') }}</p>
         </t-tab-panel>
       </t-tabs>
+        </t-tab-panel>
+      </t-tabs>
+      <t-dialog v-model:visible="addVisible" :header="t('memorySettings.addTitle')"
+        :confirm-btn="{ content: t('agentStream.memoryDraft.publish'), loading: busy }"
+        :cancel-btn="{ disabled: busy }" :close-on-overlay-click="false" :close-on-esc-keydown="!busy" :close-btn="!busy"
+        :on-confirm="createMemory" :on-cancel="() => { if (!busy) addVisible = false }">
+        <t-form label-align="top" @submit="createMemory">
+          <t-form-item :label="t('agentStream.memoryDraft.titlePlaceholder')" required>
+            <t-input v-model="newMemory.title" :maxlength="160" :disabled="busy" />
+          </t-form-item>
+          <t-form-item :label="t('memorySettings.addKindLabel')" required>
+            <t-select v-model="newMemory.kind" :disabled="busy">
+              <t-option v-for="kind in ['memory', 'sop', 'profile', 'interest']" :key="kind" :value="kind" :label="kindLabel(kind)" />
+            </t-select>
+          </t-form-item>
+          <t-form-item :label="t('memorySettings.addContentLabel')" required>
+            <t-textarea v-model="newMemory.content" :maxlength="8000" :disabled="busy" :autosize="{ minRows: 4, maxRows: 10 }" />
+          </t-form-item>
+          <t-form-item :label="t('nexusMemory.importance')">
+            <t-select v-model="newMemory.importance" :disabled="busy">
+              <t-option v-for="level in [1, 2, 3, 4, 5]" :key="level" :value="level" :label="String(level)" />
+            </t-select>
+          </t-form-item>
+          <p v-if="createError" role="alert" class="load-error">{{ createError }}</p>
+        </t-form>
+      </t-dialog>
     </template>
   </div>
 </template>
@@ -197,14 +227,21 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@nexus-web/core/stores/auth'
 import {
-  archiveMemoryEntry, getCaptureSettings, getCaptureUsage, getMemoryPreferences, listMemory, listMemoryDocAffinity, listMemoryTopics, clearMemoryDocAffinity,
+  createManualMemory, archiveMemoryEntry, getCaptureSettings, getCaptureUsage, getMemoryPreferences, listMemory, listMemoryDocAffinity, listMemoryTopics, clearMemoryDocAffinity,
   requestConsolidation, restoreMemoryVersion, reviewMemoryDraftWith, setMemoryAvailability, updateCaptureSettings,
   updateMemoryPreferences, type CaptureSettings, type CaptureUsage, type MemoryDraft, type MemoryEntry,
   type MemoryDocAffinity, type MemoryPreferences, type MemoryTopic,
 } from '@nexus-web/core/api/nexus-memory'
 import { getModelSettings, type NexusModel } from '@nexus-web/core/api/nexus-models'
 
-const { t } = useI18n()
+const { t } = useI18n({ messages: {
+  'zh-CN': { memoryPage: { config: '配置', memory: '记忆', required: '请填写标题和内容。' } },
+  'zh-TW': { memoryPage: { config: '設定', memory: '記憶', required: '請填寫標題和內容。' } },
+  'en-US': { memoryPage: { config: 'Configuration', memory: 'Memories', required: 'Enter a title and content.' } },
+  'ja-JP': { memoryPage: { config: '設定', memory: '記憶', required: 'タイトルと内容を入力してください。' } },
+  'ko-KR': { memoryPage: { config: '설정', memory: '기억', required: '제목과 내용을 입력하세요.' } },
+  'ru-RU': { memoryPage: { config: 'Настройки', memory: 'Память', required: 'Введите заголовок и содержание.' } },
+} })
 const authStore = useAuthStore()
 const tenant = () => authStore.effectiveTenantId || ''
 
@@ -218,7 +255,35 @@ const topics = ref<MemoryTopic[]>([])
 const affinity = ref<MemoryDocAffinity[]>([])
 const titles = reactive<Record<string, string>>({})
 const importances = reactive<Record<string, number>>({})
-const tab = ref('pending')
+const section = ref('config')
+const tab = ref('active')
+const addVisible = ref(false)
+const createError = ref('')
+const newMemory = reactive({ title: '', kind: 'memory' as 'memory' | 'sop' | 'profile' | 'interest', content: '', importance: 3 })
+
+/** The form submission is the owner's explicit publication decision. Preserve input on failure. */
+async function createMemory() {
+  if (busy.value) return
+  createError.value = ''
+  if (!newMemory.title.trim() || !newMemory.content.trim()) {
+    createError.value = t('memoryPage.required')
+    return
+  }
+  busy.value = true
+  try {
+    await createManualMemory(tenant(), { ...newMemory, title: newMemory.title.trim(), content: newMemory.content.trim() })
+    addVisible.value = false
+    Object.assign(newMemory, { title: '', kind: 'memory', content: '', importance: 3 })
+    tab.value = 'active'
+    MessagePlugin.success(t('agentStream.memoryDraft.published'))
+    await loadLists()
+  } catch (error) {
+    createError.value = errorText(error)
+    MessagePlugin.error(createError.value)
+  } finally {
+    busy.value = false
+  }
+}
 const busy = ref(false)
 const consolidating = ref(false)
 const loadError = ref('')
@@ -381,6 +446,12 @@ onMounted(load)
 }
 
 .memory-tabs {
+  margin-top: 16px;
+}
+
+.memory-toolbar {
+  display: flex;
+  justify-content: flex-end;
   margin-top: 16px;
 }
 

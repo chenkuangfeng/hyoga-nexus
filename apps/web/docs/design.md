@@ -328,3 +328,7 @@ useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏�
 ### 从当前会话整理私有技能
 
 工作台聊天页沿用 WeKnora `views/chat/index.vue` / `components/ChatHeader.vue` 的会话标题栏布局，增加“整理为技能”操作。仅当当前会话智能体版本的工具绑定包含 `skill_search`、`skill_manage`、`skill_save`，会话已有用户消息、Run 空闲且未阻塞并且不是嵌入模式时显示。点击后以本地化指令调用原有 `sendText` 提交普通用户消息；模型被要求只从已验证的对话内容生成新私有草稿、读取并展示完整 `SKILL.md`，并等待用户明确要求保存。保存仍经 `skill_save` 的工具审批、私有技能扫描和版本/构建流水线；本功能不自动修改已发布技能或启动后台复盘。
+
+### Workspace 我的记忆分区
+
+`NexusMemorySettings.vue` 沿用 WeKnora 固定版本 `e1f9a6166` 的 `frontend/src/views/settings/MemorySettings.vue` 设置行、列表工具栏与手动输入模式；按 Nexus 现有记忆契约改为两个顶层 TDesign Tab，原类别作为“记忆”的二级 Tab。新增使用对话框，收集标题、类型、内容和重要度，失败保留输入，提交期间禁止重复操作；沿用原归档确认。新增客户端调用 `POST native/memory`，本人提交就是明确发布，后端沿用筛查、去重与容量规则。组件局部语言包提供分区标签，避免影响共享语言文件。

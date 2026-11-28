@@ -53,15 +53,17 @@ class SqlMemoryRepository:
     def pending_drafts(self, tenant_id: UUID, owner_id: UUID) -> list[DraftView]:
         query = (
             select(MemoryDraftRecord, RunRecord.principal_id)
-            .join(RunRecord, RunRecord.id == MemoryDraftRecord.source_run_id)
+            .outerjoin(RunRecord, RunRecord.id == MemoryDraftRecord.source_run_id)
             .where(
                 MemoryDraftRecord.tenant_id == tenant_id,
-                RunRecord.principal_id == owner_id,
+                ((RunRecord.principal_id == owner_id)
+                 | (MemoryDraftRecord.source_run_id.is_(None)
+                    & (MemoryDraftRecord.scope == f'user:{owner_id}'))),
                 MemoryDraftRecord.status == 'pending_review',
             )
             .order_by(MemoryDraftRecord.created_at)
         )
-        return [_draft(row, owner) for row, owner in self.db.execute(query).all()]
+        return [_draft(row, owner or owner_id) for row, owner in self.db.execute(query).all()]
 
     def owned_entry(self, tenant_id: UUID, owner_id: UUID, entry_id: UUID, *, lock: bool = False) -> EntryView | None:
         query = select(MemoryEntryRecord).where(
@@ -85,6 +87,8 @@ class SqlMemoryRepository:
         )
         if row is None or row.tenant_id != tenant_id:
             return None
+        if row.source_run_id is None and row.scope.startswith('user:'):
+            return _draft(row, UUID(row.scope.removeprefix('user:')))
         run = self.db.get(RunRecord, row.source_run_id)
         if run is None:
             return None
@@ -103,8 +107,10 @@ class SqlMemoryRepository:
             return ('entry', entry)
         draft = self.db.scalar(
             select(MemoryDraftRecord.id)
-            .join(RunRecord, RunRecord.id == MemoryDraftRecord.source_run_id)
-            .where(MemoryDraftRecord.tenant_id == tenant_id, RunRecord.principal_id == owner_id,
+            .outerjoin(RunRecord, RunRecord.id == MemoryDraftRecord.source_run_id)
+            .where(MemoryDraftRecord.tenant_id == tenant_id, ((RunRecord.principal_id == owner_id)
+                 | (MemoryDraftRecord.source_run_id.is_(None)
+                    & (MemoryDraftRecord.scope == f'user:{owner_id}'))),
                    MemoryDraftRecord.status == 'pending_review', MemoryDraftRecord.fingerprint == fingerprint)
             .limit(1)
         )
@@ -170,14 +176,19 @@ class SqlMemoryRepository:
 
     # --- writes ------------------------------------------------------------
 
-    def create_draft(self, *, tenant_id: UUID, source_run_id: UUID, kind: str, diff: str, fingerprint: str,
+    def create_draft(self, *, tenant_id: UUID, source_run_id: UUID | None, kind: str, diff: str, fingerprint: str,
                      base_version: int | None, origin: str, source_message_ids: tuple[str, ...],
                      meta: DraftMeta | None = None) -> UUID:
-        run = self.db.get(RunRecord, source_run_id)
+        run = self.db.get(RunRecord, source_run_id) if source_run_id else None
         meta = meta or DraftMeta()
+        # Consolidation may edit a manually authored entry that has no originating Run.
+        target = self.db.get(MemoryEntryRecord, meta.target_entry_id) if meta.target_entry_id else None
+        if run is None and (target is None or target.tenant_id != tenant_id):
+            raise ValueError('Run-free draft requires an existing memory target')
+        scope = str(run.session_id) if run else f'user:{target.owner_user_id}'
         row = MemoryDraftRecord(
             id=new_id(), tenant_id=tenant_id, source_run_id=source_run_id, kind=kind,
-            scope=str(run.session_id), diff=diff, status='pending_review', created_at=utc_now(),
+            scope=scope, diff=diff, status='pending_review', created_at=utc_now(),
             origin=origin, fingerprint=fingerprint, base_version=base_version,
             source_message_ids=list(source_message_ids),
             topic=meta.topic or None, importance=meta.importance, confidence=meta.confidence,
@@ -231,7 +242,7 @@ class SqlMemoryRepository:
         if valid_until is not UNSET:
             row.valid_until = valid_until
 
-    def append_version(self, *, entry_id: UUID, version: int, content: str, source_run_id: UUID,
+    def append_version(self, *, entry_id: UUID, version: int, content: str, source_run_id: UUID | None,
                        source_draft_id: UUID | None, reviewer_id: UUID | None, fingerprint: str,
                        source_message_ids: tuple[str, ...]) -> None:
         search_id = self.db.scalar(select(func.coalesce(func.max(MemoryVersionRecord.search_id), 0))) + 1

@@ -79,7 +79,10 @@ def list_memory(db, principal: Principal, tenant_id: UUID) -> dict[str, Any]:
 def read(db, principal: Principal, tenant_id: UUID, entry_id: UUID, version: int | None = None) -> dict[str, Any]:
     with db.begin():
         user, _ = context(db, principal, tenant_id)
-        return rules.read(SqlMemoryRepository(db), user.id, tenant_id, entry_id, version)
+        result = rules.read(SqlMemoryRepository(db), user.id, tenant_id, entry_id, version)
+        if result.get('source_run_id') == 'None':
+            result['source_run_id'] = None
+        return result
 
 
 @_translate
@@ -118,3 +121,36 @@ def restore(db, principal: Principal, tenant_id: UUID, entry_id: UUID, version: 
     with db.begin():
         user, _ = context(db, principal, tenant_id)
         return rules.restore(SqlMemoryRepository(db), user.id, tenant_id, entry_id, version, expected_version)
+
+
+@_translate
+def create_manual(db, principal: Principal, tenant_id: UUID, *, title: str, kind: str,
+                  content: str, importance: int = 3) -> dict[str, Any]:
+    """Publish a user's explicit form submission atomically, retaining truthful manual provenance.
+
+    No Run is fabricated. Screening, deduplication, tombstones and publication budgets still apply;
+    failure rolls back both the manual draft and its publication.
+    """
+    from nexus_core.platform import new_id
+    from nexus_memory import text
+    from nexus_platform.persistence.models import MemoryDraftRecord
+
+    with db.begin():
+        user, _ = context(db, principal, tenant_id)
+        if not title.strip() or not content.strip() or kind not in rules.KIND_VALUES:
+            raise ValueError('Memory title, content or kind is invalid')
+        screened = text.screen(content)
+        if screened.threats:
+            raise Conflict('Memory content rejected')
+        fingerprint = text.fingerprint(screened.text)
+        repo = SqlMemoryRepository(db)
+        if repo.is_tombstoned(tenant_id, user.id, fingerprint) or repo.find_duplicate(tenant_id, user.id, fingerprint):
+            raise Conflict('Memory already exists or was previously rejected')
+        draft = MemoryDraftRecord(id=new_id(), tenant_id=tenant_id, source_run_id=None,
+                                  scope=f'user:{user.id}', kind=kind, diff=screened.text,
+                                  status='pending_review', created_at=utc_now(), origin='manual',
+                                  fingerprint=fingerprint, importance=importance)
+        db.add(draft)
+        db.flush()
+        return rules.review(repo, user.id, tenant_id, draft.id, approve=True,
+                            title=title.strip(), importance=importance)

@@ -161,3 +161,12 @@ export async function clearMemoryDocAffinity(tenantId: string, documentId?: stri
   const query = documentId ? `?document_id=${encodeURIComponent(documentId)}` : ''
   await del(`${memoryPath(tenantId)}/memory-doc-affinity${query}`)
 }
+
+/** Explicit form submission publishes a private memory with server-owned manual provenance. */
+export async function createManualMemory(tenantId: string,
+  body: { title: string; kind: 'memory' | 'sop' | 'profile' | 'interest'; content: string; importance: number }): Promise<void> {
+  const data: unknown = await post(`${memoryPath(tenantId)}/memory`, body)
+  if (!isRecord(data) || data.status !== 'published' || !isString(data.id)) {
+    throw new Error('Unexpected memory creation response')
+  }
+}

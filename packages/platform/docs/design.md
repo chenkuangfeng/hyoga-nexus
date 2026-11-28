@@ -151,3 +151,7 @@ Redis 后端每个（事件循环，Run）一个共享的阻塞读取器，再�
 `context.assembled` 记录来源摘要、大小、准备耗时和请求估算，不保存正文；`model.started`/`model.attempt` 关联 assembly_id。`context.provider_failed` 只含 provider 名与错误码。MCP 的有效 schema/风险指纹也作为来源依赖，改变风险要求或禁用服务后旧声明不能继续发送。工具 schema 在 Run 内冻结摘要，等待恢复时使用规范化 JSON 检查一致性，恢复出的不同声明以 `context_prefix_changed` 拒绝。新增上下文写事务在 SQLite 先取得写入保留锁，再读取账本和校验租约，避免与嵌入式 worker 续租并发时发生读锁升级失败；PostgreSQL 继续使用 Run 行锁。
 
 迁移将已有执行记录的未知来源账本标为 schema_version=0，后续不回放给模型；原始消息与受授权审计仍保留。插件可用 resource 依赖声明注册资源的 UUID、版本和 read/use 权限，每次请求重新校验跨空间授权。
+
+### 手动记忆来源
+
+`POST /api/v1/tenants/{tenant_id}/native/memory` 经认证上下文确定空间和所有者。`create_manual` 在同一事务中筛查正文、检查重复与拒绝墓碑、创建 `origin=manual`、`scope=user:<owner UUID>` 的草稿并通过现有 `review` 执行明确发布与容量校验。手动提交没有 Run，草稿和版本的 `source_run_id` 可空，其他来源仍保留真实 Run。读取返回空来源而非伪造运行记录；归档仍使用已有所有权校验与历史保留。

@@ -42,3 +42,57 @@ def test_owner_can_disable_and_set_validity_while_others_get_not_found(settings_
     assert client.patch(root + '/memory/' + entry_id, json={'enabled': True}).status_code == 404
     identity[0] = owner
     assert client.get(root + '/memory/' + entry_id).status_code == 200
+
+
+def test_manual_memory_needs_no_run_and_retains_owner_isolation(settings_client, database):  # noqa: F811
+    client, path, identity, owner, member, tenant_id = settings_client
+    root = path.removesuffix('/model-settings') + '/native'
+    body = {'title': '回复偏好', 'kind': 'profile', 'content': '我喜欢用中文交流并提供简洁的说明。', 'importance': 4}
+    response = client.post(root + '/memory', json=body)
+    assert response.status_code == 201, response.text
+    entry_id = response.json()['id']
+    read = client.get(root + '/memory/' + entry_id)
+    assert read.status_code == 200
+    assert read.json()['content'] == body['content']
+    assert client.post(root + '/memory', json=body).status_code == 409
+    assert client.post(root + '/memory', json={**body, 'content': '   '}).status_code == 422
+    assert client.post(root + '/memory', json={**body, 'kind': 'unknown'}).status_code == 422
+    identity[0] = member
+    assert client.get(root + '/memory/' + entry_id).status_code == 404
+    assert client.delete(root + '/memory/' + entry_id).status_code == 404
+    identity[0] = owner
+    assert client.delete(root + '/memory/' + entry_id).status_code == 200
+    assert all(row['id'] != entry_id for row in client.get(root + '/memory').json()['entries'])
+
+
+def test_manual_memory_budget_failure_rolls_back_draft(settings_client):
+    client, path, *_ = settings_client
+    root = path.removesuffix('/model-settings') + '/native'
+    body = {'title': '内容', 'kind': 'memory'}
+    assert client.post(root + '/memory', json={**body, 'content': 'x' * 6001}).status_code == 409
+    assert client.get(root + '/memory').json() == {'entries': [], 'drafts': []}
+
+
+def test_manual_memory_can_be_consolidated_without_fabricated_run(settings_client, database):  # noqa: F811
+    from nexus_memory import service as rules
+
+    client, path, identity, owner, member, tenant_id = settings_client
+    root = path.removesuffix('/model-settings') + '/native'
+    for title, content in [('语言', '我喜欢用中文交流。'), ('说明', '我喜欢简洁的说明。')]:
+        assert client.post(root + '/memory', json={'title': title, 'content': content}).status_code == 201
+    with database() as db:
+        with db.begin():
+            user = resolve_user(db, owner)
+            repo = SqlMemoryRepository(db)
+            entries = repo.live_entries(tenant_id, user.id)
+            proposal = rules.propose_merge(repo, tenant_id, user.id, keep=entries[0], others=[entries[1]],
+                                           merged='我喜欢用中文交流，并希望说明简洁。')
+    assert proposal['status'] == 'pending'
+    assert len(client.get(root + '/memory').json()['drafts']) == 1
+    identity[0] = member
+    assert client.get(root + '/memory').json()['drafts'] == []
+    identity[0] = owner
+    response = client.post(root + '/memory-drafts/' + proposal['id'] + '/review',
+                           json={'approve': True, 'title': '交流偏好'})
+    assert response.status_code == 200
+    assert len(client.get(root + '/memory').json()['entries']) == 1

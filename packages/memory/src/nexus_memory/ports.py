@@ -64,7 +64,7 @@ class VersionView:
     entry_id: UUID
     version: int
     content: str
-    source_run_id: UUID
+    source_run_id: UUID | None
     source_draft_id: UUID | None
     fingerprint: str = ''
     source_message_ids: tuple[str, ...] = ()
@@ -72,14 +72,14 @@ class VersionView:
 
 @dataclass(frozen=True)
 class DraftView:
-    """A proposed memory change; `owner_user_id` is the principal of the run that proposed it."""
+    """A proposed memory change; owner comes from its Run or explicit manual scope."""
     id: UUID
     tenant_id: UUID
     owner_user_id: UUID
     kind: str
     diff: str
     status: str
-    source_run_id: UUID
+    source_run_id: UUID | None
     fingerprint: str = ''
     base_version: int | None = None
     origin: str = 'foreground'
@@ -151,7 +151,7 @@ class MemoryRepository(Protocol):
         filter; otherwise entries with project '' (global) or equal to `project` are returned."""
 
     def pending_drafts(self, tenant_id: UUID, owner_id: UUID) -> list[DraftView]:
-        """Drafts awaiting review whose source run belongs to `owner_id`, oldest first."""
+        """Drafts awaiting review owned by `owner_id` (Run or manual source), oldest first."""
 
     def owned_entry(self, tenant_id: UUID, owner_id: UUID, entry_id: UUID, *, lock: bool = False) -> EntryView | None:
         """Active entry owned by `owner_id` in `tenant_id`, or None. `lock=True` takes a row lock."""
@@ -164,10 +164,10 @@ class MemoryRepository(Protocol):
 
     def set_draft_status(self, draft_id: UUID, status: str) -> None: ...
 
-    def create_draft(self, *, tenant_id: UUID, source_run_id: UUID, kind: str, diff: str, fingerprint: str,
+    def create_draft(self, *, tenant_id: UUID, source_run_id: UUID | None, kind: str, diff: str, fingerprint: str,
                      base_version: int | None, origin: str, source_message_ids: tuple[str, ...],
                      meta: DraftMeta | None = None) -> UUID:
-        """Insert a pending draft. The owner is the principal of `source_run_id`. `meta` defaults to empty."""
+        """Insert a pending draft. Run-free consolidation derives ownership from `meta.target_entry_id`."""
 
     def find_duplicate(self, tenant_id: UUID, owner_id: UUID, fingerprint: str) -> tuple[str, UUID] | None:
         """(`entry` | `draft`, id) of a current published version or pending draft with this fingerprint."""
@@ -197,7 +197,7 @@ class MemoryRepository(Protocol):
                    topic: str | None = None, importance: int | None = None) -> None:
         """Set the entry's current version and any provided header fields. `UNSET` leaves `valid_until` as is."""
 
-    def append_version(self, *, entry_id: UUID, version: int, content: str, source_run_id: UUID,
+    def append_version(self, *, entry_id: UUID, version: int, content: str, source_run_id: UUID | None,
                        source_draft_id: UUID | None, reviewer_id: UUID | None, fingerprint: str,
                        source_message_ids: tuple[str, ...]) -> None:
         """Append an immutable version and update the keyword index in the same transaction."""
