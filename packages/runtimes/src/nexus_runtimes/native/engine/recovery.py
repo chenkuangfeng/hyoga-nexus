@@ -21,6 +21,7 @@ async def resume_tools(state, gateway, token, definitions, hook, turn, append, *
             arguments = json.loads(pending[index].arguments)
             working.key_info = str(arguments.get('key_info', arguments.get('content', '')))
             state['key_info'] = working.key_info
+            state['checkpoint_updated'] = True
         if result.disposition != ToolDisposition.CONTINUE:
             for call in pending[index + 1:]:
                 await append(ModelMessage('tool', 'Not executed: previous tool ended this turn.', tool_call_id=call.id))

@@ -15,7 +15,7 @@ from nexus_core.runtime import (
 )
 from nexus_runtimes.native.context import resolve_incomplete_exchanges
 from nexus_runtimes.native.context.assembler import ContextAssembler
-from nexus_runtimes.native.context.working import WorkingMemory
+from nexus_runtimes.native.context.working import WorkingMemory, apply_checkpoint
 from nexus_runtimes.native.hooks import HookRegistry
 from .completion import CompletionJudge, JudgeDecision
 from .turn import TurnExecutor, TurnResponse
@@ -182,6 +182,12 @@ class RunOrchestrator:
                     from .recovery import resume_tools
                     resumed = await resume_tools(state, self.tools, token, definitions, hook, progress.turns, append,
                                                  progress=progress, budget=budget, working=working)
+                    if state.pop('checkpoint_updated', False):
+                        history = apply_checkpoint(history, working.key_info)
+                        working.key_info = ''
+                        working.history.clear()
+                        state['key_info'] = ''
+                        state['history_info'] = []
                     await self.store.save_progress(progress)
                     if resumed:
                         return resumed
@@ -367,6 +373,12 @@ class RunOrchestrator:
                     else:
                         dispatch = await self.dispatcher.dispatch(response.calls, definitions, token, hook, turn,
                             append=append, state=state, progress=progress, budget=budget, working=working)
+                        if state.pop('checkpoint_updated', False):
+                            history = apply_checkpoint(history, working.key_info)
+                            working.key_info = ''
+                            working.history.clear()
+                            state['key_info'] = ''
+                            state['history_info'] = []
                         if dispatch.terminal:
                             terminal, outcome = True, dispatch.outcome
                         elif dispatch.continuations:

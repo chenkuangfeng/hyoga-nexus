@@ -61,6 +61,7 @@ class ToolDispatcher:
                 arguments = json.loads(call.arguments)
                 working.key_info = str(arguments.get('key_info', arguments.get('content', '')))
                 state['key_info'] = working.key_info
+                state['checkpoint_updated'] = True
             if result.disposition != ToolDisposition.CONTINUE:
                 for deferred in calls[index + 1:]:
                     await append(ModelMessage('tool', 'Not executed: previous tool ended this turn.', tool_call_id=deferred.id))

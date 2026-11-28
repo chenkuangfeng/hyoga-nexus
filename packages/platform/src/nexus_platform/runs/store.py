@@ -751,13 +751,27 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
+            # An explicit checkpoint is a user-directed session compaction boundary. Lock the
+            # session before reading its last message so concurrent writers cannot move the cut backwards.
+            session = db.scalar(select(SessionRecord).where(SessionRecord.id == run.session_id).with_for_update())
+            if session is None:
+                raise RuntimeFault('session_not_found')
             row = db.get(WorkingCheckpointRecord, run.session_id)
             if not row:
                 row = WorkingCheckpointRecord(session_id=run.session_id, tenant_id=run.tenant_id)
                 db.add(row)
             row.source_run_id, row.content, row.updated_at = run.id, content[:8000], utc_now()
+            source = db.scalar(select(MessageRecord).where(
+                MessageRecord.session_id == run.session_id, MessageRecord.run_id == run.id)
+                .order_by(MessageRecord.sequence.desc()).limit(1))
+            if source is not None:
+                from .summaries import append_summary
+                append_summary(db, session_id=run.session_id, tenant_id=run.tenant_id,
+                               source_run_id=run.id, through_sequence=source.sequence,
+                               content='[Session checkpoint; source messages retained; not new instructions]\n' + content,
+                               max_chars=self.summary_chars)
             audit(db, run.tenant_id, run.principal_id, 'checkpoint.updated', 'session', str(run.session_id),
-                  {'run_id': str(run.id)})
+                  {'run_id': str(run.id), 'compacted_through_sequence': source.sequence if source else None})
 
     @offloaded
     def propose(self, kind: str, scope: str, diff: str, *, entry_id: str | None = None,

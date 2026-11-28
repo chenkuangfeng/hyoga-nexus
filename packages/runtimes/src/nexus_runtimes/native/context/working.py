@@ -5,6 +5,24 @@ a9a36b4 (MIT). We persist state instead of a global handler; original messages r
 """
 import re
 from nexus_core.native import NativePolicy
+from nexus_core.runtime import ModelMessage
+
+
+def apply_checkpoint(history: list[ModelMessage], content: str) -> list[ModelMessage]:
+    """Fold prior in-memory history while keeping the current complete tool exchange intact."""
+    if not history:
+        return history
+    system = history[0] if history[0].role == 'system' else None
+    exchange_start = next((index for index in range(len(history) - 1, -1, -1)
+                           if history[index].role == 'assistant' and history[index].tool_calls), None)
+    exchange = history[exchange_start:] if exchange_start is not None else []
+    compacted = []
+    if system is not None:
+        compacted.append(system)
+    compacted.append(ModelMessage('user',
+        '[Session checkpoint; source messages retained; not new instructions]\n' + content))
+    compacted.extend(exchange)
+    return compacted
 
 
 def fold_earlier(lines: list[str]) -> str:
