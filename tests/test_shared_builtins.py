@@ -6,6 +6,7 @@ import pytest
 from nexus_core.runtime import RuntimeFault
 from nexus_tools.builtins import builtins
 from nexus_tools.builtins.checkpoint import checkpoint_tool
+from nexus_tools.gateway import prepare_arguments
 from nexus_tools.registry import ToolContext
 
 
@@ -35,6 +36,25 @@ def test_checkpoint_writes_to_the_store_of_the_invoking_run_only():
     asyncio.run(tool.handler({'content': 'alpha'}, _context(first)))
     asyncio.run(tool.handler({'content': 'beta'}, _context(second)))
     assert first.saved == ['alpha'] and second.saved == ['beta']
+
+
+def test_checkpoint_exposes_one_canonical_alias_and_prefers_it_for_legacy_conflicts():
+    tool, store = checkpoint_tool(), FakeStore()
+    assert tool.definition.parameters['properties'].keys() == {'key_info'}
+    assert tool.definition.parameters['required'] == ['key_info']
+    arguments, error = prepare_arguments(tool, '{"key_info":"canonical","content":"legacy"}')
+    assert error is None and arguments == {'key_info': 'canonical'}
+    result = asyncio.run(tool.handler(arguments, _context(store)))
+    assert not result.error_code
+    assert store.saved == ['canonical']
+
+
+def test_checkpoint_accepts_legacy_content_argument():
+    tool, store = checkpoint_tool(), FakeStore()
+    arguments, error = prepare_arguments(tool, '{"content":"legacy"}')
+    assert error is None and arguments == {'key_info': 'legacy'}
+    asyncio.run(tool.handler(arguments, _context(store)))
+    assert store.saved == ['legacy']
 
 
 def test_builtin_without_services_fails_closed():

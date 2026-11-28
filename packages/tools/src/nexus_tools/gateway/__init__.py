@@ -73,6 +73,7 @@ def prepare_arguments(tool, text: str) -> tuple[dict | None, ToolResult | None]:
     schema = tool.definition.parameters
     try:
         parsed = restore_schema_names(parsed, schema)  # undo renames made for the provider (nexus_core.schema)
+        parsed = tool_arguments.normalize_legacy_aliases(tool.definition.name, parsed)
         parsed = tool_arguments.coerce(parsed, schema)
         problems = tool_arguments.describe_errors(schema, parsed)
     except RecursionError:

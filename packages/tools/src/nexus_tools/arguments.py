@@ -9,6 +9,7 @@ only what is unambiguous and report the rest precisely.
   needs an unclosed string or bracket closed is reported as truncated and must not run.
 - `coerce` ports hermes-agent `coerce_tool_args` (tools/arg_coercion.py): only top-level properties,
   local `$ref` resolved, originals kept whenever a repair is not certain.
+- Legacy aliases are normalized to one canonical field before schema validation; the canonical value wins.
 - `describe_errors` formats jsonschema errors (WeKnora `FormatValidationErrors`) without echoing values,
   so long or sensitive argument text is never sent back to the model.
 
@@ -26,6 +27,10 @@ from jsonschema import Draft202012Validator
 #: Bounds of the error text returned to the model.
 MAX_ERRORS = 5
 MAX_ERROR_CHARS = 1000
+LEGACY_ARGUMENT_ALIASES = {
+    # GenericAgent's checkpoint contract uses `key_info`; older Nexus calls used `content`.
+    'update_working_checkpoint': {'content': 'key_info'},
+}
 
 
 # ---------------------------------------------------------------- JSON repair
@@ -193,6 +198,19 @@ def coerce(arguments: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
         if coerced is not value:
             out[key] = _normalize(coerced, prop, schema) if isinstance(coerced, (list, dict)) else coerced
     return out
+
+
+def normalize_legacy_aliases(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Map retired argument names to the current schema, preferring an explicit canonical value."""
+    aliases = LEGACY_ARGUMENT_ALIASES.get(tool_name)
+    if not aliases or not any(alias in arguments for alias in aliases):
+        return arguments
+    normalized = dict(arguments)
+    for alias, canonical in aliases.items():
+        if alias in normalized:
+            normalized.setdefault(canonical, normalized[alias])
+            del normalized[alias]
+    return normalized
 
 
 _BAD_POINTER_ESCAPE = re.compile(r'~(?![01])')

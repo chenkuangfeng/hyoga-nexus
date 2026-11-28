@@ -9,7 +9,7 @@
 | `registry` | `RegisteredTool`、`ToolRegistry`、调用适配 |
 | `builtins` | 内置工具与编辑器目录（`catalog.py`，返回 `risk` 与派生的 `risk_level`） |
 | `gateway` | `AuthorizedToolGateway`：执行管线、外置、截断、审批与放行接入 |
-| `arguments` | 参数容错：`repair_json`、`coerce`、`describe_errors` |
+| `arguments` | 参数容错和旧参数别名归一：`repair_json`、`normalize_legacy_aliases`、`coerce`、`describe_errors` |
 | `output` | 头尾截断 `truncate` |
 | `threats` | 工具输出注入特征扫描 |
 | `policy` | 风险 × 访问级别 → `allow` / `ask` / `deny` |
@@ -18,7 +18,7 @@
 ## 执行管线（`AuthorizedToolGateway.execute`）
 
 1. 查找绑定与注册；实时授权（`ToolAccessPort.authorize`），之后按访问级别判断，`deny` 返回 `tool_authorization_denied`。
-2. 参数预处理（`prepare_arguments`）：解析失败时尝试 `repair_json`；需要补齐未闭合字符串或括号即视为截断，返回 `tool_arguments_truncated`，不执行。再按 schema 保守转换类型（`coerce`），校验失败返回带字段路径与原因的 `tool_arguments_invalid`（最多 5 条、1000 字符，不回显参数值）。规范化后的参数写回 `ToolCall.arguments`。
+2. 参数预处理（`prepare_arguments`）：解析失败时尝试 `repair_json`；需要补齐未闭合字符串或括号即视为截断，返回 `tool_arguments_truncated`，不执行。模型工具 Schema 只暴露检查点的规范字段 `key_info`；旧 `content` 调用在校验前映射为 `key_info`，若两者同时存在则规范字段优先。之后按 schema 保守转换类型（`coerce`），校验失败返回带字段路径与原因的 `tool_arguments_invalid`（最多 5 条、1000 字符，不回显参数值）。规范化后的参数写回 `ToolCall.arguments`。
 3. 参数守卫（`guard.scan`）：`CRITICAL` 返回 `tool_guard_denied`，任何放行都不能绕过；`HIGH` 以 `reason='guard'` 进入审批，会话放行不适用；所有命中写事件 `tool.guard_finding`。
 4. 审批：访问级别为 `ask`（含工具声明的 `requires_approval`）或守卫要求时进入。策略触发且非 `destructive` 的审批先查会话放行（`ToolAccessPort.grant`）。审批人修改的参数重新预处理。
 5. 执行（超时、取消、副作用工具的 `interrupted` 语义不变）。
