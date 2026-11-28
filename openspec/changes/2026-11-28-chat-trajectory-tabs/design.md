@@ -5,3 +5,5 @@
 实现参考 DeepSeek Harness `packages/client/ui-trajectory/src/client/TrajectoryTable.tsx` 的两列事件/内容表、可键盘选择的记录行与点击检查器，以及 `trajectory-record.ts` 的类型化记录详情。Nexus 使用数据库模型请求快照而不是将 RunEvent 直接投影为轨迹行；不复制参考项目的完整虚拟化时间轴。
 
 活动行使用会话已持久化的 `MessageRecord` 呈现用户与助手文本，工具结果通过仅暴露 opaque `tool_call_id` 与模型请求快照中的调用配对，不额外暴露整份 `runtime_metadata`。每轮模型 usage 汇总到对应助手活动行；顶部缓存命中卡片汇总 `usage.cache_read`，仅当输入用量有效时计算占比。模型请求计数仍按独立轨迹表记录计算。
+
+列表先按会话中 Run 的首次活动时间排序并分组；每组显示 Run 序号及短 ID，表格列固定为活动、内容、Token。用 `table-layout: fixed` 和单行省略控制长文本，Token 列在数据可用时标明实际值或估算值，详情检查器继续提供完整正文。

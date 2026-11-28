@@ -120,6 +120,17 @@ const activities = computed<Activity[]>(() => {
   }
   return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.sequence - b.sequence)
 })
+const activityGroups = computed(() => {
+  const byRun = new Map<string, Activity[]>()
+  for (const activity of activities.value) byRun.set(activity.runId, [...(byRun.get(activity.runId) ?? []), activity])
+  return [...byRun.entries()]
+    .sort(([, left], [, right]) => (left[0]?.createdAt ?? '').localeCompare(right[0]?.createdAt ?? ''))
+    .map(([runId, items], index) => ({
+      runId,
+      label: `${t('nexusChat.trajectory.runGroup', { run: index + 1 })} · ${runId.slice(0, 8)}`,
+      activities: items,
+    }))
+})
 
 watch(activities, items => {
   if (!items.some(item => item.id === selectedId.value)) selectedId.value = items[0]?.id ?? ''
@@ -179,16 +190,16 @@ function details(value: unknown): string {
       <div v-else class="trajectory__split">
         <div class="trajectory__table-scroll">
           <table class="trajectory__table">
-            <thead><tr><th>{{ t('nexusChat.trajectory.record') }}</th><th>{{ t('nexusChat.trajectory.content') }}</th></tr></thead>
-            <tbody>
-              <tr v-for="activity in activities" :key="activity.id" :aria-selected="activity.id === selectedId"
+            <colgroup><col class="trajectory__kind-column"><col><col class="trajectory__token-column"></colgroup>
+            <thead><tr><th>{{ t('nexusChat.trajectory.record') }}</th><th>{{ t('nexusChat.trajectory.content') }}</th><th>{{ t('nexusChat.trajectory.tokensHeader') }}</th></tr></thead>
+            <tbody v-for="group in activityGroups" :key="group.runId" :data-run-id="group.runId">
+              <tr class="trajectory__run-row"><th colspan="3" :title="group.runId">{{ group.label }}</th></tr>
+              <tr v-for="activity in group.activities" :key="activity.id" :aria-selected="activity.id === selectedId"
                 :data-kind="activity.kind" :data-status="activity.status" tabindex="0" @click="selectedId = activity.id"
                 @keydown.enter.prevent="selectedId = activity.id" @keydown.space.prevent="selectedId = activity.id">
-                <td><strong>{{ activityLabel(activity.kind) }}</strong><small>{{ activity.turn ? t('nexusChat.trajectory.turn', { turn: activity.turn }) : activity.createdAt }}</small></td>
-                <td class="trajectory__summary" :title="activity.summary">
-                  <span>{{ activity.summary }}</span>
-                  <small v-if="activityTokens(activity)">{{ activityTokens(activity) }}</small>
-                </td>
+                <td class="trajectory__kind"><strong>{{ activityLabel(activity.kind) }}</strong><small>{{ activity.turn ? t('nexusChat.trajectory.turn', { turn: activity.turn }) : activity.createdAt }}</small></td>
+                <td class="trajectory__summary" :title="activity.summary"><span>{{ activity.summary }}</span></td>
+                <td class="trajectory__tokens" :title="activityTokens(activity) ?? ''"><span v-if="activityTokens(activity)">{{ activityTokens(activity) }}</span></td>
               </tr>
             </tbody>
           </table>
@@ -232,16 +243,23 @@ function details(value: unknown): string {
 .trajectory__stat strong { font-size: var(--app-text-lg); line-height: 1.2; font-variant-numeric: tabular-nums; }
 .trajectory__split { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(320px, 1.2fr) minmax(320px, 1fr); overflow: hidden; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-md); background: var(--td-bg-color-container); }
 .trajectory__table-scroll { min-width: 0; overflow: auto; border-right: 1px solid var(--td-component-stroke); }
-.trajectory__table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--app-text-sm); }
+.trajectory__table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: var(--app-text-sm); }
+.trajectory__kind-column { width: 104px; }
+.trajectory__token-column { width: 88px; }
 .trajectory__table th { position: sticky; top: 0; z-index: 1; padding: 9px 10px; background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-secondary); font-weight: 500; }
 .trajectory__table td { max-width: 360px; padding: 10px; border-top: 1px solid var(--td-component-stroke); vertical-align: top; }
+.trajectory__table .trajectory__run-row th { position: static; padding: 8px 10px; border-top: 1px solid var(--td-component-stroke); background: var(--td-bg-color-container); color: var(--td-text-color-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trajectory__table tbody tr { cursor: pointer; }
+.trajectory__table tbody tr.trajectory__run-row { cursor: default; }
 .trajectory__table tbody tr:hover { background: var(--td-bg-color-container-hover); }
+.trajectory__table tbody tr.trajectory__run-row:hover { background: var(--td-bg-color-container); }
 .trajectory__table tbody tr[aria-selected="true"] { background: var(--td-brand-color-light); }
 .trajectory__table tbody tr:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
-.trajectory__table td:first-child strong, .trajectory__table td:first-child small, .trajectory__table td:last-child span, .trajectory__table td:last-child small { display: block; }
-.trajectory__table td:first-child small, .trajectory__table td:last-child small { margin-top: 4px; }
-.trajectory__summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trajectory__table .trajectory__kind strong, .trajectory__table .trajectory__kind small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trajectory__table .trajectory__kind small { margin-top: 4px; }
+.trajectory__summary, .trajectory__tokens { overflow: hidden; }
+.trajectory__summary span, .trajectory__tokens span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trajectory__tokens { color: var(--td-text-color-secondary); font-size: var(--app-text-xs); font-variant-numeric: tabular-nums; }
 .trajectory__inspector { min-width: 0; overflow: auto; padding: 14px; }
 .trajectory__inspector header h2 { margin: 0 0 3px; font-size: var(--app-text-md); }
 .trajectory__metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 12px 0; }

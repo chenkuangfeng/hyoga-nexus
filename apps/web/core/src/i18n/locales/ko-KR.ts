@@ -8692,6 +8692,7 @@ export default {
       showLess: '접기'
     },
     trajectory: {
+      runGroup: 'Run {run}', tokensHeader: '토큰',
       totalTokens: '총 토큰', sessionTotalHint: '세션 내 Run 합계', cacheHits: '캐시 적중', cacheRate: '입력의 {rate}%', cacheRateUnknown: '캐시 사용량이 반환되지 않음',
       tokensActual: '실제', tokensEstimated: '추정', activityUser: '사용자', activityAssistant: '어시스턴트', activityTool: '도구', turn: '{turn}번째 턴', toolArguments: '도구 인수', toolResult: '실행 결과',
       conversation: '대화', title: '추적', tabsLabel: '세션 실행 추적', empty: '실행 이벤트가 없습니다',

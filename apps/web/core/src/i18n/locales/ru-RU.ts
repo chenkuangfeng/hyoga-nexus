@@ -8692,6 +8692,7 @@ export default {
       showLess: 'Свернуть'
     },
     trajectory: {
+      runGroup: 'Run {run}', tokensHeader: 'Токены',
       totalTokens: 'Всего токенов', sessionTotalHint: 'Сумма Run в сеансе', cacheHits: 'Попадания в кэш', cacheRate: '{rate}% входных токенов', cacheRateUnknown: 'Расход кэша не возвращён',
       tokensActual: 'факт', tokensEstimated: 'оценка', activityUser: 'Пользователь', activityAssistant: 'Ассистент', activityTool: 'Инструмент', turn: 'Ход {turn}', toolArguments: 'Аргументы инструмента', toolResult: 'Результат выполнения',
       conversation: 'Чат', title: 'Траектория', tabsLabel: 'Ход выполнения сеанса', empty: 'Событий запусков пока нет',
