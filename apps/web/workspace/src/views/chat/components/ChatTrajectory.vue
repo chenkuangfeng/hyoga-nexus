@@ -164,12 +164,11 @@ watch(activities, items => {
   if (!items.some(item => item.id === selectedId.value)) selectedId.value = ''
 }, { immediate: true })
 const selected = computed(() => activities.value.find(item => item.id === selectedId.value) ?? null)
-const selectedGroup = computed(() => activityGroups.value.flatMap(group => group.groups)
-  .find(group => group.user?.id === selectedId.value || group.activities.some(activity => activity.id === selectedId.value)) ?? null)
-const inspectorRecords = computed(() => [...new Map((selectedGroup.value
-  ? [...(selectedGroup.value.user?.records ?? []), ...selectedGroup.value.activities.flatMap(activity => activity.records)]
-  : selected.value?.records ?? []).map(record => [record.id, record])).values()])
-const inspectorTools = computed(() => selectedGroup.value?.activities.filter(activity => activity.kind === 'tool') ?? [])
+const inspectorRecords = computed(() => selected.value?.records ?? [])
+const inspectorTools = computed(() => {
+  const activity = selected.value
+  return activity?.kind === 'tool' ? [activity] : []
+})
 const totalSessionTokens = computed(() => {
   const totals = new Map<string, number>()
   for (const record of props.records) {
@@ -214,6 +213,10 @@ function toggleGroup(id: string): void {
   else next.add(id)
   collapsedGroups.value = next
 }
+function selectActivity(activity: Activity): void {
+  selectedId.value = activity.id
+  inspectorTab.value = activity.kind === 'tool' ? 'tools' : 'activity'
+}
 function duration(record: RunTrajectoryRecord): string {
   if (!record.completed_at) return '—'
   const elapsed = Math.max(0, new Date(record.completed_at).getTime() - new Date(record.started_at).getTime())
@@ -247,9 +250,9 @@ function details(value: unknown): string {
                   :class="{ 'trajectory__input-row--run-start': inputGroup === group.groups[0] }"
                   :aria-selected="inputGroup.user.id === selectedId"
                   :aria-expanded="!collapsedGroups.has(inputGroup.id)" tabindex="0"
-                  @click="selectedId = inputGroup.user.id; toggleGroup(inputGroup.id)"
-                  @keydown.enter.prevent="selectedId = inputGroup.user.id; toggleGroup(inputGroup.id)"
-                  @keydown.space.prevent="selectedId = inputGroup.user.id; toggleGroup(inputGroup.id)">
+                  @click="selectActivity(inputGroup.user); toggleGroup(inputGroup.id)"
+                  @keydown.enter.prevent="selectActivity(inputGroup.user); toggleGroup(inputGroup.id)"
+                  @keydown.space.prevent="selectActivity(inputGroup.user); toggleGroup(inputGroup.id)">
                   <td class="trajectory__kind" :title="inputGroup.user.createdAt"><strong><span class="trajectory__chevron" :class="{ 'trajectory__chevron--collapsed': collapsedGroups.has(inputGroup.id) }" aria-hidden="true"></span>{{ activityLabel('user') }}</strong></td>
                   <td class="trajectory__summary" :title="inputGroup.user.summary"><span>{{ inputGroup.user.summary }}</span></td>
                   <td class="trajectory__tokens"></td>
@@ -257,8 +260,8 @@ function details(value: unknown): string {
                 <tr v-for="activity in inputGroup.activities" v-show="!collapsedGroups.has(inputGroup.id)"
                   :key="activity.id" class="trajectory__activity-row" :aria-selected="activity.id === selectedId"
                   :data-kind="activity.kind" :data-status="activity.status" tabindex="0"
-                  @click="selectedId = activity.id" @keydown.enter.prevent="selectedId = activity.id"
-                  @keydown.space.prevent="selectedId = activity.id">
+                  @click="selectActivity(activity)" @keydown.enter.prevent="selectActivity(activity)"
+                  @keydown.space.prevent="selectActivity(activity)">
                   <td class="trajectory__kind" :title="activity.turn ? t('nexusChat.trajectory.turn', { turn: activity.turn }) : activity.createdAt"><strong>{{ activityLabel(activity.kind) }}</strong></td>
                   <td class="trajectory__summary" :title="activity.summary"><span>{{ activity.kind === 'tool' && activity.toolName ? displayTool(activity.toolName) : activity.summary }}</span></td>
                   <td class="trajectory__tokens" :title="activityTokens(activity) ?? ''"><span v-if="activityTokens(activity)">{{ activityTokens(activity) }}</span></td>
@@ -273,7 +276,7 @@ function details(value: unknown): string {
             <t-tab-panel value="activity" :label="t('nexusChat.trajectory.details')">
               <details open><summary>{{ activityLabel(selected.kind) }}</summary><pre>{{ selected.content || selected.summary }}</pre></details>
             </t-tab-panel>
-            <t-tab-panel value="tools" :label="`${t('nexusChat.trajectory.toolList')} (${inspectorTools.length})`">
+            <t-tab-panel v-if="inspectorTools.length" value="tools" :label="`${t('nexusChat.trajectory.toolList')} (${inspectorTools.length})`">
               <details v-for="activity in inspectorTools" :key="activity.id" class="trajectory__tool-item">
                 <summary>{{ displayTool(activity.toolName ?? activity.summary) }}</summary>
                 <p v-if="activity.toolArguments !== undefined"><strong>{{ t('nexusChat.trajectory.toolArguments') }}</strong><pre>{{ activity.toolArguments }}</pre></p>
@@ -282,7 +285,7 @@ function details(value: unknown): string {
               </details>
               <p v-if="inspectorTools.length === 0" class="trajectory__empty">—</p>
             </t-tab-panel>
-            <t-tab-panel value="requests" :label="`${t('nexusChat.trajectory.modelRequest')} (${inspectorRecords.length})`">
+            <t-tab-panel v-if="inspectorRecords.length" value="requests" :label="`${t('nexusChat.trajectory.modelRequest')} (${inspectorRecords.length})`">
               <details v-for="record in inspectorRecords" :key="record.id" class="trajectory__request-item">
               <summary>{{ t('nexusChat.trajectory.modelRequest') }} #{{ record.sequence }} · {{ record.status }}</summary>
               <div class="trajectory__metrics">
@@ -327,9 +330,9 @@ function details(value: unknown): string {
 .trajectory__table tbody tr:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
 .trajectory__table .trajectory__input-row td { background: var(--td-bg-color-secondarycontainer); font-weight: 600; }
 .trajectory__table .trajectory__input-row[aria-selected="true"] td { background: var(--td-brand-color-light); }
-.trajectory__table .trajectory__input-row td:first-child { border-left: 3px solid var(--td-brand-color); }
-.trajectory__table .trajectory__input-row--run-start td { box-shadow: inset 0 2px 0 var(--td-brand-color); }
-.trajectory__table .trajectory__activity-row td:first-child { border-left: 3px solid var(--td-component-stroke); padding-left: 19px; }
+.trajectory__table .trajectory__input-row td:first-child { border-left: 1px solid var(--td-component-stroke); }
+.trajectory__table .trajectory__input-row--run-start td { box-shadow: inset 0 1px 0 var(--td-component-stroke); }
+.trajectory__table .trajectory__activity-row td:first-child { border-left: 1px solid var(--td-component-stroke); padding-left: 19px; }
 .trajectory__table .trajectory__activity-row .trajectory__summary { padding-left: 18px; }
 .trajectory__table .trajectory__kind strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 500; }
 .trajectory__table .trajectory__input-row .trajectory__kind strong { font-weight: 650; }
