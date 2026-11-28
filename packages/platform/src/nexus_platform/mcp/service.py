@@ -668,6 +668,17 @@ def _service_ids(service_ids) -> set[UUID]:
     return ids
 
 
+def context_version(tool: VisibleTool) -> str:
+    """Fingerprint the enabled schema and effective risk used by a frozen model catalog.
+
+    MCP catalogs have no immutable published version: a changed risk/schema must invalidate the
+    frozen advertisement rather than silently applying the previous approval requirements.
+    """
+    from nexus_core.runtime.context import context_digest
+    return context_digest({'name': tool.tool_name, 'description': tool.description,
+        'schema': tool.input_schema, 'risk': tool.risk, 'approval': tool.requires_approval})
+
+
 def visible_tools(db: Session, tenant_id: UUID, service_ids) -> list[VisibleTool]:
     """Tools of services bound to the Run's agent, enabled at both service and tool level, with policy.
 
@@ -677,18 +688,23 @@ def visible_tools(db: Session, tenant_id: UUID, service_ids) -> list[VisibleTool
     ids = _service_ids(service_ids)
     if not ids:
         return []
-    services = db.scalars(select(McpServiceRecord).where(McpServiceRecord.id.in_(ids)))
+    services = list(db.scalars(select(McpServiceRecord).where(
+        McpServiceRecord.id.in_(ids), McpServiceRecord.tenant_id == tenant_id,
+        McpServiceRecord.enabled.is_(True))))
+    admitted_ids = [service.id for service in services]
+    catalog = {}
+    for tool in db.scalars(select(McpServiceToolRecord).where(
+            McpServiceToolRecord.service_id.in_(admitted_ids), McpServiceToolRecord.enabled.is_(True),
+            McpServiceToolRecord.catalog_status == 'ready')):
+        catalog.setdefault(tool.service_id, []).append(tool)
+    policies = {(p.service_id, p.tool_name): p for p in db.scalars(select(McpToolApprovalRecord).where(
+        McpToolApprovalRecord.tenant_id == tenant_id, McpToolApprovalRecord.service_id.in_(admitted_ids)))}
     visible: list[VisibleTool] = []
     for service in services:
         if service.tenant_id != tenant_id or not service.enabled:
             continue
-        tool_rows = db.scalars(select(McpServiceToolRecord).where(
-            McpServiceToolRecord.service_id == service.id,
-            McpServiceToolRecord.enabled.is_(True), McpServiceToolRecord.catalog_status == "ready"))
-        for tool in tool_rows:
-            approval = db.scalar(select(McpToolApprovalRecord).where(
-                McpToolApprovalRecord.tenant_id == tenant_id, McpToolApprovalRecord.service_id == service.id,
-                McpToolApprovalRecord.tool_name == tool.tool_name))
+        for tool in catalog.get(service.id, []):
+            approval = policies.get((service.id, tool.tool_name))
             declared = risk.declared_risk(tool.read_only_hint)
             effective, requires = risk.risk_action(
                 approval.explicit_risk if approval else None,
@@ -701,7 +717,7 @@ def visible_tools(db: Session, tenant_id: UUID, service_ids) -> list[VisibleTool
                                        description=tool.description, input_schema=tool.input_schema,
                                        output_schema=tool.output_schema, risk=effective,
                                        requires_approval=requires, timeout=timeout))
-    return visible
+    return sorted(visible, key=lambda t: (str(t.service_id), t.tool_name))
 
 
 def resolve_call(db: Session, tenant_id: UUID, service_id: UUID, tool_name: str, *,

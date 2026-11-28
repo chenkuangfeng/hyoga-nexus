@@ -50,15 +50,24 @@ _LOCK = threading.Lock()
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='memory-provider')
 
 
-def register(provider: MemoryProviderPort) -> None:
-    """Make a provider selectable by spaces. `builtin` is reserved for the platform's own memory."""
-    if not provider.name or provider.name == 'builtin':
+def register(provider: MemoryProviderPort, *, generation: str | None = None) -> None:
+    """Register a trusted implementation; an explicit version permits safe restart reuse.
+
+    Omitting generation uses a process-instance identity and rebuilds old external snapshots.
+    Applications must change an explicit generation when source semantics or scope changes.
+    `builtin` is reserved for the platform's own memory.
+    """
+    if (not provider.name or provider.name == 'builtin'
+            or (generation is not None and (not isinstance(generation, str) or not generation))):
         raise ValueError('Memory provider name is invalid')
+    from uuid import uuid4
     _REGISTRY[provider.name] = provider
+    _GENERATIONS[provider.name] = generation if generation is not None else uuid4().hex
 
 
 def unregister(name: str) -> None:
     _REGISTRY.pop(name, None)
+    _GENERATIONS.pop(name, None)
     _FAILURES.pop(name, None)
     _PAUSED_UNTIL.pop(name, None)
 
@@ -67,11 +76,19 @@ def registered() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def provider_for(db: Session, tenant_id: UUID) -> MemoryProviderPort | None:
-    """The space's provider when it is registered and not paused."""
+def selected_provider(db: Session, tenant_id: UUID) -> MemoryProviderPort | None:
+    """Configured implementation regardless of transient circuit-breaker availability.
+
+    A temporary outage does not revoke permission to already frozen provider material.
+    Removing/changing the space setting or unregistering the implementation does.
+    """
     row = db.get(MemorySpaceSettingsRecord, tenant_id)
-    name = row.memory_provider if row else None
-    provider = _REGISTRY.get(name or '')
+    return _REGISTRY.get((row.memory_provider if row else None) or '')
+
+
+def provider_for(db: Session, tenant_id: UUID) -> MemoryProviderPort | None:
+    """The selected provider when its failure circuit is not currently paused."""
+    provider = selected_provider(db, tenant_id)
     if provider is None or _PAUSED_UNTIL.get(provider.name, 0) > time.monotonic():
         return None
     return provider
@@ -100,7 +117,14 @@ class ProviderContext:
 def call(provider: MemoryProviderPort, hook: str, fn: Callable[[], Any], *, timeout: float,
          audit_to: tuple[Any, UUID, UUID] | None = None) -> Any:
     """Run one hook with a deadline; None on failure. Consecutive failures pause the provider."""
-    future = _POOL.submit(fn)
+    if not _CAPACITY.acquire(blocking=False):
+        return None
+    try:
+        future = _POOL.submit(fn)
+    except BaseException:
+        _CAPACITY.release()
+        raise
+    future.add_done_callback(lambda _: _CAPACITY.release())
     try:
         result = future.result(timeout=timeout)
     except (FutureTimeout, Exception) as exc:
@@ -170,3 +194,62 @@ def after_run(factory: Any, run_id: UUID) -> threading.Thread | None:
                               kwargs={'timeout': SYNC_TIMEOUT, 'audit_to': (factory, tenant_id, owner_id)})
     thread.start()
     return thread
+
+# Admission is bounded as well as execution: timed-out sync hooks retain their slot until
+# the underlying function really ends, so the ThreadPoolExecutor queue cannot grow forever.
+_CAPACITY = threading.BoundedSemaphore(4)
+_GENERATIONS: dict[str, str] = {}
+
+
+def generation(name: str) -> str:
+    """Identity of the currently registered implementation, not an authorization decision."""
+    return _GENERATIONS.get(name, '')
+
+
+def collect_context(provider: MemoryProviderPort, *, tenant_id: UUID, owner_id: UUID,
+                    session_id: UUID, query: str, snapshot: bool, timeout: float = PREFETCH_TIMEOUT) -> dict[str, str]:
+    """Collect independent snapshot/prefetch hooks outside a transaction under one deadline.
+
+    Late results are discarded. Capacity is released by completion, never by the waiting timeout.
+    Returned failures are code-only; the caller writes observability in its final short transaction.
+    """
+    ctx = ProviderContext(str(tenant_id), str(owner_id), str(session_id))
+    hooks = [('prefetch', lambda: provider.prefetch(ctx, query))]
+    if snapshot:
+        hooks.append(('snapshot_block', lambda: provider.snapshot_block(ctx)))
+    futures = {}
+    for name, fn in hooks:
+        if not _CAPACITY.acquire(blocking=False):
+            continue
+        try:
+            future = _POOL.submit(fn)
+        except BaseException:
+            _CAPACITY.release()
+            raise
+        future.add_done_callback(lambda _: _CAPACITY.release())
+        futures[name] = future
+    deadline = time.monotonic() + timeout
+    result = {}
+    for name, _ in hooks:
+        future = futures.get(name)
+        if future is None:
+            result[name] = ''
+            result[name + '_error'] = 'provider_capacity_exceeded'
+            continue
+        try:
+            result[name] = fence(provider, future.result(timeout=max(0, deadline - time.monotonic())))
+        except Exception:
+            future.cancel()
+            result[name] = ''
+            result[name + '_error'] = 'provider_failed'
+    failed = any(v == 'provider_failed' for k, v in result.items() if k.endswith('_error'))
+    succeeded = any(name in futures and name + '_error' not in result for name, _ in hooks)
+    with _LOCK:
+        if failed:
+            _FAILURES[provider.name] = _FAILURES.get(provider.name, 0) + 1
+        elif succeeded:
+            _FAILURES[provider.name] = 0
+        if _FAILURES.get(provider.name, 0) >= STALL_LIMIT:
+            _PAUSED_UNTIL[provider.name] = time.monotonic() + PAUSE
+            _FAILURES[provider.name] = 0
+    return result

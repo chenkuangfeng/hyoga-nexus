@@ -144,6 +144,7 @@ class Snapshot:
     """Text frozen into a session's system prompt, and the profile entries whose bodies it carries."""
     text: str
     resident: tuple[dict[str, Any], ...]
+    dependencies: tuple[dict[str, str], ...] = ()
 
 
 def snapshot(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, project: str = '',
@@ -181,7 +182,10 @@ def snapshot(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, project: s
     lines = _index_lines(listed)
     if lines:
         parts.append('\n'.join(lines))
-    return Snapshot(text='\n'.join(parts),
+    visible = resident + listed[:sum(1 for line in lines if ' | ' in line)]
+    return Snapshot(dependencies=tuple({'kind': 'memory', 'resource_id': str(item.entry.id),
+                                       'version': str(item.entry.current_version)} for item in visible),
+                    text='\n'.join(parts),
                     resident=tuple({'id': str(item.entry.id), 'title': item.entry.title, 'kind': item.entry.kind,
                                     'version': item.entry.current_version} for item in resident))
 

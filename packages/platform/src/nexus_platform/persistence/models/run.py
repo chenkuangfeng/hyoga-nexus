@@ -50,6 +50,8 @@ class RunRecord(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     config_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    #: Versioned context hashes and source references, never a duplicate transcript.
+    context_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     lease_owner: Mapped[str | None] = mapped_column(String(160))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -87,3 +89,16 @@ class NativePreferenceRecord(Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class RunContextBlockRecord(Base):
+    """Immutable injected content that has no original message row (for trusted providers).
+
+    The Run manifest stores its digest/references. This is not another copy of conversation
+    messages; it lets wait/resume reuse exact provider bytes without re-running plugin code.
+    """
+    __tablename__ = 'run_context_blocks'
+    run_id: Mapped[UUID] = mapped_column(ForeignKey('runs.id', ondelete='CASCADE'), primary_key=True)
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

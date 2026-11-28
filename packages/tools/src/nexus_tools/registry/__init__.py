@@ -32,6 +32,16 @@ class ToolRegistry:
     def __init__(self):
         self._tools: dict[tuple[str, str], RegisteredTool] = {}
 
+    def fork(self) -> ToolRegistry:
+        """Return a Run-owned registration map without copying stateless handlers.
+
+        Registering an MCP/provider tool must never mutate the process-wide builtin catalog.
+        Model-visible schemas are deep-copied by the authorized gateway before exposure.
+        """
+        result = ToolRegistry()
+        result._tools = dict(self._tools)
+        return result
+
     def register(self, tool: RegisteredTool):
         definition = tool.definition
         key = (definition.name, definition.version)

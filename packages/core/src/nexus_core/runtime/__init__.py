@@ -9,9 +9,11 @@ from .store import RuntimeStorePort
 from .memory import MemoryDraftPort
 from .sandbox import SandboxRequest, SandboxResult, SandboxPort
 from .outcomes import RuntimeOutcome
+from .context import (ContextDependency, ContextBlock, ContextBuildInput, AssemblyManifest, RunContextSnapshot, ContextProvider)
 from .port import AgentRuntime, RunContext, RunRequest, RuntimeCapabilities
 
 __all__ = [
+    'ContextDependency', 'ContextBlock', 'ContextBuildInput', 'AssemblyManifest', 'RunContextSnapshot', 'ContextProvider',
     'RuntimeFault',
     'CancellationTokenPort',
     'ToolCall',

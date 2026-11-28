@@ -15,6 +15,8 @@ class ModelMessage:
     tool_calls: tuple[ToolCall, ...] = ()
     tool_call_id: str | None = None
     source_id: str | None = None
+    #: Host-assigned contribution key (for example a trusted hook); never vendor instructions.
+    context_source: str | None = None
 
 
 @dataclass(frozen=True)

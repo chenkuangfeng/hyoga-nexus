@@ -37,3 +37,9 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 
 - [功能需求](docs/requirements.md)
 - [模块设计](docs/design.md)
+
+## 对话上下文装配
+
+启动新版本前在仓库根执行 `uv run alembic -c alembic.ini upgrade head`。上下文使用版本化来源账本；旧记忆/技能快照会按当前权限重建，无法追溯注入来源的旧执行历史保留在存储与审计中，但不直接回放给模型。Run 等待恢复时继续复用已保存的插件资料，并校验工具 schema；来源撤权、删除或禁用会阻止继续发送旧内容。
+
+受信任的应用扩展通过 `ProviderRegistration` 与 worker 的 `context_providers` 组合参数提供具名资料，具体接口与生命周期见 [设计说明](docs/design.md)。提供方实例应无 Run 状态，依赖由输入显式传入，不在实例上保存上一位用户的内容；普通提供方不能提升 system 角色或扩展工具授权。

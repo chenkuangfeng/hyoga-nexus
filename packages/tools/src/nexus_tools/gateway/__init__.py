@@ -166,20 +166,29 @@ class AuthorizedToolGateway:
         self.turn_used = 0
 
     async def _offered(self):
-        """Every definition this Run may call, authorized and not hidden, in binding order."""
-        output = []
+        """Offer eligible definitions with one request-local bulk check when supported."""
+        candidates = []
         for name, version in self.bindings.items():
             tool = self.registry.get(name, version)
-            if tool and tool.definition.capability == 'python_function':
-                if tool.definition.group in self.hidden_groups:
-                    continue  # the group is off or unavailable: the tool is not offered
-                if self._decide(tool) == 'deny':
-                    continue  # never offered: a read-only agent does not see write tools
-                try:
+            if (tool and tool.definition.capability == 'python_function'
+                    and tool.definition.group not in self.hidden_groups and self._decide(tool) != 'deny'):
+                candidates.append((name, version, tool))
+        bulk_allowed = await self.access.authorize_many(tuple((n, v) for n, v, _ in candidates)) if (
+            candidates and hasattr(self.access, 'authorize_many')) else None
+        output = []
+        for name, version, tool in candidates:
+            try:
+                if bulk_allowed is None:
                     await self.access.authorize(name, version)
-                except RuntimeFault:
+                elif (name, version) not in bulk_allowed:
                     continue
-                output.append(tool.definition)
+            except RuntimeFault:
+                continue
+            # A canonical JSON copy isolates nested schema objects and stabilizes property order.
+            # Other definition fields are immutable scalars/tuples or stateless callbacks.
+            parameters = json.loads(json.dumps(tool.definition.parameters, ensure_ascii=False,
+                                               sort_keys=True, allow_nan=False))
+            output.append(replace(tool.definition, parameters=parameters))
         return output
 
     async def definitions(self):

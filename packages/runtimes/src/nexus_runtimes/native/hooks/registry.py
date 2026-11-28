@@ -6,6 +6,7 @@ names from model arguments. Returned transformations are typed and cannot grant 
 from __future__ import annotations
 import asyncio
 import importlib
+from dataclasses import replace
 from collections.abc import Awaitable, Callable
 from nexus_core.native import HookContext, HookTransform
 from nexus_core.runtime import RuntimeFault
@@ -58,7 +59,10 @@ class HookRegistry:
                     raise RuntimeFault('hook_transform_invalid')
                 if len(result.done_prompts) > 10 or any(not isinstance(p, str) or len(p) > 2000 for p in result.done_prompts):
                     raise RuntimeFault('hook_transform_invalid')
-                messages.extend(result.append_messages); prompts.extend(result.done_prompts)
+                source = f'hook:{context.phase}:{callback.__module__}.{getattr(callback, "__qualname__", type(callback).__name__)}'
+                messages.extend(replace(message, context_source=f'{source[:180]}:{context.turn}:{index}')
+                                for index, message in enumerate(result.append_messages))
+                prompts.extend(result.done_prompts)
             except Exception:
                 await emit('hook.failed', {'phase': context.phase, 'turn': context.turn})
         return HookTransform(tuple(messages), tuple(prompts))

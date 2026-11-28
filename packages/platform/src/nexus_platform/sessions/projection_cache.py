@@ -15,6 +15,7 @@ The cache is process-local; a restart empties it, which is safe because keys are
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -37,19 +38,20 @@ class ProjectionCache:
     """Thread-safe LRU with idle expiry. ``get_or_build`` is the only read path."""
 
     def __init__(self, *, max_entries: int = 256, idle_ttl: float = 900.0,
-                 max_entry_bytes: int = 256 * 1024, clock: Clock | None = None) -> None:
-        if max_entries < 1 or idle_ttl <= 0 or max_entry_bytes < 1:
+                 max_entry_bytes: int = 256 * 1024, max_bytes: int = 16 * 1024 * 1024, clock: Clock | None = None) -> None:
+        if max_entries < 1 or idle_ttl <= 0 or max_entry_bytes < 1 or max_bytes < 1:
             raise ValueError("cache limits must be positive")
         self.max_entries = max_entries
         self.idle_ttl = idle_ttl
         self.max_entry_bytes = max_entry_bytes
+        self.max_bytes = max_bytes
         self._clock = clock or _monotonic
         self._entries: OrderedDict[Hashable, _Entry] = OrderedDict()
         self._lock = threading.Lock()
         self.hits = 0
         self.misses = 0
 
-    def get_or_build(self, session_id: UUID, watermark: int, build: Callable[[], T]) -> T:
+    def get_or_build(self, session_id: Hashable, watermark: int, build: Callable[[], T]) -> T:
         """Return the cached projection for ``(session_id, watermark)``, building it on a miss.
 
         ``build`` runs outside the lock, so two threads may build the same key concurrently;
@@ -63,20 +65,20 @@ class ProjectionCache:
                 entry.last_used = now
                 self._entries.move_to_end(key)
                 self.hits += 1
-                return entry.value
+                return deepcopy(entry.value)
             if entry is not None:
                 del self._entries[key]
             self.misses += 1
         value = build()
         size = _encoded_size(value)
-        if size is None or size > self.max_entry_bytes:
+        if size is None or size > min(self.max_entry_bytes, self.max_bytes):
             return value
         with self._lock:
             if key not in self._entries:
-                self._entries[key] = _Entry(value=value, size=size, last_used=self._clock())
+                self._entries[key] = _Entry(value=deepcopy(value), size=size, last_used=self._clock())
             self._entries.move_to_end(key)
             self._expire_idle(self._clock())
-            while len(self._entries) > self.max_entries:
+            while len(self._entries) > self.max_entries or sum(e.size for e in self._entries.values()) > self.max_bytes:
                 self._entries.popitem(last=False)
         return value
 

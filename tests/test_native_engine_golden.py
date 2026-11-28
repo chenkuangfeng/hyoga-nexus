@@ -103,40 +103,42 @@ def _waiting_input(database):
 # Recorded on main before the engine split (commit d32b48d). Do not edit to match a refactor;
 # a mismatch means observable behaviour changed. The one deliberate change since: a turn that produced text
 # also stores `message.completed` right after `model.completed` (openspec 2026-11-07-run-event-streaming).
+# Context assembly adds a metadata event after Run preparation and before each new request snapshot
+# (openspec 2026-11-01-context-token-performance/context-assembly.md); lifecycle/tool ordering is unchanged.
 GOLDEN = {
     'empty_response_retry_then_answer': {
-        'events': ['run.queued', 'run.started', 'turn.started', 'model.started',
+        'events': ['run.queued', 'run.started', 'context.assembled', 'turn.started', 'context.assembled', 'model.started',
                    'message.delta', 'model.completed', 'model.recovery',
-                   'turn.completed', 'turn.started', 'model.started', 'message.delta',
+                   'turn.completed', 'turn.started', 'context.assembled', 'model.started', 'message.delta',
                    'model.completed', 'message.completed', 'turn.completed', 'run.completed'],
         'status': 'completed', 'tools': []},
     'invalid_arguments_then_answer': {
-        'events': ['run.queued', 'run.started', 'turn.started', 'model.started',
+        'events': ['run.queued', 'run.started', 'context.assembled', 'turn.started', 'context.assembled', 'model.started',
                    'model.completed', 'tool.started', 'tool.failed', 'tool.started',
-                   'tool.completed', 'turn.completed', 'turn.started', 'model.started',
+                   'tool.completed', 'turn.completed', 'turn.started', 'context.assembled', 'model.started',
                    'message.delta', 'model.completed', 'message.completed', 'turn.completed',
                    'run.completed'],
         'status': 'completed', 'tools': [('failed', 'tool_arguments_truncated'), ('completed', None)]},
     'multi_tool_then_answer': {
-        'events': ['run.queued', 'run.started', 'turn.started', 'model.started',
+        'events': ['run.queued', 'run.started', 'context.assembled', 'turn.started', 'context.assembled', 'model.started',
                    'model.completed', 'tool.started', 'tool.completed', 'tool.started',
-                   'tool.completed', 'turn.completed', 'turn.started', 'model.started',
+                   'tool.completed', 'turn.completed', 'turn.started', 'context.assembled', 'model.started',
                    'message.delta', 'model.completed', 'message.completed', 'turn.completed',
                    'run.completed'],
         'status': 'completed', 'tools': [('completed', None), ('completed', None)]},
     'text_answer': {
-        'events': ['run.queued', 'run.started', 'turn.started', 'model.started',
+        'events': ['run.queued', 'run.started', 'context.assembled', 'turn.started', 'context.assembled', 'model.started',
                    'message.delta', 'model.completed', 'message.completed', 'turn.completed',
                    'run.completed'],
         'status': 'completed', 'tools': []},
     'truncated_tool_call_then_answer': {
-        'events': ['run.queued', 'run.started', 'turn.started', 'model.started',
-                   'model.completed', 'turn.completed', 'turn.started', 'model.started',
+        'events': ['run.queued', 'run.started', 'context.assembled', 'turn.started', 'context.assembled', 'model.started',
+                   'model.completed', 'turn.completed', 'turn.started', 'context.assembled', 'model.started',
                    'message.delta', 'model.completed', 'message.completed', 'turn.completed',
                    'run.completed'],
         'status': 'completed', 'tools': []},
     'waiting_input': {
-        'events': ['run.queued', 'run.started', 'turn.started', 'model.started',
+        'events': ['run.queued', 'run.started', 'context.assembled', 'turn.started', 'context.assembled', 'model.started',
                    'model.completed', 'tool.started', 'tool.completed', 'turn.completed',
                    'input.requested', 'run.waiting_input'],
         'status': 'waiting_input', 'tools': [('completed', None)]},

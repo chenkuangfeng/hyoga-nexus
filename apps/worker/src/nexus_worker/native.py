@@ -80,6 +80,8 @@ class ToolAccess:
     def __init__(self, store):
         self._store = store
         self.authorize, self.start, self.denied = store.authorize, store.start, store.denied
+        if hasattr(store, 'authorize_many'):
+            self.authorize_many = store.authorize_many
         self.finish = store.finish_tool
         self.progress = store.tool_progress
         self.approval = store.approval
@@ -126,11 +128,17 @@ def admit_or_defer(factory, epoch: int, task_id, worker_id: str) -> bool:
 
 async def execute_native(factory, task_id, worker_id, *, model_factory=None, registry_factory=None,
                          resolver=None, hooks=(), stopped=None, ledger_epoch=None, compaction_model_factory=None,
-                         watchdog=None):
+                         watchdog=None, context_providers=()):
+    # Trusted registration happens before preparation so restored history can validate generations.
+    if context_providers:
+        from nexus_platform.runs.context_plugins import register_plugin_generation
+        for registration in context_providers:
+            register_plugin_generation(registration.name, registration.generation)
     # Synchronous database work runs on the database pool so the Runs sharing this event loop are not stalled.
     if ledger_epoch is not None and not await run_db(admit_or_defer, factory, ledger_epoch, task_id, worker_id):
         return
-    context = await run_db(prepare_execution, factory, task_id, worker_id)
+    from nexus_platform.runs.preparation import ContextPreparationService
+    context = await ContextPreparationService(factory).prepare_async(task_id, worker_id)
     if context is None:
         return
     store = DurableRuntimeStore(factory, context, worker_id, task_id)
@@ -170,6 +178,24 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
     model = None
     sandbox = None
     try:
+        provider_registry = None
+        if context_providers:
+            from dataclasses import replace
+            from nexus_core.runtime.context_assembly import RequestContextAssembler
+            from nexus_runtimes.native.context.providers import ContextProviderRegistry
+            from nexus_platform.runs.context_plugins import plugin_dependencies_allowed
+            provider_registry = ContextProviderRegistry(generation_check=plugin_dependencies_allowed)
+            for registration in context_providers:
+                provider_registry.register(registration)
+            cached = await store.load_context_blocks()
+            blocks = await provider_registry.collect(await store.context_build_input(context.progress.turns),
+                store.emit, lifetimes=('session', 'run'), cached=cached)
+            plugin = RequestContextAssembler().assemble(blocks, ())
+            base = list(context.messages)
+            base[0] = replace(base[0], content=base[0].content + plugin.messages[0].content)
+            base.extend(plugin.messages[1:])
+            context = replace(context, messages=tuple(base), context_blocks=(*context.context_blocks, *blocks))
+            await store.save_context_blocks(blocks)
         if model_factory:
             model = model_factory(context)
         else:
@@ -178,7 +204,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
         if context.runtime_type != 'native':
             raise RuntimeFault('runtime_not_configured')
         # Builtin definitions are shared for the process; the Run's store reaches handlers via services.
-        registry = registry_factory(store) if registry_factory else builtins()
+        registry = registry_factory(store) if registry_factory else builtins().fork()
         try:
             policy = NativePolicy(**context.budgets.get('behavior', {}))
         except (ValueError, TypeError):
@@ -219,7 +245,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             from .mcp_tools import register_mcp_tools
             await register_mcp_tools(run_db, factory, registry, bound,
                                      tenant_id=context.tenant_id, principal_id=context.principal_id,
-                                     service_ids=context.mcp_service_ids)
+                                     service_ids=context.mcp_service_ids, store=store)
         names = {field.name for field in fields(ExecutionBudget)}
         options = {key: value for key, value in context.budgets.items() if key in names}
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in options.values()):
@@ -250,7 +276,7 @@ async def execute_native(factory, task_id, worker_id, *, model_factory=None, reg
             compaction_resolver = resolver or StoredCredentialResolver(factory, DeploymentCredentialResolver())
             compaction_model_factory = lambda: compaction_model(context, factory, compaction_resolver, version_id)
         runtime = RunOrchestrator(model, gateway, store, hooks=hooks, policy=policy,
-                                  compaction_model_factory=compaction_model_factory)
+                                  compaction_model_factory=compaction_model_factory, context_providers=provider_registry)
         outcome = await runtime.run(
             RunRequest(run_id=str(context.run_id), messages=tuple(context.messages), budget=budget),
             RunContext(token=token, progress=context.progress))

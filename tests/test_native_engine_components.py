@@ -373,11 +373,27 @@ def test_provider_context_overflow_forces_compaction_and_retries_once(failures, 
     policy = NativePolicy(summarize_context=False, working_memory=False)
     context = ContextAssembler(model, store, policy)
     orchestrator = RunOrchestrator(model, _Tools(), store, policy=policy)
+    from nexus_core.runtime.context import ContextBlock
+    class StepProvider:
+        calls = 0
+        async def collect(self, *_args, **_kwargs):
+            self.calls += 1
+            return (ContextBlock('plugin:step', 'test', 'user', 'turn_tail', 1, 'step reference', lifetime='step'),)
+    async def load_blocks(**_kwargs): return ()
+    async def save_blocks(*_args, **_kwargs): pass
+    async def build_input(*_args): return None
+    store.load_context_blocks = load_blocks
+    store.save_context_blocks = save_blocks
+    store.context_build_input = build_input
+    step_provider = StepProvider()
+    orchestrator.context_providers = step_provider
     orchestrator.context = context
     request = RunRequest('run', messages, ExecutionBudget(max_tokens=0, max_context_chars=12000,
                                                           max_output_tokens=512, max_rounds=3))
     outcome = asyncio.run(orchestrator.run(request, RunContext(CancellationToken(), progress=RuntimeProgress())))
     assert outcome.status == expected_status
+    assert step_provider.calls == 1
+    assert all(any(m.content == 'step reference' for m in r.messages) for r in model.requests)
     assert len(model.requests) == 2
     assert any(message.content == old_tool_result for message in model.requests[0].messages)
     assert not any(message.content == old_tool_result for message in model.requests[1].messages)

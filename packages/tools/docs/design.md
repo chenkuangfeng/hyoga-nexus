@@ -68,3 +68,9 @@
 - **渐进加载**（`bridge.py`）：`source == 'mcp'` 或声明 `deferrable` 的工具，其 schema 估算 token 之和达到 `NativePolicy.tool_search_min_tokens`（默认 2500，0 关闭）时，不再直接发给模型，改为 `tool_search` / `tool_describe` / `tool_call` 三个桥接工具。估算采用紧凑 JSON 和约 3 字符/token 的启发式，并非供应商实际 token。38 个内置工具中 14 个高频工具直接提供（问询、检查点、待办、外置结果读取、记忆检索、技能加载/搜索/执行、主知识检索、工作区列举/读写/执行），其余 24 个低频工具按需发现。桥接目录只列工具名，匹配结果返回简介，`tool_describe` 按需返回完整 schema；智能体编辑器可覆盖阈值。Run 内工具块不变。`tool_call` 展开为真实工具后走完整网关管线；只能调用已绑定、已授权、未被分组隐藏、且确实被延迟的工具。
 - **schema 清洗**（`nexus_core.schema`）：发给供应商的是清洗后的副本（属性名、类型数组、缺失的 `properties` 与 `required`、`$ref` 旁的 `default`、顶层组合子），模型返回的参数由 `restore` 还原属性名。
 - **Web 工具**（`builtins/web.py`、`web/`，`web` 组）：`web_search` 的后端注册表有 tavily、brave、searxng，请求形状按各家公开 API 编写，未对真实服务验证；`web_fetch` 逐跳校验（协议、端口 80/443/8080/8443、解析出的每个地址都必须是公网地址），连接到校验过的字面地址并保留 SNI，手动跟随最多 5 次重定向，正文有字节上限；结果带「外部网页内容」前缀，并经过网关的注入扫描。`[web].enabled` 默认关闭。
+
+## 目录装配的性能与隔离
+
+`AuthorizedToolGateway` 先过滤禁用组和风险拒绝，再使用可选 `authorize_many` 授权整个候选目录；不支持批量端口的独立适配器继续逐项授权。两种路径都不缓存权限结论。结果按名字排序、schema 深拷贝后冻结在 Run 中，渐进加载仍经原有桥接工具。实际调用继续走 `authorize` 和审批，不复用目录阶段的 allow/deny。
+
+`ToolRegistry.fork()` 只复制注册映射，复用无状态处理器。动态 MCP 注册留在 Run 映射中，不污染另一 Run 或进程 builtin 目录。

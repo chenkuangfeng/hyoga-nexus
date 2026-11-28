@@ -363,14 +363,11 @@ def visible_versions(db: Session, tenant_id: UUID, user_id: UUID) -> dict[str, S
     """name -> current version of the private skills a Run of this user may use: not archived, ready, not superseded."""
     taken = {name for name in db.scalars(select(SkillRecord.name).where(
         SkillRecord.tenant_id.in_((tenant_id, SYSTEM_TENANT_ID)), SkillRecord.owner_user_id.is_(None)))}
-    result: dict[str, SkillVersionRecord] = {}
-    for skill in db.scalars(select(SkillRecord).where(
-            SkillRecord.tenant_id == tenant_id, SkillRecord.owner_user_id == user_id, SkillRecord.archived_at.is_(None),
-            SkillRecord.current_version_id.is_not(None))):
-        version = db.get(SkillVersionRecord, skill.current_version_id)
-        if version is not None and version.build_state == 'ready' and skill.name not in taken:
-            result[skill.name] = version
-    return result
+    return {name: version for name, version in db.execute(select(SkillRecord.name, SkillVersionRecord)
+        .join(SkillVersionRecord, SkillVersionRecord.id == SkillRecord.current_version_id)
+        .where(SkillRecord.tenant_id == tenant_id, SkillRecord.owner_user_id == user_id,
+               SkillRecord.archived_at.is_(None), SkillVersionRecord.build_state == 'ready')) if name not in taken}
+
 
 
 # ---------------------------------------------------------------------------------------------------- API wrappers

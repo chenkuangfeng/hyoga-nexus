@@ -179,6 +179,9 @@ class SessionMemorySnapshotRecord(Base):
     #: `[{id, title, kind, version}]` of the profile entries whose bodies the snapshot carries (stage 2).
     #: Reported in a `memory.used` event by every Run that injects the snapshot. NULL for older snapshots.
     resident_entries: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    context_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default='0')
+    #: NULL identifies legacy snapshots that must be rebuilt before model injection.
+    context_dependencies: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

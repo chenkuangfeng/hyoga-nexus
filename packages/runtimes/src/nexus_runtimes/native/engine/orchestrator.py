@@ -88,10 +88,11 @@ class RunOrchestrator:
     Progress state survives waiting_input resumes, including working memory and guards.
     """
     def __init__(self, model, tools, store, *, hooks=(), policy: NativePolicy | None = None,
-                 transforms: HookRegistry | None = None, compaction_model_factory=None):
+                 transforms: HookRegistry | None = None, compaction_model_factory=None, context_providers=None):
         self.model, self.tools, self.store = model, tools, store
         self.hooks, self.policy = list(hooks), policy or NativePolicy()
         self.transforms = transforms or HookRegistry()
+        self.context_providers = context_providers
         # Builds the configured compaction model per summary call (P3); None means the Run's own model.
         self.compaction_model_factory = compaction_model_factory
         self.dispatcher = ToolDispatcher(tools, parallel=self.policy.parallel_reads,
@@ -173,6 +174,8 @@ class RunOrchestrator:
                 # runs per call, so a revoked tool is refused even if it is still listed here.
                 definitions = await self.tools.definitions()
                 self.context.freeze(definitions)
+                if hasattr(self.store, 'freeze_context_tools'):
+                    await self.store.freeze_context_tools(definitions)
                 await self._hook(run_id, 'agent.before')
                 await self._transform(run_id, 'agent.before', progress.turns, history, done)
                 if self.policy.project_name and not state.get('project_injected'):
@@ -215,6 +218,17 @@ class RunOrchestrator:
                         turn_definitions = ()
                     view = self.context.view(history, working=working, turn=turn, definitions=turn_definitions)
                     model_history = list(view.messages)
+                    step_messages = ()
+                    if self.context_providers is not None:
+                        from nexus_core.runtime.context_assembly import RequestContextAssembler
+                        cached = await self.store.load_context_blocks(lifetimes=('step',), step=turn)
+                        blocks = await self.context_providers.collect(await self.store.context_build_input(turn),
+                            self.store.emit, lifetimes=('step',), cached=cached)
+                        if blocks:
+                            extra = RequestContextAssembler().assemble(blocks, ())
+                            await self.store.save_context_blocks(blocks, step=turn)
+                            step_messages = extra.messages[1:]
+                            model_history.extend(step_messages)
                     if last_turn:
                         model_history.append(ModelMessage('user', FINAL_ANSWER_HINT))
                         await self.store.emit('turn.tools_disabled', {'turn': turn})
@@ -269,6 +283,7 @@ class RunOrchestrator:
                                 history, working=working, turn=turn, definitions=turn_definitions,
                                 tool_result_window_rounds=1)
                             retry_messages = list(recovery_view.messages)
+                            retry_messages.extend(step_messages)
                             if last_turn:
                                 retry_messages.append(ModelMessage('user', FINAL_ANSWER_HINT))
                             if budget.max_tokens > 0:

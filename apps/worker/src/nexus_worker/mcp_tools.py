@@ -74,7 +74,7 @@ class McpToolExecutor:
             return ToolResult("MCP 调用失败", error_code="mcp_call_failed")
 
 
-async def register_mcp_tools(run_db, factory, registry, bound, *, tenant_id, principal_id, service_ids):
+async def register_mcp_tools(run_db, factory, registry, bound, *, tenant_id, principal_id, service_ids, store=None):
     """Add this Run's enabled MCP tools to `registry` and `bound` (both mutated in place).
 
     Called once per Run before the orchestrator starts; the definitions are the live projection of
@@ -89,6 +89,9 @@ async def register_mcp_tools(run_db, factory, registry, bound, *, tenant_id, pri
     visible = await run_db(_visible)
     if not visible:
         return
+    if store is not None:
+        from nexus_core.runtime.context import ContextDependency
+        await store.add_context_dependencies(tuple(ContextDependency('mcp', str(t.service_id), mcp_service.context_version(t)) for t in visible))
     executor = McpToolExecutor(run_db, factory, tenant_id, principal_id)
     for tool in visible:
         definition = mcp_gateway.tool_definition(
@@ -105,4 +108,6 @@ async def register_mcp_tools(run_db, factory, registry, bound, *, tenant_id, pri
             definition, service_id=str(tool.service_id), tool_name=tool.tool_name, executor=executor
         )
         registry.register(registered)
+        if store is not None:
+            store.mcp_catalog[definition.name] = (str(tool.service_id), mcp_service.context_version(tool))
         bound[definition.name] = definition.version

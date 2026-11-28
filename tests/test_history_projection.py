@@ -22,7 +22,7 @@ def test_new_message_is_visible_to_the_next_run_and_rows_are_rebuilt(database, m
     principal, tenant, session, run, _ = stack(database)
     builds = []
     original = preparation._message_rows
-    monkeypatch.setattr(preparation, '_message_rows', lambda db, sid: builds.append(1) or original(db, sid))
+    monkeypatch.setattr(preparation, '_message_rows', lambda db, sid, *args: builds.append(1) or original(db, sid, *args))
     first = FakeModel([[ModelChunk('text', text='Answer one')]])
     run_once(database, 'worker', model_factory=lambda _: first)
     with database() as db:

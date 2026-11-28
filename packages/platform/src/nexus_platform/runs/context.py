@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from uuid import UUID
 from nexus_core.platform import CredentialRef, Principal
 from nexus_core.runtime import ModelMessage, RuntimeProgress
+from nexus_core.runtime.context import ContextBlock
 
 
 @dataclass(frozen=True)
@@ -25,3 +26,7 @@ class ExecutionContext:
     history_run_ids: tuple[UUID, ...]
     #: MCP service ids bound to the agent version (from the frozen config snapshot). Resolved live at execution.
     mcp_service_ids: tuple[str, ...] = ()
+
+    #: Authorized, named contributions; worker renders these with the pure request assembler.
+    context_blocks: tuple[ContextBlock, ...] = ()
+    source_watermark: int = 0

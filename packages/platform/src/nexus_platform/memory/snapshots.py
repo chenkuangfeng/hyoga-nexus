@@ -50,21 +50,25 @@ def session_snapshot(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id
     """Return the session's frozen snapshot row, creating it on the first call (see `session_index`)."""
     row = db.get(SessionMemorySnapshotRecord, session_id)
     if row is not None and row.tenant_id == tenant_id and row.owner_user_id == owner_id:
-        return row
+        from types import SimpleNamespace
+        from nexus_core.runtime.context import ContextDependency
+        from nexus_platform.runs.context_access import sources_allowed
+        scope = SimpleNamespace(tenant_id=tenant_id, principal_id=owner_id, config_snapshot={})
+        if row.context_schema_version == 1 and row.context_dependencies is not None and sources_allowed(
+                db, scope, [ContextDependency(**d) for d in row.context_dependencies]):
+            return row
+        # A legacy or unsafe snapshot must not keep deleted/private facts in its frozen text.
+        db.delete(row)
+        db.flush()
     built = memory_rules.snapshot(SqlMemoryRepository(db), tenant_id, owner_id, project, now=now or utc_now())
     text = built.text
-    # Stage 6 (D6): the space's external provider may add a block; it is frozen with the snapshot.
-    from .providers import provider_for, snapshot_text
-    provider = provider_for(db, tenant_id)
-    if provider is not None:
-        extra = snapshot_text(None, provider, tenant_id=tenant_id, owner_id=owner_id, session_id=session_id)
-        if extra:
-            text = text + '\n' + extra
+    # External snapshot hooks are collected by ContextPreparationService outside transactions.
     key = version_key(db, tenant_id, owner_id)
     row = SessionMemorySnapshotRecord(
         session_id=session_id, tenant_id=tenant_id, owner_user_id=owner_id,
         index_text=text, version_key=key, created_at=now or utc_now(),
         resident_entries=[dict(item) for item in built.resident],
+        context_dependencies=list(built.dependencies), context_schema_version=1,
     )
     db.add(row)
     db.flush()

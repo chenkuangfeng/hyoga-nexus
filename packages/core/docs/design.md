@@ -17,3 +17,9 @@
 | `egress.py` | 受保护的出站下载：只允许公网地址、逐跳校验重定向、连接已校验的字面地址、字节与时间上限；`web_fetch` 与技能远程安装共用 |
 
 这次拆分保留原 DTO/Protocol 字段与方法，不增加供应商私有状态、ORM 或第二个执行循环。真正的协议请求构建、历史重放和上下文压缩由 runtimes 实现。
+
+## 上下文内容契约
+
+`runtime/context.py` 提供 `ContextDependency`、`ContextBlock`、`ContextBuildInput`、`AssemblyManifest`、`RunContextSnapshot` 与 `ContextProvider`。依赖标识引用来源与版本，不代表授权；块明确角色、位置、生命周期与信任级别，正文摘要由实际文本计算。`ModelMessage.context_source` 是宿主赋予的贡献名，供可信 hook 的持久化来源记录使用，不成为供应商指令。
+
+`runtime/context_assembly.py` 的 `RequestContextAssembler` 是无 I/O 的确定性装配器，由平台准备与 Native 共用；放在 core 是为了避免 platform 导入 runtimes。它只使用本包 DTO 和标准库，拒绝重复贡献名，不在未完成的工具交换后插入尾部资料。v1 复现现有消息布局；v2 资料尾置已有纯装配支持，但未通过真实模型评测前不作为默认布局。工具 schema 仍是请求的独立字段。

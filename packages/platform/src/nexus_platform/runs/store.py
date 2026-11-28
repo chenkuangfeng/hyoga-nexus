@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict
 from datetime import timedelta, timezone
 from uuid import UUID
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
 from nexus_core.run_events import EPHEMERAL_KINDS, BusEvent, BusUnavailable
@@ -80,6 +80,7 @@ def _behavior(context: ExecutionContext) -> NativePolicy:
 class DurableRuntimeStore:
     def __init__(self, factory: sessionmaker[Session], context: ExecutionContext, worker_id: str, task_id: UUID):
         self.factory, self.context, self.worker_id, self.task_id = factory, context, worker_id, task_id
+        self.mcp_catalog: dict[str, tuple[str, str]] = {}
         behavior = _behavior(context)
         self.page_chars, self.summary_chars = behavior.tool_output_page_chars, behavior.summary_max_chars
         self._producer = None  # fencing lease on the live event bus; None while no bus keeps ephemeral text
@@ -170,6 +171,19 @@ class DurableRuntimeStore:
             raise RuntimeFault('interrupted')
         return run
 
+    def _context_write_run(self, db: Session) -> RunRecord:
+        """Fence a context write before reading its ledger, including on SQLite.
+
+        SQLite ignores FOR UPDATE. Reserving its writer before any read avoids a deferred
+        read-to-write upgrade racing the embedded worker's lease/watchdog writes. The no-op
+        touches only this Run; lease validation still happens in the same transaction below.
+        PostgreSQL continues to use the ordinary row lock in _run.
+        """
+        if db.get_bind().dialect.name == 'sqlite':
+            db.execute(update(RunRecord).where(RunRecord.id == self.context.run_id)
+                       .values(id=RunRecord.id).execution_options(synchronize_session=False))
+        return self._run(db)
+
     async def emit(self, kind: str, payload: dict[str, object]) -> None:
         if kind in EPHEMERAL_KINDS and self._publish_ephemeral(kind, payload):
             return  # live-only text goes to the bus without a thread hop or a transaction
@@ -181,7 +195,19 @@ class DurableRuntimeStore:
         """Persist the exact model-visible request independently from the Run event stream."""
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
-            run = self._run(db)
+            run = self._context_write_run(db)
+            from nexus_core.runtime.context import context_digest
+            manifest = dict(run.context_manifest or {'schema_version': 1, 'dependencies': []})
+            digest = context_digest(request_snapshot)
+            if manifest.get('assembly_id') != digest:
+                manifest['assembly_id'] = digest
+                run.context_manifest = manifest
+                append_event(db, run.id, 'context.assembled', {'assembly_id': digest,
+                    'layout_version': manifest.get('layout_version', 'v1'),
+                    'tool_count': len(request_snapshot.get('tools', [])),
+                    'message_count': len(request_snapshot.get('messages', [])),
+                    'input_estimate_tokens': input_estimate_tokens,
+                    'dependency_count': len(manifest['dependencies'])})
             latest = db.scalar(select(func.max(RunTrajectoryRecord.sequence)).where(
                 RunTrajectoryRecord.run_id == run.id)) or 0
             row = RunTrajectoryRecord(id=new_id(), run_id=run.id, sequence=latest + 1,
@@ -214,19 +240,124 @@ class DurableRuntimeStore:
         with SqlAlchemyUnitOfWork(self.factory) as work:
             db = work.session
             run = self._run(db)
-            if kind == 'model.started':
-                try:
-                    authorize_model(db, run.tenant_id, run.principal_id,
-                                    UUID(run.config_snapshot['model_profile_version_id']))
-                    require_tenant(db, run.tenant_id)
-                    require_membership(db, run.tenant_id, run.principal_id)
-                    # One batched decision for all history sources (P8), not one check per source Run.
-                    sources = [db.get(RunRecord, source_id) for source_id in self.context.history_run_ids]
-                    if any(source is None for source in sources) or not all(histories_allowed(db, sources).values()):
-                        raise RuntimeFault('run_authorization_denied')
-                except PlatformError:
-                    raise RuntimeFault('run_authorization_denied') from None
+            if kind in ('model.started', 'model.attempt'):
+                from .context_access import require_context_access
+                require_context_access(db, run, self.context.history_run_ids)
+                if run.context_manifest:
+                    payload = {**payload, 'assembly_id': run.context_manifest.get('assembly_id', '')}
             append_event(db, run.id, kind, payload)
+
+    @offloaded
+    def authorize_context(self) -> None:
+        """Guard auxiliary context-bearing requests as well as the main model attempt path."""
+        from .context_access import require_context_access
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            require_context_access(work.session, self._run(work.session), self.context.history_run_ids)
+
+    @offloaded
+    def add_context_dependencies(self, dependencies) -> None:
+        """Persist tool/provider provenance before its result can enter model history."""
+        from .context_access import merge_dependencies
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            merge_dependencies(self._context_write_run(work.session), dependencies)
+
+    @offloaded
+    def load_context_blocks(self, *, lifetimes=('session', 'run'), step: int | None = None):
+        """Restore exact provider bytes only after validating ownership and current sources."""
+        from nexus_core.runtime.context import ContextBlock, ContextDependency
+        from nexus_platform.persistence.models import RunContextBlockRecord
+        from .context_access import sources_allowed
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            rows = db.scalars(select(RunContextBlockRecord).join(RunRecord).where(
+                RunRecord.session_id == run.session_id, RunRecord.tenant_id == run.tenant_id,
+                RunRecord.principal_id == run.principal_id,
+                RunRecord.config_snapshot['agent_version_id'].as_string() == run.config_snapshot['agent_version_id'])
+                .order_by(RunRecord.created_at.desc()))
+            found = {}
+            for row in rows:
+                data = dict(row.data)
+                if data['lifetime'] not in lifetimes or data['key'] in found:
+                    continue
+                if data['lifetime'] != 'session' and row.run_id != run.id:
+                    continue
+                if data['lifetime'] == 'step' and data.pop('_step', None) != step:
+                    continue
+                data.pop('_step', None)
+                data['dependencies'] = tuple(ContextDependency(**d) for d in data['dependencies'])
+                block = ContextBlock(**data)
+                if block.digest != row.digest or not sources_allowed(db, run, block.dependencies):
+                    if row.run_id != run.id:
+                        continue  # a new Run rebuilds a revoked/stale session contribution
+                    raise RuntimeFault('run_authorization_denied')
+                found[block.key] = block
+            return tuple(found.values())
+
+    @offloaded
+    def save_context_blocks(self, blocks, *, step: int | None = None) -> None:
+        """Store injected provider bytes once; reject a different body for a frozen key."""
+        from nexus_platform.persistence.models import RunContextBlockRecord
+        from nexus_core.runtime.context import context_digest
+        from .context_access import merge_dependencies
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._context_write_run(db)
+            manifest = dict(run.context_manifest or {'schema_version': 1, 'dependencies': []})
+            digests = dict(manifest.get('block_digests', []))
+            for block in blocks:
+                key = f'{step}:{block.key}' if block.lifetime == 'step' else block.key
+                if len(key) > 255:
+                    raise RuntimeFault('context_configuration_invalid')
+                existing = db.get(RunContextBlockRecord, (run.id, key))
+                if existing and existing.digest != block.digest:
+                    raise RuntimeFault('context_prefix_changed')
+                if existing is None:
+                    data = asdict(block)
+                    if block.lifetime == 'step':
+                        data['_step'] = step
+                    db.add(RunContextBlockRecord(run_id=run.id, key=key, digest=block.digest, data=data))
+                digests[key] = block.digest
+            previous_id = manifest.get('assembly_id', '')
+            manifest['block_digests'] = sorted(digests.items())
+            manifest['assembly_id'] = context_digest({'blocks': manifest['block_digests'],
+                                                       'tools': manifest.get('tools_digest', '')})
+            run.context_manifest = manifest
+            merge_dependencies(run, [d for b in blocks for d in b.dependencies])
+            if previous_id != manifest['assembly_id']:
+                append_event(db, run.id, 'context.assembled', {'assembly_id': manifest['assembly_id'],
+                    'layout_version': 'v1', 'block_count': len(digests),
+                    'dependency_count': len(run.context_manifest['dependencies'])})
+
+    @offloaded
+    def context_build_input(self, step: int):
+        """Expose the latest original user query, not synthetic user-role memory envelopes."""
+        from nexus_core.runtime.context import ContextBuildInput
+        from .context_access import dependencies_from
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            rows = db.scalars(select(MessageRecord).where(MessageRecord.run_id == run.id,
+                MessageRecord.role == 'user').order_by(MessageRecord.sequence.desc()))
+            message = next((m for m in rows if (m.runtime_metadata or {}).get('origin') != 'runtime'), None)
+            return ContextBuildInput(str(run.tenant_id), str(run.principal_id), str(run.session_id), str(run.id),
+                run.config_snapshot['agent_version_id'], step, str(message.id) if message else None,
+                message.content if message else '', run.started_at, dependencies_from(run.context_manifest))
+
+    @offloaded
+    def freeze_context_tools(self, definitions) -> None:
+        """Record exact schema bytes without storing callbacks or a duplicate tool transcript."""
+        from nexus_core.runtime.context import context_digest
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            run = self._context_write_run(work.session)
+            manifest = dict(run.context_manifest or {'schema_version': 1, 'dependencies': []})
+            digest = context_digest([
+                {'name': d.name, 'version': d.version, 'description': d.description, 'parameters': d.parameters}
+                for d in definitions])
+            if manifest.get('tools_digest') and manifest['tools_digest'] != digest:
+                raise RuntimeFault('context_prefix_changed')
+            manifest['tools_digest'] = digest
+            run.context_manifest = manifest
 
     @offloaded
     def message(self, message: ModelMessage) -> None:
@@ -319,7 +450,56 @@ class DurableRuntimeStore:
             task = db.get(OutboxRecord, self.task_id)
             task.completed_at, task.lease_owner, task.lease_until = utc_now(), None, None
 
-    async def authorize(self, name: str, version: str) -> str:
+    @offloaded
+    def authorize_many(self, requested) -> set[tuple[str, str]]:
+        """Authorize the initial catalog in one short transaction; never reuse these decisions.
+
+        Actual calls still use authorize() and the domain service's execution-time checks.
+        Metadata lookup is batched, while existing per-resource audit semantics are preserved.
+        """
+        from nexus_platform.authz.resource_batch import ResourceAuthorizationBatch
+        from nexus_platform.persistence.models import ResourceBindingRecord
+        from nexus_platform.memory.switches import memory_state
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            require_tenant(db, run.tenant_id)
+            require_membership(db, run.tenant_id, run.principal_id)
+            bindings = list(db.scalars(select(ResourceBindingRecord).where(
+                ResourceBindingRecord.agent_version_id == UUID(run.config_snapshot['agent_version_id']),
+                ResourceBindingRecord.kind == 'tool')))
+            batch = ResourceAuthorizationBatch(db, run.tenant_id,
+                [(b.kind, b.resource_id, b.source_tenant_id, b.resource_version_id) for b in bindings])
+            available = {}
+            memory_on = memory_state(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
+                                     agent_budgets=self.context.budgets).available
+            for binding in bindings:
+                name, version = binding.resource_id, binding.resource_version_id or 'v1'
+                if binding.binding_config.get('enabled') is False or (name in MEMORY_TOOL_NAMES and not memory_on):
+                    continue
+                try:
+                    batch.authorize(binding.kind, name, binding.source_tenant_id, binding.resource_version_id)
+                except PlatformError:
+                    continue
+                available[(name, version)] = str(binding.id)
+            if self.mcp_catalog:
+                from nexus_platform.mcp.service import visible_tools, context_version
+                current = {(str(t.service_id), context_version(t)) for t in visible_tools(db, run.tenant_id,
+                    {UUID(service) for service, _ in self.mcp_catalog.values()})}
+                for name, reference in self.mcp_catalog.items():
+                    if reference in current:
+                        available[(name, 'v1')] = None
+            allowed = set(requested) & available.keys()
+            for name, _ in allowed:
+                audit(db, run.tenant_id, run.principal_id, 'run.resource_access', 'tool', name,
+                      {'run_id': str(run.id), 'permission': 'use'})
+            return allowed
+
+    async def authorize(self, name: str, version: str) -> str | None:
+        if name in self.mcp_catalog:
+            if (name, version) not in await self.authorize_many(((name, version),)):
+                raise RuntimeFault('tool_authorization_denied')
+            return None  # MCP has a service binding, not a ResourceBindingRecord FK
         binding_id = next((binding for tool, ver, binding in self.context.bindings if tool == name and ver == version), None)
         if not binding_id:
             raise RuntimeFault('tool_authorization_denied')
@@ -519,6 +699,9 @@ class DurableRuntimeStore:
                 audit(db, run.tenant_id, run.principal_id, 'skill.loaded', 'run', str(run.id), {'skill': name[:64]})
                 used, _ = usable_version(db, run.tenant_id, agent_version_id, name, run.principal_id)
                 if used is not None:
+                    from .context_access import merge_dependencies
+                    from nexus_core.runtime.context import ContextDependency
+                    merge_dependencies(run, (ContextDependency('skill', str(used.skill_id), str(used.id)),))
                     record_use(db, used, run.principal_id)
                 return text
         result = await run_db(read)
@@ -638,6 +821,12 @@ class DurableRuntimeStore:
                 require_membership(db, run.tenant_id, run.principal_id)
                 text = read_skill(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, path,
                                   user_id=run.principal_id)
+                from nexus_platform.skills.service import usable_version
+                from .context_access import merge_dependencies
+                from nexus_core.runtime.context import ContextDependency
+                used, _ = usable_version(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), name, run.principal_id)
+                if used is not None:
+                    merge_dependencies(run, (ContextDependency('skill', str(used.skill_id), str(used.id)),))
                 audit(db, run.tenant_id, run.principal_id, 'skill.file_read', 'run', str(run.id),
                       {'skill': name[:64], 'path': path[:200]})
                 return text
@@ -653,8 +842,12 @@ class DurableRuntimeStore:
                 db = work.session
                 run = self._run(db)
                 require_membership(db, run.tenant_id, run.principal_id)
-                return search_usable(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), run.principal_id,
-                                     query, limit)
+                dependencies = []
+                hits = search_usable(db, run.tenant_id, UUID(run.config_snapshot['agent_version_id']), run.principal_id,
+                                     query, limit, dependencies=dependencies)
+                from .context_access import merge_dependencies
+                merge_dependencies(run, dependencies)
+                return hits
         return await run_db(find)
 
     async def skill_manage(self, action: str, arguments: dict) -> dict:
@@ -741,6 +934,9 @@ class DurableRuntimeStore:
             require_membership(db, run.tenant_id, run.principal_id)
             result = read_for_run(db, run.tenant_id, run.principal_id, UUID(entry_id), run.id)
             entry = db.get(MemoryEntryRecord, UUID(entry_id))
+            from .context_access import merge_dependencies
+            from nexus_core.runtime.context import ContextDependency
+            merge_dependencies(run, (ContextDependency('memory', str(entry.id), str(entry.current_version)),))
             # Stage 2 (B5): the timeline shows which memory this turn read.
             append_event(db, run.id, 'memory.used', {'source': 'read', 'entries': [
                 {'id': str(entry.id), 'title': entry.title, 'kind': entry.kind, 'version': entry.current_version}]})
@@ -856,6 +1052,20 @@ class DurableRuntimeStore:
         from nexus_platform.knowledge.tools import list_documents_for_run
         return await list_documents_for_run(self.factory, self.context.run_id, kb_id, keyword, offset, limit)
 
+    def _remember_conversation_sources(self, db: Session, run: RunRecord, references) -> None:
+        """Record structured message references returned by history tools, without parsing text."""
+        from sqlalchemy import tuple_
+        from .context_access import merge_dependencies
+        from nexus_core.runtime.context import ContextDependency
+        references = tuple(references)
+        if not references:
+            return
+        rows = db.scalars(select(MessageRecord).where(
+            tuple_(MessageRecord.session_id, MessageRecord.sequence).in_(references)))
+        sources = {str(message.run_id) if message.run_id else (message.runtime_metadata or {}).get('source_run_id')
+                   for message in rows}
+        merge_dependencies(run, [ContextDependency('history', source, 'source-v1') for source in sources if source])
+
     @offloaded
     def search_conversations(self, query: str, limit: int) -> str:
         """Keyword search over the principal's other sessions in this space (stage 4, D1); snippets only."""
@@ -866,6 +1076,7 @@ class DurableRuntimeStore:
             require_membership(db, run.tenant_id, run.principal_id)
             hits = search(db, tenant_id=run.tenant_id, owner_id=run.principal_id,
                           current_session_id=run.session_id, query=query, limit=limit)
+            self._remember_conversation_sources(db, run, [(UUID(h['session_id']), h['sequence']) for h in hits])
         if not hits:
             return 'No matching messages in earlier conversations.'
         return '\n'.join(f"[{h['session_id']} #{h['sequence']}] {h['session_title'] or '(untitled)'} | {h['role']} | "
@@ -887,6 +1098,8 @@ class DurableRuntimeStore:
             require_membership(db, run.tenant_id, run.principal_id)
             page = read_page(db, tenant_id=run.tenant_id, owner_id=run.principal_id, current_session_id=run.session_id,
                              session_id=target, around=around, before=before, after=after)
+            if page is not None:
+                self._remember_conversation_sources(db, run, [(target, item['sequence']) for item in page['messages']])
         if page is None:
             return 'Conversation not found.'
         body = '\n'.join(f"#{m['sequence']} {m['role']}: {html.escape(m['content'], quote=False)}" for m in page['messages'])
@@ -916,6 +1129,9 @@ class DurableRuntimeStore:
             hits = search_entries(db, run.tenant_id, run.principal_id, query, limit, vector_ranking=ranking)
             if not hits:
                 return 'No matching published memory.'
+            from .context_access import merge_dependencies
+            from nexus_core.runtime.context import ContextDependency
+            merge_dependencies(run, tuple(ContextDependency('memory', h['id'], str(h['version'])) for h in hits))
             append_event(db, run.id, 'memory.used', {'source': 'search', 'entries': [
                 {'id': h['id'], 'title': h['title'], 'kind': h['kind'], 'version': h['version']} for h in hits]})
             return '\n'.join(f"[{h['id']}] {h['kind']} | {h['title']} | v{h['version']} | {h['snippet']}" for h in hits)

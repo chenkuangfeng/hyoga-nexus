@@ -417,7 +417,8 @@ def test_embedded_worker_runs_a_run_and_stops_cleanly(tmp_path):
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and run_row(factory, run.id).status != "completed":
             time.sleep(0.1)
-        assert run_row(factory, run.id).status == "completed"
+        observed = run_row(factory, run.id)
+        assert observed.status == "completed", (observed.status, observed.error_code)
     finally:
         workers.stop(timeout=20)
     assert workers.threads == []

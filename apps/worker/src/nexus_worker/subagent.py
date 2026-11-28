@@ -62,7 +62,7 @@ class NoApprovalAccess:
     """The parent's tool access without `approval` and `grant`, so the gateway refuses what would need approval."""
 
     def __init__(self, access):
-        for name in ('authorize', 'start', 'finish', 'denied', 'progress', 'spill', 'observe'):
+        for name in ('authorize', 'authorize_many', 'start', 'finish', 'denied', 'progress', 'spill', 'observe'):
             if hasattr(access, name):
                 setattr(self, name, getattr(access, name))
 

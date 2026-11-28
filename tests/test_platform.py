@@ -276,7 +276,8 @@ def test_platform_api_publishes_agent_and_exposes_run_events(database):
             after = client.get(
                 f"/api/v1/tenants/{tenant_id}/runs/{run_id}/events?after_sequence=1"
             )
-            assert [event["sequence"] for event in after.json()] == [2, 3]
+            assert [event["sequence"] for event in after.json()] == [2, 3, 4]
+            assert [event['event_type'] for event in after.json()] == ['run.started', 'context.assembled', 'run.failed']
 
             draft_response = client.post(
                 f"/api/v1/tenants/{tenant_id}/agents",

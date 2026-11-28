@@ -17,6 +17,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from nexus_core.runtime.context import ContextDependency
 from nexus_core.native import BUILTIN_TOOL_NAMES
 from nexus_core.platform import SYSTEM_TENANT_ID, Principal, new_id, utc_now
 from nexus_platform.authz.audit import audit
@@ -288,19 +289,26 @@ def _live(db: Session, tenant_id: UUID, name: str, version: SkillVersionRecord) 
 
 def bound_versions(db: Session, agent_version_id: UUID) -> dict[str, SkillVersionRecord]:
     """Return ``name -> version`` for the skills this agent version binds and that are still live."""
-    result: dict[str, SkillVersionRecord] = {}
     rows = db.scalars(select(ResourceBindingRecord).where(
         ResourceBindingRecord.agent_version_id == agent_version_id,
         ResourceBindingRecord.kind == RESOURCE_KIND)).all()
+    parsed = {}
     for row in rows:
         try:
-            version = db.get(SkillVersionRecord, UUID(row.resource_version_id))
-        except ValueError:
+            parsed[row.id] = UUID(row.resource_version_id)
+        except (ValueError, TypeError):
             continue
-        if version is None or version.tenant_id != row.source_tenant_id or not _live(db, row.source_tenant_id, row.resource_id, version):
-            continue
-        result[row.resource_id] = version
-    return result
+    versions, live = {}, set()
+    ids = list(set(parsed.values()))
+    for offset in range(0, len(ids), 300):
+        batch = ids[offset:offset + 300]
+        versions.update({v.id: v for v in db.scalars(select(SkillVersionRecord).where(SkillVersionRecord.id.in_(batch)))})
+        live.update((r.tenant_id, r.resource_id, r.version_id) for r in db.scalars(select(PlatformResourceRecord).where(
+            PlatformResourceRecord.kind == RESOURCE_KIND, PlatformResourceRecord.active.is_(True),
+            PlatformResourceRecord.version_id.in_([str(v) for v in batch]))))
+    return {row.resource_id: versions[parsed[row.id]] for row in rows if row.id in parsed
+            and parsed[row.id] in versions and versions[parsed[row.id]].tenant_id == row.source_tenant_id
+            and (row.source_tenant_id, row.resource_id, str(parsed[row.id])) in live}
 
 
 def usable_version(db: Session, tenant_id: UUID, agent_version_id: UUID, name: str,
@@ -366,7 +374,8 @@ def _terms(text: str) -> set[str]:
 
 
 def search_usable(db: Session, tenant_id: UUID, agent_version_id: UUID, user_id: UUID | None, query: str,
-                  limit: int = SEARCH_LIMIT) -> list[tuple[str, str]]:
+                  limit: int = SEARCH_LIMIT, *,
+                  dependencies: list[ContextDependency] | None = None) -> list[tuple[str, str]]:
     """(name, description) of the skills this Run may use that match `query`, best first.
 
     Searches only skills the Run could load: the agent version's bound skills and the user's own private skills that are
@@ -389,7 +398,12 @@ def search_usable(db: Session, tenant_id: UUID, agent_version_id: UUID, user_id:
         if score:
             scored.append((score, name, version.description))
     scored.sort(key=lambda item: (-item[0], item[1]))
-    return [(name, description) for _, name, description in scored[:max(1, min(limit, SEARCH_LIMIT))]]
+    selected = scored[:max(1, min(limit, SEARCH_LIMIT))]
+    if dependencies is not None:
+        # Capture the exact version whose metadata is returned, not a later lookup by name.
+        dependencies.extend(ContextDependency('skill', str(available[name].skill_id), str(available[name].id))
+                            for _, name, _ in selected)
+    return [(name, description) for _, name, description in selected]
 
 
 def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_id: UUID,
@@ -401,23 +415,52 @@ def session_index(db: Session, tenant_id: UUID, session_id: UUID, agent_version_
     """
     snapshot = db.get(SessionSkillSnapshotRecord, session_id)
     if snapshot is not None and snapshot.tenant_id == tenant_id and snapshot.agent_version_id == agent_version_id:
-        return snapshot.index_text
+        from types import SimpleNamespace
+        from nexus_core.runtime.context import ContextDependency
+        from nexus_platform.runs.context_access import sources_allowed
+        scope = SimpleNamespace(tenant_id=tenant_id, principal_id=user_id, config_snapshot={})
+        if snapshot.context_schema_version == 1 and snapshot.context_dependencies is not None and sources_allowed(
+                db, scope, [ContextDependency(**d) for d in snapshot.context_dependencies]):
+            return snapshot.index_text
     available = dict(bound_versions(db, agent_version_id))
     if user_id is not None:  # the owner's private skills join the index without being bound
         from nexus_platform.skills import private
         available.update({name: v for name, v in private.visible_versions(db, tenant_id, user_id).items()
                           if name not in available})
-    lines = [f'{name} | {version.description}' for name, version in sorted(available.items())
-             if version.model_invocable]
+    # Visibility is checked before metadata enters even a frozen catalog.
+    from nexus_platform.authz.resource_batch import ResourceAuthorizationBatch
+    skill_rows = {r.id: r for r in db.scalars(select(SkillRecord).where(
+        SkillRecord.id.in_([v.skill_id for v in available.values()])))}
+    grants = ResourceAuthorizationBatch(db, tenant_id,
+        [(RESOURCE_KIND, name, v.tenant_id, str(v.id)) for name, v in available.items()])
+    admitted = {}
+    for name, version in sorted(available.items()):
+        if not version.model_invocable:
+            continue
+        skill = skill_rows.get(version.skill_id)
+        if skill is None or skill.archived_at:
+            continue
+        if skill.owner_user_id is None:
+            try:
+                grants.authorize(RESOURCE_KIND, name, version.tenant_id, str(version.id))
+            except PlatformError:
+                continue
+        admitted[name] = version
+    lines = [f'{name} | {version.description}' for name, version in admitted.items()]
     text = '\n'.join(lines)
     if len(text) > INDEX_LIMIT:
         text = text[:INDEX_LIMIT].rsplit('\n', 1)[0] + '\n(more skills exist; find them with skill_search)'
+    deps = [{'kind': 'skill', 'resource_id': str(v.skill_id), 'version': str(v.id)}
+            for name, v in admitted.items() if f'{name} | ' in text]
     if snapshot is None:
         db.add(SessionSkillSnapshotRecord(session_id=session_id, tenant_id=tenant_id, agent_version_id=agent_version_id,
-                                          index_text=text, created_at=utc_now()))
+                                          index_text=text, created_at=utc_now(), context_dependencies=deps, context_schema_version=1))
     else:
         snapshot.agent_version_id = agent_version_id
         snapshot.index_text = text
+        snapshot.context_dependencies = deps
+        snapshot.context_schema_version = 1
+    db.flush()  # the context contributor immediately reads this row with autoflush disabled
     return text
 
 

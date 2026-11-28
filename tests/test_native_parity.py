@@ -19,7 +19,7 @@ from nexus_runtimes.native.models.retry import RetryModel
 from nexus_runtimes.native.models.routing import RoutedModel
 from nexus_runtimes.native.models.protocols.structured import StructuredModel
 from nexus_runtimes.native.models.tool_protocol import parse_text_calls
-from nexus_platform.persistence.models import InputRequestRecord, NativeRunStateRecord, MessageRecord, ToolInvocationRecord, SessionRecord, MemoryVersionRecord
+from nexus_platform.persistence.models import InputRequestRecord, NativeRunStateRecord, MessageRecord, ToolInvocationRecord, SessionRecord, MemoryVersionRecord, WorkingCheckpointRecord
 from nexus_tools.registry import ToolRegistry, RegisteredTool
 from nexus_worker.__main__ import run_once
 
@@ -72,7 +72,8 @@ def test_empty_never_succeeds_and_candidate_checkpoint_compatibility(database):
         prompt = db.scalar(select(InputRequestRecord).where(InputRequestRecord.run_id == run.id))
         assert prompt.candidates == ['A', 'B']
         state = db.get(NativeRunStateRecord, run.id).progress
-        assert state['state']['key_info'] == 'verified key context'
+        assert db.get(WorkingCheckpointRecord, session.id).content == 'verified key context'
+        assert state['state']['key_info'] == ''  # folded into the durable checkpoint, not re-injected each turn
 
 
 def test_generator_tools_project_only_public_progress(database):

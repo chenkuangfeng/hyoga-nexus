@@ -14,7 +14,7 @@ from .model import (
 from .agent import AgentRecord, AgentVersionRecord, ResourceBindingRecord, AgentDraftBindingRecord
 from .resource import PlatformResourceRecord, ResourceGrantRecord, TenantBuiltinDisabledRecord
 from .session import SessionRecord, MessageRecord, RuntimeSessionBindingRecord
-from .run import RunRecord, NativeRunStateRecord, RunDirectiveRecord, NativePreferenceRecord
+from .run import RunContextBlockRecord, RunRecord, NativeRunStateRecord, RunDirectiveRecord, NativePreferenceRecord
 from .event import RunEventRecord
 from .trajectory import RunTrajectoryRecord
 from .invocation import ToolInvocationRecord

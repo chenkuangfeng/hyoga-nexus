@@ -114,6 +114,9 @@ class SessionSkillSnapshotRecord(Base):
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     agent_version_id: Mapped[UUID] = mapped_column(ForeignKey("agent_versions.id", ondelete="CASCADE"), nullable=False)
     index_text: Mapped[str] = mapped_column(Text, nullable=False)
+    context_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default='0')
+    #: NULL identifies legacy snapshots that must be rebuilt before model injection.
+    context_dependencies: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

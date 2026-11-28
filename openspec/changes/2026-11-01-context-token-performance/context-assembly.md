@@ -1,6 +1,6 @@
 # 每次对话的上下文装配设计
 
-状态：方案，未实施。范围为 Native 的 messages/tools 装配，沿用本变更 P4、P8、P10、P11，不修改压缩算法、跨 Run 工具回放规则和累计 token 预算策略。其他 Runtime 继续由适配器驱动。
+状态：已实施装配底座与 v1 兼容布局；真实模型质量评测和 v2 默认切换未完成，验证记录见 tasks.md 与 evals/context-performance/assembly-report.md。范围为 Native 的 messages/tools 装配，沿用本变更 P4、P8、P10、P11，不修改压缩算法、跨 Run 工具回放规则和累计 token 预算策略。其他 Runtime 继续由适配器驱动。
 
 ## 1. 已核对的对象与取舍
 
@@ -30,10 +30,11 @@
 ```python
 @dataclass(frozen=True)
 class ContextDependency:
-    kind: str                 # agent/model/resource/memory/skill/provider/checkpoint/history
+    kind: str                 # resource/memory/skill/provider/plugin/mcp/knowledge/history
     resource_id: str
     version: str
     source_run_id: str | None = None
+    permission: Literal['read', 'use'] = 'use'
 
 @dataclass(frozen=True)
 class ContextBlock:
@@ -64,23 +65,25 @@ class AssemblyManifest:
 | 对象 | 归属 | 输入与输出/约束 |
 | --- | --- | --- |
 | `ContextPreparationService` | platform | 编排短事务读取、事务外工作、最终提交；取代大段准备器拼接，保留 prepare_execution 入口 |
-| `AuthorizedResourceLoader` | platform | 批量读取当前授权及选定版本，生成只读输入；不跨请求缓存 allow/deny |
-| `HistoryProjector` | platform | 消息行与来源权限生成历史；延续 P10；不静默丢弃未摘要用户/最终回答 |
+| `ResourceAuthorizationBatch` | platform | 批量读取当前授权及选定版本，生成只读输入；不跨请求缓存 allow/deny |
+| `_message_rows` / `histories_allowed` | platform | 消息行与来源权限生成历史；延续 P10；不静默丢弃未摘要用户/最终回答 |
 | `MemoryContextProvider` | platform + memory 契约 | 生成常驻/索引、当前 Run recall；正文按需读取；原始用户查询不取自合成消息 |
 | `SkillCatalogProvider` | platform | 合并绑定/私有技能，生成有限目录，正文仍由 load_skill 提供 |
 | `KnowledgeCatalogProvider` | platform | 仅返回已绑定且当前可读知识库目录；检索仍走工具 |
-| `ToolCatalogBuilder` | tools/worker | 复用 AuthorizedToolGateway 的过滤、审批风险与渐进加载；输出规范排序的 schema 快照 |
+| `AuthorizedToolGateway._offered` / `ToolAccess.authorize_many` | tools/worker | 复用 AuthorizedToolGateway 的过滤、审批风险与渐进加载；输出规范排序的 schema 快照 |
 | `ContextProviderRegistry` | worker 装配，契约在 core | 只注册受信任应用提供方，返回内容块；不返回工具处理器或授权结论 |
-| `RequestContextAssembler` | runtimes/native/context | 纯装配、去重、顺序、协议校验；不查数据库、不远程请求 |
-| `ContextAccessGuard` | platform，通过端口调用 | 每 attempt 校验 manifest 来源与当前权限，失败关闭；与既有 model.started 校验合并，避免双重遍历 |
+| `RequestContextAssembler` | core/runtime/context_assembly（Native 复用） | 纯装配、去重、顺序、协议校验；不查数据库、不远程请求 |
+| `require_context_access` / `sources_allowed` | platform，通过端口调用 | 每 attempt 校验 manifest 来源与当前权限，失败关闭；与既有 model.started 校验合并，避免双重遍历 |
 
-目录/记忆数据从已有所属包读取，不把领域逻辑挪进 runtimes；工具定义仍由 tools/MCP 管理。当前 ContextAssembler 的历史拟合与预算处理保持独立，可调用纯装配器。
+目录/记忆数据从已有所属包读取，不把领域逻辑挪进 runtimes；工具定义仍由 tools/MCP 管理。当前 ContextAssembler 的历史拟合与预算处理保持独立。纯装配器放在 core，由准备和 Native 共用，避免 platform 导入 runtimes；没有另建只转发调用的 Loader/Projector 类。Agent 与模型来源由 Run 配置版本及现有授权关卡追踪。通用 resource 依赖使用 PlatformResourceRecord 的 UUID、版本和 read/use 权限，插件不能用显示名绕过资源授权。
 
 ## 4. 一次 Run 的准备流程
 
 ### A. 短事务读取
 
 验证队首、租约、取消、用户、空间、Agent、模型及资源；批量读取来源 Run。捕获 session watermark、配置/目录依赖版本、选定快照与真实用户消息。只复制普通数据，结束事务后释放连接。此时不把 Run 改成 running、不发送模型请求，不在事务中调用外部 provider。
+
+没有外部 provider 的路径在同一短事务中完成 A/C，避免空阶段造成重复查询和事务成本。
 
 ### B. 事务外工作
 
@@ -126,7 +129,7 @@ messages:
 
 普通编辑保持选定旧版本；显式记忆更正/刷新在下一 Run 重建。删除、禁用、过期、撤权使来源不可再注入；若已进入当前 Run 历史，直接终止 Run，不声称可以从助手文字中清除衍生事实。下一 Run 的历史依赖校验也要覆盖记忆、技能和插件来源，不能仅检查 Agent 最初绑定的 resources。
 
-快照新增 `schema_version` 与依赖清单；Run 新增版本化 context manifest 数据记录（使用正式迁移，存哈希和引用，不复制全部消息正文）。当前 step 的新增来源在首次进入模型视图前并入 Run 依赖并持久化。原始消息仍是唯一对话来源。旧快照无依赖时不能沿用裸文本，需重新读取并授权生成；不可重建的历史不注入，按现有不可见历史规则处理。
+记忆/技能快照新增 `context_schema_version` 与依赖清单；Run 新增版本化 context manifest 数据记录（使用正式迁移，存哈希和引用，不复制全部消息正文）；provider 独有内容保存到 run_context_blocks，并由 manifest 引用其摘要，保证恢复不重跑提供方。当前 step 的新增来源在首次进入模型视图前并入 Run 依赖并持久化。原始消息仍是唯一对话来源。旧快照无依赖时不能沿用裸文本，需重新读取并授权生成；迁移把已执行的旧 Run 标为 schema_version=0，只从模型输入隐藏，不删除原始记录。新 Run 遇到已失效的 session provider 内容会重建，当前 Run 的失效来源则拒绝继续。
 
 不承诺追踪用户自行粘贴内容的全部来源；只追踪宿主注入、工具和系统明确记录的来源。摘要、检查点继承输入依赖，不能用摘要洗掉权限限制。
 
@@ -165,4 +168,4 @@ ContextProvider 不接收数据库 Session、凭据、可修改的共享 message
 
 性能验收使用至少 20 段现有固定语料，并增加 100/1000 工具、10k 消息、多 worker 和慢 provider 组合。记录 prepare/assemble/auth 的 p50/p95、SQL/事务数、连接占用、缓存字节、输入/cached_tokens。目标：非授权内容命中时不重复扫描技能正文、不重新远程发现 MCP；无网络调用占用数据库事务；SQL 按批量来源增长而非逐工具 N+1；无 provider 场景 p95 装配耗时对基线回退不超过 10%。超过门槛先定位修复，不为过线放宽权限。质量 eval 覆盖追问、技能选择、记忆使用和当前任务延续，通过后再启用 v2 默认值；真实供应商不可用时只报告平台指标，默认值不切换。
 
-本方案不引入 Redis、任意第三方代码安装或新管理 UI；沿用现有开关和资源配置。新增用户可配项如实施需要，必须同时接入现有类型化 API 与设置界面。提案未实施前不将本设计写成模块当前能力，不提前归档。
+本方案不引入 Redis、任意第三方代码安装或新管理 UI；沿用现有开关和资源配置。新增用户可配项如实施需要，必须同时接入现有类型化 API 与设置界面。模块文档只描述已实施的 v1 与来源校验；v2 默认布局继续标为待评测，不提前归档。

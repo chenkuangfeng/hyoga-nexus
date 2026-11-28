@@ -135,3 +135,19 @@ Redis 后端每个（事件循环，Run）一个共享的阻塞读取器，再�
 ## 知识库文档目录
 
 `knowledge_folders` 保存显式目录，目录查询合并记录、文档路径和隐式父级。新建与重命名需要内容维护权。同名文件的版本和内容去重按目录计算。上传提交阶段重新校验权限和重复内容，原文件仍用 UUID 组成对象键。
+
+## 对话上下文装配与来源授权
+
+`runs/preparation.py` 的 `ContextPreparationService` 组织准备流程：`ExecutionPreparer` 在短事务读取授权、版本、水位与本地目录；外部记忆 snapshot/prefetch 在事务外、数据库线程池之外执行；最后短事务复核租约、取消、水位和来源权限后发布 `run.started`。水位变化最多重建一次，再次变化以 `context_changed` 结束。没有外部工作时，读取和最终提交共用同一个短事务，不重复开启事务和读取授权。
+
+`runs/context_catalogs.py` 分别提供 MemoryContextProvider、SkillCatalogProvider、KnowledgeCatalogProvider，返回具名且带来源依赖的块。技能正文保持按需加载；目录只展示当前可见的绑定或私有技能；知识库目录记录用户可读依赖。`authz/resource_batch.py` 批量读取资源注册、共享授权和内置禁用事实，等价保留本空间优先、系统内置回退和共享权限规则，只在当前操作内使用。少量历史资源沿用标量查询；大量资源和初始工具目录使用分批读取，实际执行仍重新授权。
+
+`runs.context_manifest` 保存版本、来源依赖、块摘要、工具摘要与当前请求摘要。`run_context_blocks` 仅保存没有原始消息行的 provider 贡献，保证同 Run 等待恢复复用原字节；普通消息不复制到该表。会话记忆与技能快照的 `context_schema_version` 不是 1 或 `context_dependencies` 为 NULL 时视为旧格式，在当前授权下重建。普通发布不改变冻结内容；删除、停用、过期、撤权使内容安全失效。已注入当前 Run 的来源失效时返回 `run_authorization_denied`，不试图从助手自由文本移除衍生事实；新 Run 隐藏来源失效的历史，摘要和检查点也不能绕过来源限制。
+
+`runs/context_access.py` 在 `model.started`、真实重试的 `model.attempt` 与辅助摘要发送前复核用户、成员、Agent、模型和来源。历史来源按主体与记忆策略分组，正常路径批量检查合并后的依赖；失败时细分来源，避免误隐藏无关历史。撤权以该次数据库读取快照为边界，已经发送的请求无法撤回。权限结果不进入跨请求缓存。模型分支及 `search_conversations`/`read_conversation` 工具通过 history 引用保存原 Run 的传递来源；校验迭代展开并去重，来源删除、旧格式或跨主体/空间时拒绝沿用，避免复制消息或摘要清除资源限制。
+
+历史查询在 SQL 中保留当前 Run 完整工具交换，历史 Run 只读既有回放规则需要的消息，摘要覆盖区先验证全部来源再跳过。无摘要的长历史分批读取，不能静默截断未覆盖消息。投影缓存以 tenant/session/run/cut/watermark/投影版本隔离，按条目数、单条字节和总字节限制容量；缓存读写隔离可变对象。
+
+`context.assembled` 记录来源摘要、大小、准备耗时和请求估算，不保存正文；`model.started`/`model.attempt` 关联 assembly_id。`context.provider_failed` 只含 provider 名与错误码。MCP 的有效 schema/风险指纹也作为来源依赖，改变风险要求或禁用服务后旧声明不能继续发送。工具 schema 在 Run 内冻结摘要，等待恢复时使用规范化 JSON 检查一致性，恢复出的不同声明以 `context_prefix_changed` 拒绝。新增上下文写事务在 SQLite 先取得写入保留锁，再读取账本和校验租约，避免与嵌入式 worker 续租并发时发生读锁升级失败；PostgreSQL 继续使用 Run 行锁。
+
+迁移将已有执行记录的未知来源账本标为 schema_version=0，后续不回放给模型；原始消息与受授权审计仍保留。插件可用 resource 依赖声明注册资源的 UUID、版本和 read/use 权限，每次请求重新校验跨空间授权。
