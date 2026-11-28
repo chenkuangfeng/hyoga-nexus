@@ -65,6 +65,7 @@ from nexus_api.schemas.platform import (
     ResourceGrantView,
     RunCreate,
     RunEventView,
+    RunTrajectoryRecordView,
     RunView,
     SessionCreate,
     MemorySnapshotView,
@@ -654,6 +655,26 @@ def list_run_events(
 def event_view(row):
     return RunEventView(event_id=row.id, run_id=row.run_id, sequence=row.sequence, event_type=row.event_type,
         schema_version=row.schema_version, payload=row.payload, occurred_at=row.occurred_at)
+
+
+@router.get("/tenants/{tenant_id}/runs/{run_id}/trajectory", response_model=list[RunTrajectoryRecordView])
+def list_run_trajectory(
+    tenant_id: UUID,
+    run_id: UUID,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_database_session),
+):
+    """Read the independently persisted model request records after Run authorization."""
+    return [trajectory_record_view(row) for row in runs.list_trajectory_records(db, principal, tenant_id, run_id)]
+
+
+def trajectory_record_view(row):
+    """Map a durable request snapshot to the public, read-only trajectory DTO."""
+    return RunTrajectoryRecordView(id=row.id, run_id=row.run_id, sequence=row.sequence, turn=row.turn,
+        attempt=row.attempt, purpose=row.purpose, status=row.status,
+        input_estimate_tokens=row.input_estimate_tokens, run_total_tokens=row.run_total_tokens,
+        request_snapshot=row.request_snapshot, response_snapshot=row.response_snapshot, usage=row.usage,
+        error_code=row.error_code, started_at=row.started_at, completed_at=row.completed_at)
 
 
 @router.post("/tenants/{tenant_id}/runs/{run_id}/watchdog/acknowledge", response_model=RunView, status_code=202)

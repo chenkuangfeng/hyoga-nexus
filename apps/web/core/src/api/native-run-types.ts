@@ -45,6 +45,24 @@ export interface RunEvent {
   ephemeral?: boolean
 }
 
+export interface RunTrajectoryRecord {
+  id: string
+  run_id: string
+  sequence: number
+  turn: number
+  attempt: number
+  purpose: string
+  status: string
+  input_estimate_tokens: number
+  run_total_tokens: number | null
+  request_snapshot: Record<string, unknown>
+  response_snapshot: Record<string, unknown>
+  usage: Record<string, number>
+  error_code: string | null
+  started_at: string
+  completed_at: string | null
+}
+
 export interface SessionView {
   id: string
   tenant_id: string
@@ -154,6 +172,20 @@ export function isRunEvent(value: unknown): value is RunEvent {
     && isString(value.event_type)
     && isRecord(value.payload)
     && isString(value.occurred_at)
+}
+
+/** Validate a persisted model request record before exposing its snapshot in the inspector. */
+export function isRunTrajectoryRecord(value: unknown): value is RunTrajectoryRecord {
+  return isRecord(value)
+    && isString(value.id) && isString(value.run_id)
+    && isInteger(value.sequence) && isInteger(value.turn) && isInteger(value.attempt)
+    && isString(value.purpose) && isString(value.status)
+    && isInteger(value.input_estimate_tokens)
+    && (value.run_total_tokens === null || isInteger(value.run_total_tokens))
+    && isRecord(value.request_snapshot) && isRecord(value.response_snapshot)
+    && isRecord(value.usage) && Object.values(value.usage).every(isInteger)
+    && isNullableString(value.error_code) && isString(value.started_at)
+    && isNullableString(value.completed_at)
 }
 
 /** A tool the owner allowed for the rest of a session (openspec 2026-11-06-tool-call-hardening E). */

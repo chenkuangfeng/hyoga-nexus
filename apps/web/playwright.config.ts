@@ -35,5 +35,5 @@ export default defineConfig({
   webServer: [
     { command: preview ? 'corepack pnpm --filter @nexus-web/workspace exec vite preview --host 127.0.0.1 --port 5193 --strictPort' : 'corepack pnpm exec vite --config e2e/vite.config.ts --host 127.0.0.1 --port 5193 --strictPort', url: 'http://127.0.0.1:5193/login', reuseExistingServer: false, env: { ...serverEnv, NEXUS_E2E_APP: 'workspace' }, timeout: 90_000 },
     { command: preview ? 'corepack pnpm --filter @nexus-web/enterprise exec vite preview --host 127.0.0.1 --port 5194 --strictPort' : 'corepack pnpm exec vite --config e2e/vite.config.ts --host 127.0.0.1 --port 5194 --strictPort', url: 'http://127.0.0.1:5194/enterprise/login', reuseExistingServer: false, env: { ...serverEnv, NEXUS_E2E_APP: 'enterprise' }, timeout: 90_000 },
-  ].filter((_, index) => app !== 'enterprise' || index === 1),
+  ].filter((_, index) => !app || (app === 'enterprise' ? index === 1 : index === 0)),
 })

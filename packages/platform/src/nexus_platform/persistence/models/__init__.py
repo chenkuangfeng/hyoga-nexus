@@ -16,6 +16,7 @@ from .resource import PlatformResourceRecord, ResourceGrantRecord, TenantBuiltin
 from .session import SessionRecord, MessageRecord, RuntimeSessionBindingRecord
 from .run import RunRecord, NativeRunStateRecord, RunDirectiveRecord, NativePreferenceRecord
 from .event import RunEventRecord
+from .trajectory import RunTrajectoryRecord
 from .invocation import ToolInvocationRecord
 from .tool_output import ToolOutputRecord
 from .artifact import ArtifactRecord
@@ -87,6 +88,7 @@ __all__ = [
     'MemoryTopicStatRecord',
     'MemoryCaptureJobRecord',
     'Base',
+    'RunTrajectoryRecord',
     'UserRecord',
     'UserIdentityRecord',
     'SpaceInviteLinkRecord',

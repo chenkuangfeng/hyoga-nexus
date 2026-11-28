@@ -223,6 +223,24 @@ class RunEventView(BaseModel):
     ephemeral: bool = False
 
 
+class RunTrajectoryRecordView(BaseModel):
+    id: UUID
+    run_id: UUID
+    sequence: int
+    turn: int
+    attempt: int
+    purpose: str
+    status: str
+    input_estimate_tokens: int
+    run_total_tokens: int | None
+    request_snapshot: dict[str, Any]
+    response_snapshot: dict[str, Any]
+    usage: dict[str, int]
+    error_code: str | None
+    started_at: datetime
+    completed_at: datetime | None
+
+
 class ResourceGrantCreate(BaseModel):
     source_tenant_id: UUID
     kind: str = Field(min_length=1, max_length=64)

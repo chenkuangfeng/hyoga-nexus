@@ -4,6 +4,7 @@ from .submission import create_run
 from .session_ledger import queue_position
 from .queries import get_run
 from .events import list_events, append_event
+from .trajectory import list_trajectory_records
 from .cancellation import request_cancel
 from .leasing import claim_next, process_claimed
 from .access import authorize_run_resource
@@ -17,6 +18,7 @@ __all__ = [
     'create_run',
     'get_run',
     'list_events',
+    'list_trajectory_records',
     'request_cancel',
     'claim_next',
     'process_claimed',

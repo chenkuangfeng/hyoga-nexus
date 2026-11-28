@@ -7,18 +7,50 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import replace
+from typing import Sequence
 from nexus_core.native import HookContext, NativePolicy
 from nexus_core.runtime import (
     LifecycleEvent, ModelMessage, RunContext, RunRequest, RuntimeCapabilities, RuntimeFault,
-    RuntimeOutcome, RuntimeProgress,
+    RuntimeOutcome, RuntimeProgress, ToolDefinition,
 )
 from nexus_runtimes.native.context import resolve_incomplete_exchanges
 from nexus_runtimes.native.context.assembler import ContextAssembler
 from nexus_runtimes.native.context.working import WorkingMemory
 from nexus_runtimes.native.hooks import HookRegistry
 from .completion import CompletionJudge, JudgeDecision
-from .turn import TurnExecutor
+from .turn import TurnExecutor, TurnResponse
 from .dispatcher import ToolDispatcher
+
+
+def _trajectory_request_snapshot(messages: Sequence[ModelMessage],
+                                 definitions: Sequence[ToolDefinition]) -> dict[str, object]:
+    """Capture the vendor-neutral request view for later authorized inspection."""
+    return {
+        'messages': [{
+            'role': message.role,
+            'content': message.content,
+            'tool_call_id': message.tool_call_id,
+            'tool_calls': [{'id': call.id, 'name': call.name, 'arguments': call.arguments}
+                           for call in message.tool_calls],
+        } for message in messages],
+        'tools': [{
+            'name': tool.name,
+            'description': tool.description,
+            'parameters': tool.parameters,
+            'side_effects': tool.side_effects,
+            'requires_approval': tool.requires_approval,
+        } for tool in definitions],
+    }
+
+
+def _trajectory_response_snapshot(response: TurnResponse) -> dict[str, object]:
+    """Capture model text and structured calls without provider SDK objects."""
+    return {
+        'text': response.text,
+        'finish_reason': response.finish_reason,
+        'tool_calls': [{'id': call.id, 'name': call.name, 'arguments': call.arguments}
+                       for call in response.calls],
+    }
 
 
 #: Sent on the last allowed turn, where tools are withdrawn so the model must answer (3.7).
@@ -204,14 +236,21 @@ class RunOrchestrator:
                     remaining = remaining_total - input_estimate if remaining_total is not None else budget.max_output_tokens
                     await self.store.save_progress(progress)
                     await self._hook(run_id, 'model.before', turn)
+                    trajectory_record_id = None
+                    if hasattr(self.store, 'start_trajectory_record'):
+                        trajectory_record_id = await self.store.start_trajectory_record(
+                            turn, 1, input_estimate, _trajectory_request_snapshot(model_history, turn_definitions))
                     await self.store.emit('model.started', {'turn': turn,
                         'input_estimate_tokens': input_estimate})
                     model_hook_active = True
                     try:
                         try:
                             response = await self.turn_executor.execute(model_history, turn_definitions, remaining, token, turn, budget)
-                        except RuntimeFault as exc:
-                            if exc.code != 'model_context_exceeded' or getattr(exc, 'output_started', False):
+                        except Exception as exc:
+                            if trajectory_record_id is not None:
+                                await self.store.finish_trajectory_record(trajectory_record_id, {}, {},
+                                    progress.tokens, 'failed', getattr(exc, 'code', 'model_request_failed'))
+                            if not isinstance(exc, RuntimeFault) or exc.code != 'model_context_exceeded' or getattr(exc, 'output_started', False):
                                 raise
                             # Provider context windows can be smaller than our configured estimate.
                             # Compact once more, aggressively trim older tool output, then retry once.
@@ -257,10 +296,21 @@ class RunOrchestrator:
                                 'reason': 'model_context_exceeded', 'action': 'compact_and_retry'})
                             await self._hook(run_id, 'model.before', turn)
                             model_hook_active = True
+                            retry_record_id = None
+                            if hasattr(self.store, 'start_trajectory_record'):
+                                retry_record_id = await self.store.start_trajectory_record(
+                                    turn, 2, retry_estimate, _trajectory_request_snapshot(retry_messages, turn_definitions))
                             await self.store.emit('model.started', {'turn': turn, 'recovery_attempt': 1,
                                 'input_estimate_tokens': retry_estimate})
-                            response = await self.turn_executor.execute(
-                                retry_messages, turn_definitions, remaining, token, turn, budget)
+                            try:
+                                response = await self.turn_executor.execute(
+                                    retry_messages, turn_definitions, remaining, token, turn, budget)
+                            except Exception as retry_error:
+                                if retry_record_id is not None:
+                                    await self.store.finish_trajectory_record(retry_record_id, {}, {}, progress.tokens,
+                                        'failed', getattr(retry_error, 'code', 'model_request_failed'))
+                                raise
+                            trajectory_record_id = retry_record_id
                     finally:
                         if model_hook_active:
                             await self._hook(run_id, 'model.after', turn)
@@ -270,6 +320,9 @@ class RunOrchestrator:
                         from nexus_runtimes.native.context.assembler import estimate_tokens
                         progress.tokens += request_input_estimate + estimate_tokens(response.text)
                         progress.tokens += sum(estimate_tokens(call.arguments) for call in response.calls)
+                    if trajectory_record_id is not None:
+                        await self.store.finish_trajectory_record(trajectory_record_id,
+                            _trajectory_response_snapshot(response), response.usage, progress.tokens, 'completed')
                     completed = ('model.completed', {'turn': turn, 'tokens': progress.tokens,
                         'run_total_tokens': progress.tokens,
                         'request_input_estimate_tokens': request_input_estimate,

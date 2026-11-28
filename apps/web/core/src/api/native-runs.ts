@@ -14,6 +14,7 @@ import { getApiBaseUrl } from '@nexus-web/core/utils/api-base'
 import {
   isRecord,
   isRunEvent,
+  isRunTrajectoryRecord,
   isRunView,
   isString,
   type ConversationMessage,
@@ -22,6 +23,7 @@ import {
   type BlockedSession,
   type PendingInput,
   type RunEvent,
+  type RunTrajectoryRecord,
   type RunView,
   type SessionView,
   type ToolGrant,
@@ -135,6 +137,13 @@ export async function listRunEvents(tenantId: string, runId: string): Promise<Ru
     if (data.length < EVENT_PAGE_LIMIT || page.length === 0) return events
     after = page[page.length - 1].sequence
   }
+}
+
+/** Read durable, authorized model request snapshots for one Run's trajectory inspector. */
+export async function listRunTrajectoryRecords(tenantId: string, runId: string): Promise<RunTrajectoryRecord[]> {
+  const data: unknown = await get(`${tenantPath(tenantId)}/runs/${encodeURIComponent(runId)}/trajectory`)
+  if (!Array.isArray(data)) throw new Error('Unexpected run trajectory response')
+  return data.map(item => requireValid(item, isRunTrajectoryRecord, 'run trajectory record'))
 }
 
 /** A pending tool approval of the caller's own Run; arguments are only exposed here, never in events. */

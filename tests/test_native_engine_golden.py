@@ -14,6 +14,7 @@ from test_platform import database  # noqa: F401  (pytest fixture)
 from test_native_runtime import FakeModel, call, registry, run_row, stack
 from nexus_core.runtime import ModelChunk, ToolResult
 from nexus_platform.persistence.models import ToolInvocationRecord
+from nexus_platform.persistence.models import RunTrajectoryRecord
 from nexus_platform.runs.service import list_events
 from nexus_worker.__main__ import run_once
 
@@ -159,3 +160,12 @@ def test_model_events_record_request_estimate_and_run_total(database):
     assert started.payload['input_estimate_tokens'] > 0
     assert completed.payload['request_input_estimate_tokens'] == started.payload['input_estimate_tokens']
     assert completed.payload['run_total_tokens'] == completed.payload['tokens']
+    with database() as db:
+        records = list(db.scalars(select(RunTrajectoryRecord)
+            .where(RunTrajectoryRecord.run_id == run.id).order_by(RunTrajectoryRecord.sequence)))
+    assert len(records) == 1
+    assert records[0].status == 'completed'
+    assert records[0].input_estimate_tokens == started.payload['input_estimate_tokens']
+    assert records[0].request_snapshot['messages']
+    assert records[0].response_snapshot['text'] == 'Done'
+    assert records[0].run_total_tokens == completed.payload['tokens']

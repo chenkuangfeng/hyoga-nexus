@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict
 from datetime import timedelta, timezone
 from uuid import UUID
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 from nexus_core.platform import new_id, utc_now
 from nexus_core.run_events import EPHEMERAL_KINDS, BusEvent, BusUnavailable
@@ -31,6 +31,7 @@ from nexus_platform.persistence.models import (
     MemoryEntryRecord,
     ContextSummaryRecord,
     ToolOutputRecord,
+    RunTrajectoryRecord,
 )
 from nexus_platform.persistence.models.event import RunEventRecord
 from nexus_platform.runs.service import append_event, authorize_run_resource
@@ -173,6 +174,41 @@ class DurableRuntimeStore:
         if kind in EPHEMERAL_KINDS and self._publish_ephemeral(kind, payload):
             return  # live-only text goes to the bus without a thread hop or a transaction
         await run_db(self._emit_stored, kind, payload)
+
+    @offloaded
+    def start_trajectory_record(self, turn: int, attempt: int, input_estimate_tokens: int,
+                                request_snapshot: dict[str, object]) -> str:
+        """Persist the exact model-visible request independently from the Run event stream."""
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            latest = db.scalar(select(func.max(RunTrajectoryRecord.sequence)).where(
+                RunTrajectoryRecord.run_id == run.id)) or 0
+            row = RunTrajectoryRecord(id=new_id(), run_id=run.id, sequence=latest + 1,
+                turn=turn, attempt=attempt, purpose='assistant', status='running',
+                input_estimate_tokens=input_estimate_tokens, run_total_tokens=None,
+                request_snapshot=request_snapshot, response_snapshot={}, usage={},
+                started_at=utc_now())
+            db.add(row)
+            return str(row.id)
+
+    @offloaded
+    def finish_trajectory_record(self, record_id: str, response_snapshot: dict[str, object],
+                                 usage: dict[str, int], run_total_tokens: int,
+                                 status: str, error_code: str | None = None) -> None:
+        """Complete one persisted request snapshot with its provider result and cumulative usage."""
+        with SqlAlchemyUnitOfWork(self.factory) as work:
+            db = work.session
+            run = self._run(db)
+            row = db.get(RunTrajectoryRecord, UUID(record_id))
+            if not row or row.run_id != run.id or row.status != 'running':
+                raise RuntimeFault('interrupted')
+            row.status = status
+            row.response_snapshot = response_snapshot
+            row.usage = usage
+            row.run_total_tokens = run_total_tokens
+            row.error_code = error_code
+            row.completed_at = utc_now()
 
     def _emit_stored(self, kind: str, payload: dict[str, object]) -> None:
         with SqlAlchemyUnitOfWork(self.factory) as work:

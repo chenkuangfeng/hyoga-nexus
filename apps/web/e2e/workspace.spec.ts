@@ -266,42 +266,46 @@ test('会话通过顶部标签查看对话、轨迹和产物，产物加载失�
   await expect.poll(async () => (await page.locator('.platform-route-outlet').boundingBox())!.width >= 300).toBe(true)
 })
 
-test('会话可显式要求智能体把已验证流程整理成私有技能草稿', async ({ page, api }) => {
+test('会话页顶部只显示左对齐的对话、轨迹和产物标签', async ({ page, api }) => {
+  test.setTimeout(120_000)
   await api.signIn(); bootWorkspace(api)
-  const messages = [{ id: 'm1', run_id: null, sequence: 1, role: 'user', content: '部署流程已完成', created_at: '2026-11-27T00:00:00Z' }]
+  const messages = [{ id: 'm1', run_id: 'r1', sequence: 1, role: 'user', content: '部署流程已完成', created_at: '2026-11-27T00:00:00Z' }]
   const completedRun = { id: 'r1', tenant_id: 'a', session_id: 's1', principal_id: 'u', status: 'completed',
     attempt: 1, error_code: null, error_message: null, created_at: '2026-11-27T00:00:00Z',
     started_at: '2026-11-27T00:00:00Z', ended_at: '2026-11-27T00:00:01Z', queue_position: null, attention_required: false }
-  let boundTools = ['skill_search', 'skill_manage', 'skill_save']
   api.handle(request => {
     const url = new URL(request.url()), path = url.pathname
     if (path === '/api/v1/tenants/a/agents') return { body: [{ id: 'agent', name: 'Agent', description: '', status: 'published',
-      published_version_id: 'av1', resource_bindings: boundTools.map(resource_id => ({ kind: 'tool', resource_id })) }] }
+      published_version_id: 'av1', resource_bindings: [] }] }
     if (path === '/api/v1/tenants/a/sessions') return { body: [{ id: 's1', agent_version_id: 'av1', title: '部署流程' }] }
     if (path === '/api/v1/tenants/a/sessions/s1/messages') return { body: { messages, latest_run: completedRun, blocked: null } }
     if (path === '/api/v1/tenants/a/native/sessions/s1/tool-grants') return { body: [] }
+    if (path === '/api/v1/tenants/a/sessions') return { body: [{ id: 's1', agent_version_id: 'av1', title: '部署流程' }] }
+    if (path === '/api/v1/tenants/a/runs/r1/trajectory') return { body: [{ id: 'tr1', run_id: 'r1', sequence: 1,
+      turn: 1, attempt: 1, purpose: 'assistant', status: 'completed', input_estimate_tokens: 128,
+      run_total_tokens: 160, request_snapshot: { messages: [{ role: 'user', content: '部署流程已完成' }],
+        tools: [{ name: 'deploy', description: '部署应用', parameters: { type: 'object' } }] },
+      response_snapshot: { text: '部署步骤已核验', tool_calls: [] }, usage: { input: 130, output: 30 }, error_code: null,
+      started_at: '2026-11-27T00:00:00Z', completed_at: '2026-11-27T00:00:01Z' }] }
     if (path === '/api/v1/tenants/a/artifacts') return { body: { items: [] } }
-    if (path === '/api/v1/tenants/a/sessions/s1/runs' && request.method() === 'POST') return { body: {
-      ...completedRun, id: 'r2', status: 'queued', started_at: null, ended_at: null,
-    } }
-    if (path === '/api/v1/tenants/a/runs/r2') return { body: { ...completedRun, id: 'r2' } }
   })
-  await page.route('**/api/v1/tenants/a/runs/r2/events*', route => route.fulfill({
-    status: 200, headers: { 'content-type': 'text/event-stream' }, body: '',
-  }))
   await page.goto('/platform/chat/s1')
-  const learn = page.getByTestId('chat-learn-skill')
-  await expect(learn).toBeVisible()
-  const submitted = page.waitForRequest(request => request.method() === 'POST'
-    && new URL(request.url()).pathname === '/api/v1/tenants/a/sessions/s1/runs')
-  await learn.click()
-  const request = await submitted
-  expect(request.postDataJSON().message).toContain('SKILL.md')
-  expect(request.postDataJSON().message).toContain('skill_save')
-  boundTools = []
-  const refreshedAgents = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/tenants/a/agents')
-  await page.reload()
-  await refreshedAgents
+  await expect(page.locator('.chat-topbar')).toBeVisible({ timeout: 60_000 })
+  const topbar = page.locator('.chat-topbar')
+  await expect(topbar.getByRole('tab')).toHaveCount(3)
+  await expect(topbar.getByRole('tab').nth(0)).toHaveText('对话')
+  await expect(topbar.getByRole('tab').nth(2)).toHaveText('产物')
+  await expect(topbar.locator('> :not(nav)')).toHaveCount(0)
+  const topbarBox = await topbar.boundingBox(), tabsBox = await topbar.getByRole('tablist').boundingBox()
+  expect(topbarBox && tabsBox && tabsBox.x - topbarBox.x).toBeLessThanOrEqual(24)
+  await expect(topbar.getByRole('tab', { name: '对话' })).toHaveAttribute('aria-selected', 'true')
+  await topbar.getByRole('tab', { name: '对话' }).press('ArrowRight')
+  await expect(topbar.getByRole('tab', { name: '轨迹' })).toHaveAttribute('aria-selected', 'true')
+  await topbar.getByRole('tab', { name: '轨迹' }).click()
+  await expect(page.locator('#chat-panel-trajectory')).toContainText('部署步骤已核验')
+  await page.locator('#chat-panel-trajectory').getByRole('row').nth(1).click()
+  await expect(page.getByTestId('trajectory-inspector')).toContainText('部署流程已完成')
+  await expect(page.getByTestId('trajectory-inspector')).toContainText('部署应用')
   await expect(page.getByTestId('chat-learn-skill')).toHaveCount(0)
 })
 

@@ -44,31 +44,7 @@
   <!-- Conversation (WeKnora views/chat/index.vue). -->
   <div v-else class="chat" :class="{ 'is-embedded': compact }">
     <div v-if="!compact" class="chat-topbar">
-      <NexusChatHeader :title="sessionTitleText" :session-id="activeSessionId" @copy-markdown="copyMarkdown" />
-      <t-button v-if="canLearnCurrentConversation" class="chat-learn-skill-button"
-        size="small" variant="outline" data-testid="chat-learn-skill"
-        :aria-label="t('nexusChat.learnSkill')" @click="learnCurrentConversation">
-        {{ t('nexusChat.learnSkill') }}
-      </t-button>
-      <!-- Nexus: tools allowed for the rest of this session (openspec 2026-11-06-tool-call-hardening 7.3). -->
-      <t-popup v-if="toolGrants.length" trigger="click" placement="bottom-right" overlay-class-name="wk-popover">
-        <button type="button" class="tool-grants-toggle" :aria-label="$t('nativeRuns.toolGrants.title')">
-          <t-icon name="secured" /> {{ toolGrants.length }}
-        </button>
-        <template #content>
-          <div class="tool-grants-panel">
-            <p class="tool-grants-title">{{ $t('nativeRuns.toolGrants.title') }}</p>
-            <p class="tool-grants-hint">{{ $t('nativeRuns.toolGrants.hint') }}</p>
-            <div v-for="grant in toolGrants" :key="grant.id" class="tool-grants-row">
-              <span class="tool-grants-name">{{ grant.tool_name }}</span>
-              <t-button size="small" variant="text" theme="danger" @click="revokeGrant(grant.id)">
-                {{ $t('nativeRuns.toolGrants.revoke') }}
-              </t-button>
-            </div>
-          </div>
-        </template>
-      </t-popup>
-      <nav v-if="!compact" class="chat-view-tabs" role="tablist" :aria-label="t('nexusChat.trajectory.tabsLabel')">
+      <nav class="chat-view-tabs" role="tablist" :aria-label="t('nexusChat.trajectory.tabsLabel')">
         <button v-for="tab in chatTabs" :key="tab.id" type="button" role="tab" class="chat-view-tab"
           :id="`chat-tab-${tab.id}`" :aria-selected="activeTab === tab.id" :aria-controls="`chat-panel-${tab.id}`"
           :tabindex="activeTab === tab.id ? 0 : -1" @click="activeTab = tab.id"
@@ -152,7 +128,7 @@
       </div>
     </div>
     <section v-else-if="activeTab === 'trajectory'" id="chat-panel-trajectory" class="chat-tab-panel" role="tabpanel" aria-labelledby="chat-tab-trajectory">
-      <ChatTrajectory :events-by-run="eventsByRun" :live-run-id="run?.id ?? null" :live-events="native.state.value.events" />
+      <ChatTrajectory :records="trajectoryRecords" :loading="trajectoryLoading" :error="trajectoryError" @retry="loadSessionTrajectory(activeSessionId)" />
     </section>
     <section v-else id="chat-panel-artifacts" class="chat-tab-panel chat-artifacts-panel" role="tabpanel" aria-labelledby="chat-tab-artifacts">
       <t-loading :loading="artifactsLoading">
@@ -188,13 +164,12 @@ import {
   listPendingApprovals,
   listRunEvents,
   listSessions,
+  listRunTrajectoryRecords,
   resolveApproval,
-  listToolGrants,
-  revokeToolGrant,
-  type ToolGrant,
   type AgentView,
   type ConversationMessage,
   type RunEvent,
+  type RunTrajectoryRecord,
 } from '@nexus-web/core/api/native-runs'
 import { useNativeRun } from '@/composables/useNativeRun'
 import { provideNexusChatActions } from '@/composables/nexusChatActions'
@@ -202,7 +177,6 @@ import { archiveMemoryEntry, listPendingDraftIds, reviewMemoryDraft } from '@nex
 import { providePromptDock } from '@/composables/usePromptDock'
 import { canSteer, failureCode, isActive, isTerminal } from '@/views/native/nativeRunState'
 import InputField from '@/components/Input-field.vue'
-import NexusChatHeader from '@/components/NexusChatHeader.vue'
 import MessageTimestamp from '@/components/chat/MessageTimestamp.vue'
 import ChatQuestionMinimap from '@/components/chat/ChatQuestionMinimap.vue'
 import usermsg from '@/views/chat/components/usermsg.vue'
@@ -210,10 +184,9 @@ import botmsg from '@/views/chat/components/botmsg.vue'
 import PendingPromptDock from '@/views/chat/components/PendingPromptDock.vue'
 import { shouldShowConversationTimestamp } from '@/utils/messageTimestamp'
 import { listSessionArtifacts, type ArtifactLibraryItem } from '@nexus-web/core/api/artifacts'
-import { copyWithToast } from '@/utils/clipboard'
 import { deriveSessionTitle } from '@/utils/nexusChatTitle'
 import { summarizeAskUserAnswer, type AskUserQuestion } from '@/utils/askUser'
-import { buildChatRows, runsNeedingEvents, transcriptMarkdown, type ChatRow } from '@/utils/nexusChatTranscript'
+import { buildChatRows, runsNeedingEvents, type ChatRow } from '@/utils/nexusChatTranscript'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -254,13 +227,19 @@ const native = useNativeRun(() => tenantId.value)
 
 const messages = ref<ConversationMessage[]>([])
 const eventsByRun = ref(new Map<string, RunEvent[]>())
+const trajectoryByRun = ref(new Map<string, RunTrajectoryRecord[]>())
+const trajectoryLoading = ref(false)
+const trajectoryError = ref(false)
+const trajectoryRecords = computed(() => [...trajectoryByRun.value.values()].flat()
+  .sort((a, b) => a.started_at.localeCompare(b.started_at) || a.sequence - b.sequence))
+const trajectoryPending = new Set<string>()
+let trajectoryTimer: ReturnType<typeof setInterval> | null = null
 const approvalArgs = ref(new Map<string, Record<string, unknown>>())
 const loading = ref(false)
 const errorText = ref('')
 const agents = ref<AgentView[]>([])
 const selectedAgent = ref<string | undefined>(undefined)
 const pendingUsers = ref<string[]>([])
-const sessionTitleText = ref('')
 /** Agent version the open session is bound to; shown on the composer's agent button. */
 const sessionAgentVersion = ref('')
 /** WeKnora: true on entering a session (history renders without the typewriter), false after sending. */
@@ -314,22 +293,6 @@ const agentOptions = computed(() => agents.value.map(agent => ({
 })))
 
 const isReplying = computed(() => isActive(run.value))
-const canLearnCurrentConversation = computed(() => {
-  if (props.compact || isWelcome.value || isReplying.value || blockedSession.value
-      || !messages.value.some((message) => message.role === 'user')) return false
-  const agent = agents.value.find((item) => item.published_version_id === sessionAgentVersion.value)
-  const boundTools = new Set((agent?.resource_bindings ?? [])
-    .filter((binding) => binding.kind === 'tool')
-    .map((binding) => binding.resource_id))
-  return boundTools.has('skill_manage') && boundTools.has('skill_save') && boundTools.has('skill_search')
-})
-
-/** Submit a normal user turn that asks the current agent to draft a skill from this conversation. */
-function learnCurrentConversation() {
-  if (!canLearnCurrentConversation.value) return
-  void sendText(t('nexusChat.learnSkillPrompt'))
-}
-
 /** WeKnora shows a run-level error as the answer text; the code identifies the cause. */
 function failureMessage(code: string): string {
   return code ? t('nativeRuns.failure', { code }) : t('chat.processError')
@@ -378,18 +341,13 @@ async function loadAgents() {
   }
 }
 
-async function loadSessionTitle(id: string) {
+async function loadSessionAgentVersion(id: string) {
   const tenant = tenantId.value
   if (!tenant || !id) return
   try {
-    const found = (await listSessions(tenant)).find(item => item.id === id)
-    if (activeSessionId.value === id) {
-      sessionTitleText.value = found?.title || ''
-      sessionAgentVersion.value = found?.agent_version_id || ''
-    }
-  } catch {
-    /* keep the default title */
-  }
+    const session = (await listSessions(tenant)).find(item => item.id === id)
+    if (activeSessionId.value === id) sessionAgentVersion.value = session?.agent_version_id ?? ''
+  } catch { /* keep the locked selector until session data can be read */ }
 }
 
 /** Read the events of finished Runs, a few at a time; a failed read leaves that answer as plain text. */
@@ -410,6 +368,51 @@ async function loadRunEvents(sessionId: string) {
   }
   await Promise.all(Array.from({ length: EVENT_READ_CONCURRENCY }, worker))
 }
+
+async function loadRunTrajectory(runId: string, sessionId: string) {
+  const tenant = tenantId.value
+  if (!tenant || !runId || trajectoryPending.has(runId)) return
+  trajectoryPending.add(runId)
+  trajectoryLoading.value = true
+  try {
+    const records = await listRunTrajectoryRecords(tenant, runId)
+    if (activeSessionId.value === sessionId) {
+      trajectoryByRun.value = new Map(trajectoryByRun.value).set(runId, records)
+      trajectoryError.value = false
+    }
+  } catch {
+    if (activeSessionId.value === sessionId) trajectoryError.value = true
+  } finally {
+    trajectoryPending.delete(runId)
+    trajectoryLoading.value = trajectoryPending.size > 0
+  }
+}
+
+async function loadSessionTrajectory(sessionId: string) {
+  const ids = [...new Set([
+    ...messages.value.map(message => message.run_id).filter((id): id is string => !!id),
+    ...(run.value?.id ? [run.value.id] : []),
+  ])]
+  trajectoryError.value = false
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < ids.length) {
+      const id = ids[cursor++]
+      if (id) await loadRunTrajectory(id, sessionId)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(EVENT_READ_CONCURRENCY, ids.length) }, worker))
+}
+
+watch(() => [activeTab.value, activeSessionId.value, run.value?.id, run.value?.status], () => {
+  if (trajectoryTimer) clearInterval(trajectoryTimer)
+  trajectoryTimer = null
+  if (activeTab.value !== 'trajectory' || !isActive(run.value) || !run.value?.id) return
+  const currentRunId = run.value.id
+  const sessionId = activeSessionId.value
+  void loadRunTrajectory(currentRunId, sessionId)
+  trajectoryTimer = setInterval(() => void loadRunTrajectory(currentRunId, sessionId), 1500)
+})
 
 /** Files the session's Runs left under /outputs (openspec 2026-11-07-tool-expansion 4.6), shown under their answers. */
 const sessionArtifacts = ref<ArtifactLibraryItem[]>([])
@@ -437,15 +440,18 @@ async function openSession() {
   userHasScrolledUp.value = false
   isFirstEnter.value = true
   eventsByRun.value = new Map()
+  trajectoryByRun.value = new Map()
+  trajectoryError.value = false
   approvalArgs.value = new Map()
   sessionArtifacts.value = []
   void loadArtifacts(id)
-  void loadSessionTitle(id)
   void loadAgents()
+  void loadSessionAgentVersion(id)
   try {
     messages.value = await native.loadSession(id)
     if (run.value?.status === 'waiting_approval') void loadApprovals()
     void loadRunEvents(id)
+    void loadSessionTrajectory(id)
   } catch (error) {
     errorText.value = messageOf(error, t('nativeRuns.loadError'))
   } finally {
@@ -461,6 +467,7 @@ async function settleRun() {
   const page = await getConversation(tenantId.value, activeSessionId.value)
   messages.value = page.messages
   pendingUsers.value = []
+  void loadRunTrajectory(current.id, activeSessionId.value)
   // The worker registers a Run's outputs before it finishes, so they exist by now.
   void loadArtifacts(activeSessionId.value)
 }
@@ -493,7 +500,6 @@ async function sendText(text: string) {
       }
       const session = await createSessionApi(tenantId.value, selectedAgent.value, deriveSessionTitle(text))
       createdSessionId = session.id
-      sessionTitleText.value = session.title
       sessionAgentVersion.value = session.agent_version_id
       pendingUsers.value = [text]
       await native.send(session.id, text)
@@ -541,40 +547,11 @@ function promptRequest(pendingId: string): AskUserQuestion {
 /** Pending draft ids of the caller (memory draft cards); reset after a review so the next read is fresh. */
 let pendingDrafts: Promise<Set<string>> | null = null
 
-/** Session grants of the open conversation (tool-call-hardening E); reloaded on session change and after an approval. */
-const toolGrants = ref<ToolGrant[]>([])
-
-async function loadToolGrants() {
-  const tenant = tenantId.value, session = activeSessionId.value
-  if (!tenant || !session) { toolGrants.value = []; return }
-  try {
-    const grants = await listToolGrants(tenant, session)
-    if (activeSessionId.value === session) toolGrants.value = grants
-  } catch {
-    toolGrants.value = []
-  }
-}
-
-async function revokeGrant(grantId: string) {
-  const tenant = tenantId.value, session = activeSessionId.value
-  if (!tenant || !session) return
-  try {
-    await revokeToolGrant(tenant, session, grantId)
-    MessagePlugin.success(t('nativeRuns.toolGrants.revoked'))
-  } catch (error) {
-    MessagePlugin.error(error instanceof Error && error.message ? error.message : t('nativeRuns.loadError'))
-  }
-  await loadToolGrants()
-}
-
-watch(() => activeSessionId.value, () => { void loadToolGrants() }, { immediate: true })
-
 provideNexusChatActions({
   async resolveApproval(pendingId, decision, args, rememberForSession) {
     const current = run.value
     if (!tenantId.value || !current) throw new Error(t('nativeRuns.loadError'))
     await resolveApproval(tenantId.value, current.id, pendingId, decision === 'approve', args, rememberForSession)
-    if (rememberForSession) void loadToolGrants()
     await native.resume()
   },
   async answerPrompt(pendingId, response) {
@@ -610,12 +587,6 @@ provideNexusChatActions({
     await archiveMemoryEntry(tenantId.value, entryId)
   },
 })
-
-function copyMarkdown() {
-  const markdown = transcriptMarkdown(sessionTitleText.value || t('createChat.newSessionTitle'), rows.value,
-    { user: t('nativeRuns.user'), assistant: t('nativeRuns.assistant') })
-  void copyWithToast(markdown, 'common.copySuccess', 'common.copyFailed')
-}
 
 // ---- scrolling (WeKnora index.vue) ------------------------------------------------------------
 
@@ -689,7 +660,6 @@ watch(activeSessionId, (id) => {
   if (id && String(id) === createdSessionId) return
   native.dispose()
   pendingUsers.value = []
-  sessionTitleText.value = ''
   sessionAgentVersion.value = ''
   if (!id) {
     messages.value = []
@@ -714,6 +684,7 @@ onMounted(() => {
   else void openSession()
 })
 onBeforeUnmount(() => {
+  if (trajectoryTimer) clearInterval(trajectoryTimer)
   artifactRequest++
   native.dispose()
   composerObserver?.disconnect()
@@ -831,101 +802,14 @@ defineExpose({ sendText })
     display: flex;
     align-items: center;
     gap: 12px;
-    flex: 0 0 var(--app-chat-header-height);
+    flex: 0 0 auto;
+    min-height: var(--app-chat-header-height);
     width: 100%;
     min-width: 0;
     padding: 0 12px 0 var(--chat-content-inset, 20px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--td-component-stroke);
     background: var(--td-bg-color-container);
-}
-
-.sandbox-header-toggle {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    margin-left: auto;
-
-    &.after-grants {
-        margin-left: 8px;
-    }
-}
-
-.tool-grants-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
-    padding: 0 6px;
-    height: 24px;
-    border: none;
-    border-radius: var(--app-radius-sm);
-    background: transparent;
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-
-    &:hover,
-    &:focus-visible {
-        background: var(--td-bg-color-container-hover);
-        color: var(--td-text-color-primary);
-    }
-}
-
-.chat-learn-skill-button {
-    flex-shrink: 0;
-}
-
-.tool-grants-panel {
-    min-width: 220px;
-    max-width: 320px;
-    padding: 8px 4px;
-}
-
-.tool-grants-title {
-    margin: 0 0 4px;
-    font-weight: 500;
-}
-
-.tool-grants-hint {
-    margin: 0 0 8px;
-    font-size: var(--app-text-sm);
-    color: var(--td-text-color-secondary);
-}
-
-.tool-grants-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.tool-grants-name {
-    font-family: var(--app-font-mono, monospace);
-    font-size: var(--app-text-md);
-}
-
-.sandbox-header-toggle__btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--app-radius-sm);
-    color: var(--td-text-color-placeholder);
-    background: transparent;
-    cursor: pointer;
-    transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
-
-    &:hover {
-        color: var(--td-text-color-primary);
-        background: var(--td-bg-color-container-hover);
-    }
-
-    &:active {
-        background: var(--td-bg-color-container-active);
-    }
 }
 
 .chat_scroll_box {
@@ -1436,8 +1320,7 @@ defineExpose({ sendText })
 </style>
 
 <style scoped>
-.chat-topbar { flex: 0 0 auto; flex-wrap: wrap; min-height: var(--app-chat-header-height); }
-.chat-view-tabs { display: flex; flex: 1 0 100%; align-items: center; gap: 4px; width: 100%; padding: 0 16px; overflow-x: auto; border-top: 1px solid var(--td-component-stroke); }
+.chat-view-tabs { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; max-width: 100%; padding: 0; overflow-x: auto; }
 .chat-view-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--td-text-color-secondary); cursor: pointer; }
 .chat-view-tab[aria-selected="true"] { border-bottom-color: var(--td-brand-color); color: var(--td-brand-color); font-weight: 600; }
 .chat-view-tab:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }

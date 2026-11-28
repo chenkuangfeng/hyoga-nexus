@@ -288,7 +288,7 @@ UsagePage 是 Nexus 自身用量契约的管理页，沿用现有页面和公共
 
 useEditorPresentation 在 core 提供管理端注入的 modal/route/drawer 偏好。EditorDialog、SettingDrawer 与 SettingsModalShell 消费该偏好；没有注入的员工或嵌入页面保留自身行为。路由模式通过 editor 查询参数增加历史，浏览器返回发出关闭；关闭删除该参数。仅编辑位置查询变化不重新加载管理权限，账号/企业变化仍使上下文失效。编辑位置使用组件独立标识，关闭、卸载及迟到导航只清理自身位置，不能影响随后打开的其他编辑器。界面偏好属于当前用户当前浏览器，不作为服务端权限事实。
 
-会话页 NexusChatPage 以顶部“对话 / 轨迹 / 产物”标签切换主内容。产物复用 RunArtifactCards 的受认证预览和下载，不再占用右侧常驻栏；请求携带当前 session_id，旧请求代次不覆盖新会话，错误可重试，空结果明确显示。轨迹由 ChatTrajectory 只读投影当前 Run 和按需读取的历史 Run 持久事件，按事件时间与 sequence 排序，包含模型调用、工具、压缩和运行状态；模型事件区分输入上下文估算、供应商单次实际 usage 与会话累计 Run token。该交互参考 DeepSeek Harness `packages/client/ui-trajectory` 的事件账本和用量检查器概念，并适配 Nexus 当前持久事件契约，不展示未记录的模型提示词。嵌入式聊天维持紧凑对话，不显示标签。
+会话页 NexusChatPage 顶部仅显示左对齐的“对话 / 轨迹 / 产物”标签，不显示会话标题或其后的快捷按钮。产物复用 RunArtifactCards 的受认证预览和下载，不再占用右侧常驻栏；请求携带当前 session_id，旧请求代次不覆盖新会话，错误可重试，空结果明确显示。轨迹由 `run_trajectory_records` 独立表记录每次模型请求，不从 `run_events` 派生；授权后按请求序号读取，列表显示请求、轮次/尝试、摘要和用量，点选后在检查器展示真实请求消息快照、工具定义、模型响应、调用用量与耗时。记录在模型调用前创建，失败或完成时补全，覆盖上下文溢出重试；保留 Run 累计 token、请求输入估算和供应商实际用量。界面交互按 DeepSeek Harness `packages/client/ui-trajectory/src/client/TrajectoryTable.tsx` 的可选列表与详情检查器，以及 `trajectory-record.ts` 的轨迹记录职责实现；Nexus 将记录落在授权 Run 的持久化表中。历史 Run 无请求记录时显示空状态。嵌入式聊天维持紧凑对话，不显示标签。
 
 | 页面/组件 | WeKnora e1f9a6166 来源 | Nexus 必要适配 |
 | --- | --- | --- |

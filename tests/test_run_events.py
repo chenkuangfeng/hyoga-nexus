@@ -361,6 +361,13 @@ def test_sse_replays_stored_events_and_ends_for_a_finished_run(database):
             with client.stream("GET", url, headers={"Accept": "text/event-stream", "Last-Event-ID": "2"}) as response:
                 resumed = "".join(response.iter_text())
             assert resumed.startswith("event: stream.resync") and "id: 1\n" not in resumed
+            trajectory = client.get(f"/api/v1/tenants/{tenant.id}/runs/{run.id}/trajectory")
+            assert trajectory.status_code == 200
+            records = trajectory.json()
+            assert len(records) == 1
+            assert records[0]["status"] == "completed"
+            assert records[0]["request_snapshot"]["messages"]
+            assert records[0]["response_snapshot"]["text"] == "Hi"
     finally:
         app.dependency_overrides.clear()
         app.state.session_factory = None
