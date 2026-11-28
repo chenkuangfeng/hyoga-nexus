@@ -664,6 +664,11 @@ watch(activeSessionId, (id) => {
   if (!id) {
     messages.value = []
     eventsByRun.value = new Map()
+    // A new session created from the welcome screen skips openSession() so its live Run
+    // can keep streaming. Clear the old session's trajectory here or its request/token
+    // totals leak into that new session's header.
+    trajectoryByRun.value = new Map()
+    trajectoryError.value = false
     artifactRequest++; artifactsError.value = false; artifactsLoading.value = false
     sessionArtifacts.value = []
     errorText.value = ''
