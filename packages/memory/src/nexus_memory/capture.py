@@ -195,7 +195,7 @@ def validate_actions(raw: Any, *, unattended: bool, related: Sequence[dict[str, 
     """Check extractor output against the action schema.
 
     Accepted item shapes (optional fields in brackets):
-    - `{'op': 'add', 'kind': 'memory'|'sop', 'diff': str, [topic, importance, confidence, valid_until, evidence]}`
+    - `{'op': 'add', 'kind': 'memory'|'sop', 'diff': str, [topic, subject, attribute, fact_scope, importance, confidence, valid_until, evidence]}`
     - `{'op': 'update', 'target': int, 'diff': str, [...]}`: `target` indexes `related`; the action is
       resolved to that entry's id and current version. Unattended runs may update only this way.
     - `{'op': 'update', 'entry_id': uuid, 'base_version': int, 'diff': str}` (attended only)
@@ -293,6 +293,11 @@ def _check_item(item: Any, *, unattended: bool, related: Sequence[dict[str, Any]
     topic = item.get('topic')
     if isinstance(topic, str) and topic.strip():
         action['topic'] = topic.strip()[:TOPIC_LIMIT]
+    for source, target in (('subject', 'subject'), ('attribute', 'attribute'), ('fact_scope', 'fact_scope')):
+        value = item.get(source)
+        if isinstance(value, str) and value.strip():
+            action[target] = value.strip()[:TOPIC_LIMIT]
+    action['intent'] = 'correct' if op == 'update' else 'add'
     if 'valid_until' in item and now is not None:
         end = parse_valid_until(item.get('valid_until'), now)
         if end is not None:

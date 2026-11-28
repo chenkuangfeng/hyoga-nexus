@@ -51,6 +51,8 @@ class EntryView:
     valid_until: datetime | None = None
     #: Label the entry is about; two entries with the same `text.topic_key` are the same subject.
     topic: str = ''
+    #: Explicit fact identity; legacy entries without it must be targeted by ID and version.
+    fact_identity: dict[str, str] = field(default_factory=dict)
     #: 1 (trivial) to 5 (essential); copied from the draft on publish, editable by the owner.
     importance: int = 3
     #: Usage statistics (stage 2): last model read, search hit or resident injection, and how many.
@@ -87,6 +89,8 @@ class DraftView:
     #: Extraction metadata (openspec 2026-11-06-memory-evolution stage 1). All optional: foreground
     #: proposals may omit them, and drafts created before the stage have none.
     topic: str = ''
+    fact_identity: dict[str, str] = field(default_factory=dict)
+    intent: str = 'add'
     importance: int | None = None
     confidence: str | None = None
     valid_until: datetime | None = None
@@ -103,6 +107,8 @@ class DraftView:
 class DraftMeta:
     """Optional metadata stored with a new draft; see `DraftView` for the meaning of each field."""
     topic: str = ''
+    fact_identity: dict[str, str] = field(default_factory=dict)
+    intent: str = 'add'
     importance: int | None = None
     confidence: str | None = None
     valid_until: datetime | None = None

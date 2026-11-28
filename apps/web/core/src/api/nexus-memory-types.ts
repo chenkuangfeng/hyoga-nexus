@@ -44,6 +44,7 @@ export interface MemoryEntry {
   enabled: boolean
   valid_until: string | null
   topic: string
+  fact_identity: Record<string, string>
   importance: number
 }
 
@@ -61,12 +62,16 @@ export interface MemoryDraft {
   base_version: number | null
   target_entry_id: string | null
   topic: string
+  fact_identity: Record<string, string>
+  intent: string
   importance: number | null
   confidence: string | null
   valid_until: string | null
   evidence: { message_id?: string; sequence?: number; quote: string }[]
   conflicts: MemoryHint[]
   similar: MemoryHint[]
+  same_topic_candidates: MemoryHint[]
+  identity_candidates: MemoryHint[]
   /** Entries a merge draft archives when published. */
   merges: { id: string; title: string; version: number }[]
 }
@@ -128,7 +133,8 @@ export function memoryListFromResponse(data: unknown): { entries: MemoryEntry[];
     id: item.id as string, title: asString(item.title), kind: asString(item.kind, 'memory'),
     project: asString(item.project), version: asNumber(item.version, 1), enabled: item.enabled !== false,
     valid_until: typeof item.valid_until === 'string' ? item.valid_until : null,
-    topic: asString(item.topic), importance: asNumber(item.importance, 3),
+    topic: asString(item.topic), fact_identity: isRecord(item.fact_identity) ? item.fact_identity as Record<string, string> : {},
+    importance: asNumber(item.importance, 3),
   }))
   const drafts = data.drafts.filter(isRecord).filter(item => isString(item.id)).map(item => {
     const annotations = isRecord(item.annotations) ? item.annotations : {}
@@ -137,7 +143,8 @@ export function memoryListFromResponse(data: unknown): { entries: MemoryEntry[];
       id: item.id as string, kind: asString(item.kind, 'memory'), diff: asString(item.diff), origin: asString(item.origin),
       base_version: typeof item.base_version === 'number' ? item.base_version : null,
       target_entry_id: typeof item.target_entry_id === 'string' ? item.target_entry_id : null,
-      topic: asString(item.topic), importance: typeof item.importance === 'number' ? item.importance : null,
+      topic: asString(item.topic), fact_identity: isRecord(item.fact_identity) ? item.fact_identity as Record<string, string> : {},
+      intent: asString(item.intent, 'add'), importance: typeof item.importance === 'number' ? item.importance : null,
       confidence: typeof item.confidence === 'string' ? item.confidence : null,
       valid_until: typeof item.valid_until === 'string' ? item.valid_until : null,
       evidence: Array.isArray(item.evidence)
@@ -149,6 +156,8 @@ export function memoryListFromResponse(data: unknown): { entries: MemoryEntry[];
         : [],
       conflicts: hints(annotations.conflict),
       similar: hints(annotations.similar),
+      same_topic_candidates: hints(annotations.same_topic_candidates),
+      identity_candidates: hints(annotations.identity_candidates),
       merges: merge.filter(isRecord).map(m => ({ id: asString(m.id), title: asString(m.title), version: asNumber(m.version, 1) }))
         .filter(m => m.id),
     }

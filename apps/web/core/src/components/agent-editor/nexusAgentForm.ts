@@ -48,6 +48,8 @@ export interface AgentEditorForm {
   memory_enabled: boolean
   /** `budgets.memory.recall`: false stops per-turn memory recall (openspec 2026-11-06-memory-evolution D3). */
   memory_recall: boolean
+  /** `budgets.memory.profile`: true injects approved profile facts into each request. */
+  memory_profile: boolean
   /** `budgets.behavior.tool_access` (openspec 2026-11-06-tool-call-hardening D11). */
   tool_access: ToolAccess
   /** Progressive tool loading threshold; 0 disables it. */
@@ -154,7 +156,8 @@ export function formFromAgent(agent: NexusAgent, modelOptions: Record<string, un
     knowledge_bases: (agent.resource_bindings || []).filter(b => b.kind === 'knowledge_base')
       .map(b => ({ id: b.resource_id, source_tenant_id: b.source_tenant_id })),
     memory_enabled: memoryOf(budgets).enabled !== false,
-    memory_recall: memoryOf(budgets).recall !== false,
+    memory_recall: memoryOf(budgets).recall === true,
+    memory_profile: memoryOf(budgets).profile === true,
     tool_access: accessOf(budgets),
     tool_search_min_tokens: toolSearchThresholdOf(budgets),
     skills: (agent.resource_bindings || []).filter(b => b.kind === 'skill')
@@ -182,7 +185,8 @@ export function formForNewAgent(defaults: NativeDefaults | null, modelId: string
     allowed_tools: [...defaultTools],
     knowledge_bases: [],
     memory_enabled: true,
-    memory_recall: true,
+    memory_recall: false,
+    memory_profile: false,
     tool_access: accessOf(defaults ? { behavior: defaults.settings.behavior } : undefined),
     tool_search_min_tokens: numberOr(defaults?.settings.behavior.tool_search_min_tokens, DEFAULT_TOOL_SEARCH_MIN_TOKENS),
     skills: [],
@@ -234,7 +238,8 @@ export function draftFromForm(form: AgentEditorForm, base: NexusAgent | null, de
   // stored; an agent that leaves both on inherits the space and member settings.
   const memory: Record<string, unknown> = {}
   if (!form.memory_enabled) memory.enabled = false
-  if (!form.memory_recall) memory.recall = false
+  memory.recall = form.memory_recall
+  memory.profile = form.memory_profile
   if (Object.keys(memory).length) budgets.memory = memory
   else delete budgets.memory
 

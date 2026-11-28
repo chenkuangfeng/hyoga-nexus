@@ -100,7 +100,7 @@ def _missing(db: Session, limit: int) -> list[tuple[UUID, UUID, UUID, int, UUID,
     rows = db.execute(
         select(MemoryEntryRecord.tenant_id, MemoryEntryRecord.owner_user_id, MemoryEntryRecord.id,
                MemoryEntryRecord.current_version, MemorySpaceSettingsRecord.embedding_model_version_id,
-               MemoryEntryRecord.topic, MemoryVersionRecord.content)
+               MemoryEntryRecord.topic, MemoryEntryRecord.fact_identity, MemoryVersionRecord.content)
         .join(MemorySpaceSettingsRecord, MemorySpaceSettingsRecord.tenant_id == MemoryEntryRecord.tenant_id)
         .join(MemoryVersionRecord, (MemoryVersionRecord.entry_id == MemoryEntryRecord.id)
               & (MemoryVersionRecord.version == MemoryEntryRecord.current_version))
@@ -113,10 +113,12 @@ def _missing(db: Session, limit: int) -> list[tuple[UUID, UUID, UUID, int, UUID,
         .limit(limit * 4)).all()
     now = time.monotonic()
     out = []
-    for tenant, owner, entry, version, model, topic, content in rows:
+    for tenant, owner, entry, version, model, topic, identity, content in rows:
         if now - _FAILED.get((tenant, owner), -FAILURE_BACKOFF_SECONDS * 2) < FAILURE_BACKOFF_SECONDS:
             continue
-        out.append((tenant, owner, entry, version, model, semantic.embeddable_text(topic, content)))
+        identity_text = ' '.join(str(value) for value in (identity or {}).values())
+        search_topic = ' '.join(part for part in (topic, identity_text) if part)
+        out.append((tenant, owner, entry, version, model, semantic.embeddable_text(search_topic, content)))
         if len(out) >= limit:
             break
     return out

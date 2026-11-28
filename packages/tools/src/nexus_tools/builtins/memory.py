@@ -16,7 +16,10 @@ def memory_tools():
         message = await store.propose(arguments['kind'], 'session', arguments['diff'],
                                       entry_id=arguments.get('entry_id'), base_version=arguments.get('base_version'),
                                       topic=arguments.get('topic', ''), importance=arguments.get('importance'),
-                                      valid_until=arguments.get('valid_until'))
+                                      valid_until=arguments.get('valid_until'),
+                                      subject=arguments.get('subject', ''), attribute=arguments.get('attribute', ''),
+                                      fact_scope=arguments.get('fact_scope', ''), intent=arguments.get('intent', 'add'),
+                                      evidence=arguments.get('evidence', []))
         return ToolResult(message)
     async def start(arguments, context):
         store = _store(context)
@@ -36,14 +39,24 @@ def memory_tools():
         'entry_id': {'type': 'string', 'maxLength': 36},
         'base_version': {'type': 'integer', 'minimum': 1},
         'topic': {'type': 'string', 'maxLength': 160},
+        'subject': {'type': 'string', 'maxLength': 160},
+        'attribute': {'type': 'string', 'maxLength': 160},
+        'fact_scope': {'type': 'string', 'maxLength': 160},
+        'intent': {'type': 'string', 'enum': ['add', 'correct', 'supplement', 'expire']},
+        'evidence': {'type': 'array', 'maxItems': 5, 'items': {'type': 'object',
+            'properties': {'message_id': {'type': 'string', 'maxLength': 36},
+                           'quote': {'type': 'string', 'minLength': 1, 'maxLength': 500}},
+            'required': ['quote'], 'additionalProperties': False}},
         'importance': {'type': 'integer', 'minimum': 1, 'maximum': 5},
         'valid_until': {'type': 'string', 'maxLength': 32}},
         'required': ['kind', 'diff'], 'additionalProperties': False}
     yield RegisteredTool(ToolDefinition('propose_memory_draft',
-        'Propose verified memory/SOP changes for review. Pass entry_id and base_version to propose an edit of an existing entry. '
-        'Give a short topic; a draft whose topic matches a published entry becomes an edit of that entry. '
+        'Propose a memory/SOP change for owner review; this never publishes it. Default intent is add. '
+        'Use correct only when the user explicitly corrects a known fact, and provide subject, attribute, fact_scope plus evidence quotes from user messages. '
+        'Use expire only for an explicitly expired fact; identify the existing entry, quote the user and keep the full current text in diff. Approval marks it expired. '
+        'Topic similarity only returns candidate hints; it does not update an existing entry. To explicitly edit, pass entry_id and base_version. '
         'importance is 1-5; valid_until (YYYY-MM-DD) only for time-bound notes. '
-        'Use kind profile for who the user is and how they like to work (shown at the start of new conversations), '
+        'Use kind profile for stable identity and preferences (injected only when the agent enables profile injection), '
         'memory for environment facts and conventions, sop for verified procedures.',
         draft_schema), draft, lambda r: r.data)
     yield RegisteredTool(ToolDefinition('start_long_term_update', 'Read the memory index and consolidate reusable findings.',

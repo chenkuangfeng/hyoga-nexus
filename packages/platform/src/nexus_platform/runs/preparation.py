@@ -263,9 +263,9 @@ class ExecutionPreparer:
                       {'run_id': str(run.id), 'message_count': len(history)})
                 events = []
                 if memory.resident_entries:
-                    events.append(('memory.used', {'source': 'resident', 'entries': list(memory.resident_entries)}))
+                    events.append(('memory.used', {'source': 'profile', 'entries': list(memory.resident_entries)}))
                 if memory.recall_entries:
-                    events.append(('memory.used', {'source': 'recall', 'entries': list(memory.recall_entries)}))
+                    events.append(('memory.used', {'source': 'auto_recall', 'entries': list(memory.recall_entries)}))
                 # Inherited dependencies are retained even when an input is later summarized.
                 blocks.append(ContextBlock('history:sources', 'history', 'user', 'history_prefix', 0, '',
                                            dependencies=tuple(dependencies)))

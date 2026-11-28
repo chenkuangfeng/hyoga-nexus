@@ -17,6 +17,7 @@ interface Activity {
   sequence: number
   turn: number | null
   kind: 'user' | 'assistant' | 'tool' | 'memory'
+  memorySource?: 'profile' | 'auto_recall'
   summary: string
   content: string
   createdAt: string
@@ -68,9 +69,7 @@ const activities = computed<Activity[]>(() => {
   for (const [runId, runMessages] of messagesByRun) {
     const runRecords = (recordsByRun.get(runId) ?? []).slice().sort((a, b) => a.sequence - b.sequence)
     const used = new Set<string>()
-    const seenMemoryBlocks = new Set<string>()
-    const memoryBlocks: string[] = []
-    let firstMemoryRecord: RunTrajectoryRecord | undefined
+    const memorySources = new Map<'profile' | 'auto_recall', { blocks: string[]; record: RunTrajectoryRecord }>()
     const orderedMessages = runMessages.slice().sort((a, b) => a.sequence - b.sequence)
     const recordsForCall = new Map<string, RunTrajectoryRecord>()
     for (const record of runRecords) for (const call of calls(record)) recordsForCall.set(call.id, record)
@@ -105,23 +104,25 @@ const activities = computed<Activity[]>(() => {
         if (typeof message.content !== 'string') continue
         const blocks = message.content.match(/<user_memory\b[^>]*>[\s\S]*?<\/user_memory>/g) ?? []
         for (const block of blocks) {
-          if (seenMemoryBlocks.has(block)) continue
-          seenMemoryBlocks.add(block)
-          memoryBlocks.push(block)
-          firstMemoryRecord ??= record
+          const source = /<user_memory\s+kind="profile"/.test(block) ? 'profile' : 'auto_recall'
+          const current = memorySources.get(source)
+          if (current?.blocks.includes(block)) continue
+          if (current) current.blocks.push(block)
+          else memorySources.set(source, { blocks: [block], record })
         }
       }
     }
-    if (firstMemoryRecord && memoryBlocks.length) {
+    for (const [source, memory] of memorySources) {
       const runInput = orderedMessages.find(message => message.role === 'user')
-      const count = memoryBlocks.reduce((total, block) => {
+      const count = memory.blocks.reduce((total, block) => {
         const entries = block.match(/^-\s+/gm)?.length ?? 0
         return total + Math.max(entries, 1)
       }, 0)
-      all.push({ id: `memory:${runId}`, runId, sequence: runInput ? runInput.sequence + 0.1 : firstMemoryRecord.sequence - 0.5,
-        turn: firstMemoryRecord.turn, kind: 'memory',
-        summary: t('nexusChat.trajectory.memoryUsedCount', { count }), content: memoryBlocks.join('\n\n'),
-        createdAt: runInput?.created_at ?? firstMemoryRecord.started_at, status: 'completed',
+      all.push({ id: `memory:${source}:${runId}`, runId, sequence: runInput ? runInput.sequence + 0.1 : memory.record.sequence - 0.5,
+        turn: memory.record.turn, kind: 'memory', memorySource: source,
+        summary: `${source === 'profile' ? t('nexusMemory.profileInjected') : t('nexusMemory.autoRecallUsed')} · ${t('nexusChat.trajectory.memoryUsedCount', { count })}`,
+        content: memory.blocks.join('\n\n'),
+        createdAt: runInput?.created_at ?? memory.record.started_at, status: 'completed',
         // This row describes context provenance. The memory text was included in a model
         // request, but it is not itself a model request; keep the request snapshot on the
         // assistant activity where it belongs.

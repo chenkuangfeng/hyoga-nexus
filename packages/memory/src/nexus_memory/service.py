@@ -148,7 +148,8 @@ class Snapshot:
 
 
 def snapshot(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, project: str = '',
-             now: datetime | None = None, budget: int = MEMORY_BUDGET_CHARS) -> Snapshot:
+             now: datetime | None = None, budget: int = MEMORY_BUDGET_CHARS,
+             include_profile: bool = True) -> Snapshot:
     """Build the session memory snapshot (stage 2, B1/B2): capacity line, resident profile block, index.
 
     - The capacity line reports the owner's used characters against the budget, counted exactly as
@@ -168,7 +169,7 @@ def snapshot(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, project: s
     resident: list[LiveEntry] = []
     body_chars = 0
     for item in rows:
-        if item.entry.kind != 'profile':
+        if item.entry.kind != 'profile' or not include_profile:
             continue
         if body_chars + len(item.content) + 3 > RESIDENT_LIMIT:
             continue
@@ -200,12 +201,13 @@ def list_memory(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID) -> dict
     published = [{'id': str(row.id), 'title': row.title, 'kind': row.kind, 'project': row.project,
                   'version': row.current_version, 'enabled': row.enabled,
                   'valid_until': row.valid_until.isoformat() if row.valid_until else None,
-                  'topic': row.topic, 'importance': row.importance}
+                  'topic': row.topic, 'fact_identity': dict(row.fact_identity), 'importance': row.importance}
                  for row in repo.published_entries(tenant_id, owner_id, '')]
     drafts = [{'id': str(d.id), 'kind': d.kind, 'diff': d.diff, 'source_run_id': str(d.source_run_id),
                'origin': d.origin, 'base_version': d.base_version,
                'target_entry_id': str(d.target_entry_id) if d.target_entry_id else None,
-               'topic': d.topic, 'importance': d.importance, 'confidence': d.confidence,
+               'topic': d.topic, 'fact_identity': dict(d.fact_identity), 'intent': d.intent,
+               'importance': d.importance, 'confidence': d.confidence,
                'valid_until': d.valid_until.isoformat() if d.valid_until else None,
                'evidence': [dict(item) for item in d.evidence], 'annotations': dict(d.annotations)}
               for d in repo.pending_drafts(tenant_id, owner_id)]
@@ -404,7 +406,8 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
             origin: str = 'foreground', source_message_ids: tuple[str, ...] = (),
             budget: int = MEMORY_BUDGET_CHARS, topic: str = '', importance: int | None = None,
             confidence: str | None = None, valid_until: datetime | None = None,
-            evidence: tuple[dict[str, Any], ...] = ()) -> dict[str, Any]:
+            evidence: tuple[dict[str, Any], ...] = (), subject: str = '', attribute: str = '',
+            fact_scope: str = '', intent: str = 'add') -> dict[str, Any]:
     """Screen a proposed change and create a pending draft, or explain why nothing was created.
 
     Outcomes (never raise for ordinary refusals, so the model can read the reason and continue):
@@ -416,9 +419,9 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
       draft edits an entry, and review `annotations`.
     An edit (`entry_id`) must name the version it was based on; a stale base is a conflict.
 
-    A new statement becomes an edit instead of a second entry (openspec 2026-11-06-memory-evolution A6)
-    when its topic has the key of a live entry of the same kind, or when it contains that entry's
-    content. Conflict hints are attached, never enforced; publication still needs the owner.
+    A new statement becomes an edit only when it explicitly names an entry/version or declares a
+    correction whose complete fact identity uniquely matches a live entry. Topic and semantic overlap
+    are candidate hints only; publication still needs the owner.
     """
     if kind not in KIND_VALUES:
         raise ValueError('Memory kind is invalid')
@@ -426,6 +429,15 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
         raise ValueError('Memory origin is invalid')
     if confidence is not None and confidence not in CONFIDENCE_VALUES:
         raise ValueError('Memory confidence is invalid')
+    if intent not in ('add', 'correct', 'supplement', 'expire'):
+        raise ValueError('Memory intent is invalid')
+    if intent in ('correct', 'expire') and not evidence:
+        return {'status': 'rejected', 'reason': 'correction_needs_identity_and_evidence'}
+    if intent in ('correct', 'expire') and entry_id is None and not all((subject.strip(), attribute.strip(), fact_scope.strip())):
+        return {'status': 'rejected', 'reason': 'correction_needs_identity_and_evidence'}
+    fact_identity = {key: value.strip()[:160] for key, value in {
+        'subject': subject, 'attribute': attribute, 'scope': fact_scope,
+    }.items() if value.strip()}
     screened = text.screen(diff)
     if screened.threats:
         return {'status': 'rejected', 'reason': 'threat', 'rules': list(screened.threats)}
@@ -433,7 +445,7 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
     fp = text.fingerprint(content)
     if repo.is_tombstoned(tenant_id, owner_id, fp):
         return {'status': 'rejected', 'reason': 'previously_rejected'}
-    duplicate = repo.find_duplicate(tenant_id, owner_id, fp)
+    duplicate = repo.find_duplicate(tenant_id, owner_id, fp) if intent != 'expire' else None
     if duplicate is not None:
         return {'status': 'duplicate', 'target': duplicate[0], 'id': str(duplicate[1])}
 
@@ -442,24 +454,34 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
     same_kind = [item for item in repo.live_entries(tenant_id, owner_id) if item.entry.kind == kind]
     converted = False
     if entry_id is None:
-        matches = _topic_matches(same_kind, topic)
-        if matches:
-            entry_id, base_version, converted = matches[0].entry.id, matches[0].entry.current_version, True
-            if len(matches) > 1:
-                annotations['conflict'] = [_hint(item) for item in matches[1:HINT_LIMIT + 1]]
-        else:
+        if intent in ('correct', 'expire') and set(fact_identity) == {'subject', 'attribute', 'scope'}:
+            identity_key = tuple(text.normalize_for_match(fact_identity[key]) for key in ('subject', 'attribute', 'scope'))
+            matches = [item for item in same_kind if item.entry.fact_identity and tuple(
+                text.normalize_for_match(item.entry.fact_identity.get(key, '')) for key in ('subject', 'attribute', 'scope')
+            ) == identity_key]
+            if len(matches) == 1:
+                entry_id, base_version, converted = matches[0].entry.id, matches[0].entry.current_version, True
+            elif len(matches) > 1:
+                annotations['identity_candidates'] = [_hint(item) for item in matches[:HINT_LIMIT]]
+                if intent == 'correct':
+                    return {'status': 'rejected', 'reason': 'identity_ambiguous',
+                            'candidates': annotations['identity_candidates']}
+            elif intent == 'expire':
+                return {'status': 'rejected', 'reason': 'expire_target_not_found'}
+            elif intent == 'correct':
+                return {'status': 'rejected', 'reason': 'correction_target_not_found'}
+        if entry_id is None:
             contained = _contained(same_kind, content)
-            if contained is not None:
-                item, longer = contained
-                if not longer:
-                    return {'status': 'duplicate', 'target': 'entry', 'id': str(item.entry.id)}
-                entry_id, base_version, converted = item.entry.id, item.entry.current_version, True
-            else:
-                normalized = text.normalize_for_match(content)
-                for draft in repo.pending_drafts(tenant_id, owner_id):
-                    if (draft.kind == kind and len(normalized) >= CONTAINMENT_MIN_CHARS
-                            and normalized in text.normalize_for_match(draft.diff)):
-                        return {'status': 'duplicate', 'target': 'draft', 'id': str(draft.id)}
+            if intent != 'expire' and contained is not None and not contained[1]:
+                return {'status': 'duplicate', 'target': 'entry', 'id': str(contained[0].entry.id)}
+        normalized = text.normalize_for_match(content)
+        for draft in repo.pending_drafts(tenant_id, owner_id):
+            if (intent != 'expire' and draft.kind == kind and len(normalized) >= CONTAINMENT_MIN_CHARS
+                    and normalized in text.normalize_for_match(draft.diff)):
+                return {'status': 'duplicate', 'target': 'draft', 'id': str(draft.id)}
+        topic_matches = _topic_matches(same_kind, topic)
+        if topic_matches and entry_id is None:
+            annotations['same_topic_candidates'] = [_hint(item) for item in topic_matches[:HINT_LIMIT]]
     conflicts = _conflicts(same_kind, content, entry_id)
     if conflicts:
         annotations['conflict'] = (annotations.get('conflict', []) + conflicts)[:HINT_LIMIT]
@@ -484,7 +506,8 @@ def propose(repo: MemoryRepository, tenant_id: UUID, owner_id: UUID, source_run_
                 'entries': [{'id': str(item.id), 'title': item.title, 'chars': item.chars}
                             for item in repo.sized_entries(tenant_id, owner_id)]}
 
-    meta = DraftMeta(topic=topic, importance=_clean_importance(importance), confidence=confidence,
+    meta = DraftMeta(topic=topic, fact_identity=fact_identity, intent=intent,
+                     importance=_clean_importance(importance), confidence=confidence,
                      valid_until=utc(valid_until), evidence=tuple(evidence), annotations=annotations,
                      target_entry_id=entry_id)
     draft_id = repo.create_draft(tenant_id=tenant_id, source_run_id=source_run_id, kind=kind, diff=content,
@@ -563,28 +586,45 @@ def review(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, draft_id: UU
                 raise MemoryConflict('A merged entry changed after the merge was proposed')
             archived.append(other)
             replaced += _current_chars(repo, tenant_id, owner_id, other.id)
+    published_content = draft.diff
+    if draft.intent == 'expire':
+        if entry is None:
+            raise MemoryConflict('An expiration draft must target an existing memory entry')
+        current = next((item for item in repo.live_entries(tenant_id, owner_id)
+                        if item.entry.id == entry.id), None)
+        if current is None:
+            raise MemoryConflict('The memory entry is no longer active')
+        # Expiring a fact changes its validity, not its content. Keep the immutable version history
+        # meaningful by carrying the current content into the new version and retaining the evidence
+        # and explanation on the draft/audit record.
+        published_content = current.content
     used = sum(item.chars for item in repo.sized_entries(tenant_id, owner_id)) - replaced
-    if used + len(draft.diff) > budget:
+    if used + len(published_content) > budget:
         raise MemoryConflict('Memory budget would be exceeded; merge or remove entries first')
     for other in archived:
         repo.bump_entry(other.id, current_version=other.current_version, active=False)
         repo.audit(tenant_id, owner_id, 'memory.archived', 'memory', str(other.id), {'merged_into': str(entry_id)})
     chosen = importance or draft.importance or (entry.importance if entry else DEFAULT_IMPORTANCE)
     topic = draft.topic or (entry.topic if entry else '')
-    validity = draft.valid_until if draft.valid_until is not None else UNSET
+    fact_identity = draft.fact_identity or (entry.fact_identity if entry else {})
+    validity = draft.valid_until if draft.valid_until is not None else (
+        datetime.now(timezone.utc) if draft.intent == 'expire' else UNSET)
     if target is not None:
         repo.bump_entry(target, current_version=new_version, title=title.strip(), project=project,
-                        topic=topic, importance=chosen, valid_until=validity)
+                        topic=topic, importance=chosen, valid_until=validity, fact_identity=fact_identity)
     else:
         created = repo.create_entry(tenant_id=tenant_id, owner_id=owner_id, kind=draft.kind,
-                                    title=title.strip(), project=project, topic=topic, importance=chosen)
+                                    title=title.strip(), project=project, topic=topic, importance=chosen,
+                                    fact_identity=fact_identity)
         target = created.id
         if validity is not UNSET:
             repo.bump_entry(target, current_version=new_version, valid_until=validity)
-    repo.append_version(entry_id=target, version=new_version, content=draft.diff, source_run_id=draft.source_run_id,
+    repo.append_version(entry_id=target, version=new_version, content=published_content, source_run_id=draft.source_run_id,
                         source_draft_id=draft.id, reviewer_id=owner_id,
-                        fingerprint=draft.fingerprint or text.fingerprint(draft.diff),
-                        source_message_ids=draft.source_message_ids)
+                        fingerprint=text.fingerprint(published_content) if draft.intent == 'expire' else
+                        (draft.fingerprint or text.fingerprint(draft.diff)),
+                        source_message_ids=draft.source_message_ids,
+                        search_context=(title.strip(), topic, *fact_identity.values()))
     repo.set_draft_status(draft.id, 'approved')
     repo.audit(tenant_id, owner_id, 'memory.published', 'memory', str(target),
                {'version': new_version, 'draft_id': str(draft.id)})
@@ -627,7 +667,8 @@ def restore(repo: MemoryRepository, owner_id: UUID, tenant_id: UUID, entry_id: U
     repo.append_version(entry_id=entry.id, version=new_version, content=old.content,
                         source_run_id=old.source_run_id, source_draft_id=old.source_draft_id, reviewer_id=owner_id,
                         fingerprint=old.fingerprint or text.fingerprint(old.content),
-                        source_message_ids=old.source_message_ids)
+                        source_message_ids=old.source_message_ids,
+                        search_context=(entry.title, entry.topic, *entry.fact_identity.values()))
     repo.audit(tenant_id, owner_id, 'memory.restored', 'memory', str(entry.id), {'version': new_version})
     return {'version': new_version}
 

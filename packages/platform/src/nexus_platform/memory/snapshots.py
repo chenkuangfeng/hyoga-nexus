@@ -46,7 +46,7 @@ def version_key(db: Session, tenant_id: UUID, owner_id: UUID) -> str:
 
 
 def session_snapshot(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id: UUID, project: str = '',
-                     now: datetime | None = None) -> SessionMemorySnapshotRecord:
+                     now: datetime | None = None, include_profile: bool = True) -> SessionMemorySnapshotRecord:
     """Return the session's frozen snapshot row, creating it on the first call (see `session_index`)."""
     row = db.get(SessionMemorySnapshotRecord, session_id)
     if row is not None and row.tenant_id == tenant_id and row.owner_user_id == owner_id:
@@ -60,7 +60,8 @@ def session_snapshot(db: Session, *, tenant_id: UUID, owner_id: UUID, session_id
         # A legacy or unsafe snapshot must not keep deleted/private facts in its frozen text.
         db.delete(row)
         db.flush()
-    built = memory_rules.snapshot(SqlMemoryRepository(db), tenant_id, owner_id, project, now=now or utc_now())
+    built = memory_rules.snapshot(SqlMemoryRepository(db), tenant_id, owner_id, project,
+                                   now=now or utc_now(), include_profile=include_profile)
     text = built.text
     # External snapshot hooks are collected by ContextPreparationService outside transactions.
     key = version_key(db, tenant_id, owner_id)

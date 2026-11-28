@@ -191,7 +191,8 @@ class SqlMemoryRepository:
             scope=scope, diff=diff, status='pending_review', created_at=utc_now(),
             origin=origin, fingerprint=fingerprint, base_version=base_version,
             source_message_ids=list(source_message_ids),
-            topic=meta.topic or None, importance=meta.importance, confidence=meta.confidence,
+            topic=meta.topic or None, fact_identity=dict(meta.fact_identity) or None, intent=meta.intent,
+            importance=meta.importance, confidence=meta.confidence,
             valid_until=meta.valid_until, evidence=[dict(item) for item in meta.evidence] or None,
             annotations=dict(meta.annotations) or None, target_entry_id=meta.target_entry_id,
         )
@@ -211,11 +212,11 @@ class SqlMemoryRepository:
             row.topic, row.created_at = topic, utc_now()
 
     def create_entry(self, *, tenant_id: UUID, owner_id: UUID, kind: str, title: str, project: str,
-                     topic: str = '', importance: int = 3) -> EntryView:
+                     topic: str = '', importance: int = 3, fact_identity: dict[str, str] | None = None) -> EntryView:
         row = MemoryEntryRecord(
             id=new_id(), tenant_id=tenant_id, owner_user_id=owner_id, kind=kind, title=title,
             project=project, active=True, current_version=1, created_at=utc_now(), enabled=True,
-            topic=topic, importance=importance,
+            topic=topic, importance=importance, fact_identity=dict(fact_identity or {}),
         )
         self.db.add(row)
         self.db.flush()
@@ -224,12 +225,15 @@ class SqlMemoryRepository:
     def bump_entry(self, entry_id: UUID, *, current_version: int, title: str | None = None,
                    project: str | None = None, active: bool | None = None,
                    enabled: bool | None = None, valid_until: Any = UNSET,
-                   topic: str | None = None, importance: int | None = None) -> None:
+                   topic: str | None = None, importance: int | None = None,
+                   fact_identity: dict[str, str] | None = None) -> None:
         row = self.db.get(MemoryEntryRecord, entry_id)
         if topic is not None:
             row.topic = topic
         if importance is not None:
             row.importance = importance
+        if fact_identity is not None:
+            row.fact_identity = dict(fact_identity)
         row.current_version = current_version
         if title is not None:
             row.title = title
@@ -244,12 +248,13 @@ class SqlMemoryRepository:
 
     def append_version(self, *, entry_id: UUID, version: int, content: str, source_run_id: UUID | None,
                        source_draft_id: UUID | None, reviewer_id: UUID | None, fingerprint: str,
-                       source_message_ids: tuple[str, ...]) -> None:
+                       source_message_ids: tuple[str, ...], search_context: tuple[str, ...] = ()) -> None:
         search_id = self.db.scalar(select(func.coalesce(func.max(MemoryVersionRecord.search_id), 0))) + 1
+        tokens = memtext.tokenize(' '.join((*search_context, content)))
         self.db.add(MemoryVersionRecord(
             entry_id=entry_id, version=version, content=content, source_run_id=source_run_id,
             source_draft_id=source_draft_id, reviewed_by=reviewer_id, created_at=utc_now(),
-            fingerprint=fingerprint, tokens=memtext.tokenize(content), search_id=search_id,
+            fingerprint=fingerprint, tokens=tokens, search_id=search_id,
             source_message_ids=list(source_message_ids),
         ))
         self.db.flush()
@@ -262,7 +267,7 @@ class SqlMemoryRepository:
                 ' AND search_id <> :current)'
             ), {'entry': _bind_uuid(entry_id), 'current': search_id})
             self.db.execute(text('INSERT INTO memory_fts(rowid, tokens) VALUES (:sid, :tokens)'),
-                            {'sid': search_id, 'tokens': memtext.tokenize(content)})
+                            {'sid': search_id, 'tokens': tokens})
 
     def audit(self, tenant_id: UUID, actor_id: UUID, action: str, target_type: str,
               target_id: str, metadata: dict[str, Any] | None = None) -> None:
@@ -365,6 +370,7 @@ def _entry(row: MemoryEntryRecord) -> EntryView:
         enabled=bool(row.enabled), valid_until=_aware(row.valid_until),
         topic=row.topic or '', importance=row.importance if row.importance is not None else 3,
         last_used_at=_aware(row.last_used_at), use_count=row.use_count or 0,
+        fact_identity=dict(row.fact_identity or {}),
     )
 
 
@@ -382,7 +388,8 @@ def _draft(row: MemoryDraftRecord, owner_id: UUID) -> DraftView:
         diff=row.diff, status=row.status, source_run_id=row.source_run_id,
         fingerprint=row.fingerprint or '', base_version=row.base_version, origin=row.origin,
         source_message_ids=tuple(row.source_message_ids or ()),
-        topic=row.topic or '', importance=row.importance, confidence=row.confidence,
+        topic=row.topic or '', fact_identity=dict(row.fact_identity or {}), intent=row.intent or 'add',
+        importance=row.importance, confidence=row.confidence,
         valid_until=_aware(row.valid_until), evidence=tuple(row.evidence or ()),
         annotations=dict(row.annotations or {}), target_entry_id=row.target_entry_id,
     )

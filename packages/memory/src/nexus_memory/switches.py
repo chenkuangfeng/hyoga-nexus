@@ -61,9 +61,15 @@ def agent_preference(budgets: Mapping[str, Any] | None) -> bool | None:
 
 
 def recall_enabled(budgets: Mapping[str, Any] | None) -> bool:
-    """Per-turn recall (stage 5, D3) is on unless the agent version sets ``budgets.memory.recall`` to false."""
+    """Whether memory is automatically searched on every user turn; default off."""
     group = (budgets or {}).get(AGENT_BUDGET_KEY)
-    return not (isinstance(group, dict) and group.get('recall') is False)
+    return isinstance(group, dict) and group.get('recall') is True
+
+
+def profile_injection_enabled(budgets: Mapping[str, Any] | None) -> bool:
+    """Whether approved profile facts are injected into every model request; default off."""
+    group = (budgets or {}).get(AGENT_BUDGET_KEY)
+    return isinstance(group, dict) and group.get('profile') is True
 
 
 def resolve(*, space_enabled: bool, write_mode: str, user_enabled: bool,
@@ -80,7 +86,7 @@ def resolve(*, space_enabled: bool, write_mode: str, user_enabled: bool,
 
 
 def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
-    """Reject anything but ``{"enabled": <bool>, "recall": <bool>}`` in ``budgets['memory']``; a missing group is valid.
+    """Validate the optional memory, automatic-recall and profile-injection switches.
 
     ``recall`` (openspec 2026-11-06-memory-evolution D3) turns per-turn memory recall off for the agent.
 
@@ -91,9 +97,11 @@ def validate_agent_budget(budgets: Mapping[str, Any]) -> None:
         return
     if not isinstance(group, dict):
         raise ValueError('Agent memory settings must be an object')
-    if set(group) - {'enabled', 'recall'}:
+    if set(group) - {'enabled', 'recall', 'profile'}:
         raise ValueError('Unknown agent memory setting')
     if 'enabled' in group and not isinstance(group['enabled'], bool):
         raise ValueError('Agent memory enabled must be a boolean')
     if 'recall' in group and not isinstance(group['recall'], bool):
         raise ValueError('Agent memory recall must be a boolean')
+    if 'profile' in group and not isinstance(group['profile'], bool):
+        raise ValueError('Agent profile injection must be a boolean')

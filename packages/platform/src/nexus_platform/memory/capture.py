@@ -444,6 +444,8 @@ def _propose(repo: SqlMemoryRepository, job: MemoryCaptureJobRecord, action: dic
         action['diff'], entry_id=_uuid_or_none(action.get('entry_id')),
         base_version=action.get('base_version'), origin='capture', source_message_ids=source_ids,
         topic=action.get('topic', ''), importance=action.get('importance'), confidence=action.get('confidence'),
+        subject=action.get('subject', ''), attribute=action.get('attribute', ''),
+        fact_scope=action.get('fact_scope', ''), intent=action.get('intent', 'add'),
         valid_until=datetime.fromisoformat(valid_until) if valid_until else None,
         evidence=tuple(action.get('evidence') or ()))
 

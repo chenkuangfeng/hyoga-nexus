@@ -938,7 +938,7 @@ class DurableRuntimeStore:
             from nexus_core.runtime.context import ContextDependency
             merge_dependencies(run, (ContextDependency('memory', str(entry.id), str(entry.current_version)),))
             # Stage 2 (B5): the timeline shows which memory this turn read.
-            append_event(db, run.id, 'memory.used', {'source': 'read', 'entries': [
+            append_event(db, run.id, 'memory.used', {'source': 'tool_read', 'entries': [
                 {'id': str(entry.id), 'title': entry.title, 'kind': entry.kind, 'version': entry.current_version}]})
             return result
 
@@ -972,7 +972,8 @@ class DurableRuntimeStore:
     @offloaded
     def propose(self, kind: str, scope: str, diff: str, *, entry_id: str | None = None,
                       base_version: int | None = None, topic: str = '', importance: int | None = None,
-                      valid_until: str | None = None) -> str:
+                      valid_until: str | None = None, subject: str = '', attribute: str = '',
+                      fact_scope: str = '', intent: str = 'add', evidence: list[dict[str, str]] | None = None) -> str:
         """Screen and record a draft for review; returns a short outcome line the model can read.
 
         Refusals (threat rules, tombstones, duplicates, budget, stale base) do not fail the Run:
@@ -987,10 +988,35 @@ class DurableRuntimeStore:
             run = self._run(db)
             try:
                 from nexus_memory.service import parse_valid_until
+                evidence_rows = []
+                for item in evidence or []:
+                    quote = item.get('quote', '').strip()
+                    source = None
+                    raw_message_id = item.get('message_id')
+                    if raw_message_id:
+                        try:
+                            candidate = db.get(MessageRecord, UUID(raw_message_id))
+                            if candidate and candidate.session_id == run.session_id and candidate.role == 'user' and quote in candidate.content:
+                                source = candidate
+                        except (ValueError, TypeError):
+                            source = None
+                    else:
+                        source = db.scalar(select(MessageRecord).where(
+                            MessageRecord.session_id == run.session_id, MessageRecord.role == 'user',
+                            MessageRecord.content.contains(quote)).order_by(MessageRecord.sequence.desc()).limit(1)) if quote else None
+                    if not source or not quote or quote not in source.content:
+                        return 'Draft not created: evidence must quote a user message in this conversation.'
+                    evidence_rows.append({'message_id': str(source.id), 'quote': quote, 'sequence': source.sequence})
+                effective_intent = 'correct' if entry_id else intent
+                if (effective_intent == 'correct' or entry_id) and not evidence_rows:
+                    return 'Draft not created: corrections and edits need a quote from the user message that supports the change.'
                 outcome = propose_draft(db, run.tenant_id, run.principal_id, run.id, kind, diff,
                                         entry_id=UUID(entry_id) if entry_id else None, base_version=base_version,
                                         topic=topic, importance=importance,
-                                        valid_until=parse_valid_until(valid_until, utc_now()))
+                                        valid_until=parse_valid_until(valid_until, utc_now()), subject=subject,
+                                        attribute=attribute, fact_scope=fact_scope, intent=effective_intent,
+                                        evidence=tuple(evidence_rows),
+                                        source_message_ids=tuple(item['message_id'] for item in evidence_rows))
             except (Conflict, NotFound) as exc:
                 return f'Draft not created: {exc}'
             status = outcome['status']
@@ -1132,6 +1158,6 @@ class DurableRuntimeStore:
             from .context_access import merge_dependencies
             from nexus_core.runtime.context import ContextDependency
             merge_dependencies(run, tuple(ContextDependency('memory', h['id'], str(h['version'])) for h in hits))
-            append_event(db, run.id, 'memory.used', {'source': 'search', 'entries': [
+            append_event(db, run.id, 'memory.used', {'source': 'tool_search', 'entries': [
                 {'id': h['id'], 'title': h['title'], 'kind': h['kind'], 'version': h['version']} for h in hits]})
             return '\n'.join(f"[{h['id']}] {h['kind']} | {h['title']} | v{h['version']} | {h['snippet']}" for h in hits)

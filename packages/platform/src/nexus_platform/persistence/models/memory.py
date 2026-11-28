@@ -51,6 +51,8 @@ class MemoryDraftRecord(Base):
     source_message_ids: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     # Extraction metadata and review hints (openspec 2026-11-06-memory-evolution stage 1). All optional.
     topic: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    fact_identity: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    intent: Mapped[str] = mapped_column(String(16), nullable=False, default='add', server_default='add')
     importance: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confidence: Mapped[str | None] = mapped_column(String(8), nullable=True)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -78,6 +80,7 @@ class MemoryEntryRecord(Base):
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Subject label; entries with the same normalized topic are one subject (an addition becomes an edit).
     topic: Mapped[str] = mapped_column(String(160), nullable=False, default='', server_default='')
+    fact_identity: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     #: 1 (trivial) to 5 (essential); orders the index and eviction.
     importance: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default='3')
     #: Usage statistics (stage 2): bumped by model reads, search hits and resident injection. Order the

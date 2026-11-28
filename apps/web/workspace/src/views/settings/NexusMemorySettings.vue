@@ -102,6 +102,9 @@
               </span>
             </div>
             <div class="card-body">{{ draft.diff }}</div>
+            <p v-if="draft.fact_identity.subject || draft.fact_identity.attribute || draft.fact_identity.scope" class="hint-line">
+              {{ t('nexusMemory.factIdentity') }}：{{ [draft.fact_identity.subject, draft.fact_identity.attribute, draft.fact_identity.scope].filter(Boolean).join(' · ') }}
+            </p>
             <ul v-if="draft.evidence.length" class="evidence">
               <li v-for="(quote, index) in draft.evidence" :key="index">“{{ quote.quote }}”</li>
             </ul>
@@ -113,6 +116,9 @@
             </p>
             <p v-if="draft.similar.length" class="hint-line is-warning">
               {{ t('agentStream.memoryDraft.similarHint', { titles: draft.similar.map(h => h.title).join('、') }) }}
+            </p>
+            <p v-if="draft.same_topic_candidates.length || draft.identity_candidates.length" class="hint-line is-warning">
+              {{ t('nexusMemory.candidateOnlyHint', { titles: [...draft.identity_candidates, ...draft.same_topic_candidates].map(h => h.title).join('、') }) }}
             </p>
             <div class="card-actions">
               <t-input v-model="titles[draft.id]" size="small" :maxlength="160" class="title-input"

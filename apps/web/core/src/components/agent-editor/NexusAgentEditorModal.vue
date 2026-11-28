@@ -83,6 +83,16 @@
               <t-switch v-model="form.memory_recall" />
             </div>
           </div>
+
+          <div v-if="form.memory_enabled" class="setting-row">
+            <div class="setting-info">
+              <label>{{ $t('nexusMemory.agentProfileInjection') }}</label>
+              <p class="desc">{{ $t('nexusMemory.agentProfileInjectionDesc') }}</p>
+            </div>
+            <div class="setting-control">
+              <t-switch v-model="form.memory_profile" />
+            </div>
+          </div>
         </div>
       </div>
 

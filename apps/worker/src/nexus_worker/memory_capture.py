@@ -53,8 +53,8 @@ INSTRUCTIONS = '\n'.join((
     '- 没有找到可行方法的一串尝试，不能写成“推荐流程”。',
     '- 很容易重新查到的通用知识、大段代码或日志、密码、令牌和其他敏感信息。',
     '',
-    '复用已有条目：内容与 <related_memory> 中某条是同一主题时，用 update 并给出该条的编号 target；'
-    '只是领域相近不算同一主题。',
+    '复用已有条目：仅当主体、属性、范围完全指向同一事实，且用户明确纠正时才用 update 并给出该条的编号 target；'
+    '主题相同或语义相近只用于发现候选，不能作为更新依据。补充不同属性、环境或时间范围时新增条目。',
     '<rejected_topics> 中的主题是用户拒绝过的，除非用户给出了新的信息，不要再提。',
     '',
     '证据：每一项必须给出 evidence，引用 <conversation> 中用户原话的片段（逐字摘录，4 到 200 字），'
@@ -63,9 +63,11 @@ INSTRUCTIONS = '\n'.join((
     '只在本周、本月这类有时效的任务上给出 valid_until（YYYY-MM-DD）。',
     '',
     '只输出一个 JSON 数组，不要输出其他文字；没有可保存内容时输出 []。每一项形如：',
-    '{"op":"add","kind":"profile"|"memory"|"sop","topic":"主题","diff":"内容","importance":3,"confidence":"high",'
+    '{"op":"add","kind":"profile"|"memory"|"sop","topic":"主题","subject":"主体","attribute":"属性",'
+    '"fact_scope":"范围","diff":"内容","importance":3,"confidence":"high",'
     '"evidence":[{"seq":12,"quote":"用户原话"}]}',
-    '{"op":"update","target":0,"topic":"主题","diff":"更新后的完整内容","importance":3,"confidence":"high",'
+    '{"op":"update","target":0,"topic":"主题","subject":"主体","attribute":"属性",'
+    '"fact_scope":"范围","diff":"更新后的完整内容","importance":3,"confidence":"high",'
     '"evidence":[{"seq":12,"quote":"用户原话"}]}',
     '',
     '<rules> 是空间管理员补充的抽取规则，在不违反以上要求的前提下遵守。',
